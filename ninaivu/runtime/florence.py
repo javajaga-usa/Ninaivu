@@ -55,6 +55,8 @@ LARGE_FROM_GB = 24
 DESCRIBE_VERSION = 1
 
 SIZE = 768
+#: The image encoder's open sizes as the export names them, fixed for Core ML.
+FIXED = {"batch_size": 1, "height": SIZE, "width": SIZE}
 MEAN = (0.485, 0.456, 0.406)
 STD = (0.229, 0.224, 0.225)
 #: The task "<DETAILED_CAPTION>" as Florence2Processor writes it out.
@@ -89,6 +91,26 @@ PARTS = {
 }
 #: The decoder's attention heads, for when the export leaves them unnamed.
 HEADS = {"captions": 12, "captions-large": 16}
+
+
+def image_device(choice: str | None = None, *, platform: str | None = None,
+                 arch: str | None = None) -> str:
+    """Where the image encoder runs for the household's ``ai_image_device``
+    *choice* (runtime/devices.py).
+
+    ``auto`` on a Mac with Apple silicon is Core ML on the processor and
+    graphics processor (``coreml-gpu``). Measured on the Mac mini (M4 Pro),
+    with the image encoder at its one size: 0.61 s a photograph there, the
+    same with every unit, 3.1 s on the Neural Engine alone and 1.37 s on
+    the processor, all with the same output; and the graphics processor's
+    compile is the shorter (about 4.5 minutes against 7.5, paid once into
+    the compiled-model cache).
+    """
+    from .devices import resolve_image_device                  # noqa: PLC0415
+    chosen = resolve_image_device(choice, coreml_measured=True, platform=platform, arch=arch)
+    if chosen == "coreml" and (choice or "auto").lower() == "auto":
+        return "coreml-gpu"
+    return chosen
 
 
 def chosen_model() -> str | None:
@@ -199,7 +221,7 @@ class Florence:
     def __init__(self, root: Path, threads: int = 2, model_id: str = MODEL,
                  device: str | None = None, cache: str | None = None) -> None:
         from tokenizers import Tokenizer                        # noqa: PLC0415
-        from .devices import CPU, coreml_cache, image_providers, resolve_image_device  # noqa: PLC0415
+        from .devices import CPU, coreml_cache, image_providers  # noqa: PLC0415
         from .siglip import _session                            # noqa: PLC0415
         root = Path(root)
         parts = PARTS[model_id]
@@ -211,18 +233,21 @@ class Florence:
         self.heads = HEADS[model_id]
         self.tokenizer = Tokenizer.from_file(str(root / parts["tokenizer"]))
         vision = root / parts["vision"]
+        self.image_device = image_device(device)
+        coreml = self.image_device in ("coreml", "coreml-gpu")
+        # Core ML is handed the image encoder at the one size it is always
+        # given (FIXED): left open, it split the model into 207 pieces with
+        # the processor between them and took 8 s a photograph on the Mac
+        # mini; fixed, 49 pieces and 0.61 s, against 1.37 s on the processor,
+        # with the same output.
         self.vision = _session(vision, threads,
-                               image_providers(device, cache=coreml_cache(cache, vision)))
+                               image_providers(self.image_device,
+                                               cache=coreml_cache(cache, vision)),
+                               fixed=FIXED if coreml else None)
         self.embed = _session(root / parts["embed"], threads, [CPU])
-        # The text encoder takes the same shape for every photograph, like the
-        # image encoder, so at full precision (large) Core ML can take it too
-        # when the image encoder is put there; an 8-bit one stays on the
-        # processor (runtime/devices.py).
-        encoder = root / parts["encoder"]
-        on_coreml = resolve_image_device(device) in ("coreml", "coreml-gpu")
-        self.encoder = _session(encoder, threads,
-                                image_providers(device, cache=coreml_cache(cache, encoder))
-                                if on_coreml and "int8" not in encoder.name else [CPU])
+        # The text encoder stays on the processor: on Core ML it was five
+        # times slower there (1.3 s against 0.26).
+        self.encoder = _session(root / parts["encoder"], threads, [CPU])
         self.decoder = _session(root / parts["decoder"], threads, [CPU])
         self.prompt = prompt_ids(self.tokenizer)
         self._words: Any = None                  # the task's vectors, worked out once
@@ -230,9 +255,8 @@ class Florence:
         self.stages = {"image": 0.0, "text": 0.0, "writing": 0.0}
         self._decoder_inputs = {a.name: a for a in self.decoder.get_inputs()}
         self._decoder_outputs = [o.name for o in self.decoder.get_outputs()]
-        log.warning("description model %s loaded (images on %s, text on %s) in %.1f s", model_id,
-                    self.vision.get_providers()[0], self.encoder.get_providers()[0],
-                    time.monotonic() - started)
+        log.warning("description model %s loaded (images on %s) in %.1f s", model_id,
+                    self.vision.get_providers()[0], time.monotonic() - started)
 
     # -- pieces -----------------------------------------------------------
     def _embed(self, rows: Sequence[Sequence[int]]) -> Any:

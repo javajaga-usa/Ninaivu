@@ -6,7 +6,7 @@
 
 - Photos are described several at a time. Florence-2 writes a word for every photo of a batch in one run of its decoder instead of one run each, and a photo whose description has ended leaves the batch, so a long description does not hold up the short ones. Each description is word for word what describing the photo alone would write. A batch that fails together is described again a photo at a time, so one bad photo is still its own failure.
 - The task's words ("Describe in detail what is shown in the image") are worked out once when the model loads, not for every photo.
-- With **AI image device** set to Core ML, Florence-2 large's text encoder goes to Core ML with its image encoder; the 8-bit encoder of the base model stays on the processor.
+- On a Mac with Apple silicon, Florence-2's image encoder, three quarters of each photo's time, now runs on Core ML on the processor and graphics processor (**AI image device** Automatic), handed to it at its one size. Left open-sized, Core ML split the model into 207 pieces and took 8 s a photo on the Mac mini; at its one size it takes 0.61 s, against 1.37 s on the processor, with the same output. The first start compiles it (about 4.5 minutes), kept in the compiled-model cache after that. Choosing Processor keeps it where it was.
 - `tools/try_captions.py --batch N` describes N photos a call, as the server does, and says where each photo's time went: the image encoder, the text encoder and writing the words.
 
 ## 3.0.0 — 25 October 2026

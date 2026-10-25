@@ -244,6 +244,38 @@ def test_a_sentence_that_would_repeat_itself_is_cut_short(tmp_path):
     assert "a dog a dog a" not in text and len(text.split()) < 12
 
 
+def test_on_apple_silicon_the_image_encoder_goes_to_core_ml_on_the_graphics_processor():
+    mac = {"platform": "darwin", "arch": "arm64"}
+    assert florence.image_device(None, **mac) == "coreml-gpu"
+    assert florence.image_device("auto", **mac) == "coreml-gpu"
+    assert florence.image_device("coreml", **mac) == "coreml", "the household's choice is kept"
+    assert florence.image_device("cpu", **mac) == "cpu"
+    assert florence.image_device("auto", platform="darwin", arch="x86_64") == "cpu"
+    assert florence.image_device("auto", platform="linux", arch="x86_64") == "accelerated"
+
+
+@needs_onnx
+def test_core_ml_is_handed_the_image_encoder_at_its_one_size(tmp_path, monkeypatch):
+    import onnx_fakes
+    folder = onnx_fakes.florence(tmp_path / "florence-2-base")
+    made = {}
+    real = siglip._session
+
+    def session(path, threads, providers, fixed=None):
+        made[Path(path).stem] = (providers, fixed)
+        return real(path, threads, ["CPUExecutionProvider"])
+
+    monkeypatch.setattr(siglip, "_session", session)
+    florence.Florence(folder, device="coreml-gpu")
+    providers, fixed = made["vision_encoder"]
+    assert fixed == {"batch_size": 1, "height": 768, "width": 768}
+    assert all(made[name][1] is None and made[name][0] == ["CPUExecutionProvider"]
+               for name in made if name != "vision_encoder"), "the rest stays on the processor"
+    made.clear()
+    florence.Florence(folder, device="cpu")
+    assert made["vision_encoder"] == (["CPUExecutionProvider"], None)
+
+
 @needs_onnx
 def test_several_photographs_are_written_together_as_each_would_be_alone(tmp_path):
     import onnx_fakes

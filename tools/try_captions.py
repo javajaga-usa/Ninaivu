@@ -72,7 +72,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--model", choices=florence.MODELS, default=None,
                         help="which description model (default: the best one downloaded)")
     parser.add_argument("--device", default=None,
-                        help="how to run the image encoder: auto, cpu, coreml or coreml-gpu")
+                        help="how to run the image encoder: auto (Core ML on the graphics "
+                             "processor on Apple silicon), cpu, coreml or coreml-gpu")
     parser.add_argument("--threads", type=int, default=0, help="threads for the model (default: half the cores)")
     parser.add_argument("--batch", type=int, default=0,
                         help="photographs a call (default: the server's)")
@@ -92,6 +93,11 @@ def main(argv: list[str] | None = None) -> int:
              "image_device": args.device}
     if args.threads:
         setup["threads"] = args.threads
+    # Core ML's compiled models, where the server keeps them: compiled here
+    # once, the server's next start finds them (and the other way round).
+    from ninaivu.runtime import host_setup
+    if cache := host_setup(cfg).get("coreml_cache"):
+        setup["coreml_cache"] = cache
     from ninaivu.runtime.describer import BATCH
     batch = max(1, args.batch or BATCH)
     host = ModelHost(setup)
