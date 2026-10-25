@@ -1,10 +1,11 @@
 """The smaller-videos trial: HEVC tried on a sample before anything changes.
 
-Compress & Replace (media/video_compress.py) makes an H.264 MP4 no larger
+Compress & Replace (media/video_compress.py) made an H.264 MP4 no larger
 than 1080p. HEVC, through the Mac's own video engine, makes the same picture
-in about half the bytes, and could keep a 4K video at 4K. Before that is
-offered for real, this tries it on a sample of the library's own videos, so
-the household can see the saving and look at the result with their own eyes:
+in about half the bytes, and keeps a 4K video at 4K. Before that was offered
+for real (Compress & Replace makes HEVC at the video's own size since 3.0),
+this tried it on a sample of the library's own videos, so the household could
+see the saving and look at the result with their own eyes:
 
 * **The sample** (:func:`pick`) is up to 500 videos, spread evenly from the
   smallest to the largest, so short phone clips and long camera recordings

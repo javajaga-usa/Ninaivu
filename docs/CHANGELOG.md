@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Large files
+
+- **Compress & Replace makes HEVC, and 4K stays 4K.** The smaller MP4 is now HEVC (the Mac's own video engine, or libx265 elsewhere), at the video's own size instead of at most 1080p, tagged `hvc1` so Apple's players, Safari, Chrome, Edge and phones play it. It is about half the size H.264 was for the same picture, as the smaller-videos trial measured. An ffmpeg with no HEVC encoder makes H.264, also at the video's own size.
+- **Only the size and the format change.** The date, place and camera tags, each stream's own tags and the rotation go into the smaller file as the original has them, the picture is not turned, and the file keeps the original's modified time. Replace no longer writes a tag of Ninaivu's own into the file, and a turn made in Ninaivu stays on the item. Tidy copies tells which library a video was replaced in from the Replace line in the audit log instead.
+
 ### Two computers
 
 - **The nightly wake follows the Mac's clock.** The Primary now sends its time zone with the time it wants waking, so a Secondary set to another zone (or to UTC, as a server often is) still wakes the Mac five minutes before its catch-up. A Secondary paired with an older Primary goes by its own clock, as before.

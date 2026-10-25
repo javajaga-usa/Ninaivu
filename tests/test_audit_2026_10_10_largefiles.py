@@ -18,8 +18,8 @@ from conftest import ADMIN
 from ninaivu.media import media, video_compress as vc
 from ninaivu.storage import db, recycle
 
-HAS_X264 = bool(media.FFMPEG) and vc.encoder() == "libx264"
-needs_encoder = pytest.mark.skipif(not HAS_X264, reason="needs ffmpeg with libx264")
+HAS_X264 = bool(media.FFMPEG) and vc.encoder() in ("libx265", "libx264")
+needs_encoder = pytest.mark.skipif(not HAS_X264, reason="needs ffmpeg with libx265 or libx264")
 
 
 @pytest.fixture(autouse=True)

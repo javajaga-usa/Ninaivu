@@ -5,8 +5,9 @@ right one is often neither: a two-hour 4K recording of a wedding is worth
 keeping and not worth 40 GB. So there are two more.
 
 * **Compress** writes a smaller copy beside the original, as an MP4 with
-  H.264 video and AAC sound, no larger than 1080p, and adds it to the library
-  with the original's date, place and visibility. The original is not touched.
+  HEVC video and AAC sound at the original's own size (a 4K video stays 4K),
+  and adds it to the library with the original's date, place and visibility.
+  The original is not touched.
 * **Replace** does the same, checks the copy, and only then swaps it in for
   the original. The original goes into the library's bin first
   (``_deleted/_originals``, the same safety copy turning a file makes — see
@@ -18,9 +19,17 @@ The console offers only Replace now, as one "Compress & Replace" button; the
 copy mode stays for the API, and a copy the old Compress button left is still
 picked up by Replace and by Tidy copies.
 
-The new file is always an MP4, whatever the original was: it is what every
-browser and phone plays. A Replace of ``wedding.avi`` therefore leaves
-``wedding.mp4`` where it was.
+The new file is always an MP4, whatever the original was, with its HEVC
+tagged ``hvc1``: the form Apple's players, Safari, current Chrome and Edge
+and phones play. A Replace of ``wedding.avi`` therefore leaves
+``wedding.mp4`` where it was. An ffmpeg with no HEVC encoder makes H.264
+instead, also at the original's size.
+
+Only the size and the format change. The tags (when and where it was filmed,
+the camera) and the rotation go into the copy as the original has them, the
+picture is not turned, and the copy is given the original's modified time
+(:func:`keep_times`). A Replace adds no tag of its own; only a Compress copy,
+which sits beside its original, carries :data:`MARK_TAG`.
 
 The copy is checked before anything else happens: it has to open, run as long
 as the original, give a picture, and actually be smaller. One that is not
@@ -36,7 +45,7 @@ hidden ``.compress.tmp`` file that no scan indexes. One left behind by a job
 that never finished (the app closed, a power cut) is removed at start-up and
 when the next job starts in that folder (:func:`sweep_temporaries`).
 
-Every copy carries a tag naming the file it was made from
+Every Compress copy carries a tag naming the file it was made from
 (:data:`MARK_TAG`), so a copy is matched to its own video, never to another
 one that only shares its name (``clip.mov`` and ``clip.mp4``).
 
@@ -44,17 +53,17 @@ An ffmpeg that stops answering (a sleeping USB disk, a stalled share) cannot
 hold the queue: Stop ends it, by force after a few seconds, and one that has
 made no progress for :data:`STALL_SECONDS` is ended and said so.
 
-Needs ffmpeg with an H.264 encoder. Without one the buttons say why and do
-nothing; nothing else in Ninaivu changes.
+Needs ffmpeg with an HEVC or H.264 encoder. Without one the buttons say why
+and do nothing; nothing else in Ninaivu changes.
 
 On a Mac the encode runs on the video engine built into the chip
 (VideoToolbox) when ffmpeg has it, which is several times faster than the
-processor and leaves the processor to the family. That engine has no
-quality-for-size dial like x264's, so it is given a bitrate instead: what
-1080p H.264 needs to look like the original, scaled down for smaller
-pictures and never more than half of what the original spends. If it fails
-for a particular video, the same video is compressed again on the processor,
-as it would be anywhere else.
+processor and leaves the processor to the family. For HEVC it is given the
+quality the smaller-videos trial measured (mugil/display.py); for H.264,
+which has no quality dial there, a bitrate: what 1080p needs to look like
+the original, more for larger pictures and never more than half of what the
+original spends. If it fails for a particular video, the same video is
+compressed again on the processor, as it would be anywhere else.
 
 A video whose file was cut short where it came from (a camera that lost
 power, a copy that stopped) has no index: MP4 and MOV keep the list of where
@@ -91,14 +100,14 @@ log = logging.getLogger(__name__)
 #: visually close to the original for family video, usually a third to a half
 #: of a phone's or camcorder's size, and playable everywhere.
 PRESET = {
-    "codec": "H.264",
-    "max_lines": 1080,       # the shorter side, so a portrait clip stays upright-sized
-    "crf": 23,
+    "codec": "HEVC",
+    "max_lines": None,       # the picture's own size: a 4K video stays 4K
+    "crf": 23,               # H.264, when there is no HEVC encoder
     "speed": "medium",
     "audio_kbps": 128,
 }
 #: How the console names it, in English; the locales carry the Tamil.
-PRESET_LABEL = said("MP4 (H.264), up to 1080p")
+PRESET_LABEL = said("MP4 (HEVC), at its own size")
 
 OUTPUT_EXT = "mp4"
 #: A copy that runs this much shorter or longer than the original is not a
@@ -136,8 +145,13 @@ _worker: threading.Thread | None = None
 _encoder: str | None | bool = False      # False: not looked for yet
 _hardware: str | None | bool = False     # the same, for the Mac's video engine
 
+#: The encoders, best first. HEVC is about half H.264's size for the same
+#: picture; H.264 only when this ffmpeg has no HEVC.
+SOFTWARE = ("libx265", "libx264", "libopenh264")
+HARDWARE_HEVC = "hevc_videotoolbox"
 HARDWARE = "h264_videotoolbox"
-#: Bitrate for a 1080p picture on the video engine, which has no CRF: about
+HEVC = ("libx265", HARDWARE_HEVC)
+#: Bitrate for a 1080p picture on the H.264 video engine, which has no CRF: about
 #: what x264 at CRF 23 spends on family video. Smaller pictures get less.
 HARDWARE_1080P_BPS = 6_000_000
 HARDWARE_MIN_BPS = 1_000_000
@@ -217,12 +231,10 @@ def _look_for_encoders() -> None:
             proc = subprocess.run([media.FFMPEG, "-hide_banner", "-v", "quiet", "-encoders"],
                                   capture_output=True, timeout=20, check=False)
             listing = proc.stdout.decode("utf-8", "replace")
-            for name in ("libx264", "libopenh264"):
-                if f" {name} " in listing:
-                    software = name
-                    break
-            if sys.platform == "darwin" and f" {HARDWARE} " in listing:
-                hardware = HARDWARE
+            software = next((name for name in SOFTWARE if f" {name} " in listing), None)
+            if sys.platform == "darwin":
+                hardware = next((name for name in (HARDWARE_HEVC, HARDWARE)
+                                 if f" {name} " in listing), None)
         except (OSError, subprocess.SubprocessError):
             pass
     _encoder = software or ""
@@ -230,7 +242,7 @@ def _look_for_encoders() -> None:
 
 
 def encoder() -> str | None:
-    """The H.264 encoder this ffmpeg has, or None. Looked for once.
+    """The video encoder this ffmpeg has, HEVC first, or None. Looked for once.
 
     The processor's encoder when there is one, since it is the one every
     video can fall back to; the Mac's video engine otherwise."""
@@ -247,14 +259,11 @@ def hardware_encoder() -> str | None:
 
 
 def hardware_bitrate(width: int, height: int, size: int, duration: float) -> int:
-    """Bits per second for the video engine (see the module's note)."""
-    lines = PRESET["max_lines"]
-    short, long_ = sorted((max(1, int(width or 0)), max(1, int(height or 0))))
+    """Bits per second for the H.264 video engine (see the module's note), for
+    the picture at its own size."""
     if not width or not height:
-        short, long_ = lines, lines * 16 // 9
-    scale = min(1.0, lines / short)
-    pixels = (short * scale) * (long_ * scale)
-    rate = HARDWARE_1080P_BPS * pixels / (1920 * 1080)
+        width, height = 1920, 1080
+    rate = HARDWARE_1080P_BPS * int(width) * int(height) / (1920 * 1080)
     if size > 0 and duration > 0:
         rate = min(rate, size * 8 / duration * HARDWARE_SHARE)
     return int(max(HARDWARE_MIN_BPS, rate))
@@ -265,7 +274,7 @@ def unavailable_reason() -> str | None:
     if not media.FFMPEG:
         return said("Compressing videos needs ffmpeg, which is not installed on this computer.")
     if not encoder():
-        return said("This computer's ffmpeg has no H.264 encoder, so it cannot compress videos.")
+        return said("This computer's ffmpeg has no HEVC or H.264 encoder, so it cannot compress videos.")
     return None
 
 
@@ -284,18 +293,27 @@ def _reset_for_tests() -> None:
 # --- the encode itself ---------------------------------------------------------
 
 def command(source: Path, target: Path, enc: str, threads: int | None = None,
-            bitrate: int | None = None) -> list[str]:
+            bitrate: int | None = None, *, mark: bool = True) -> list[str]:
     """The ffmpeg command for the preset. *target* may end in ``.tmp``, so the
-    container is named rather than guessed from the extension."""
-    lines = PRESET["max_lines"]
-    # The shorter side down to 1080 lines at most, never up, and even: H.264
-    # in 4:2:0 refuses odd sizes. ffmpeg has already turned a rotated phone
-    # clip upright by the time this runs, so iw and ih are as it is watched.
-    scale = (f"scale=w='if(gte(iw,ih),-2,trunc(min(iw,{lines})/2)*2)'"
-             f":h='if(gte(iw,ih),trunc(min(ih,{lines})/2)*2,-2)'")
+    container is named rather than guessed from the extension. *mark* writes
+    :data:`MARK_TAG`, for a copy kept beside its original."""
+    from ..mugil.display import VIDEOTOOLBOX_QUALITY, X265_CRF   # noqa: PLC0415
+    # The picture's own size, made even: 4:2:0 refuses odd sizes. With
+    # -noautorotate the picture is stored as the original stores it, and its
+    # rotation goes into the copy as a tag, as the original has it.
+    scale = "scale='trunc(iw/2)*2':'trunc(ih/2)*2'"
     video = ["-c:v", enc, "-pix_fmt", "yuv420p"]
     decode: list[str] = []
-    if enc == "libx264":
+    if enc in HEVC:
+        # hvc1, not hev1: the tag Apple's players and Safari need to play it.
+        video += ["-tag:v", "hvc1"]
+        if enc == "libx265":
+            video += ["-preset", PRESET["speed"], "-crf", str(X265_CRF),
+                      "-x265-params", "log-level=error"]
+        else:
+            video += ["-q:v", str(VIDEOTOOLBOX_QUALITY)]
+            decode = ["-hwaccel", "videotoolbox"]
+    elif enc == "libx264":
         video += ["-preset", PRESET["speed"], "-crf", str(PRESET["crf"])]
     elif enc == HARDWARE:
         rate = int(bitrate or HARDWARE_1080P_BPS)
@@ -306,16 +324,18 @@ def command(source: Path, target: Path, enc: str, threads: int | None = None,
         decode = ["-hwaccel", "videotoolbox"]
     else:                                     # openh264 has no CRF; a fair bitrate instead
         video += ["-b:v", "4M"]
-    cmd = [media.FFMPEG, "-v", "error", "-nostdin", "-y", *media.LOCAL_ONLY,
+    cmd = [media.FFMPEG, "-v", "error", "-nostdin", "-y", "-noautorotate", *media.LOCAL_ONLY,
            *decode, "-i", str(source),
            "-map", "0:v:0", "-map", "0:a:0?",
-           # The date it was filmed and where: this is the family's own copy,
-           # and the index reads its date from here at the next scan.
-           "-map_metadata", "0",
-           # Which file this is a copy of, so it is never taken for a copy
-           # of another video with the same name (see copy_source).
-           "-metadata", f"{MARK_TAG}={source.name}",
-           "-vf", scale, *video,
+           # The date it was filmed and where, the camera, and each stream's
+           # own tags: only the size and the format may change.
+           "-map_metadata", "0", "-map_metadata:s:v", "0:s:v:0",
+           "-map_metadata:s:a", "0:s:a"]
+    if mark:
+        # Which file this is a copy of, so it is never taken for a copy
+        # of another video with the same name (see copy_source).
+        cmd += ["-metadata", f"{MARK_TAG}={source.name}"]
+    cmd += ["-vf", scale, *video,
            "-c:a", "aac", "-b:a", f"{PRESET['audio_kbps']}k",
            "-movflags", "+faststart+use_metadata_tags",
            "-progress", "pipe:1", "-nostats"]
@@ -332,7 +352,8 @@ def _threads() -> int | None:
 
 
 def encode(source: Path, target: Path, duration: float,
-           report: Callable[[float], None], cancelled: Callable[[], bool]) -> None:
+           report: Callable[[float], None], cancelled: Callable[[], bool], *,
+           mark: bool = True) -> None:
     """Run the encode, reporting progress from 0 to 1. Raises CompressError.
 
     On the Mac's video engine first when there is one; a video it cannot do
@@ -353,14 +374,22 @@ def encode(source: Path, target: Path, duration: float,
         rate = hardware_bitrate(info.get("width") or 0, info.get("height") or 0,
                                 size, duration or float(info.get("duration") or 0))
         try:
-            _ffmpeg(command(source, target, hardware, None, rate), duration, report, cancelled)
+            _ffmpeg(command(source, target, hardware, None, rate, mark=mark),
+                    duration, report, cancelled)
             return
         except CompressError as exc:
             if cancelled() or not software or isinstance(exc, DamagedVideo):
                 raise
             log.info("The video engine could not compress %s; using the processor.", source.name)
             report(0.0)
-    _ffmpeg(command(source, target, software, _threads()), duration, report, cancelled)
+    _ffmpeg(command(source, target, software, _threads(), mark=mark),
+            duration, report, cancelled)
+
+
+def keep_times(source_stat: os.stat_result, target: Path) -> None:
+    """Give the checked copy the original's modified time: only its size and
+    format differ from the original's."""
+    os.utime(target, ns=(source_stat.st_atime_ns, source_stat.st_mtime_ns))
 
 
 def _ffmpeg(cmd: list[str], duration: float,
