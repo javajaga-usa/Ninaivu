@@ -109,7 +109,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
 ALWAYS_ON: tuple[str, ...] = (
     # On by default now, and nothing to decide: each costs nothing until it
     # is used, or is cheap and long proven.
-    "photo_frame", "time_capsules", "our_year", "then_and_now", "life_story",
+    "photo_frame", "time_capsules", "memory_films", "our_year", "then_and_now", "life_story",
     "festival_albums", "photo_stacks", "find_print", "content_fingerprints",
     "change_journal", "perceptual_hash", "video_thumbs", "quality_scan", "occasion_scan",
 )
@@ -117,7 +117,7 @@ ALWAYS_ON: tuple[str, ...] = (
 #: computer: the AI models page is the one place that is decided
 #: (server/features.py).
 FOLLOW_THEIR_MODEL: tuple[str, ...] = (
-    "ai_runtime", "memory_films", "voice_search", "colour_photos", "photo_talk",
+    "ai_runtime", "voice_search", "colour_photos", "photo_talk",
     "video_words", "video_moments", "ask_ninaivu",
 )
 #: Tuning a household never needs: config.json and the command line only.

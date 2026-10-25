@@ -497,7 +497,7 @@ work before the next.
 
 ### Memory films (a trial of 2.0)
 
-`memory_films`, on by itself since 3.1 once the writing model is downloaded (`false` in `config.json`, or `NINAIVU_MEMORY_FILMS=0` for one launch, turns it off), puts **Make a film** beside **Make a
+`memory_films`, on by itself since 3.1, with or without the writing model (`false` in `config.json`, or `NINAIVU_MEMORY_FILMS=0` for one launch, turns it off), puts **Make a film** beside **Make a
 book** in the family app. Ninaivu picks the best photographs and clips of an
 album, a trip or a person, moves gently towards the faces, tells the voice
 stories over their photographs, cuts on the beat of the music and writes an

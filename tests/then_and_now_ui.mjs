@@ -1,7 +1,7 @@
 // @fixture thennow
 /**
- * Then and now, in a browser: no button and no strip until the console
- * switches then_and_now on; then the top bar's button opens the pairs, a
+ * Then and now, in a browser: no button and no strip while the console
+ * has then_and_now off (it is on by default since 3.1); then the top bar's button opens the pairs, a
  * pair opens large with the newer photograph over the older up to a handle
  * that follows the pointer and the arrow keys, or the two side by side; a
  * person's pair is held by the eyes; the years people were born are asked
@@ -103,6 +103,10 @@ async function visit(name, options) {
 
 const desk = await visit('desktop', { viewport: { width: 1280, height: 800 } });
 ok('the library has the drawn pairs', Object.keys(desk.byName).length >= 6, Object.keys(desk.byName).join(','));
+// On by default since 3.1: turned off first, to see that off hides it.
+ok('the console switches it off', (await switchOn(desk.context, false)) === 200);
+await desk.page.reload({ waitUntil: 'networkidle' });
+await desk.page.waitForFunction(() => document.querySelectorAll('#grid .cell').length > 0, { timeout: 30000 });
 ok('off: no Then and now button', await desk.page.locator('#then-btn').isHidden());
 ok('off: no strip', await desk.page.locator('#then-now-banner').isHidden());
 ok('the console switches it on', (await switchOn(desk.context, true)) === 200);
