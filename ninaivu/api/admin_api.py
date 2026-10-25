@@ -2268,6 +2268,18 @@ def remove_library():
     # for it as well, though nothing is lost on purpose (audit D-08).
     folding = any(any(nested_roots.relation(root, others))
                   for root in cfg.roots if root not in others)
+    if folding:
+        # A let-go original (two computers) cannot follow its row into the
+        # other folder: it comes back to this computer first, or nothing is
+        # folded (nested_roots.bring_back_first).
+        held = sum(nested_roots.bring_back_first(cfg, conn, root) for root in cfg.roots
+                   if root not in others and any(nested_roots.relation(root, others)))
+        if held:
+            return jsonify({
+                **refusal("{count} originals in this folder are kept only on the Secondary, "
+                          "and could not be brought back to this computer now, so nothing was "
+                          "removed. Try again when the Secondary is switched on.", count=held),
+                "held": held}), 409
     if losing or folding:
         from ..storage import backup                            # noqa: PLC0415
         try:

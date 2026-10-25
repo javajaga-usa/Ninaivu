@@ -358,6 +358,15 @@ def set_root():
     # Taking in a library folder inside this one merges and deletes rows, as
     # Remove's fold does: a copy of the index is taken first (D-08).
     _, inside = nested_roots.relation(str(target), cfg.roots)
+    # A let-go original (two computers) cannot follow its row into this
+    # folder: it comes back to this computer first (nested_roots.bring_back_first).
+    held = sum(nested_roots.bring_back_first(cfg, _conn(), root) for root in inside)
+    if held:
+        return jsonify({
+            **refusal("{count} originals in the library folders inside this one are kept only "
+                      "on the Secondary, and could not be brought back to this computer now, so "
+                      "the folder was not added. Try again when the Secondary is switched on.",
+                      count=held), "held": held}), 409
     if inside:
         from ..storage import backup                            # noqa: PLC0415
         try:
