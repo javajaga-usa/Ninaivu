@@ -25,11 +25,13 @@ Works on Windows, macOS and Linux with only the standard library.
 from __future__ import annotations
 
 import argparse
+import errno
 import importlib.util
 import hashlib
 import json
 import os
 import platform
+import shutil
 import socket
 import subprocess
 import sys
@@ -137,6 +139,12 @@ def in_virtualenv() -> bool:
     return sys.prefix != getattr(sys, "base_prefix", sys.prefix)
 
 
+def links_refused(exc: BaseException) -> bool:
+    """Whether making the venv failed because the drive takes no symlinks."""
+    return (not IS_WINDOWS and isinstance(exc, OSError)
+            and exc.errno in (errno.EPERM, errno.ENOTSUP, errno.EOPNOTSUPP))
+
+
 def ensure_venv() -> Path:
     """Return the interpreter to run the app with, creating a venv if needed."""
     if in_virtualenv() or os.environ.get("NINAIVU_NO_VENV"):
@@ -144,10 +152,30 @@ def ensure_venv() -> Path:
 
     python = venv_python(VENV_DIR)
     if not python.exists():
+        if importlib.util.find_spec("ensurepip") is None:
+            # Debian and the distributions built on it (Ubuntu, MX Linux, Mint)
+            # leave venv's pip out of python3 itself. Carrying on would fall
+            # back to that python3, which has no pip either, and end on "could
+            # not install core dependencies" with the real cause scrolled away.
+            die("This Python cannot make a virtual environment yet. On Debian, "
+                "Ubuntu, MX Linux and the like, run: sudo apt install python3-venv "
+                "— then start Ninaivu again.")
         say(f"Creating a virtual environment in {VENV_DIR.name}…")
+        existed = VENV_DIR.exists()
         try:
             venv.EnvBuilder(with_pip=True, upgrade_deps=False).create(VENV_DIR)
         except Exception as exc:  # noqa: BLE001
+            if links_refused(exc):
+                # On Linux venv always links lib64 to lib, and a drive formatted
+                # FAT, exFAT or NTFS (a USB stick, a live system's storage
+                # partition) refuses links. Nothing else about the checkout is
+                # wrong, so say where to put it rather than limp on.
+                if not existed:
+                    shutil.rmtree(VENV_DIR, ignore_errors=True)
+                die(f"The drive {HERE} is on cannot hold the links a virtual "
+                    "environment needs (it is probably FAT, exFAT or NTFS). Put "
+                    "Ninaivu in a folder on this computer's own disk, for example "
+                    "~/Ninaivu, and start it from there.")
             warn(f"Could not create a virtual environment ({exc}).")
             warn("Falling back to the current interpreter.")
             return Path(sys.executable)
