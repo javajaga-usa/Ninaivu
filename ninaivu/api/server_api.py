@@ -24,7 +24,7 @@ from typing import Any, Callable
 from flask import Blueprint, current_app, jsonify, request
 
 from .. import __version__
-from ..server import auth, capacity, runfile
+from ..server import auth, capacity, job_status, runfile
 from ..storage import db
 from ..server.auth import current_user, require_admin
 from ..utils.resources import MODES, budget
@@ -737,6 +737,17 @@ def stop_server():
 def workload_status():
     """How background work shares the machine, and what it is doing now."""
     return jsonify(current_app.config["MV_SERVICES"].workload.snapshot())
+
+
+@server_bp.get("/api/admin/jobs")
+@require_admin
+def jobs_status():
+    """How far each long job over the library has got, running or not:
+    complete, how many left, off, or waiting for its model (job_status.py)."""
+    response = jsonify(job_status.report(current_app.config["MV_SERVICES"], _cfg(),
+                                         fresh=request.args.get("fresh") == "1"))
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @server_bp.post("/api/admin/workload")

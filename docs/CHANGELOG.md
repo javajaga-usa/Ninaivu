@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Seeing where the long jobs stand
+
+- **Background jobs, on the Activity page.** One line for each job Ninaivu works through the whole library with: describing photographs, writing down voice stories and what is said in videos, finding moments in videos, the image model's tags, naming places, reading text in photos, finding faces, describing videos and fingerprinting files. Each says **Complete** with how many were done, **Left to do** or **Running** with how many are done of how many, **Off**, or **Not available** with what it is waiting for (a model to download, say), and how many photographs could not be done. The activity strip shows a job only while it runs, so a job that finished overnight, such as describing 180,000 photographs, left nothing on screen to say it was done. It is counted from the index itself, so it holds after a restart and between passes, and **Count again** counts afresh.
+- **A photo's description in the viewer.** The details panel (**i**) shows what the on-device AI engine wrote about the photograph, under **Description**. The descriptions were only used by search before, with no page that showed one.
+
 ### Faces
 
 - **"Not bothered" on a group waiting for a name.** A stranger in the background or a face in a crowd steps aside with one press, and the next group moves up. Nothing is deleted. The faces stay out of the groups waiting for a name, the review queues, Young faces and the "Who is this?" picker, and are never given to a named person by a regroup. New photographs of the same person stay hidden too: a regroup hides the new faces in a group made mostly of hidden ones. **Hidden from naming**, below the groups, lists them with **Show again** and **Bring them all back**, and naming a hidden face shows it again. A new search for faces keeps a face hidden, as it keeps a confirmed name.

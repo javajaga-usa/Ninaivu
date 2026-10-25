@@ -4942,5 +4942,19 @@
   "Could not hide that group: {reason}": "Could not hide that group: {reason}",
   "{count} faces are back in the list.": "{count} faces are back in the list.",
   "A cluster is required.": "A cluster is required.",
-  "This group has changed since the page loaded. The list has been refreshed; please try again.": "This group has changed since the page loaded. The list has been refreshed; please try again."
+  "This group has changed since the page loaded. The list has been refreshed; please try again.": "This group has changed since the page loaded. The list has been refreshed; please try again.",
+  "Background jobs": "Background jobs",
+  "How far each job over the whole library has got, whether or not it is running now.": "How far each job over the whole library has got, whether or not it is running now.",
+  "Count again": "Count again",
+  "Counted at {time}": "Counted at {time}",
+  "Complete": "Complete",
+  "Left to do": "Left to do",
+  "Not available": "Not available",
+  "All {total} done": "All {total} done",
+  "{done} of {total} done, {left} left": "{done} of {total} done, {left} left",
+  "{left} left": "{left} left",
+  "{count} could not be done": "{count} could not be done",
+  "last pass ended {when}": "last pass ended {when}",
+  "Description": "Description",
+  "Nothing to do in this library": "Nothing to do in this library"
 }
