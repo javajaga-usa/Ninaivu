@@ -51,7 +51,10 @@ export class FacesPanel {
     this.toast = toast || (() => {});
     this.familyUrl = familyUrl || null;
     this.visible = false;
-    this.state = { status: null, clusters: [], people: [], reviewing: null };
+    this.state = {
+      status: null, clusters: [], more: false, people: [], reviewing: null,
+      hidden: [], hiddenFaces: 0, showingHidden: false,
+    };
   }
 
   wire() {
@@ -59,6 +62,9 @@ export class FacesPanel {
     $('#faces-regroup')?.addEventListener('click', () => this.regroup());
     $('#faces-download')?.addEventListener('click', () => this.download());
     $('#faces-refresh')?.addEventListener('click', () => this.refresh());
+    $('#faces-more')?.addEventListener('click', () => this.loadMore());
+    $('#faces-hidden-toggle')?.addEventListener('click', () => this.toggleHidden());
+    $('#faces-show-all')?.addEventListener('click', () => this.showAgain(null));
     // "Who is this?" links: the answers come back here and in the family app.
     $('#faces-ask')?.addEventListener('click', () => openAskFamily({
       toast: this.toast, familyUrl: this.familyUrl,
@@ -80,7 +86,10 @@ export class FacesPanel {
       ]);
       this.state.status = status;
       this.state.clusters = clusters.clusters || [];
+      this.state.more = Boolean(clusters.more);
+      this.state.hiddenFaces = clusters.hidden_faces || 0;
       this.state.people = people.people || [];
+      if (this.state.showingHidden) await this.loadHidden();
       this.render();
     } catch (err) {
       this.toast(i18n.t('Could not load faces: {reason}', { reason: err.message }));
@@ -93,6 +102,7 @@ export class FacesPanel {
     this.renderStatus();
     this.renderPeople();
     this.renderClusters();
+    this.renderHidden();
   }
 
   renderStatus() {
@@ -238,6 +248,8 @@ export class FacesPanel {
     const list = $('#faces-clusters');
     if (!list) return;
     list.innerHTML = '';
+    const more = $('#faces-more');
+    if (more) more.hidden = !this.state.more;
     if (!this.state.clusters.length) {
       list.appendChild(el('p', 'hint',
         i18n.t('No unnamed groups. Run a scan if you have added photographs since the last one.')));
@@ -289,7 +301,128 @@ export class FacesPanel {
       input.addEventListener('keydown', (e) => { if (e.key === 'Enter') commit(); });
       row.append(input, save);
       card.appendChild(row);
+
+      // Somebody nobody is bothered to name — a stranger in the background,
+      // a face in a crowd — steps aside, and the next group moves up.
+      const hide = el('button', 'btn ghost small', i18n.t('Not bothered'));
+      hide.title = i18n.t('Stop asking about this person. Nothing is deleted, and you can bring them back below.');
+      hide.onclick = () => this.hideGroup(cluster, card, hide);
+      card.appendChild(hide);
       list.appendChild(card);
+    }
+  }
+
+  /* -- hidden from naming ------------------------------------------------ */
+
+  renderHidden() {
+    const block = $('#faces-hidden-block');
+    if (!block) return;
+    const count = this.state.hiddenFaces;
+    block.hidden = !count && !this.state.showingHidden;
+    const toggle = $('#faces-hidden-toggle');
+    if (toggle) {
+      toggle.textContent = this.state.showingHidden
+        ? i18n.t('Hide this list')
+        : i18n.t('Show hidden groups ({count} faces)', { count: count.toLocaleString(i18n.locale()) });
+    }
+    const all = $('#faces-show-all');
+    if (all) all.hidden = !this.state.showingHidden || !count;
+    const list = $('#faces-hidden');
+    if (!list) return;
+    list.hidden = !this.state.showingHidden;
+    list.innerHTML = '';
+    if (!this.state.showingHidden) return;
+    if (!this.state.hidden.length) {
+      list.appendChild(el('p', 'hint', count
+        ? i18n.t('The hidden faces are not in any group right now. Bring them all back to see them again.')
+        : i18n.t('Nobody is hidden.')));
+      return;
+    }
+    for (const cluster of this.state.hidden) {
+      const card = el('div', 'person-card');
+      if (cluster.cover?.id) {
+        const img = el('img', 'person-face');
+        img.src = faceThumb(cluster.cover.id);
+        img.alt = i18n.t('Unnamed person');
+        img.loading = 'lazy';
+        card.appendChild(img);
+      }
+      card.appendChild(el('div', 'hint',
+        i18n.t('{faces} faces in {count} photographs', { faces: cluster.size, count: cluster.photo_count })));
+      const back = el('button', 'btn ghost small', i18n.t('Show again'));
+      back.onclick = async () => {
+        back.disabled = true;
+        await this.showAgain(cluster.cluster_key);
+      };
+      card.appendChild(back);
+      list.appendChild(card);
+    }
+  }
+
+  async loadHidden() {
+    try {
+      const data = await json('/api/faces/clusters?hidden=1&limit=200');
+      this.state.hidden = data.clusters || [];
+    } catch (err) {
+      this.state.hidden = [];
+      this.toast(i18n.t('Could not load faces: {reason}', { reason: err.message }));
+    }
+  }
+
+  async toggleHidden() {
+    this.state.showingHidden = !this.state.showingHidden;
+    if (this.state.showingHidden) await this.loadHidden();
+    this.renderHidden();
+  }
+
+  async hideGroup(cluster, card, button) {
+    button.disabled = true;
+    try {
+      const result = await json('/api/faces/clusters/hide', {
+        method: 'POST', body: { cluster_key: cluster.cluster_key },
+      });
+      this.toast(i18n.t('Hidden: {count} faces will not be asked about again.', { count: result.hidden }));
+      // Only this card goes: the rest of the page, and anything typed into
+      // another group's name, stays as it is.
+      this.state.clusters = this.state.clusters.filter((c) => c.cluster_key !== cluster.cluster_key);
+      this.state.hiddenFaces += result.hidden || 0;
+      card.remove();
+      if (!this.state.clusters.length) this.renderClusters();
+      if (this.state.showingHidden) await this.loadHidden();
+      this.renderHidden();
+    } catch (err) {
+      this.toast(i18n.t('Could not hide that group: {reason}', { reason: err.message }));
+      await this.refresh();
+    }
+  }
+
+  async showAgain(clusterKey) {
+    try {
+      const result = await json('/api/faces/clusters/show', {
+        method: 'POST', body: clusterKey == null ? { all: true } : { cluster_key: clusterKey },
+      });
+      this.toast(i18n.t('{count} faces are back in the list.', { count: result.shown }));
+    } catch (err) {
+      this.toast(i18n.t('Could not save that: {reason}', { reason: err.message }));
+    }
+    await this.refresh();
+  }
+
+  /** The next page of groups: a large library has far more than one page,
+   * and the person you are looking for is often further down. */
+  async loadMore() {
+    const button = $('#faces-more');
+    if (button) button.disabled = true;
+    try {
+      const data = await json(`/api/faces/clusters?offset=${this.state.clusters.length}`);
+      const seen = new Set(this.state.clusters.map((c) => c.cluster_key));
+      this.state.clusters.push(...(data.clusters || []).filter((c) => !seen.has(c.cluster_key)));
+      this.state.more = Boolean(data.more);
+      this.renderClusters();
+    } catch (err) {
+      this.toast(i18n.t('Could not load faces: {reason}', { reason: err.message }));
+    } finally {
+      if (button) button.disabled = false;
     }
   }
 

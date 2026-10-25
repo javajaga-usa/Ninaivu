@@ -280,6 +280,8 @@ def ask_family_faces():
         "FROM faces f JOIN assets a ON a.id = f.asset_id "
         f"WHERE {guard} AND f.person_id IS NULL AND f.thumb IS NOT NULL "
         "AND f.quality >= ? "
+        # Not the faces somebody said they are not bothered about naming.
+        "AND NOT EXISTS (SELECT 1 FROM faces_ignored i WHERE i.face_id = f.id) "
         "GROUP BY COALESCE(f.cluster_key, 'face:' || f.id) "
         "ORDER BY size DESC, quality DESC, f.id LIMIT ? OFFSET ?",
         (*params, CLUSTER_MIN_QUALITY, limit + 1, offset)).fetchall()

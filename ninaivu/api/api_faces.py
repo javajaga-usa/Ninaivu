@@ -201,12 +201,46 @@ def faces_not_carried():
 @admin_only.get("/api/faces/clusters")
 @require_admin
 def faces_clusters():
-    """Groups the matcher formed that nobody has named yet."""
+    """Groups the matcher formed that nobody has named yet, a page at a time
+    (``?offset=``); ``?hidden=1`` lists the groups hidden from naming."""
     conn = _conn()
+    hidden = _int_arg("hidden", 0) == 1
+    limit = _face_limit(60)
     clusters = db.list_unnamed_clusters(
         conn, _roots(), max_visibility=current_user().max_visibility,
-        min_size=max(1, _int_arg("min_size", 3)), limit=_face_limit(60))
-    return jsonify({"clusters": clusters})
+        min_size=max(1, _int_arg("min_size", 1 if hidden else 3)), limit=limit + 1,
+        offset=max(0, _int_arg("offset", 0)), hidden=hidden)
+    return jsonify({"clusters": clusters[:limit], "more": len(clusters) > limit,
+                    "hidden_faces": db.count_hidden_faces(conn)})
+
+
+@admin_only.post("/api/faces/clusters/hide")
+@require_admin
+def faces_hide_cluster():
+    """"Not bothered": keep one unnamed group out of naming, without
+    deleting anything. :func:`db.hide_cluster` says what that covers."""
+    key = str(json_object().get("cluster_key", "")).strip()
+    if not key:
+        abort(400, description="A cluster is required.")
+    hidden = db.hide_cluster(_conn(), key)
+    if not hidden:
+        abort(409, description="This group has changed since the page loaded. "
+                               "The list has been refreshed; please try again.")
+    return jsonify({"cluster_key": key, "hidden": hidden})
+
+
+@admin_only.post("/api/faces/clusters/show")
+@require_admin
+def faces_show_cluster():
+    """Bring a hidden group back to the list, or every hidden face with
+    ``{"all": true}``."""
+    data = json_object()
+    if data.get("all") is True:
+        return jsonify({"shown": db.show_cluster(_conn())})
+    key = str(data.get("cluster_key", "")).strip()
+    if not key:
+        abort(400, description="A cluster is required.")
+    return jsonify({"cluster_key": key, "shown": db.show_cluster(_conn(), key)})
 
 
 @admin_only.get("/api/faces/cluster/<cluster_key>")

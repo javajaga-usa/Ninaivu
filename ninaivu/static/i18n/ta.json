@@ -5010,5 +5010,21 @@
   "Update the Secondary with {name}? It switches when no originals are arriving, and goes back by itself if the new version cannot start.": "{name} கொண்டு இரண்டாம் கணினியைப் புதுப்பிக்கவா? மூலக்கோப்புகள் வராத நேரத்தில் மாறும்; புதிய பதிப்பு தொடங்காவிட்டால் தானாகவே திரும்பும்.",
   "Sending the update to the Secondary.": "புதுப்பிப்பு இரண்டாம் கணினிக்கு அனுப்பப்படுகிறது.",
   "Choose the Linux portable download of Ninaivu.": "நினைவின் Linux கையடக்கப் பதிவிறக்கத்தைத் தேர்ந்தெடுக்கவும்.",
-  "Pair this computer with a Secondary first.": "முதலில் இந்தக் கணினியை ஓர் இரண்டாம் கணினியுடன் இணைக்கவும்."
+  "Pair this computer with a Secondary first.": "முதலில் இந்தக் கணினியை ஓர் இரண்டாம் கணினியுடன் இணைக்கவும்.",
+  "Show more groups": "மேலும் குழுக்களைக் காட்டு",
+  "Hidden from naming": "பெயரிடுவதிலிருந்து மறைக்கப்பட்டவை",
+  "People you said you are not bothered about naming. Ninaivu stops asking about them, and keeps new photographs of them out of the list too. Nothing is deleted.": "பெயரிடத் தேவையில்லை என்று நீங்கள் சொன்னவர்கள். நினைவு இனி அவர்களைப் பற்றிக் கேட்காது, அவர்களின் புதிய படங்களையும் பட்டியலில் சேர்க்காது. எதுவும் நீக்கப்படவில்லை.",
+  "Bring them all back": "அனைவரையும் திரும்பக் கொண்டு வா",
+  "Not bothered": "தேவையில்லை",
+  "Stop asking about this person. Nothing is deleted, and you can bring them back below.": "இவரைப் பற்றிக் கேட்பதை நிறுத்து. எதுவும் நீக்கப்படாது, கீழே இவரைத் திரும்பக் கொண்டு வரலாம்.",
+  "Hide this list": "இந்தப் பட்டியலை மறை",
+  "Show hidden groups ({count} faces)": "மறைக்கப்பட்ட குழுக்களைக் காட்டு ({count} முகங்கள்)",
+  "The hidden faces are not in any group right now. Bring them all back to see them again.": "மறைக்கப்பட்ட முகங்கள் இப்போது எந்தக் குழுவிலும் இல்லை. மீண்டும் பார்க்க அனைவரையும் திரும்பக் கொண்டு வாருங்கள்.",
+  "Nobody is hidden.": "யாரும் மறைக்கப்படவில்லை.",
+  "Show again": "மீண்டும் காட்டு",
+  "Hidden: {count} faces will not be asked about again.": "மறைக்கப்பட்டது: {count} முகங்களைப் பற்றி இனி கேட்கப்படாது.",
+  "Could not hide that group: {reason}": "அந்தக் குழுவை மறைக்க முடியவில்லை: {reason}",
+  "{count} faces are back in the list.": "{count} முகங்கள் மீண்டும் பட்டியலில் உள்ளன.",
+  "A cluster is required.": "ஒரு குழு தேவை.",
+  "This group has changed since the page loaded. The list has been refreshed; please try again.": "பக்கம் ஏற்றப்பட்ட பின் இந்தக் குழு மாறிவிட்டது. பட்டியல் புதுப்பிக்கப்பட்டது; மீண்டும் முயலுங்கள்."
 }

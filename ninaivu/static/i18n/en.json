@@ -4924,5 +4924,21 @@
   "Update the Secondary with {name}? It switches when no originals are arriving, and goes back by itself if the new version cannot start.": "Update the Secondary with {name}? It switches when no originals are arriving, and goes back by itself if the new version cannot start.",
   "Sending the update to the Secondary.": "Sending the update to the Secondary.",
   "Choose the Linux portable download of Ninaivu.": "Choose the Linux portable download of Ninaivu.",
-  "Pair this computer with a Secondary first.": "Pair this computer with a Secondary first."
+  "Pair this computer with a Secondary first.": "Pair this computer with a Secondary first.",
+  "Show more groups": "Show more groups",
+  "Hidden from naming": "Hidden from naming",
+  "People you said you are not bothered about naming. Ninaivu stops asking about them, and keeps new photographs of them out of the list too. Nothing is deleted.": "People you said you are not bothered about naming. Ninaivu stops asking about them, and keeps new photographs of them out of the list too. Nothing is deleted.",
+  "Bring them all back": "Bring them all back",
+  "Not bothered": "Not bothered",
+  "Stop asking about this person. Nothing is deleted, and you can bring them back below.": "Stop asking about this person. Nothing is deleted, and you can bring them back below.",
+  "Hide this list": "Hide this list",
+  "Show hidden groups ({count} faces)": "Show hidden groups ({count} faces)",
+  "The hidden faces are not in any group right now. Bring them all back to see them again.": "The hidden faces are not in any group right now. Bring them all back to see them again.",
+  "Nobody is hidden.": "Nobody is hidden.",
+  "Show again": "Show again",
+  "Hidden: {count} faces will not be asked about again.": "Hidden: {count} faces will not be asked about again.",
+  "Could not hide that group: {reason}": "Could not hide that group: {reason}",
+  "{count} faces are back in the list.": "{count} faces are back in the list.",
+  "A cluster is required.": "A cluster is required.",
+  "This group has changed since the page loaded. The list has been refreshed; please try again.": "This group has changed since the page loaded. The list has been refreshed; please try again."
 }
