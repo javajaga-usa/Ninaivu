@@ -29,6 +29,7 @@ from flask import abort, current_app, jsonify
 from .. import runtime
 from ..ask import answer as answer_mod
 from ..ask import question as question_mod
+from ..server import features
 from ..server.auth import current_user, require_family
 from ..storage import db, journal
 from ..words import Said
@@ -54,7 +55,7 @@ _asking = threading.BoundedSemaphore(3)
 
 
 def _switched_on() -> None:
-    if not getattr(_cfg(), "ask_ninaivu", False):
+    if not features.on(_cfg(), "ask_ninaivu"):
         abort(404)
     if current_user().is_guest:
         abort(404)

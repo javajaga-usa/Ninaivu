@@ -101,12 +101,42 @@ GROUPS: dict[str, tuple[str, ...]] = {
     ),
 }
 
+#: Settings 3.1 stopped offering as switches (the "fewer switches" list the
+#: household agreed). Each is still a setting: read from config.json and the
+#: environment, kept in its group so the page that owns it (the Straighten
+#: page, Library settings) can still change it, but not shown on the Advanced
+#: page. A value somebody saved before keeps working as it was.
+ALWAYS_ON: tuple[str, ...] = (
+    # On by default now, and nothing to decide: each costs nothing until it
+    # is used, or is cheap and long proven.
+    "photo_frame", "time_capsules", "our_year", "then_and_now", "life_story",
+    "festival_albums", "photo_stacks", "find_print", "content_fingerprints",
+    "change_journal", "perceptual_hash", "video_thumbs", "quality_scan", "occasion_scan",
+)
+#: On by default, and on in fact only once the model each needs is on this
+#: computer: the AI models page is the one place that is decided
+#: (server/features.py).
+FOLLOW_THEIR_MODEL: tuple[str, ...] = (
+    "ai_runtime", "memory_films", "voice_search", "colour_photos", "photo_talk",
+    "video_words", "video_moments", "ask_ninaivu",
+)
+#: Tuning a household never needs: config.json and the command line only.
+TUNING_ONLY: tuple[str, ...] = (
+    "lock_roots", "follow_symlinks", "import_voice_audio_only", "straighten_requires_face",
+    "straighten_auto", "straighten_auto_apply", "detect_orientation", "orientation_ai",
+    "rescan_on_change", "watch", "date_phrase_search", "phrase_search",
+    "southern_hemisphere", "letters_aloud", "debug",
+)
+#: Not shown on the Advanced page at all.
+OFF_THE_PAGE: frozenset[str] = frozenset(
+    (*ALWAYS_ON, *FOLLOW_THEIR_MODEL, *TUNING_ONLY, "first_day_done"))
+
 #: The ten a household changes, on the first screen of the Advanced page
 #: before anything is folded away. Everything else is under its group.
 FIRST_SCREEN: tuple[str, ...] = (
     "house_name", "open_browsing", "lock_after_minutes", "cloud_enabled",
     "remote_access", "ai_enabled", "faces_enabled", "place_names", "hide_screens",
-    "straighten_auto",
+    "daily_catchup",
 )
 
 #: Shown here, changed only on the page that owns them, because changing
@@ -327,6 +357,8 @@ def describe(cfg: Config) -> dict[str, Any]:
     for group, names in GROUPS.items():
         items = []
         for name in names:
+            if name in OFF_THE_PAGE:
+                continue
             default = defaults.get(name)
             value = getattr(cfg, name, default)
             kind = ("float" if name in OPTIONAL_NUMBERS

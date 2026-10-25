@@ -23,7 +23,7 @@ from typing import Any, Callable
 from flask import Blueprint, abort, current_app, g, has_app_context, jsonify, request, send_file
 
 from .. import COPYRIGHT, LICENCE, __version__
-from ..server import auth
+from ..server import auth, features
 from ..storage import db, nested_roots
 from ..media import media
 from ..media.scanner import Scanner
@@ -165,7 +165,7 @@ def settings_all_change():
                 scanner._faces = None                           # noqa: SLF001
         if {"ai_runtime", "speech_languages"} & set(changed):
             services = current_app.config["MV_SERVICES"]
-            if cfg.ai_runtime:
+            if features.on(cfg, "ai_runtime"):
                 # On now: the voice stories and the photographs are looked at
                 # straight away.
                 services.transcriber.wake()
@@ -1606,13 +1606,16 @@ def _compress_work(cfg, row: dict[str, Any], mode: str, user_id: int, cloud=None
             if info is None:
                 if not vc.same_disk_space(folder, before.st_size // 2 + safety):
                     raise vc.CompressError(said("There is not enough free space on that disk to compress this video."))
-                vc.encode(source, temporary, duration, report, cancelled)
+                vc.encode(source, temporary, duration, report, cancelled,
+                          mark=mode == "copy")
                 report(1.0)
                 info = vc.verify(duration, before.st_size, temporary)
             elif safety and not vc.same_disk_space(folder, safety):
                 raise vc.CompressError(
                     "There is not enough free space on that disk for a copy of the original, "
                     "so it was left as it is.")
+            # Only the size and the format differ: the original's time too.
+            vc.keep_times(before, temporary)
             if cancelled():
                 raise vc.CompressError(said("Stopped."))
             if mode == "copy":
@@ -1663,7 +1666,10 @@ def _publish_copy(conn, cfg, row, temporary: Path, folder: Path, root: str,
               "folder": "" if folder_rel == "." else folder_rel,
               "ext": vc.OUTPUT_EXT, "kind": "video", "width": info.get("width"),
               "height": info.get("height"), "duration": info.get("duration") or row.get("duration"),
-              "thumb": base, "vis_source": "item", "rotation": 0, "rot_source": "manual",
+              # The copy keeps the original's rotation tag, so a turn made
+              # here applies to it as it did to the original.
+              "thumb": base, "vis_source": "item", "rotation": row.get("rotation") or 0,
+              "rot_source": row.get("rot_source") or "manual",
               "caption": f"Compressed copy of {row['filename']}"}
     new_id = db.upsert_asset(conn, record)
     try:
@@ -1803,8 +1809,8 @@ def _replace_original(conn, cfg, row, before, temporary: Path,
     fresh = db.get_asset(conn, row["id"]) or row
     fields = _reshoot(dict(fresh), cfg)
     fields["duration"] = info.get("duration") or row.get("duration")
-    fields["rotation"] = 0
-    fields["rot_source"] = "manual"
+    # The smaller file keeps the original's rotation tag, so the item's own
+    # turn (the index's, never the file's) stays as it was.
     db.update_asset(conn, row["id"], **fields)
     if not same_name and row.get("thumb") and row["thumb"] != fresh.get("thumb"):
         media.remove_thumbnails(cfg.thumbs_dir, row["thumb"], cfg.thumb_sizes, cfg.thumb_format)
@@ -1818,10 +1824,17 @@ def _replace_original(conn, cfg, row, before, temporary: Path,
     size = target.stat().st_size
     auth.audit(conn, user_id, "replace_video",
                f"{rel} → {new_rel} ({media.human_size(before.st_size)} → "
-               f"{media.human_size(size)}); original kept in the bin")
+               f"{media.human_size(size)}); original kept in the bin{_IN_LIBRARY}{root}")
     return {"mode": "replace", "id": row["id"], "name": target.name,
             "old_size": before.st_size, "new_size": size,
             "kept": str(kept.relative_to(Path(root))) if kept else ""}
+
+
+#: Ends Replace's audit line: the library it replaced the video in. The
+#: smaller file carries no tag of its own (only its size and format may
+#: differ from the original's), so this is how Tidy copies tells which of two
+#: libraries' same-named videos was replaced.
+_IN_LIBRARY = "; in library "
 
 
 #: "party-compressed.mp4", "party-compressed-2.mp4", and the copies of copies
@@ -1829,26 +1842,39 @@ def _replace_original(conn, cfg, row, before, temporary: Path,
 _COPY_NAME = re.compile(r"^(?P<stem>.+?)(?:-compressed(?:-\d+)?)+\.mp4$", re.IGNORECASE)
 
 
-def _replaced_in(conn, libraries: list[str], root: str, replacements: list[str]) -> bool:
+def _replaced_in(conn, libraries: list[str], root: str,
+                 replacements: list[tuple[str, str | None]]) -> bool:
     """Whether Replace has put a smaller file in the original's place in
-    *root*, given where the audit says it put one (*replacements*: paths in
-    some library, as the audit does not name which).
+    *root*, given where the audit says it put one (*replacements*: a path,
+    and the library when the audit line names it; older lines do not).
 
-    The file in that place says so itself when this build made it: it
-    carries the tag every compressed file does. A file without it counts
-    only when no other library has a file at that path, so a Replace in one
-    library never marks a same-named video in another as replaced."""
+    An older build's file in that place says so itself: it carries the tag
+    every compressed file did then. A file the line names no library for,
+    and without the tag, counts only when no other library has a file at
+    that path, so a Replace in one library never marks a same-named video in
+    another as replaced."""
     from ..media import video_compress as vc                 # noqa: PLC0415
     marks = ",".join("?" * len(libraries))
-    for new_rel in replacements:
+    for new_rel, named in replacements:
         holders = [r["root"] for r in conn.execute(
             f"SELECT root FROM assets WHERE root IN ({marks}) AND rel_path=? "
             f"AND COALESCE(trashed, 0)=0", [*libraries, new_rel])]
         if root not in holders:
             continue
+        if named is not None:
+            if named == root:
+                return True
+            continue
         if vc.copy_source(Path(root) / new_rel) or set(holders) == {root}:
             return True
     return False
+
+
+def _replacement(detail: str, source_rel: str) -> tuple[str, str | None]:
+    """Where a Replace audit line put the smaller file, and in which library
+    (None from a line written before it said)."""
+    rest, _, named = detail.partition(_IN_LIBRARY)
+    return rest[len(source_rel) + 3:].rsplit(" (", 1)[0], (named or None)
 
 
 def _extra_copies(conn) -> tuple[list[dict[str, Any]], int]:
@@ -1897,7 +1923,7 @@ def _extra_copies(conn) -> tuple[list[dict[str, Any]], int]:
         originals.sort(key=lambda o: o["root"] != root)
         # Where Replace has put the smaller file in its place: under the
         # same name, or as an .mp4 when the original was another format.
-        replacements = [detail[len(source_rel) + 3:].rsplit(" (", 1)[0]
+        replacements = [_replacement(detail, source_rel)
                         for detail in replaced if detail.startswith(f"{source_rel} → ")]
         group.sort(key=lambda c: (c.get("mtime") or 0, c["id"]), reverse=True)
         if _replaced_in(conn, libraries, originals[0]["root"] if originals else root,
@@ -3978,7 +4004,11 @@ def space_report():
     if role(cfg) == PRIMARY:
         from ..mugil import optimize                          # noqa: PLC0415
         try:
-            plan = optimize.plan(conn, cfg.state_dir, list(cfg.roots))
+            # The plan also reads the Secondary's confirmations and the
+            # display copies, which the library's number does not follow.
+            plan = db.cached_aggregate(
+                conn, ("space-optimize", cfg.state_dir, tuple(cfg.roots)),
+                lambda: optimize.plan(conn, cfg.state_dir, list(cfg.roots)), max_age=300)
             extra.append(("optimize_mac_storage", int((plan.get("ready") or {}).get("bytes") or 0)))
         except Exception:                                     # noqa: BLE001 - one step fewer
             log.debug("no Optimize Mac storage step in the forecast", exc_info=True)

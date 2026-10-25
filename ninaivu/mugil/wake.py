@@ -96,7 +96,11 @@ def wanted_at(cfg) -> str:
 
 def what_to_ask(cfg) -> dict[str, Any]:
     """The Primary's request, as it is sent to the Secondary."""
-    return {"macs": hardware_addresses(), "at": wanted_at(cfg)}
+    # "at" is the Primary's own wall clock, so its offset from UTC goes with
+    # it: a Secondary set to another time zone still wakes it at that hour.
+    # It is sent on every run, so a change of summer time follows the next day.
+    return {"macs": hardware_addresses(), "at": wanted_at(cfg),
+            "utc_offset": int(time.localtime().tm_gmtoff or 0)}
 
 
 def remember_told(state_dir: str | Path, asked: dict[str, Any]) -> None:
@@ -141,7 +145,14 @@ def remember(state_dir: str | Path, asked: dict[str, Any]) -> dict[str, Any]:
     at = str(asked.get("at") or "")
     if at and not re.match(r"^([01]\d|2[0-3]):[0-5]\d$", at):
         at = ""
-    data = {**load(state_dir), "macs": macs, "at": at, "asked_at": time.time()}
+    try:
+        offset = int(asked.get("utc_offset"))
+    except (TypeError, ValueError):
+        offset = None
+    if offset is not None and abs(offset) > 14 * 3600:
+        offset = None
+    data = {**load(state_dir), "macs": macs, "at": at, "utc_offset": offset,
+            "asked_at": time.time()}
     _save(state_dir, data)
     return data
 
@@ -199,7 +210,11 @@ def due(data: dict[str, Any], now: float) -> bool:
     at, macs = data.get("at"), data.get("macs")
     if not at or not macs:
         return False
-    here = _dt.datetime.fromtimestamp(now)
+    offset = data.get("utc_offset")
+    # The Primary's wall clock when it said; this computer's own when an
+    # older Primary did not.
+    here = (_dt.datetime.fromtimestamp(now, _dt.timezone(_dt.timedelta(seconds=int(offset))))
+            if isinstance(offset, int) else _dt.datetime.fromtimestamp(now))
     hour, minute = (int(x) for x in at.split(":"))
     when = here.replace(hour=hour, minute=minute, second=0, microsecond=0)
     if when > here:

@@ -8,6 +8,7 @@ deleting does. Without ffmpeg (or an H.264 encoder) the routes say why and do
 nothing.
 """
 
+import json
 import shutil
 import subprocess
 import sys
@@ -19,8 +20,8 @@ from conftest import ADMIN, FAMILY, login
 from ninaivu.media import media, video_compress as vc
 from ninaivu.storage import db, recycle
 
-HAS_X264 = bool(media.FFMPEG) and vc.encoder() == "libx264"
-needs_encoder = pytest.mark.skipif(not HAS_X264, reason="needs ffmpeg with libx264")
+HAS_X264 = bool(media.FFMPEG) and vc.encoder() in ("libx265", "libx264")
+needs_encoder = pytest.mark.skipif(not HAS_X264, reason="needs ffmpeg with libx265 or libx264")
 
 
 @pytest.fixture(autouse=True)
@@ -148,6 +149,37 @@ def test_replace_keeps_the_original_in_the_bin_and_the_same_item(as_admin, scann
 
 
 @needs_encoder
+def test_replace_changes_only_the_size_and_the_format(as_admin, scanned):
+    """HEVC at the original's own size, with its tags, rotation and modified
+    time, and no tag of Ninaivu's own."""
+    from ninaivu.mugil import display
+    cfg, conn, scanner = scanned
+    folder = Path(cfg.active_root) / "videos"
+    make_video(folder / "plain.mp4")
+    path = folder / "turned.mp4"
+    subprocess.run([media.FFMPEG, "-v", "error", "-y", "-display_rotation", "90",
+                    "-i", str(folder / "plain.mp4"), "-c", "copy", str(path)],
+                   check=True, capture_output=True, timeout=60)
+    (folder / "plain.mp4").unlink()
+    scanner._run(Path(cfg.active_root), full=True)
+    vid = conn.execute("SELECT id FROM assets WHERE rel_path='videos/turned.mp4'").fetchone()["id"]
+    before, probed = path.stat(), display._probe(path)
+
+    run(as_admin, {"id": vid, "mode": "replace", "password": ADMIN[1]})
+
+    after = display._probe(path)
+    video = next(s for s in after["streams"] if s.get("codec_type") == "video")
+    if vc.encoder() == "libx265":
+        assert video["codec_name"] == "hevc" and video.get("codec_tag_string") == "hvc1"
+    assert (video["width"], video["height"]) == (1280, 720)       # its own size, stored as it was
+    assert display._rotation(after) == display._rotation(probed) != 0
+    assert display._tags(after) == display._tags(probed)
+    assert vc.MARK_TAG not in json.dumps(after)
+    assert path.stat().st_mtime_ns == before.st_mtime_ns
+    assert path.stat().st_size < before.st_size
+
+
+@needs_encoder
 def test_replace_of_another_format_leaves_an_mp4_in_its_place(as_admin, scanned):
     cfg, conn, _ = scanned
     vid = index_video(scanned, "wedding.avi")
@@ -243,15 +275,57 @@ def test_a_video_that_would_not_shrink_is_left_alone(as_admin, scanned, monkeypa
 
 # --- the preset ------------------------------------------------------------------
 
-def test_the_preset_never_scales_up_and_keeps_the_date(tmp_path, monkeypatch):
+def test_the_preset_keeps_the_size_the_date_and_the_rotation(tmp_path, monkeypatch):
     # Only the arguments are checked, so it runs where ffmpeg is not installed.
     monkeypatch.setattr(media, "FFMPEG", "ffmpeg")
     cmd = vc.command(tmp_path / "in.mov", tmp_path / "out.tmp", "libx264")
     joined = " ".join(cmd)
-    assert "min(ih,1080)" in joined and "min(iw,1080)" in joined
+    # The picture's own size (a 4K video stays 4K), only made even.
+    assert cmd[cmd.index("-vf") + 1] == "scale='trunc(iw/2)*2':'trunc(ih/2)*2'"
+    assert "1080" not in joined
+    # The rotation tag is carried, not applied to the picture.
+    assert cmd.index("-noautorotate") < cmd.index("-i")
     assert cmd[cmd.index("-map_metadata") + 1] == "0"
+    assert "0:s:v:0" in cmd and "0:s:a" in cmd
     assert cmd[cmd.index("-c:v") + 1] == "libx264"
     assert cmd[cmd.index("-f", cmd.index("-nostats")) + 1] == "mp4"
+
+
+def test_hevc_is_tagged_to_play_on_apple_and_in_browsers(tmp_path, monkeypatch):
+    from ninaivu.mugil.display import VIDEOTOOLBOX_QUALITY, X265_CRF
+    monkeypatch.setattr(media, "FFMPEG", "ffmpeg")
+    soft = vc.command(tmp_path / "in.mov", tmp_path / "out.tmp", "libx265")
+    assert soft[soft.index("-c:v") + 1] == "libx265"
+    assert soft[soft.index("-tag:v") + 1] == "hvc1"
+    assert soft[soft.index("-crf") + 1] == str(X265_CRF)
+    engine = vc.command(tmp_path / "in.mov", tmp_path / "out.tmp", vc.HARDWARE_HEVC)
+    assert engine[engine.index("-tag:v") + 1] == "hvc1"
+    assert engine[engine.index("-q:v") + 1] == str(VIDEOTOOLBOX_QUALITY)
+    assert engine.index("-hwaccel") < engine.index("-i")
+    # H.264 carries no HEVC tag.
+    assert "-tag:v" not in vc.command(tmp_path / "in.mov", tmp_path / "out.tmp", "libx264")
+
+
+def test_only_a_copy_beside_its_original_is_marked(tmp_path, monkeypatch):
+    monkeypatch.setattr(media, "FFMPEG", "ffmpeg")
+    marked = vc.command(tmp_path / "in.mov", tmp_path / "out.tmp", "libx265")
+    assert f"{vc.MARK_TAG}=in.mov" in marked
+    plain = vc.command(tmp_path / "in.mov", tmp_path / "out.tmp", "libx265", mark=False)
+    assert not any(vc.MARK_TAG in part for part in plain)
+
+
+def test_hevc_is_chosen_before_h264(monkeypatch):
+    listing = (" V....D libx264  H.264\n V....D libx265  HEVC\n"
+               " V....D h264_videotoolbox x\n V....D hevc_videotoolbox x\n")
+
+    class Done:
+        stdout = listing.encode()
+    monkeypatch.setattr(media, "FFMPEG", "ffmpeg")
+    monkeypatch.setattr(vc.subprocess, "run", lambda *a, **k: Done())
+    monkeypatch.setattr(vc.sys, "platform", "darwin")
+    monkeypatch.setattr(vc, "_encoder", False)
+    monkeypatch.setattr(vc, "_hardware", False)
+    assert vc.encoder() == "libx265" and vc.hardware_encoder() == vc.HARDWARE_HEVC
 
 
 # --- the Mac's video engine ----------------------------------------------------
@@ -269,10 +343,11 @@ def test_the_video_engine_is_given_a_bitrate_and_reads_on_the_engine_too(tmp_pat
 
 def test_the_video_engines_bitrate_follows_the_picture_and_the_original():
     hour = 3600.0
-    # 4K at 57 Mbit/s (a phone's): the full 1080p rate.
-    assert vc.hardware_bitrate(3840, 2160, int(57e6 / 8 * hour), hour) == vc.HARDWARE_1080P_BPS
-    # A portrait clip is judged by its short side, like the scale filter.
-    assert vc.hardware_bitrate(2160, 3840, int(57e6 / 8 * hour), hour) == vc.HARDWARE_1080P_BPS
+    # 1080p at 57 Mbit/s: the full 1080p rate.
+    assert vc.hardware_bitrate(1920, 1080, int(57e6 / 8 * hour), hour) == vc.HARDWARE_1080P_BPS
+    # 4K stays 4K, so it is given four times that; portrait or landscape alike.
+    assert vc.hardware_bitrate(3840, 2160, int(57e6 / 8 * hour), hour) == 4 * vc.HARDWARE_1080P_BPS
+    assert vc.hardware_bitrate(2160, 3840, int(57e6 / 8 * hour), hour) == 4 * vc.HARDWARE_1080P_BPS
     # 720p gets less than 1080p.
     assert vc.hardware_bitrate(1280, 720, int(57e6 / 8 * hour), hour) < vc.HARDWARE_1080P_BPS
     # Never more than half of what a lean original spends, nor below the floor.

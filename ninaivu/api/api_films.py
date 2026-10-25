@@ -23,6 +23,7 @@ from typing import Any
 from flask import abort, current_app, jsonify, make_response, request, send_file
 
 from ..media import books as book_maker, films as maker, storyboard
+from ..server import features
 from ..server.auth import current_user, require_family
 from ..storage import db, films as store, stories as story_store
 from ..words import Said, refusal
@@ -56,7 +57,7 @@ _STARTED = time.time()
 
 
 def _switched_on() -> None:
-    if not getattr(_cfg(), "memory_films", False):
+    if not features.on(_cfg(), "memory_films"):
         abort(404)
 
 

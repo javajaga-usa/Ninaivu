@@ -60,6 +60,21 @@ def _models_stay_off_this_machine(request, tmp_path: Path):
 
 
 @pytest.fixture(autouse=True)
+def _feature_models_are_here(monkeypatch):
+    """The features that follow their model (server/features.py) are tested
+    with stub model hosts, so the model each needs is taken as downloaded.
+    The on-device engine as a whole ("any") is still asked for real: with no
+    model in a test's folder it stays off, as on a new install, unless a test
+    says otherwise. tests/test_fewer_switches.py tests the gate itself."""
+    from ninaivu.server import features
+    real = features._why_not
+    monkeypatch.setattr(features, "_why_not", lambda need: real(need) if need == "any" else None)
+    features.forget()
+    yield
+    features.forget()
+
+
+@pytest.fixture(autouse=True)
 def _sign_in_limits_start_empty():
     """Rate limits and PIN lockouts are process-wide; one test's guesses must
     not pause the next test's profile."""
@@ -196,6 +211,14 @@ def cfg(tmp_path: Path, library: Path):
     # themselves, and test_the_backup_is_encrypted_by_default checks the
     # shipped default.
     config.cloud_encrypt = False
+    # The features on by default since 3.1 (settings_groups.ALWAYS_ON and
+    # FOLLOW_THEIR_MODEL) start off here, as they shipped in 2.x, so a test
+    # sees only what it switches on; tests/test_fewer_switches.py checks the
+    # shipped defaults.
+    from ninaivu.server import settings_groups
+    for name in (*settings_groups.ALWAYS_ON, *settings_groups.FOLLOW_THEIR_MODEL):
+        if name not in ("perceptual_hash", "video_thumbs", "quality_scan", "occasion_scan"):
+            setattr(config, name, False)
     config.workers = 2
     config.open_browsing = True
     # The fixtures draw 400x300 solid-colour JPEGs a few kilobytes each. Real

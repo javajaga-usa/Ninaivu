@@ -18,7 +18,7 @@ from ninaivu.api import api_then_and_now
 from ninaivu.media import then_and_now as pairing
 from ninaivu.server import auth
 from ninaivu.server.config import Config
-from ninaivu.server.settings_groups import GROUPS
+from ninaivu.server.settings_groups import GROUPS, OFF_THE_PAGE
 from ninaivu.storage import db, family_tree
 from ninaivu.storage import then_and_now as born_store
 
@@ -98,8 +98,8 @@ def pairs(app, people):
 
 
 def test_off_by_default_and_under_advanced():
-    assert Config().then_and_now is False
-    assert "then_and_now" in GROUPS["Advanced"]
+    assert Config().then_and_now is True                 # on by default since 3.1
+    assert "then_and_now" in GROUPS["Advanced"] and "then_and_now" in OFF_THE_PAGE
 
 
 def test_every_route_is_404_until_switched_on(as_family, app):

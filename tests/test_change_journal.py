@@ -17,7 +17,7 @@ from ninaivu import build_services, create_admin_app
 from ninaivu.media.scanner import Scanner
 from ninaivu.server import auth
 from ninaivu.server.config import Config
-from ninaivu.server.settings_groups import GROUPS
+from ninaivu.server.settings_groups import GROUPS, OFF_THE_PAGE
 from ninaivu.storage import db, fsevents, journal
 
 
@@ -40,8 +40,8 @@ def keeping(scanned):
 
 
 def test_off_by_default_and_on_the_advanced_page(scanned):
-    assert Config().change_journal is False
-    assert "change_journal" in GROUPS["Advanced"]
+    assert Config().change_journal is True                 # on by default since 3.1
+    assert "change_journal" in GROUPS["Advanced"] and "change_journal" in OFF_THE_PAGE
     cfg, conn, _ = scanned
     # The fixture's first scan ran with it off: the table is there, empty.
     assert journal.counts(conn) == {"rows": 0, "since": None, "latest": 0, "keeping": False}

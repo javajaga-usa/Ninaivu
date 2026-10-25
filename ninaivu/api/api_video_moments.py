@@ -22,6 +22,7 @@ from pathlib import Path
 from flask import abort, jsonify, request, send_file
 
 from ..media import media
+from ..server import features
 from ..storage import db, video_moments
 from .api import (_cfg, _conn, _engine, _guard, _roots, _text_vector, _thumb_version,
                   _viewer, bp)
@@ -37,7 +38,7 @@ FRAMES_KEPT = 3000
 
 
 def _switched_on() -> None:
-    if not getattr(_cfg(), "video_moments", False):
+    if not features.on(_cfg(), "video_moments"):
         abort(404)
 
 

@@ -122,3 +122,36 @@ def test_the_primary_asks_for_an_original_by_its_fingerprint(tmp_path, monkeypat
     got = fetch.original(cfg, str(tmp_path / "lib"), "a.jpg", partner=Partner)
     assert got is not None and Path(got).read_bytes() == b"x"
     assert asked["digest"] == hashlib.blake2b(b"x", digest_size=32).hexdigest()
+
+
+def test_the_wake_is_at_the_primarys_hour_whatever_the_secondarys_time_zone(tmp_path):
+    import datetime as dt
+    from ninaivu.mugil import wake
+    # The Primary is five and a half hours east of UTC and wants waking at 01:55.
+    kept = wake.remember(tmp_path, {"macs": ["a4:83:e7:01:02:03"], "at": "01:55",
+                                    "utc_offset": 19800})
+    assert kept["utc_offset"] == 19800
+    there = dt.timezone(dt.timedelta(seconds=19800))
+    night = dt.datetime(2026, 10, 25, 1, 56, tzinfo=there).timestamp()
+    assert wake.due(kept, night)
+    assert not wake.due(kept, night - 120)
+    # 01:56 UTC is 07:26 at the Primary: long past its wake.
+    assert not wake.due(kept, dt.datetime(2026, 10, 25, 1, 56, tzinfo=dt.timezone.utc).timestamp())
+    # A nonsense offset, or none from an older Primary, falls back to this clock.
+    assert wake.remember(tmp_path, {"macs": [], "at": "01:55", "utc_offset": 10 ** 9})["utc_offset"] is None
+    assert wake.remember(tmp_path, {"macs": [], "at": "01:55"})["utc_offset"] is None
+
+
+def test_the_space_report_reuses_the_optimize_plan(as_admin, monkeypatch):
+    import ninaivu.mugil as mugil
+    from ninaivu.mugil import optimize
+    calls = []
+
+    def plan(*a, **k):
+        calls.append(1)
+        return {"ready": {"files": 1, "bytes": 5}}
+    monkeypatch.setattr(mugil, "role", lambda cfg: mugil.PRIMARY)
+    monkeypatch.setattr(optimize, "plan", plan)
+    for _ in range(3):
+        assert as_admin.get("/api/admin/space").status_code == 200
+    assert len(calls) == 1
