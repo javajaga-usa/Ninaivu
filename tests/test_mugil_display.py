@@ -108,6 +108,18 @@ def test_a_video_copy_is_hevc_and_keeps_its_tags_and_rotation(tmp_path):
     assert source.read_bytes() == before
 
 
+@needs_hevc
+def test_a_video_without_sound_has_a_copy_too(tmp_path):
+    source = tmp_path / "screen.mp4"
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i",
+                    "testsrc=size=1920x1440:rate=30", "-t", "3", "-c:v", "libx264", "-crf", "8",
+                    str(source)], check=True)
+    target = tmp_path / "copy.mp4"
+    display.make_video(source, target)
+    assert not display.has_sound(display._probe(target))
+    assert display.has_sound({}), "when ffprobe cannot tell, sound is kept"
+
+
 # --- the worker ------------------------------------------------------------------
 
 @pytest.fixture()

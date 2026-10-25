@@ -172,7 +172,8 @@ def try_one(state_dir: str | Path, row: dict[str, Any]) -> dict[str, Any]:
                 with contextlib.suppress(OSError):
                     os.nice(10)
         done = subprocess.run(display.video_command(media.FFMPEG, source, partial, encoder,
-                                                    lines=None),
+                                                    lines=None,
+                                                    audio=display.has_sound(before)),
                               capture_output=True, check=False,
                               timeout=max(MIN_SECONDS, (length or 0) * TIME_ALLOWANCE),
                               preexec_fn=lower if os.name == "posix" else None)

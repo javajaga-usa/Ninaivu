@@ -31,15 +31,16 @@ def _fresh_jobs():
     vc._reset_for_tests()
 
 
-def make_video(path: Path, seconds: int = 3) -> None:
+def make_video(path: Path, seconds: int = 3, *, sound: bool = True) -> None:
     """A deliberately wasteful video: high bitrate MPEG-4 Part 2, so the
     preset always makes it smaller."""
     path.parent.mkdir(parents=True, exist_ok=True)
+    audio = (["-f", "lavfi", "-i", f"sine=frequency=440:duration={seconds}",
+              "-c:a", "pcm_s16le" if path.suffix == ".avi" else "aac"] if sound else [])
     subprocess.run(
         [media.FFMPEG, "-v", "error", "-y",
          "-f", "lavfi", "-i", f"testsrc2=size=1280x720:rate=25:duration={seconds}",
-         "-f", "lavfi", "-i", f"sine=frequency=440:duration={seconds}",
-         "-c:v", "mpeg4", "-q:v", "1", "-c:a", "pcm_s16le" if path.suffix == ".avi" else "aac",
+         *audio, "-c:v", "mpeg4", "-q:v", "1",
          "-metadata", "creation_time=2015-06-01T10:00:00Z", str(path)],
         check=True, capture_output=True, timeout=120)
 
@@ -149,6 +150,34 @@ def test_replace_keeps_the_original_in_the_bin_and_the_same_item(as_admin, scann
 
 
 @needs_encoder
+@pytest.mark.parametrize("mode", ["copy", "replace"])
+def test_a_video_without_sound_is_compressed(as_admin, scanned, mode):
+    """Screen recordings and many drone and dash-camera clips have no sound;
+    ffmpeg refuses to copy the tags of a sound stream that is not there."""
+    cfg, conn, scanner = scanned
+    path = Path(cfg.active_root) / "videos" / "quiet.mp4"
+    make_video(path, sound=False)
+    scanner._run(Path(cfg.active_root), full=True)
+    vid = conn.execute("SELECT id FROM assets WHERE rel_path='videos/quiet.mp4'").fetchone()["id"]
+    before = path.stat().st_size
+
+    body = {"id": vid, "mode": mode}
+    if mode == "replace":
+        body["password"] = ADMIN[1]
+    result = run(as_admin, body)
+
+    made = path if mode == "replace" else Path(cfg.active_root) / "videos" / result["name"]
+    assert made.stat().st_size < before
+    assert vc.has_audio(made) is False
+
+
+def test_the_tags_of_sound_are_copied_only_when_there_is_sound(tmp_path):
+    with_sound = vc.command(tmp_path / "a.mp4", tmp_path / "b.tmp", "libx264")
+    silent = vc.command(tmp_path / "a.mp4", tmp_path / "b.tmp", "libx264", audio=False)
+    assert "-map_metadata:s:a" in with_sound and "-map_metadata:s:a" not in silent
+
+
+@needs_encoder
 def test_replace_changes_only_the_size_and_the_format(as_admin, scanned):
     """HEVC at the original's own size, with its tags, rotation and modified
     time, and no tag of Ninaivu's own."""
@@ -218,11 +247,36 @@ def test_replace_uses_the_copy_compress_already_made(as_admin, scanned, monkeypa
     result = run(as_admin, {"id": vid, "mode": "replace", "password": ADMIN[1]})
 
     assert result["id"] == vid and result["reused"] == "picnic-compressed.mp4"
-    assert path.read_bytes() == copy_bytes                 # the copy, now in place
+    # The copy, now in place, without the tag that said it was a copy.
+    assert len(copy_bytes) - 4096 < path.stat().st_size <= len(copy_bytes)
+    assert vc.copy_source(path) is None
     assert not copy_path.exists()                          # and not left twice
     assert db.get_asset(conn, copy["id"]) is None
     kept = recycle.bin_path(cfg.active_root) / recycle.ORIGINALS / row["rel_path"]
     assert kept.read_bytes() == before
+
+
+@needs_encoder
+def test_replace_does_not_use_a_copy_an_older_build_made(as_admin, scanned):
+    """Older builds made copies up to 1080p, turned upright: in the
+    original's place one would make a 4K video smaller in size, not only in
+    bytes."""
+    cfg, conn, scanner = scanned
+    vid = index_video(scanned, "garden.mp4")
+    path = Path(cfg.active_root) / "videos" / "garden.mp4"
+    old = path.with_name("garden-compressed.mp4")
+    subprocess.run([media.FFMPEG, "-v", "error", "-y", "-i", str(path), "-vf", "scale=640:360",
+                    "-c:v", "libx264", "-c:a", "aac", "-map_metadata", "0",
+                    "-metadata", f"{vc.MARK_TAG}=garden.mp4",
+                    "-movflags", "use_metadata_tags", str(old)],
+                   check=True, capture_output=True, timeout=120)
+    scanner._run(Path(cfg.active_root), full=True)
+
+    result = run(as_admin, {"id": vid, "mode": "replace", "password": ADMIN[1]})
+
+    assert vc.copy_source(old) == "garden.mp4"
+    assert "reused" not in result
+    assert media.probe_video(path)["width"] == 1280
 
 
 @needs_encoder
