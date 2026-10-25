@@ -293,10 +293,13 @@ def _reset_for_tests() -> None:
 # --- the encode itself ---------------------------------------------------------
 
 def command(source: Path, target: Path, enc: str, threads: int | None = None,
-            bitrate: int | None = None, *, mark: bool = True) -> list[str]:
+            bitrate: int | None = None, *, mark: bool = True,
+            audio: bool = True) -> list[str]:
     """The ffmpeg command for the preset. *target* may end in ``.tmp``, so the
     container is named rather than guessed from the extension. *mark* writes
-    :data:`MARK_TAG`, for a copy kept beside its original."""
+    :data:`MARK_TAG`, for a copy kept beside its original. *audio* says the
+    original has sound: ffmpeg refuses to copy the tags of a sound stream
+    that is not there."""
     from ..mugil.display import VIDEOTOOLBOX_QUALITY, X265_CRF   # noqa: PLC0415
     # The picture's own size, made even: 4:2:0 refuses odd sizes. With
     # -noautorotate the picture is stored as the original stores it, and its
@@ -329,8 +332,9 @@ def command(source: Path, target: Path, enc: str, threads: int | None = None,
            "-map", "0:v:0", "-map", "0:a:0?",
            # The date it was filmed and where, the camera, and each stream's
            # own tags: only the size and the format may change.
-           "-map_metadata", "0", "-map_metadata:s:v", "0:s:v:0",
-           "-map_metadata:s:a", "0:s:a"]
+           "-map_metadata", "0", "-map_metadata:s:v", "0:s:v:0"]
+    if audio:
+        cmd += ["-map_metadata:s:a", "0:s:a"]
     if mark:
         # Which file this is a copy of, so it is never taken for a copy
         # of another video with the same name (see copy_source).
@@ -365,6 +369,7 @@ def encode(source: Path, target: Path, duration: float,
         raise CompressError(unavailable_reason() or "Cannot compress here.")
     if damaged(source):
         raise DamagedVideo(DAMAGED)
+    audio = has_audio(source)
     if hardware:
         info = media.probe_video(source)
         try:
@@ -374,7 +379,7 @@ def encode(source: Path, target: Path, duration: float,
         rate = hardware_bitrate(info.get("width") or 0, info.get("height") or 0,
                                 size, duration or float(info.get("duration") or 0))
         try:
-            _ffmpeg(command(source, target, hardware, None, rate, mark=mark),
+            _ffmpeg(command(source, target, hardware, None, rate, mark=mark, audio=audio),
                     duration, report, cancelled)
             return
         except CompressError as exc:
@@ -382,8 +387,63 @@ def encode(source: Path, target: Path, duration: float,
                 raise
             log.info("The video engine could not compress %s; using the processor.", source.name)
             report(0.0)
-    _ffmpeg(command(source, target, software, _threads(), mark=mark),
+    _ffmpeg(command(source, target, software, _threads(), mark=mark, audio=audio),
             duration, report, cancelled)
+
+
+def has_audio(source: Path) -> bool:
+    """Whether the video has a sound stream; yes when ffprobe cannot tell, so
+    sound is never dropped."""
+    from ..mugil.display import has_sound   # noqa: PLC0415
+    return has_sound(media.ffprobe_info(source))
+
+
+def made_as_now(source: Path, copy: Path) -> bool:
+    """Whether the copy at *copy* is what Compress makes of *source* now: the
+    picture at its own size, stored as the original stores it, with its
+    rotation and its tags. A copy an older build made (up to 1080p, turned
+    upright, its rotation and some tags gone) is not, so Replace never puts
+    one in the original's place."""
+    from ..mugil import display               # noqa: PLC0415
+    before, after = media.ffprobe_info(source), media.ffprobe_info(copy)
+
+    def picture(probe):
+        stream = next((s for s in probe.get("streams") or []
+                       if s.get("codec_type") == "video"), None)
+        return (stream or {}).get("width"), (stream or {}).get("height")
+
+    (w, h), (cw, ch) = picture(before), picture(after)
+    if not (w and h and cw and ch) or (cw, ch) != (w - w % 2, h - h % 2):
+        return False
+    own = {MARK_TAG}
+    tags = {k: v for k, v in display._tags(after).items() if k not in own}  # noqa: SLF001
+    return (display._rotation(after) == display._rotation(before)           # noqa: SLF001
+            and tags == display._tags(before))                              # noqa: SLF001
+
+
+def unmarked(copy: Path, target: Path) -> None:
+    """*copy* written again at *target* as it is, without :data:`MARK_TAG`:
+    in the original's place it is the video itself, not a copy of it. Raises
+    CompressError."""
+    probe = media.ffprobe_info(copy)
+    from ..mugil.display import has_sound      # noqa: PLC0415
+    video = next((s for s in probe.get("streams") or [] if s.get("codec_type") == "video"), {})
+    cmd = [media.FFMPEG, "-v", "error", "-nostdin", "-y", *media.LOCAL_ONLY, "-i", str(copy),
+           "-map", "0:v:0", "-map", "0:a:0?", "-c", "copy",
+           "-map_metadata", "0", "-map_metadata:s:v", "0:s:v:0"]
+    if has_sound(probe):
+        cmd += ["-map_metadata:s:a", "0:s:a"]
+    if video.get("codec_name") == "hevc":
+        cmd += ["-tag:v", "hvc1"]
+    cmd += ["-metadata", f"{MARK_TAG}=", "-movflags", "+faststart+use_metadata_tags",
+            "-f", "mp4", str(target)]
+    try:
+        done = subprocess.run(cmd, capture_output=True, timeout=600, check=False)
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise CompressError(f"Could not use the earlier copy: {exc}") from exc
+    if done.returncode != 0:
+        said_last = done.stderr.decode("utf-8", "replace").strip().splitlines()[-1:] or ["ffmpeg"]
+        raise CompressError(f"Could not use the earlier copy: {said_last[0][:200]}")
 
 
 def keep_times(source_stat: os.stat_result, target: Path) -> None:

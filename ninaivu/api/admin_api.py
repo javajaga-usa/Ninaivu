@@ -10,7 +10,6 @@ from __future__ import annotations
 import logging
 import os
 import re
-import shutil
 import socket
 import sqlite3
 import subprocess
@@ -1503,6 +1502,8 @@ def _earlier_copy(conn, cfg, row: dict[str, Any], before) -> dict[str, Any] | No
             "AND COALESCE(trashed, 0)=0", (root, rel)).fetchone()
         if found is None or _copy_source(conn, dict(found), path) != row["filename"]:
             continue
+        if not vc.made_as_now(Path(row["root"]) / row["rel_path"], path):
+            continue
         if best is None or stat.st_mtime > best[1].st_mtime:
             best = (dict(found), stat, path)
     if best is None:
@@ -1533,13 +1534,12 @@ def _forget_copy(conn, cfg, copy: dict[str, Any], keeper_id: int) -> None:
 
 
 def _stage_copy(copy_path: Path, temporary: Path) -> None:
-    """The earlier copy, as the temporary Replace swaps in: linked when it is
-    on the same disk, copied when it is not. The copy itself stays until the
-    swap has worked."""
-    try:
-        os.link(copy_path, temporary)
-    except OSError:
-        shutil.copyfile(copy_path, temporary)
+    """The earlier copy, as the temporary Replace swaps in: written again
+    without the tag that says it is a copy (only the size and the format may
+    differ from the original's). The copy itself stays until the swap has
+    worked."""
+    from ..media import video_compress as vc                 # noqa: PLC0415
+    vc.unmarked(copy_path, temporary)
 
 
 def _compress_work(cfg, row: dict[str, Any], mode: str, user_id: int, cloud=None):
