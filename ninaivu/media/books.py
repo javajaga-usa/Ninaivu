@@ -431,6 +431,8 @@ def _field(row: Any, name: str, default: Any = None) -> Any:
 
 def _flags(row: Any) -> list[str]:
     raw = _field(row, "quality", [])
+    if not raw or raw == "[]":
+        return []
     if isinstance(raw, str):
         try:
             raw = json.loads(raw or "[]")

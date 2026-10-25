@@ -275,19 +275,24 @@ def ask_family_faces():
         "a", limits["max_visibility"], limits["scope"], _roots())
     limit = max(1, min(_int_arg("limit", PICKER_PAGE), 200))
     offset = max(0, _int_arg("offset", 0))
-    rows = conn.execute(
-        "SELECT f.id, a.visibility, MAX(f.quality) AS quality, COUNT(*) AS size "
-        "FROM faces f JOIN assets a ON a.id = f.asset_id "
-        f"WHERE {guard} AND f.person_id IS NULL AND f.thumb IS NOT NULL "
-        "AND f.quality >= ? "
-        # Not the faces somebody said they are not bothered about naming.
-        "AND NOT EXISTS (SELECT 1 FROM faces_ignored i WHERE i.face_id = f.id) "
-        "GROUP BY COALESCE(f.cluster_key, 'face:' || f.id) "
-        "ORDER BY size DESC, quality DESC, f.id LIMIT ? OFFSET ?",
-        (*params, CLUSTER_MIN_QUALITY, limit + 1, offset)).fetchall()
-    faces = [{"face_id": int(r["id"]), "size": int(r["size"]),
-              "admin_only": int(r["visibility"]) >= auth.VIS_HIDDEN}
-             for r in rows[:limit]]
+    sql = ("SELECT f.id, a.visibility, MAX(f.quality) AS quality, COUNT(*) AS size "
+           "FROM faces f JOIN assets a ON a.id = f.asset_id "
+           f"WHERE {guard} AND f.person_id IS NULL AND f.thumb IS NOT NULL "
+           "AND f.quality >= ? "
+           # Not the faces somebody said they are not bothered about naming.
+           "AND NOT EXISTS (SELECT 1 FROM faces_ignored i WHERE i.face_id = f.id) "
+           "GROUP BY COALESCE(f.cluster_key, 'face:' || f.id) "
+           "ORDER BY size DESC, quality DESC, f.id LIMIT ? OFFSET ?")
+    args = (*params, CLUSTER_MIN_QUALITY, limit + 1, offset)
+    # A group over every unnamed face, 0.4 s on a family library each time
+    # the picker opened: kept until a face, a group or what is hidden moves.
+    rows = db.cached_aggregate(
+        conn, ("ask family faces", sql, args),
+        lambda: [tuple(r) for r in conn.execute(sql, args).fetchall()],
+        also=(db.FACES_GENERATION_KEY, db.FACE_GROUPS_GENERATION_KEY), shared=True)
+    faces = [{"face_id": int(face_id), "size": int(size),
+              "admin_only": int(visibility) >= auth.VIS_HIDDEN}
+             for face_id, visibility, _, size in rows[:limit]]
     return jsonify({"faces": faces, "more": len(rows) > limit})
 
 

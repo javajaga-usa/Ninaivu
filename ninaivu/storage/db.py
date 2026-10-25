@@ -1353,6 +1353,12 @@ FACES_GENERATION_KEY = "faces_generation"
 #: or loses its thumbnail (an occasion's cover is its newest item with one).
 OCCASIONS_GENERATION_KEY = "occasions_generation"
 
+#: Bumped when the matcher's unnamed groups change: a face given another
+#: group (every regroup reissues them), or hidden from naming or shown again.
+#: Who a face belongs to is :data:`FACES_GENERATION_KEY`'s; the console's
+#: list of groups waiting for a name keys on both.
+FACE_GROUPS_GENERATION_KEY = "face_groups_generation"
+
 #: Bumped when a row's location or place name changes, or it gains or loses
 #: its thumbnail (a place's cover is its newest picture with one). The map's
 #: place list and the places a search phrase is read against key on it.
@@ -1412,13 +1418,14 @@ def _generation_schema() -> str:
     seeds = "\n".join(
         f"INSERT OR IGNORE INTO meta(key, value) VALUES ('{key}', "
         f"CAST(abs(random() % 1000000000000) AS TEXT));"
-        for key in (*CHANGE_COUNTERS, SCAN_GENERATION_KEY))
+        for key in (*CHANGE_COUNTERS, SCAN_GENERATION_KEY, FACE_GROUPS_GENERATION_KEY))
     main, tags = bump(GENERATION_KEY), bump(TAGS_GENERATION_KEY)
     faces, occasions = bump(FACES_GENERATION_KEY), bump(OCCASIONS_GENERATION_KEY)
     places, vectors = bump(PLACES_GENERATION_KEY), bump(EMBEDDINGS_GENERATION_KEY)
     layout = bump(LAYOUT_GENERATION_KEY)
     scanned = bump(SCAN_GENERATION_KEY)
     albums = bump(ALBUMS_GENERATION_KEY)
+    groups = bump(FACE_GROUPS_GENERATION_KEY)
     thumbed = "(OLD.thumb IS NULL) <> (NEW.thumb IS NULL)"
     # ``source`` too: confirming a face the matcher had already given to the
     # same person changes nothing else, and the face status counts confirmed
@@ -1446,6 +1453,13 @@ def _generation_schema() -> str:
         "faces_generation_update":
             f"AFTER UPDATE OF {', '.join(face_columns)} ON faces "
             f"WHEN {_changed(face_columns)} BEGIN {faces} END",
+        "face_groups_generation_update":
+            "AFTER UPDATE OF cluster_key ON faces "
+            f"WHEN OLD.cluster_key IS NOT NEW.cluster_key BEGIN {groups} END",
+        "face_groups_generation_hide":
+            f"AFTER INSERT ON faces_ignored BEGIN {groups} END",
+        "face_groups_generation_show":
+            f"AFTER DELETE ON faces_ignored BEGIN {groups} END",
         "people_generation_insert":
             f"AFTER INSERT ON people_clusters BEGIN {faces} END",
         "people_generation_delete":
@@ -3310,7 +3324,17 @@ def with_live_clips(conn: sqlite3.Connection, asset_ids: Sequence[int]) -> list[
     ids = [int(i) for i in asset_ids]
     if not ids:
         return ids
-    clips: list[int] = []
+    found = companion_map(conn, ids)
+    clips = [c for i in ids for c in found.get(i, ())]
+    seen = set(ids)
+    return ids + [c for c in dict.fromkeys(clips) if c not in seen]
+
+
+def companion_map(conn: sqlite3.Connection, asset_ids: Sequence[int]) -> dict[int, list[int]]:
+    """``still id -> [its clip and RAW ids]`` for those of *asset_ids* that
+    have them (see :func:`with_live_clips`)."""
+    ids = list(dict.fromkeys(int(i) for i in asset_ids))
+    out: dict[int, list[int]] = {}
     # Matched as spelt first, through the (root, rel_path) index: compared
     # without case, each 500 ids read the whole library (a second for every
     # 5,000 photographs hidden). The case-blind match is only for a pair the
@@ -3326,19 +3350,20 @@ def with_live_clips(conn: sqlite3.Connection, asset_ids: Sequence[int]) -> list[
                 f"ON c.root = s.root AND c.rel_path = s.{column} "
                 f"WHERE s.id IN ({placeholders}) AND COALESCE(s.{column}, '') <> '' "
                 f"AND {condition}", chunk).fetchall()
-            clips.extend(int(r["cid"]) for r in found)
+            for r in found:
+                out.setdefault(int(r["sid"]), []).append(int(r["cid"]))
             matched = {int(r["sid"]) for r in found}
             for r in conn.execute(
                     f"SELECT s.id FROM assets s WHERE s.id IN ({placeholders}) "
                     f"AND COALESCE(s.{column}, '') <> ''", chunk).fetchall():
                 if int(r["id"]) in matched:
                     continue
-                clips.extend(int(c["cid"]) for c in conn.execute(
-                    f"SELECT c.id cid FROM assets s JOIN assets c ON c.root = s.root "
-                    f"AND c.rel_path = s.{column} COLLATE NOCASE "
-                    f"WHERE s.id = ? AND {condition}", (int(r["id"]),)))
-    seen = set(ids)
-    return ids + [c for c in dict.fromkeys(clips) if c not in seen]
+                for c in conn.execute(
+                        f"SELECT c.id cid FROM assets s JOIN assets c ON c.root = s.root "
+                        f"AND c.rel_path = s.{column} COLLATE NOCASE "
+                        f"WHERE s.id = ? AND {condition}", (int(r["id"]),)):
+                    out.setdefault(int(r["id"]), []).append(int(c["cid"]))
+    return out
 
 
 #: The same thing under the name it now deserves.

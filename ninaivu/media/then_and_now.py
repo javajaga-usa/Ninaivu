@@ -80,12 +80,16 @@ def year_of(row: dict[str, Any]) -> int:
 
 
 def _rank(row: dict[str, Any]) -> float:
-    """How good a photograph is, as photo books judge it (worked out once by
-    the caller as ``rank``, where it has many to rank)."""
+    """How good a photograph is, as photo books judge it: worked out the first
+    time it is asked for and kept on the row as ``rank``. Only the
+    photographs of a square of the map, or of a person, are ever compared;
+    scoring every photograph of the library first was a second of the first
+    visit to Then and now."""
     if "rank" in row:
         return float(row["rank"])
     from . import books                                        # noqa: PLC0415
-    return books.score(row)
+    row["rank"] = books.score(row)
+    return row["rank"]
 
 
 def _spread(rows: Sequence[dict[str, Any]], most: int) -> list[dict[str, Any]]:

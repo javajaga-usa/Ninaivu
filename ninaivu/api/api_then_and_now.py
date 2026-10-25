@@ -79,13 +79,9 @@ def _screens() -> set[int]:
 
 
 def _ranked(rows: list[dict[str, Any]], screens: set[int]) -> list[dict[str, Any]]:
-    out = []
-    for row in rows:
-        if int(row["id"]) in screens:
-            continue
-        row["rank"] = book_maker.score(row)
-        out.append(row)
-    return out
+    """The photographs, without screenshots. Each is scored the first time
+    the pairing compares it (media/then_and_now._rank)."""
+    return [row for row in rows if int(row["id"]) not in screens]
 
 
 def _shown(row: dict[str, Any]) -> dict[str, Any]:

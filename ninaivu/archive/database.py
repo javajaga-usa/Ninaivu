@@ -997,12 +997,6 @@ def finished_size(source_path):
     return None if row is None else int(row['size'] or 0)
 
 
-def bytes_already_archived():
-    row = get_db().execute(
-        "SELECT COALESCE(SUM(size),0) n FROM files WHERE status='verified'").fetchone()
-    return row['n'] or 0
-
-
 def clear_plan_rows():
     """
     Drop the predictions a dry run left behind. They describe what *would*

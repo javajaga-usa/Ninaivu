@@ -395,18 +395,6 @@ def source_paths(sources):
     return [s['path'] for s in normalise_sources(sources)]
 
 
-def describe_types(types):
-    labels = {'image': 'photos', 'video': 'video', 'audio': 'audio'}
-    chosen = [labels[k] for k in MEDIA_KINDS if k in types]
-    if not chosen:
-        return 'nothing'
-    if len(chosen) == len(MEDIA_KINDS):
-        return 'photos, video and audio'
-    return ' and '.join([', '.join(chosen[:-1]), chosen[-1]] if len(chosen) > 1
-                        else chosen)
-
-
-
 def _shell_hint(path):
     """A phone or camera shown by Windows is not a folder anything can open."""
     try:

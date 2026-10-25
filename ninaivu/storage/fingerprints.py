@@ -225,24 +225,32 @@ def duplicate_groups(conn: sqlite3.Connection, *, limit: int = 500,
     file count, so a copy edited since it was fingerprinted is not called the
     same as the original.
     """
-    groups: list[dict[str, Any]] = []
-    for row in conn.execute(
-            "SELECT f.digest, f.size, COUNT(*) AS copies FROM content_fingerprints f "
-            "JOIN assets a ON a.id=f.asset_id "
-            "WHERE f.algo=? AND a.trashed=0 AND f.size=a.size AND f.mtime=a.mtime "
-            "AND f.size >= ? GROUP BY f.digest, f.size HAVING COUNT(*) > 1 "
-            "ORDER BY (COUNT(*) - 1) * f.size DESC, f.digest LIMIT ?",
-            (ALGO, int(min_size), int(limit))).fetchall():
-        files = [dict(r) for r in conn.execute(
-            "SELECT a.id, a.root, a.rel_path FROM content_fingerprints f "
-            "JOIN assets a ON a.id=f.asset_id WHERE f.digest=? AND f.algo=? "
-            "AND a.trashed=0 AND f.size=a.size AND f.mtime=a.mtime ORDER BY a.id",
-            (row["digest"], ALGO))]
-        groups.append({"fingerprint": row["digest"], "size": int(row["size"]),
-                       "copies": int(row["copies"]),
-                       "spare_bytes": int(row["size"]) * (int(row["copies"]) - 1),
-                       "files": files})
-    return groups
+    found = conn.execute(
+        "SELECT f.digest, f.size, COUNT(*) AS copies FROM content_fingerprints f "
+        "JOIN assets a ON a.id=f.asset_id "
+        "WHERE f.algo=? AND a.trashed=0 AND f.size=a.size AND f.mtime=a.mtime "
+        "AND f.size >= ? GROUP BY f.digest, f.size HAVING COUNT(*) > 1 "
+        "ORDER BY (COUNT(*) - 1) * f.size DESC, f.digest LIMIT ?",
+        (ALGO, int(min_size), int(limit))).fetchall()
+    # Every group's files in a statement for each 500 groups, not one each:
+    # a library with a few thousand groups asked a few thousand times.
+    files: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    digests = list(dict.fromkeys(row["digest"] for row in found))
+    for start in range(0, len(digests), 500):
+        piece = digests[start:start + 500]
+        for r in conn.execute(
+                "SELECT f.digest, a.id, a.root, a.rel_path FROM content_fingerprints f "
+                "JOIN assets a ON a.id=f.asset_id "
+                f"WHERE f.digest IN ({','.join('?' * len(piece))}) AND f.algo=? "
+                "AND a.trashed=0 AND f.size=a.size AND f.mtime=a.mtime ORDER BY a.id",
+                (*piece, ALGO)):
+            files[r["digest"]].append({"id": r["id"], "root": r["root"],
+                                       "rel_path": r["rel_path"]})
+    return [{"fingerprint": row["digest"], "size": int(row["size"]),
+             "copies": int(row["copies"]),
+             "spare_bytes": int(row["size"]) * (int(row["copies"]) - 1),
+             "files": list(files.get(row["digest"], ()))}
+            for row in found]
 
 
 # -- moves -------------------------------------------------------------------

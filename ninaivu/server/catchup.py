@@ -140,10 +140,6 @@ class DailyCatchUp:
         opened = _dt.datetime.combine(day, _dt.time(start // 60, start % 60)).timestamp()
         return opened, f"{day.isoformat()} {start // 60:02d}:{start % 60:02d}"
 
-    def _opened_at(self, window: Any) -> float:
-        """When the stretch that is open now opened (wall clock)."""
-        return self._stretch(window)[0]
-
     def look(self) -> str:
         """Start what is owed, if this is the time for it. Says what it did."""
         self.last = self._look()
