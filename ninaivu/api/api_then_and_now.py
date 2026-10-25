@@ -265,7 +265,9 @@ def then_and_now_film():
     look = data.get("look") or "natural"
     if size not in maker.SIZES or pace not in maker.PACES or look not in maker.LOOKS:
         abort(400, description="Unknown size, pace or look.")
-    music_id, music_path = api_films._music(data.get("music"))  # noqa: SLF001
+    music_id, music = api_films._music(                                # noqa: SLF001
+        data.get("music", api_films.OWN_MUSIC), pace=pace,
+        seed=api_films._seed("then_and_now", sides))                  # noqa: SLF001
 
     # Only what this viewer may see, whatever ids were sent.
     wanted = sorted({a for pair in sides for a, _ in pair})
@@ -305,7 +307,7 @@ def then_and_now_film():
             "closing": api_films._text(data, "closing", 120), "size": size,      # noqa: SLF001
             "subtitles": "none", "pace": pace, "look": look, "stories": False, "months": None,
             "items": items, "style": "then_and_now", "chapters": [],
-            "music": {"path": music_path} if music_path else None}
+            "music": music}
     if maker.building():
         abort(409, description="A film is already being made. Try again when it is finished.")
     cfg = _cfg()

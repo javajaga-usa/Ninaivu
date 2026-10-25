@@ -503,9 +503,16 @@ album, a trip or a person, moves gently towards the faces, tells the voice
 stories over their photographs, cuts on the beat of the music and writes an
 MP4 under `films/` in Ninaivu's own folder. A film belongs to whoever made it;
 it is checked again before it is played, and refused once a moment in it can
-no longer be seen by them. Songs in the library are offered to administrators;
-anybody may bring a song of their own (up to 40 MB, kept under
-`films/music/`). Subtitles need the voice stories written down (`ai_runtime`
+no longer be seen by them. Like an iPhone memory, a film plays soft music
+unless somebody chooses otherwise: one of four pieces of Ninaivu's own
+(Morning light, Courtyard veena, Together, Festival day), the one for the
+film's pace unless another is picked, with **Listen** to hear it first. The
+music is written on this computer as the film is made (`media/film_music.py`),
+to the film's length and with the cuts on its beat, so nothing is downloaded
+and there is no song licence to think about; it fades in and out and gives way
+whenever a voice story or a clip's own sound plays. **No music** leaves it
+out. Songs in the library are offered to administrators; anybody may bring a
+song of their own (up to 40 MB, kept under `films/music/`). Subtitles need the voice stories written down (`ai_runtime`
 above). One film is made at a time, in up to eight parts side by side at low
 priority; ffmpeg must be installed (Extras). Deleting a profile deletes its
 films and songs.

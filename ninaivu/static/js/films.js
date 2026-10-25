@@ -9,8 +9,11 @@
  * which runs on the server while this polls it and ends in the film itself,
  * playing, with a Download button.
  *
- * Music: sound files in the library are for administrators alone, so anybody
- * may bring a song of their own for their films ("Bring a song…"), kept for
+ * Music: a film plays Ninaivu's own soft music unless somebody chooses
+ * otherwise, the piece for its pace (media/film_music.py writes it on the
+ * server, so nothing is downloaded), and Listen plays a piece's opening.
+ * Sound files in the library are for administrators alone, so anybody may
+ * also bring a song of their own for their films ("Bring a song…"), kept for
  * them alone.
  */
 
@@ -43,6 +46,13 @@ const SIZES = [
   ['1080p', i18n.key('Full HD (1080p)')],
   ['720p', i18n.key('HD (720p), quicker')],
 ];
+// Ninaivu's own pieces, by the name the server knows them by.
+const OWN_MUSIC = {
+  morning: i18n.key('Morning light'),
+  courtyard: i18n.key('Courtyard veena'),
+  together: i18n.key('Together'),
+  festival: i18n.key('Festival day'),
+};
 const STYLES = [
   ['film', i18n.key('Memories')],
   ['growing_up', i18n.key('Growing up: the same face through the years')],
@@ -58,7 +68,7 @@ let toastFn = () => {};
 let pairs = [];
 let chapters = [];
 let choices = { count: 40, pace: 'steady', look: 'natural', subtitles: 'both', size: '1080p',
-                stories: true, live: true, music: '', style: 'film', born: '' };
+                stories: true, live: true, music: 'own:auto', style: 'film', born: '' };
 
 /** Whether films are switched on for this household (asked once). */
 export function filmsAvailable() {
@@ -136,6 +146,7 @@ function close() {
 function musicChoice(value) {
   if (!value) return null;
   const [kind, id] = value.split(':');
+  if (kind === 'own') return { kind: 'built_in', name: id };
   return kind === 'upload' ? { kind, token: id } : { kind: 'library', id: Number(id) };
 }
 
@@ -164,6 +175,31 @@ async function settings() {
   const bring = el('input', { type: 'file', accept: 'audio/*', hidden: true });
   const bringButton = el('button', { class: 'btn ghost small', type: 'button', text: i18n.t('Bring a song…') });
   bringButton.onclick = () => bring.click();
+  const listen = el('button', { class: 'btn ghost small', type: 'button', text: i18n.t('Listen') });
+  const player = el('audio', { preload: 'none', hidden: true });
+  let ownFor = {};
+  const ownPiece = () => {
+    const [kind, name] = music.value.split(':');
+    if (kind !== 'own') return '';
+    return name === 'auto' ? (ownFor[pace.value] || '') : name;
+  };
+  const syncListen = () => {
+    listen.hidden = !ownPiece();
+    if (!player.paused) player.pause();
+    listen.textContent = i18n.t('Listen');
+  };
+  listen.onclick = () => {
+    if (!player.paused) {
+      player.pause();
+      return;
+    }
+    const src = `/api/films/music/own/${encodeURIComponent(ownPiece())}`;
+    if (!player.src.endsWith(src)) player.src = src;
+    player.play().catch(() => {});
+  };
+  player.onplay = () => { listen.textContent = i18n.t('Stop'); };
+  player.onpause = () => { listen.textContent = i18n.t('Listen'); };
+  player.onended = player.onpause;
   const stories = el('input', { type: 'checkbox', checked: choices.stories });
   const live = el('input', { type: 'checkbox', checked: choices.live });
   // A growing-up or then-and-now film is of one person.
@@ -184,11 +220,26 @@ async function settings() {
     text: i18n.t('This computer has no Tamil font, so Tamil words will be left out of the film. Installing one (for example the Noto Tamil fonts) fixes it.') });
 
   const fillMusic = (options) => {
-    music.replaceChildren(new Option(i18n.t('No music'), ''));
+    ownFor = options.own_music_for || {};
+    music.replaceChildren();
+    const own = el('optgroup', { label: i18n.t("Ninaivu's own music") });
+    if ((options.own_music || []).length) {
+      own.append(new Option(i18n.t('Chosen for the pace'), 'own:auto'));
+      for (const piece of options.own_music) {
+        own.append(new Option(OWN_MUSIC[piece.name] ? i18n.t(OWN_MUSIC[piece.name]) : piece.title,
+                              `own:${piece.name}`));
+      }
+      music.add(own);
+    }
     for (const song of options.my_music || []) music.add(new Option(song.title, `upload:${song.token}`));
     for (const song of options.music || []) music.add(new Option(song.title, `library:${song.id}`));
-    music.value = [...music.options].some((o) => o.value === choices.music) ? choices.music : '';
+    music.add(new Option(i18n.t('No music'), ''));
+    const fallback = own.children.length ? 'own:auto' : '';
+    music.value = [...music.options].some((o) => o.value === choices.music) ? choices.music : fallback;
+    syncListen();
   };
+  music.onchange = syncListen;
+  pace.addEventListener('change', syncListen);
   api.filmOptions().then((options) => {
     fillMusic(options);
     warning.hidden = !options.fonts || options.fonts.tamil;
@@ -211,7 +262,10 @@ async function settings() {
 
   const next = el('button', { class: 'btn primary', type: 'submit', text: i18n.t('Choose moments') });
   const cancel = el('button', { class: 'btn ghost', type: 'button', text: i18n.t('Cancel') });
-  cancel.onclick = close;
+  cancel.onclick = () => {
+    player.pause();
+    close();
+  };
   const card = step(i18n.t('Make a film'),
     el('p', { class: 'hint', text: i18n.t('Ninaivu picks the best photographs and clips, moves slowly towards the faces, tells the voice stories over their photographs with the words underneath, and cuts on the beat of the music.') }),
     styleField,
@@ -222,8 +276,9 @@ async function settings() {
     field(i18n.t('Pace'), pace),
     field(i18n.t('Look'), look),
     el('label', { class: 'export-field' }, el('span', { text: i18n.t('Music') }),
-       el('span', { class: 'export-range' }, music, bringButton)),
+       el('span', { class: 'export-range' }, music, listen, bringButton)),
     bring,
+    player,
     subtitlesField,
     field(i18n.t('Picture'), size),
     storiesField,
@@ -242,6 +297,7 @@ async function settings() {
   showStyle();
   card.onsubmit = async (event) => {
     event.preventDefault();
+    player.pause();
     choices = { count: Number(length.value), pace: pace.value, look: look.value,
                 subtitles: subtitles.value, size: size.value, stories: stories.checked,
                 live: live.checked, music: music.value, style: style.value,
