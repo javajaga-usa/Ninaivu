@@ -3950,7 +3950,11 @@ def space_report():
     if role(cfg) == PRIMARY:
         from ..mugil import optimize                          # noqa: PLC0415
         try:
-            plan = optimize.plan(conn, cfg.state_dir, list(cfg.roots))
+            # The plan also reads the Secondary's confirmations and the
+            # display copies, which the library's number does not follow.
+            plan = db.cached_aggregate(
+                conn, ("space-optimize", cfg.state_dir, tuple(cfg.roots)),
+                lambda: optimize.plan(conn, cfg.state_dir, list(cfg.roots)), max_age=300)
             extra.append(("optimize_mac_storage", int((plan.get("ready") or {}).get("bytes") or 0)))
         except Exception:                                     # noqa: BLE001 - one step fewer
             log.debug("no Optimize Mac storage step in the forecast", exc_info=True)

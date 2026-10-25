@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Two computers
+
+- **The nightly wake follows the Mac's clock.** The Primary now sends its time zone with the time it wants waking, so a Secondary set to another zone (or to UTC, as a server often is) still wakes the Mac five minutes before its catch-up. A Secondary paired with an older Primary goes by its own clock, as before.
+- **The Space page opens faster on a Primary.** The Optimize Mac storage figure in its forecast is kept for five minutes instead of being worked out again over the whole library on every visit.
+
 ### Faces
 
 - **"Not bothered" on a group waiting for a name.** A stranger in the background or a face in a crowd steps aside with one press, and the next group moves up. Nothing is deleted. The faces stay out of the groups waiting for a name, the review queues, Young faces and the "Who is this?" picker, and are never given to a named person by a regroup. New photographs of the same person stay hidden too: a regroup hides the new faces in a group made mostly of hidden ones. **Hidden from naming**, below the groups, lists them with **Show again** and **Bring them all back**, and naming a hidden face shows it again. A new search for faces keeps a face hidden, as it keeps a confirmed name.
