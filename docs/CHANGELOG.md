@@ -1,6 +1,13 @@
 # Changelog
 
-## Unreleased
+## 3.1.0 — 25 October 2026
+
+Ninaivu 3.1 gives memory films soft music of their own, written on this computer while the film is made, and shows where the long jobs over the library stand: a Background jobs list on the Activity page says, for each one, whether it is complete, how many are left, or what it is waiting for, and the photo viewer shows the description the on-device AI wrote. Compress & Replace makes HEVC and keeps 4K at 4K, the Advanced settings page has 33 switches instead of 71, and moving to a smaller computer keeps the AI's work. Photos are described several at a time, and on a Mac with Apple silicon the image encoder runs on Core ML beside the processor, more than twice as fast. Faces gains "Not bothered" for groups nobody will name and pages past the first sixty groups, and the eleventh audit's fixes keep a moved or folded library's let-go originals, settle a stuck update of the Secondary, and stop a second-copy name being taken twice.
+
+### Seeing where the long jobs stand
+
+- **Background jobs, on the Activity page.** One line for each job Ninaivu works through the whole library with: describing photographs, writing down voice stories and what is said in videos, finding moments in videos, the image model's tags, naming places, reading text in photos, finding faces, describing videos and fingerprinting files. Each says **Complete** with how many were done, **Left to do** or **Running** with how many are done of how many, **Off**, or **Not available** with what it is waiting for (a model to download, say), and how many photographs could not be done. The activity strip shows a job only while it runs, so a job that finished overnight, such as describing 180,000 photographs, left nothing on screen to say it was done. It is counted from the index itself, so it holds after a restart and between passes, and **Count again** counts afresh.
+- **A photo's description in the viewer.** The details panel (**i**) shows what the on-device AI engine wrote about the photograph, under **Description**. The descriptions were only used by search before, with no page that showed one.
 
 ### Music under memory films
 

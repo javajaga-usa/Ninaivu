@@ -1125,6 +1125,9 @@ export class Viewer extends EventTarget {
       [i18n.t('Name'), item.name],
       [i18n.t('Folder'), item.folder || '—'],
       [i18n.t('Taken'), item.date + dateCaveat(item.date_source)],
+      // What the on-device AI engine sees in it (storage/descriptions.py),
+      // in its own words: the sentence a search for it is matched against.
+      item.description ? [i18n.t('Description'), item.description] : null,
       [i18n.t('Type'), `${item.kind} · ${item.ext.toUpperCase()}`],
       [i18n.t('Size'), item.size_h],
       item.raw ? ['RAW', `${item.raw.ext} · ${item.raw.size_h} · ${i18n.t('kept with this photo')}`] : null,

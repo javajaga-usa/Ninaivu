@@ -1915,3 +1915,27 @@ body.admin {
 .vt-pair video { width: 100%; max-height: 50vh; background: #000; border-radius: 8px; }
 .vt-pair figcaption { font-size: 0.85em; opacity: 0.8; }
 .vt-said { font-weight: 600; }
+
+/* Background jobs (job-status.js) ------------------------------------------ */
+
+.job-status { display: flex; flex-direction: column; gap: 1px; }
+.job-status-row {
+  display: grid; grid-template-columns: minmax(180px, 1.2fr) 120px 2fr;
+  gap: 12px; align-items: baseline;
+  padding: 7px 9px; border-radius: var(--r-sm); font-size: 12.5px;
+}
+.job-status-row:nth-child(odd) { background: var(--surface-2); }
+.job-status-name { font-weight: 560; }
+.job-status-state { font-weight: 560; }
+.job-status-state.is-complete { color: var(--ok, #1a7f4b); }
+.job-status-state.is-running { color: var(--accent); }
+.job-status-state.is-unavailable { color: var(--gold); }
+.job-status-state.is-off,
+.job-status-row.is-off .job-status-detail { color: var(--text-3); }
+.job-status-detail { color: var(--text-2); font-variant-numeric: tabular-nums; }
+#jobs-counted { margin-left: auto; align-self: center; }
+
+@media (max-width: 900px) {
+  .job-status-row { grid-template-columns: 1fr auto; gap: 2px 12px; }
+  .job-status-detail { grid-column: 1 / -1; }
+}
