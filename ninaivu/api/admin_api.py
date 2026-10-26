@@ -271,6 +271,10 @@ def _unnamed_groups(conn, roots, max_visibility: int) -> int:
     return groups
 
 
+#: How many recent warnings and errors are counted, wherever they are counted.
+PROBLEMS_COUNTED = 50
+
+
 @admin_bp.get("/api/admin/attention")
 @require_admin
 def attention():
@@ -298,7 +302,7 @@ def attention():
         groups = _unnamed_groups(conn, roots, user.max_visibility) if roots else 0
     except sqlite3.Error:
         groups = 0
-    problems = len(logs.recent(50))
+    problems = len(logs.recent(PROBLEMS_COUNTED))
     # "Forgot password?" on the sign-in screen lands here (accounts_api.forgot).
     help_asked = count("SELECT COUNT(*) FROM users WHERE help_asked_at IS NOT NULL AND active=1")
     # Items family members sent to be screened (api/api_screening.py).
@@ -637,6 +641,9 @@ def problems():
     limit = max(1, min(50, request.args.get("limit", 12, type=int) or 12))
     return jsonify({
         "problems": logs.recent(limit),
+        # Counted the way /api/admin/attention counts them, so the Health
+        # tab, its pill and Needs you give one number.
+        "total": len(logs.recent(PROBLEMS_COUNTED)),
         "file": str(logs.folder(_cfg().state_dir) / logs.LOG_NAME),
     })
 

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Console on a phone
+
+- **A dot on a section now always has a number behind it.** On a phone the console's sections (Review, People & access, Backup & health) wear a dot when something is waiting, but the dot followed a list of its own: **Backup & health** was lit by a handover plan nobody had written yet, and **People & access** by faces without a name, while no tab inside either showed a count, so the dot could not be traced to anything. Every page that **Needs you** points at now shows its count on its tab (People, Faces, Straighten, Health, Handover, as Uploads and Screening already did), and a section is marked only when one of its tabs shows a number.
+- **The dots and counts keep up on every page.** They were only brought up to date while the Overview was open, so after approving uploads or clearing problems on their own pages the dot and the Screening count stayed as they were. They now follow the same ten-second clock everywhere, and approving an upload or clearing the problems list updates them at once.
+- **One count of problems.** The Health page's pill counted at most the twelve it lists while **Needs you** counted up to fifty, so the two could disagree; both now give the same number.
+
 ### Sent for screening, at once
 
 - **What a family member sends for screening leaves the family's view straight away.** It used to stay in the gallery until an administrator decided. Now it is gone for every family member the moment it is sent, the sender included: the gallery, albums, search, smart albums, films, the photo frame and share links, everything that follows who may see what. Administrators still see it, and it waits in the console's Screening queue. **Ignore** puts it back exactly as it was; **Hide**, **Mark explicit** and **Delete** apply on top of that. While it waits, what the AI read of it is kept, so an item that comes back has lost nothing. The Folders page shows such an item as hidden, "held while an admin screens it".
