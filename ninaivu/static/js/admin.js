@@ -416,8 +416,11 @@ async function start(user) {
   uploadPoll = setInterval(() => {
     if (document.hidden || state.user?.role !== 'admin') return;
     loadPendingUploads();
-    // The Overview's "Needs you" and the group marks follow the same clock.
-    if (document.querySelector('#tabs button[data-tab="overview"].active')) loadAttention();
+    // "Needs you", the tab counts and the section marks follow the same
+    // clock on every page, not only the Overview: the marks are there to
+    // be seen from the other pages, and stood still at whatever they were
+    // when the Overview was left.
+    loadAttention();
   }, 10000);
   // Back on the page that was open. A refresh used to land on the Overview
   // whatever was open before it, so somebody watching an import refreshed
@@ -654,6 +657,7 @@ function wireChrome() {
     try {
       await adminApi.clearProblems();
       await loadProblems();
+      loadAttention();
     } catch (exc) { toast(exc.message, true); }
   };
   $$('#bin-refresh').onclick = () => loadRecycleBin();
@@ -1386,12 +1390,28 @@ async function annotateSwitches(needLines) {
 
 // The queues, counted, at the top of the Overview. A row is shown only when
 // something is in it, so a quiet library says so in one line rather than
-// listing four things that are empty. The sidebar groups that hold a queue
-// with something in it are marked as well.
-const ATTENTION_GROUPS = {
-  uploads: 'queues', straighten: 'queues', screening: 'queues', faces: 'people', problems: 'backup', handover: 'backup',
-  signin_help: 'people',
-};
+// listing four things that are empty. Each count is also put on the tab of
+// the page it opens, and the phone's section row marks the sections holding
+// one of those tabs. The mark used to follow a list of its own here, which
+// lit "Backup & health" for a handover plan nobody had written and "People"
+// for faces without a name while no tab in either showed a number: a dot
+// that could not be traced to anything. Now a section is marked only when a
+// tab inside it carries the count that marked it.
+function showTabCounts(items) {
+  const marked = new Set();
+  for (const item of items) {
+    const tab = document.querySelector(`#tabs button[data-tab="${item.page}"]`);
+    const badge = tab?.querySelector('.tab-count');
+    if (!badge) continue;
+    const count = Number(item.count) || 0;
+    badge.textContent = count > 99 ? '99+' : count ? String(count) : '';
+    badge.hidden = !count;
+    if (count) marked.add(tab.dataset.group);
+  }
+  document.querySelectorAll('#tab-groups button[data-group]').forEach((button) => {
+    button.classList.toggle('needs-attention', marked.has(button.dataset.group));
+  });
+}
 
 async function loadAttention() {
   const list = $('#attention-list');
@@ -1405,17 +1425,11 @@ async function loadAttention() {
     return;
   }
   const waiting = (data.items || []).filter((item) => item.count > 0);
-  screeningPanel?.setCount((data.items || []).find((item) => item.key === 'screening')?.count || 0);
+  showTabCounts(data.items || []);
   headline.textContent = !waiting.length ? i18n.t('Nothing is waiting for you.')
     : data.total === 1 ? i18n.t('1 thing is waiting for you.')
       : i18n.t('{count} things are waiting for you.', { count: data.total });
   list.replaceChildren();
-  const groups = new Set(waiting.map((item) => ATTENTION_GROUPS[item.key]).filter(Boolean));
-  document.querySelectorAll('#tab-groups button[data-group]').forEach((button) => {
-    if (button.dataset.group in { queues: 1, people: 1, backup: 1 }) {
-      button.classList.toggle('needs-attention', groups.has(button.dataset.group));
-    }
-  });
   for (const item of waiting) {
     const button = document.createElement('button');
     button.type = 'button';
@@ -3533,16 +3547,17 @@ async function savePhoneBackupTrust(trusted) {
   loadPhoneBackups();
 }
 
+let uploadTotal = null;
+
 async function loadPendingUploads() {
   if (uploadActionBusy) return;
   try {
     const data = await json('/api/admin/uploads');
-    const count = $('#uploads-count');
-    if (count) {
-      count.textContent = data.total ? String(data.total) : '';
-      count.hidden = !data.total;
-    }
-    // The group's mark is set by loadAttention, which counts every queue.
+    // The tab's count and the section mark are loadAttention's, which counts
+    // every queue; asked again when this one has moved, so an approved
+    // upload takes its number and its dot with it.
+    if (uploadTotal !== null && uploadTotal !== data.total) loadAttention();
+    uploadTotal = data.total;
     const incoming = data.items.filter((item) => !seenUploads.has(item.id));
     for (const item of data.items) seenUploads.add(item.id);
     if (incoming.length) {
@@ -4284,9 +4299,12 @@ async function loadProblems() {
   const rows = data.problems || [];
   list.innerHTML = '';
 
+  // The whole count, as Needs you and the Health tab give it, not the
+  // twelve listed: the two used to disagree once there were more.
+  const total = data.total ?? rows.length;
   const pill = $('#problem-count');
-  pill.hidden = rows.length === 0;
-  pill.textContent = String(rows.length);
+  pill.hidden = total === 0;
+  pill.textContent = String(total);
   $('#problems-empty').hidden = rows.length > 0;
   $('#problem-file').textContent = data.file || i18n.t('the log file');
 
