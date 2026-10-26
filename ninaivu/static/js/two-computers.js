@@ -582,6 +582,13 @@ export class TwoComputers {
     if (status.handover?.made_at) {
       $('#tc-keeping').textContent += ` ${i18n.t('It holds the family app\'s copy from {when}.', { when: when(status.handover.made_at) })}`;
     }
+    // A copy made by hand (mugil/adopt.py): the steps say what to do next.
+    const manual = status.copy_mode === 'manual' ? (status.manual || {}) : null;
+    if (manual && manual.state !== 'ready') {
+      $('#tc-keeping').textContent += ` ${manual.state === 'checking'
+        ? i18n.t('Checking the copy made by hand; the Primary waits.')
+        : i18n.t('The library is being copied here by hand; the Primary waits until you say it is finished (Set up step by step).')}`;
+    }
     const unpaired = !status.paired && Boolean(status.originals_dir);
     $('#tc-waiting-row').hidden = !unpaired;
     $('#tc-code-row').hidden = !unpaired;
@@ -630,6 +637,13 @@ export class TwoComputers {
         size: size(progress.bytes), already: count(progress.already),
       }));
       if (progress.waiting) lines.push(i18n.t('Waiting: {reason}', { reason: progress.waiting }));
+      if (progress.secondary_preparing) {
+        lines.push(i18n.t('The Secondary is taking in a copy made by hand. Sending carries on by itself once it is checked.'));
+      }
+      if (progress.short_of_room) {
+        lines.push(i18n.t('{needed} still to send and {free} free on the Secondary: what fits is sent.', {
+          needed: size(progress.short_of_room.needed), free: size(progress.short_of_room.free) }));
+      }
       if (progress.secondary_away) {
         lines.push(i18n.t('The Secondary has not answered since {when}. Sending carries on by itself when it is back.', { when: when(progress.secondary_away) }));
       }

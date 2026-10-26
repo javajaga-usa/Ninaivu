@@ -142,7 +142,32 @@ def remember_hello(state_dir: str | Path, hello: dict[str, Any]) -> None:
     remember(state_dir, {"machine": hello.get("machine") or {}, "health": hello.get("health") or {},
                          "version": hello.get("version"),
                          "family_port": hello.get("family_port"),
-                         "offsite": hello.get("offsite") or {}})
+                         "offsite": hello.get("offsite") or {},
+                         "copy_mode": hello.get("copy_mode") or "automatic",
+                         "manual": hello.get("manual") or {}})
+
+
+#: On the Secondary: what the Primary said of itself at its last run.
+ABOUT_PRIMARY = "mugil-primary.json"
+
+
+def remember_primary(state_dir: str | Path, about: dict[str, Any]) -> None:
+    with _lock:
+        path = Path(state_dir) / ABOUT_PRIMARY
+        tmp = path.with_suffix(".tmp")
+        try:
+            tmp.write_text(json.dumps({**about, "told_at": time.time()}), encoding="utf-8")
+            os.replace(tmp, path)
+        except OSError as exc:
+            log.debug("Could not remember what the Primary said: %s", exc)
+
+
+def about_primary(state_dir: str | Path) -> dict[str, Any]:
+    try:
+        data = json.loads((Path(state_dir) / ABOUT_PRIMARY).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
 
 
 def offsite_summary(offsite) -> dict[str, Any]:
@@ -191,6 +216,7 @@ def remembered(state_dir: str | Path) -> dict[str, Any] | None:
 def forget(state_dir: str | Path) -> None:
     with _lock:
         (Path(state_dir) / REMEMBERED).unlink(missing_ok=True)
+        (Path(state_dir) / ABOUT_PRIMARY).unlink(missing_ok=True)
 
 
 def same_version(mine: str, theirs: str | None) -> bool | None:
@@ -201,5 +227,5 @@ def same_version(mine: str, theirs: str | None) -> bool | None:
 
 
 __all__ = ["this_machine", "keeping_health", "smart_verdict", "remember", "remembered",
-           "offsite_summary",
+           "offsite_summary", "remember_primary", "about_primary",
            "forget", "same_version", "system_name"]

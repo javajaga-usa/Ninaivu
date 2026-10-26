@@ -1,10 +1,21 @@
 # The first day
 
-Right after the administrator is made, the console walks through the five
+Right after the administrator is made, the console walks through the
 things a new library needs. Each step can be skipped and each is just a page
 of the console, so nothing here is a second way of doing anything.
 
 ![The first day](../screens/console-first-day.jpg)
+
+## How many computers will keep the library?
+
+Most homes need **one computer**, and the steps below follow. With **two**,
+the fast one (the **Primary**) runs the library and one that is always on with
+a big disk (the **Secondary**) keeps every original exactly as it was taken.
+Choosing the Primary adds a step after the library folder to pair with the
+Secondary. Choosing the Secondary replaces the library steps with three of its
+own: the originals folder on its big disk, whether the originals arrive
+automatically or are copied there by hand, and pairing with the Primary.
+[Two computers](../two-computers.md) has the details.
 
 ## 1. Where are the photographs?
 

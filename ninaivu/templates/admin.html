@@ -1132,6 +1132,7 @@
           <option value="secondary" data-i18n="Secondary: keeps the originals">Secondary: keeps the originals</option>
         </select>
         <button class="btn ghost" id="tc-save-role" type="button" data-i18n="Save">Save</button>
+        <button class="btn" id="tc-guide" type="button" data-i18n="Set up step by step">Set up step by step</button>
       </div>
 
       <p class="hint subtle" id="tc-network" hidden data-i18n="The family app answers this computer only, so the other computer cannot reach it. Turn on network access on the Server page.">The family app answers this computer only, so the other computer cannot reach it. Turn on network access on the Server page.</p>
@@ -2726,12 +2727,14 @@
 </div>
 
 <!-- The first day: opens once, after the administrator is made, and walks
-     through the five things a new library needs. Every step can be skipped;
+     through what a new library needs, beginning with one computer or two
+     (static/js/first-day.js writes the steps for the part chosen). Every step can be skipped;
      every step uses the same routes the pages behind it use. -->
 <div class="modal" id="first-day" hidden role="dialog" aria-modal="true" aria-labelledby="fd-title">
   <div class="modal-card wide fd-card">
     <div class="fd-head">
       <ol class="fd-steps" id="fd-steps" aria-label="Steps" data-i18n-label="Steps">
+        <li data-step="computers" data-i18n="Computers">Computers</li>
         <li data-step="library" data-i18n="Library">Library</li>
         <li data-step="people" data-i18n="Household">Household</li>
         <li data-step="ai">AI</li>

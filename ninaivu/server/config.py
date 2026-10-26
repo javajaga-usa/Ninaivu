@@ -1221,6 +1221,12 @@ class Config:
     #: Secondary and the off-site copy both keep (mugil/free.py). Off until
     #: the household turns it on; even then nothing goes until Free is pressed.
     mugil_free_space: bool = False
+    #: On the Secondary: how the originals first arrive. ``automatic``: the
+    #: Primary sends every one of them once the two are paired. ``manual``:
+    #: the household copies the library folder onto the disk by hand, and the
+    #: Primary waits until it is said to be done and checked here, then sends
+    #: only what is missing or different (mugil/adopt.py).
+    mugil_copy_mode: str = "automatic"
 
     # ---------------------------------------------------------------------
     @property

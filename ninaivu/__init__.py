@@ -307,6 +307,10 @@ class Services:
         self.mugil_welcome = Welcome()
         self.mugil_introductions = Introductions()
         self.mugil_beacon = Beacon(cfg, self.mugil_welcome, lambda: display_name(cfg))
+        # And, on a Secondary copied to by hand, the check of that copy
+        # (mugil/adopt.py).
+        from .mugil.adopt import Adopter                        # noqa: PLC0415
+        self.mugil_adopter = Adopter(cfg)
         # And the Secondary waking the Primary for its catch-up (mugil/wake.py).
         from .mugil.wake import Waker                           # noqa: PLC0415
         self.mugil_waker = Waker(cfg)
@@ -588,6 +592,7 @@ class Services:
                 self.mugil_welcome.open()
         self.mugil_beacon.keep()
         self.mugil_waker.keep()
+        self.mugil_adopter.resume()
 
     def _prepare_new_files_folder(self) -> None:
         """Set up the new-files folder now if a library folder is read-only.
@@ -1496,6 +1501,7 @@ class Services:
                             ("mugil_handover", "sending the family app's copy"),
                             ("mugil_free", "freeing space"),
                             ("mugil_rebuild", "rebuilding the library"),
+                            ("mugil_adopter", "checking the copy made by hand"),
                             ("repairer", "the repair"), ("xmp", "the sidecars"),
                             ("keepsake", "the family archive"), ("importer", "the import")):
             part = getattr(self, name, None)

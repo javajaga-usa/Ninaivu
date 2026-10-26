@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### One computer or two, from the first day
+
+- **The first day asks how many computers will keep the library.** One computer has the steps it always had. **Two computers: this one is the Primary** adds **Pair with the Secondary** after the library folder: it finds a waiting Secondary by itself (tap it when both screens show the same number), or shows a code for the Secondary to type. **Two computers: this one is the Secondary** has no library steps: it asks for the originals folder on the big disk, how the originals first arrive, and the Primary's address and the code it shows. **Mugil → Two computers → Set up step by step** opens the same steps again later.
+- **The Secondary can pair with the Primary's code.** Until now the code was shown on the Secondary and typed on the Primary. Now either computer can be set up first: the Primary shows a code (`POST /api/admin/mugil/code`), and the Secondary is given it with the Primary's address (`POST /api/admin/mugil/join`; `mac-mini` or `100.64.1.2` will do). A Primary that is off or out of reach is said in words, and the Secondary keeps waiting to be found.
+- **Copying the library by hand.** For a large library, *I will copy them myself* lets the household copy each library folder onto the Secondary's disk (`mugil_copy_mode` `manual`). The Primary waits until **I have finished copying** is pressed; then the Secondary reads every file copied and writes down its fingerprint, with progress on the page, carrying on after a restart where it was. The Primary then sends only what is missing or different: a file found at the same path with the same size and fingerprint is kept without crossing the network and given the Primary's modified time, and a different one is set aside, never written over.
+- **The first copy starts about a minute after pairing**, not at the next day's run. Before it starts, the Primary compares what is still to send with the room on the Secondary's disk and says so when it will not fit (on the console and in the notifications); what fits is sent. The Secondary's console lists the Primary's library folders and their sizes, and both say when the two run different versions.
+
 ### Sent for screening
 
 - **Family members can ask an administrator to look at photos and videos.** **Send for screening** is in the viewer and on the selection bar, so one item or a whole selection goes at once, from the gallery or from search results. The family member says what it is (a screenshot or a document, not suitable for everyone, or something else) and can add a short note. Nothing about who sees the item changes when it is sent: it stays in the family's gallery until an administrator decides, and pressing the viewer's button again takes the request back.

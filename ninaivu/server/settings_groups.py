@@ -61,7 +61,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "backup_keep", "backup_dir", "keepsake_letter", "keepsake_folder", "keepsake_made",
         "replica_dir", "replica_every_minutes",
         "mugil_role", "mugil_partner_url", "mugil_originals_dir", "mugil_copy_every_hours",
-        "mugil_family_copy", "mugil_free_space",
+        "mugil_family_copy", "mugil_free_space", "mugil_copy_mode",
     ),
     said("Remote access"): (
         "network_access", "https", "console_on_network", "console_from_internet", "tailnet_https", "remote_access", "remote_networks",
@@ -187,6 +187,7 @@ MANAGED: dict[str, str] = {
     # and off where they are explained, and written to the activity log there.
     "mugil_free_space": said("Mugil → Two computers"),
     "mugil_family_copy": said("Mugil → Two computers"),
+    "mugil_copy_mode": said("Mugil → Two computers"),
 }
 
 #: Values a text setting may take, where it is one of a few.
@@ -204,6 +205,7 @@ CHOICES: dict[str, tuple[str, ...]] = {
     "strip_location": ("off", "home", "all"),
     "notify_webhook_format": ("json", "ntfy", "form"),
     "mugil_role": ("single", "primary", "secondary"),
+    "mugil_copy_mode": ("automatic", "manual"),
 }
 
 #: Inclusive bounds for numbers (None: unbounded on that side).
