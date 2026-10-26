@@ -651,3 +651,26 @@ def test_the_list_marks_a_damaged_video_and_compress_refuses_it(as_admin, scanne
     assert response.get_json()["damaged"] is True
     assert response.get_json()["error"] == vc.DAMAGED
     assert vc.active() == []                        # nothing queued to fail later
+
+
+def test_a_date_ffmpeg_writes_twice_is_still_the_copy_compress_made(monkeypatch, tmp_path):
+    """FFmpeg 9 writes the filming date in the MP4's header and among the
+    metadata tags, and ffprobe reads back both, joined by ";". Taken for a
+    changed tag, the copy was not recognised: Compress made a second one and
+    Replace encoded again (audit 2026-10-26 F-05). A date that really
+    changed still is a change."""
+    def probe(when, rotation=0):
+        return {"format": {"tags": {"creation_time": when, "encoder": "Lavf"}},
+                "streams": [{"codec_type": "video", "width": 1280, "height": 720,
+                             "side_data_list": [{"rotation": rotation}]}]}
+
+    same = "2015-06-01T10:00:00.000000Z"
+    answers = {}
+    monkeypatch.setattr(media, "ffprobe_info", lambda path: answers[path.name])
+    source, copy = tmp_path / "dance.mp4", tmp_path / "dance-copy.mp4"
+    answers.update({source.name: probe(same), copy.name: probe(f"{same};{same}")})
+    assert vc.made_as_now(source, copy)
+    answers[copy.name] = probe(f"{same};2016-01-01T00:00:00.000000Z")
+    assert not vc.made_as_now(source, copy)
+    answers[copy.name] = probe("2016-01-01T00:00:00.000000Z")
+    assert not vc.made_as_now(source, copy)

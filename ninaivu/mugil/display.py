@@ -264,8 +264,20 @@ def _probe(path: Path) -> dict[str, Any]:
 
 
 def _tags(probe: dict[str, Any]) -> dict[str, str]:
-    return {k.lower(): str(v) for k, v in ((probe.get("format") or {}).get("tags") or {}).items()
+    return {k.lower(): _once(str(v))
+            for k, v in ((probe.get("format") or {}).get("tags") or {}).items()
             if k.lower() not in _OWN_TAGS}
+
+
+def _once(value: str) -> str:
+    """A tag said twice, as one. FFmpeg 9 writes the date a video was filmed
+    both in the MP4's own header and among the ``use_metadata_tags`` keys,
+    and ffprobe reads back ``2015-06-01T10:00:00Z;2015-06-01T10:00:00Z``: the
+    same date, kept. Taken for a changed tag, Compress made a second copy of
+    a video it had already done and Replace encoded it all again. Different
+    values joined by ``;`` are left as they are, so a changed tag still is."""
+    parts = value.split(";")
+    return parts[0] if len(parts) > 1 and len(set(parts)) == 1 else value
 
 
 def _rotation(probe: dict[str, Any]) -> int:

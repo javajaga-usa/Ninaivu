@@ -152,6 +152,19 @@ def test_something_already_installed_is_not_installed_again(monkeypatch):
 
 # -- a tool installed a minute ago counts ------------------------------------------
 
+@pytest.fixture(autouse=True)
+def _tools_put_back(monkeypatch):
+    """Every path refresh_tools writes, put back after each test. Asking
+    whether ffmpeg is there looks again when it is not, and with ``which``
+    made up that wrote None into ``media.FFMPEG`` for every test after: the
+    HEVC display copies in test_mugil_display then had "no encoder"."""
+    from ninaivu.archive import entertainment
+    from ninaivu.media import media
+    for module in (media, entertainment):
+        for name in ("FFMPEG", "FFPROBE"):
+            monkeypatch.setattr(module, name, getattr(module, name))
+
+
 def test_a_newly_installed_tool_is_found_without_a_restart(monkeypatch):
     """A package manager adds its folder to the environment for *new*
     processes; this one keeps the PATH it started with."""
@@ -385,7 +398,10 @@ def test_the_list_matches_what_rapidocr_itself_asks_for():
             .replace("_", "-")
 
     wanted = {name(r) for r in declared if "extra ==" not in r}
-    wanted.discard("opencv-python")
+    # OpenCV comes with the core requirements, as the headless build; some
+    # rapidocr releases ask for opencv-python, others (3.10) for the headless
+    # one, and either is already there.
+    wanted -= {"opencv-python", "opencv-python-headless"}
     listed = {name(r) for r in components.CATALOGUE["ocr"]["also"]}
     assert wanted <= listed, f"rapidocr now also wants {wanted - listed}"
 

@@ -583,7 +583,10 @@ def test_growing_up_shares_the_years_out_and_holds_only_clear_faces():
     faces[1]["size"] = 0.01                                 # too small to hold
     del faces[2]["eyes"]                                    # no eyes found
     picked = films.pick_growing_up(rows, faces, count=12)
-    years = [__import__("time").gmtime(r["when"]).tm_year for r in picked]
+    # Counted by the household's own calendar, as pick_growing_up shares
+    # them out: 1994-01-01 00:00 UTC is still 1993 in New York.
+    from ninaivu.media import storyboard
+    years = [storyboard.local_time(r["when"]).tm_year for r in picked]
     assert len(picked) == 12 and years == sorted(years)
     assert {1, 2}.isdisjoint(r["id"] for r in picked)
     assert max(years.count(y) for y in set(years)) - min(years.count(y) for y in set(years)) <= 1

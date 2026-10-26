@@ -31,7 +31,8 @@ import time
 from typing import Any, Sequence
 
 __all__ = ["SCHEMA", "NOTE_MAX", "ACTIONS", "send", "withdraw", "sent_by", "sent_any",
-           "open_count", "queue", "settle", "hold", "release", "HOLD_SOURCE"]
+           "open_count", "queue", "settle", "hold", "release", "release_withdrawn",
+           "HOLD_SOURCE"]
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS screening_requests (
@@ -201,15 +202,42 @@ def hold(conn: sqlite3.Connection, asset_ids: Sequence[int]) -> int:
     return held
 
 
-def release(conn: sqlite3.Connection, asset_ids: Sequence[int]) -> int:
+def release_withdrawn(conn: sqlite3.Connection, asset_ids: Sequence[int]) -> int:
+    """Put back what a withdrawn request held, once nobody is still asking.
+
+    A live photo's clip and a RAW are held with the photograph they belong
+    to, and the request is the photograph's alone. So an item comes back only
+    when no request is still open for anything in its group: a clip whose
+    still somebody else has sent stays held, whoever takes back a request for
+    the clip, and the still waits while its RAW is still asked about.
+    """
+    from .db import companion_map, with_live_clips                # noqa: PLC0415
+    asked = [int(r[0]) for r in conn.execute(
+        "SELECT DISTINCT asset_id FROM screening_requests").fetchall()]
+    blocked = set(asked)
+    for companions in companion_map(conn, asked).values():
+        blocked.update(companions)
+    free = []
+    for asset_id in dict.fromkeys(int(i) for i in asset_ids):
+        group = with_live_clips(conn, [asset_id])
+        if not blocked.intersection(group):
+            free.extend(group)
+    return release(conn, free, companions=False)
+
+
+def release(conn: sqlite3.Connection, asset_ids: Sequence[int], *,
+            companions: bool = True) -> int:
     """Put held items back to what they were before they were sent.
 
     An item whose visibility was changed again while it was held (an admin
     hid its folder, say) keeps that later decision. Returns how many items
-    were put back.
+    were put back. ``companions=False`` puts back only the ids given, for a
+    caller that has worked out the groups itself (:func:`release_withdrawn`).
     """
     from .db import _write_lock, with_live_clips                  # noqa: PLC0415
-    ids = with_live_clips(conn, [int(i) for i in asset_ids])
+    ids = [int(i) for i in asset_ids]
+    if companions:
+        ids = with_live_clips(conn, ids)
     restored = 0
     with _write_lock:
         for start in range(0, len(ids), 500):

@@ -7,8 +7,9 @@ exactly as the picture search is.
 
 ``GET /api/moments?q=<words>`` is the clips whose scenes best match the
 words, best first, each with the seconds of its best scenes; ``ready`` says
-whether the picture-search model is there to read the words, and ``clips``
-and ``moments`` how much of the library has been looked into so far.
+whether the picture-search model is there to read the words, and
+``looked_clips`` and ``looked_moments`` how much of what this viewer may see
+has been looked into so far.
 ``GET /api/moments/<id>`` is one clip's scenes, the seconds each starts at.
 ``GET /api/moments/<id>/frame?at=<seconds>`` is a picture of one of them,
 read from the clip by ffmpeg the first time it is asked for and kept.
@@ -49,13 +50,30 @@ def _search_engine():
     return engine
 
 
+def _counts_for_viewer(conn) -> dict[str, int]:
+    """How much has been looked into, counting only the clips this viewer may
+    find: the library-wide totals told a guest how many clips there were in
+    folders, dates and family-only corners they cannot see, and how fast
+    they grew."""
+    done = video_moments.looked_at(conn)
+    ids = list(done)
+    seen: list[int] = []
+    for start in range(0, len(ids), 500):
+        piece = ids[start:start + 500]
+        rows, _ = db.query_assets(conn, _roots(), ids=piece, kinds=["video"],
+                                  limit=len(piece), offset=0, columns=("id",),
+                                  with_total=False, **_viewer(), **_search_shield())
+        seen.extend(int(r["id"]) for r in rows)
+    return {"clips": len(seen), "moments": sum(done[i] for i in seen)}
+
+
 @bp.get("/api/moments")
 def moments_search():
     _switched_on()
     conn = _conn()
     text = " ".join(str(request.args.get("q") or "").split())[:MAX_QUERY]
     engine = _search_engine()
-    done = video_moments.counts(conn)
+    done = _counts_for_viewer(conn)
     answer = {"ready": engine is not None, "clips": [], **{f"looked_{k}": v for k, v in done.items()}}
     if not text or engine is None:
         return jsonify(answer)

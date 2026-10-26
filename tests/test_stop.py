@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -355,7 +356,18 @@ def test_the_root_holds_the_launcher_and_only_what_tooling_needs_there():
                # The double-click launchers and the Control Panel they open.
                "Ninaivu.command", "Setup Ninaivu.command",
                "Start - Ninaivu Control Panel.vbs", "ninaivu_control.pyw"}
-    files = {p.name for p in root.iterdir() if p.is_file()} - {".DS_Store"}   # Finder's, and gitignored
+    # What the repository holds there, not whatever else is lying in this
+    # checkout (a zip the person put there, a picture made from it): those
+    # are theirs, and never reach anybody else. Read from disk where there is
+    # no git to ask.
+    try:
+        listed = subprocess.run(["git", "-C", str(root), "ls-files", "--", "."],
+                                capture_output=True, text=True, check=True,
+                                timeout=30).stdout.splitlines()
+        files = {name for name in listed if "/" not in name}
+    except (OSError, subprocess.SubprocessError):
+        files = {p.name for p in root.iterdir() if p.is_file()}
+    files -= {".DS_Store"}                                  # Finder's, and gitignored
     assert files <= allowed, f"loose at the root: {sorted(files - allowed)}"
     assert "start.cmd" in files
 

@@ -174,3 +174,51 @@ def test_a_bad_action_is_refused(as_admin):
 def test_the_capability_is_for_family_members_not_admins(as_family, as_admin):
     assert as_family.get("/api/me").get_json()["can"]["send_for_screening"] is True
     assert as_admin.get("/api/me").get_json()["can"]["send_for_screening"] is False
+
+
+def _live_pair(conn, still: int, clip: int) -> None:
+    """Make *clip* the live clip of *still*, as the scan pairs them."""
+    path = conn.execute("SELECT rel_path FROM assets WHERE id=?", (clip,)).fetchone()[0]
+    with db._write_lock:                                              # noqa: SLF001
+        conn.execute("UPDATE assets SET is_live=1, live_video_path=? WHERE id=?", (path, still))
+        conn.execute("UPDATE assets SET live_clip=1 WHERE id=?", (clip,))
+        conn.commit()
+
+
+def _vis(conn, asset_id):
+    return conn.execute("SELECT visibility FROM assets WHERE id=?", (asset_id,)).fetchone()[0]
+
+
+def test_nobody_else_can_bring_back_a_held_clip_while_its_still_waits(app, as_family, people):
+    """The clip is held with its still, on the still's request. Somebody who
+    had not sent it took back a request for the clip alone, and the clip came
+    back to the family while the still still waited (audit 2026-10-26 F-01)."""
+    conn = people["conn"]
+    still, clip = ids_of(as_family)[:2]
+    _live_pair(conn, still, clip)
+    _send(as_family, [still])
+    assert _vis(conn, still) == 2 and _vis(conn, clip) == 2
+    other = _second_member(app, people)
+    for ids in ([clip], [still], [still, clip]):
+        assert _send(other, ids, sent=False)["withdrawn"] == 0
+        assert _vis(conn, still) == 2 and _vis(conn, clip) == 2
+    assert other.get(f"/api/asset/{clip}").status_code == 404
+    # The one who sent it takes it back: both come back together.
+    assert _send(as_family, [still], sent=False)["withdrawn"] == 1
+    assert _vis(conn, still) == 1 and _vis(conn, clip) == 1
+
+
+def test_a_clip_stays_held_while_anybody_still_asks_about_its_still(app, as_family, people):
+    conn = people["conn"]
+    still, clip = ids_of(as_family)[:2]
+    _live_pair(conn, still, clip)
+    other = _second_member(app, people)
+    _send(as_family, [still])
+    # Asked by a second person too (held, it is out of their view, so as two
+    # requests made side by side would leave it).
+    arjun = conn.execute("SELECT id FROM users WHERE username='arjun'").fetchone()[0]
+    screening.send(conn, [still], arjun)
+    assert _send(as_family, [still, clip], sent=False)["withdrawn"] == 1
+    assert _vis(conn, still) == 2 and _vis(conn, clip) == 2
+    assert _send(other, [still], sent=False)["withdrawn"] == 1
+    assert _vis(conn, still) == 1 and _vis(conn, clip) == 1

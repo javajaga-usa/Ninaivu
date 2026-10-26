@@ -71,10 +71,14 @@ def test_a_copy_that_is_no_smaller_is_not_kept(tmp_path, monkeypatch):
 
 
 def _video(path: Path, rotate: int = 90) -> None:
+    # Stored losslessly, the fastest way: a test pattern at -crf 8 is already
+    # so small that the Mac's video engine, at the quality a display copy is
+    # made at, came out no smaller, and the copy was rightly not kept.
     plain = path.with_name("plain-" + path.name)
     subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i",
                     "testsrc=size=1920x1440:rate=30", "-f", "lavfi", "-i", "sine=frequency=440",
-                    "-t", "3", "-c:v", "libx264", "-crf", "8", "-c:a", "aac",
+                    "-t", "3", "-c:v", "libx264", "-preset", "ultrafast", "-qp", "0",
+                    "-c:a", "aac",
                     "-metadata", "creation_time=2014-02-03T04:05:06Z",
                     "-metadata", "location=+12.9700+077.5900/",
                     "-movflags", "use_metadata_tags", str(plain)], check=True)

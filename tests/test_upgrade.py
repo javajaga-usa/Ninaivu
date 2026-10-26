@@ -106,12 +106,14 @@ def test_asset_columns_are_healed_regardless_of_version(tmp_path):
     for index in ("idx_assets_filter", "idx_assets_gallery", "idx_assets_name",
                   "idx_assets_size", "idx_assets_date", "idx_assets_gps", "idx_assets_vis"):
         conn.execute(f"DROP INDEX IF EXISTS {index}")
-    # A trigger that reads the column would refuse the drop; such a build had none.
-    conn.execute("DROP TRIGGER IF EXISTS revoke_asset_shares_on_hide")
-    conn.execute("DROP TRIGGER IF EXISTS keep_private_hidden")
-    conn.execute("DROP TRIGGER IF EXISTS assets_generation_update")
-    conn.execute("DROP TRIGGER IF EXISTS assets_scan_generation_update")
-    conn.execute("DROP TRIGGER IF EXISTS stacks_loosen_on_change")
+    # A trigger that reads the column would refuse the drop; such a build had
+    # none. Every one that names it, found rather than listed: a list went
+    # stale the day assets_seen_generation_update came, and the test then
+    # failed before it reached the repair it is about.
+    for (name,) in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='trigger' "
+            "AND sql LIKE '%visibility%'").fetchall():
+        conn.execute(f'DROP TRIGGER IF EXISTS "{name}"')
     conn.execute("ALTER TABLE assets DROP COLUMN visibility")
     conn.commit()
     assert "visibility" not in db.columns(conn, "assets")

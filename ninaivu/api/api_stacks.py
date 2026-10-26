@@ -21,10 +21,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from flask import abort, jsonify, request
+from flask import abort, jsonify
 
 from ..server.auth import current_user
 from ..storage import db, stacks
+from ._body import json_object
 from .api import _cfg, _conn, _roots, _thumb_version, _viewer, bp
 
 
@@ -110,6 +111,8 @@ def stack_apart(asset_id: int):
     key, frames, _ = _stack_of(asset_id)
     if len(frames) < 2:
         abort(404)
-    apart = bool((request.get_json(silent=True) or {}).get("apart", True))
+    apart = json_object().get("apart", True)
+    if not isinstance(apart, bool):
+        abort(400, description="Apart must be true or false.")
     stacks.set_apart(_conn(), key, apart, current_user().id)
     return jsonify({"ok": True, "apart": apart})

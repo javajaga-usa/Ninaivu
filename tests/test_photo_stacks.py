@@ -238,3 +238,16 @@ def test_the_gallery_does_not_wait_behind_a_scan_for_the_marks(burst):
         release.set()
         worker.join()
     assert stacks.build(conn, wait=0.05)["changed"] == 4
+
+
+@pytest.mark.parametrize("body", [{"apart": "false"}, {"apart": 0}, {"apart": None}, [1], "on"])
+def test_apart_takes_only_true_or_false(burst, as_family, body):
+    """Read as ``bool(...)``, the text "false" kept a stack apart, and a list
+    for a body answered 500 (audit 2026-10-26 F-02). Refused before anything
+    is written."""
+    burst["cfg"].photo_stacks = True
+    first = burst["beach"][0]
+    assert as_family.post(f"/api/stacks/{first}/apart", json=body).status_code == 400
+    assert as_family.get(f"/api/stacks/{first}").get_json()["apart"] is False
+    # An empty body still means apart, as the viewer's button sends it.
+    assert as_family.post(f"/api/stacks/{first}/apart").get_json()["apart"] is True
