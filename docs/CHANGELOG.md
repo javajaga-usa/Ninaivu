@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 3.2.0 — 26 October 2026
+
+Ninaivu 3.2 keeps family members to clean content everywhere: screenshots, documents, near-explicit items and photographs of people in only their underwear stay out of their search and smart albums, and explicit items are kept from them by one rule on every page. Family members can send photos and videos to an administrator for screening, and a Screening queue on the console lets an administrator ignore, hide, mark explicit or delete them, one or many at once. The first day asks whether one computer or two will keep the library, and a Secondary can be copied to by hand. Search results can be picked on a phone by holding a finger on a photo, the whole index can be exported and imported from the console, a slow start is no longer called a failure, the slowest pages on a large library are much faster, and writing down what is said in videos is gone.
 
 ### One computer or two, from the first day
 
