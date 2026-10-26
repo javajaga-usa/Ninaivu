@@ -310,7 +310,74 @@ played as usual. The folder keeps at most 20 GB, and the least recently used
 files go first. An edited copy cannot be saved beside a photograph whose
 folder is not on the Primary; that is refused and explained.
 
-## Setting it up
+## Setting it up on the first day
+
+The console's first-day steps begin with **How many computers will keep the
+library?** (and **Mugil → Two computers → Set up step by step** opens the same
+steps again later):
+
+- **One computer**: the first day as it always was.
+- **Two computers: this one is the Primary**: the library folder, then
+  **Pair with the Secondary**. The Primary looks for a waiting Secondary on the
+  house network and on Tailscale and lists it with its six-digit number; tap
+  **Pair** when the Secondary shows the same number. Or press **Show a code for
+  the Secondary** and type the code with this computer's address on the
+  Secondary. Then the household, AI, backup and phones steps as usual.
+- **Two computers: this one is the Secondary**: no library steps. Instead:
+  1. **Where should the originals be kept?** A folder on the big disk. A disk
+     that already keeps originals (the computer it was in was replaced) says
+     how many, and they are used as they are.
+  2. **How should the originals first arrive?** *Automatically* or *I will
+     copy them myself* (below).
+  3. **Pair with the Primary.** Type the Primary's address (`mac-mini`,
+     `100.64.1.2` or `http://mac-mini.tailnet.ts.net`; without a port, this
+     computer's family-app port is used) and the code its console shows. While
+     it is not paired the Secondary also waits to be found, and shows the
+     number to check.
+
+Set up whichever computer comes first. If the Primary is off or cannot be
+reached, the Secondary says so, keeps waiting, and the two pair when the
+Primary finds it. A wrong code is refused; five wrong codes void the one shown,
+and a code lasts ten minutes. Each part can be changed later on **Mugil → Two
+computers**, once the two are unpaired.
+
+The first copy starts about a minute after pairing, not at the next day's run,
+and carries on by itself after a restart, a power cut or either computer going
+away (it asks the Secondary which files it keeps, so nothing is sent twice).
+Before it starts, the Primary compares what is still to send with the room on
+the Secondary's disk; when it will not fit, both consoles and the
+notifications say so, what fits is sent, and the run stops when the disk is
+full. When the two run different versions of Ninaivu, both consoles say so; a
+Linux Secondary can be updated from the Primary (above).
+
+### Copying the library by hand
+
+Sending terabytes over the house network takes days. With **I will copy them
+myself** the household copies the library instead:
+
+1. Plug the Primary's library disk into the Secondary (or bring the files on
+   another disk), and copy each library folder into the originals folder,
+   keeping its name and every folder inside it: the library at
+   `/Volumes/JApple Extreme SSD/NinaivuMaster/Ninaivu Archive` goes to
+   `<originals folder>/Ninaivu Archive`. Once paired, the Secondary's steps
+   list each library folder of the Primary, where it goes and its size. Copy
+   the files as they are; a copy that changed their dates is fine.
+2. Until the copy is said to be finished the Primary waits and sends nothing.
+3. Press **I have finished copying**. The Secondary reads every file copied,
+   end to end, and writes down its fingerprint (the Primary's kind, BLAKE3),
+   with progress on the page. A restart or an unplugged disk carries on where
+   it was: a file already read and not changed since is not read again.
+4. Then the Primary goes through its library as on any run. A file found at
+   the same path with the same size and fingerprint is kept without crossing
+   the network, and given the Primary's modified time. A file that is missing,
+   cut short or different is sent; a different one is set aside in
+   `.ninaivu-set-aside/`, never written over.
+
+**Copy more first** makes the Primary wait again, for a copy in several goes.
+Nothing in the originals folder is changed by the check except the modified
+times put back.
+
+## Setting it up from the command line
 
 Install Ninaivu on both computers, and on each run `ninaivu mugil setup` once
 (`./ninaivu mugil setup` in a portable folder; `--dry-run` says what it would
@@ -349,9 +416,13 @@ not share broadcasts. Open *Pair by address instead* on both computers. Show a
 code on the Secondary, then type the Secondary's address (for example
 `http://linux-pc`) and the code on the Primary.
 
-The same steps as console calls, for scripts: `POST /api/admin/mugil/role`,
+The same steps as console calls, for scripts: `POST /api/admin/mugil/role`
+(with `copy_mode` `automatic` or `manual` on the Secondary),
 `POST /api/admin/mugil/look`, `POST /api/admin/mugil/pair` with
-`{"found": "<id>"}` (or `{"url": …, "code": …}`), `POST /api/admin/mugil/send`,
+`{"found": "<id>"}` (or `{"url": …, "code": …}`), on the Secondary
+`POST /api/admin/mugil/join` with `{"url": …, "code": …}` for a code shown on
+the Primary (`POST /api/admin/mugil/code` there) and `POST /api/admin/mugil/manual`
+with `{"done": true}` when a copy by hand is made, `POST /api/admin/mugil/send`,
 and `GET /api/admin/mugil` for the state.
 
 ## Security
@@ -362,7 +433,9 @@ and `GET /api/admin/mugil` for the state.
   from the two public keys. A device pretending to be either computer would
   give a different number, which is why you check it before tapping Pair. The
   wait on the Secondary closes after one pairing. With a code instead, each side
-  proves it knows the code.
+  proves it knows the code, whichever computer shows it: an administrator at
+  the computer that shows the code, and one at the computer it is typed on,
+  both take part.
 - After pairing, every request between them is signed with the key. A request
   that is unsigned, signed by another key, more than five minutes old or a
   replay is refused.

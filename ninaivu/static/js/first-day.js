@@ -1,5 +1,13 @@
-/* The first day: what a new library needs, in five steps, right after the
+/* The first day: what a new library needs, step by step, right after the
    administrator is made. Opens once (Config.first_day_done) and never again.
+
+   It begins by asking how many computers will keep the library. One
+   computer has the steps it always had. With two, this one is the Primary
+   (it runs the library: the same steps, and pairing with the Secondary
+   after the library folder) or the Secondary (its library stays empty: the
+   originals folder on its big disk, how the originals first arrive, and
+   pairing with the Primary). The Mugil page opens the same two-computer
+   steps again later (openTwoComputers).
 
    Nothing here is new machinery. Each step calls the route the page behind it
    calls — the folder picker, People, the AI switches, the Server page's
@@ -17,7 +25,43 @@ function el(tag, cls, text) {
   return node;
 }
 
-const STEPS = ['library', 'people', 'ai', 'backup', 'phones'];
+const STEPS = {
+  single: ['computers', 'library', 'people', 'ai', 'backup', 'phones'],
+  primary: ['computers', 'library', 'partner', 'people', 'ai', 'backup', 'phones'],
+  secondary: ['computers', 'originals', 'copying', 'primary'],
+};
+
+/* From the Mugil page, only the steps about the two computers. */
+const TWO_COMPUTER_STEPS = {
+  single: ['computers'],
+  primary: ['computers', 'partner'],
+  secondary: ['computers', 'originals', 'copying', 'primary'],
+};
+
+const STEP_LABEL = {
+  computers: () => i18n.t('Computers'),
+  library: () => i18n.t('Library'),
+  partner: () => i18n.t('Secondary'),
+  people: () => i18n.t('Household'),
+  ai: () => 'AI',
+  backup: () => i18n.t('Backup'),
+  phones: () => i18n.t('Phones'),
+  originals: () => i18n.t('Originals'),
+  copying: () => i18n.t('First copy'),
+  primary: () => i18n.t('Primary'),
+};
+
+const size = (n) => {
+  const value = Number(n) || 0;
+  if (value < 1024) return `${value} B`;
+  const units = ['KB', 'MB', 'GB', 'TB'];
+  let amount = value / 1024;
+  let unit = 0;
+  while (amount >= 1024 && unit < units.length - 1) { amount /= 1024; unit += 1; }
+  return `${amount < 10 ? amount.toFixed(1) : Math.round(amount)} ${units[unit]}`;
+};
+
+const count = (n) => (Number(n) || 0).toLocaleString(i18n.locale());
 
 export class FirstDay {
   constructor({ json, toast, pickFolder, openPage, refresh }) {
@@ -30,6 +74,9 @@ export class FirstDay {
     this.step = 0;
     this.added = [];                       // people added during this walk-through
     this.wired = false;
+    this.mugil = null;                     // /api/admin/mugil: the two computers
+    this.onlyComputers = false;            // opened from the Mugil page
+    this.poll = null;
     i18n.onChange(() => {
       const box = $('#first-day');
       if (this.state && box && !box.hidden) this.render();
@@ -48,10 +95,49 @@ export class FirstDay {
       try { await this.json('/api/admin/first-day', { method: 'POST', body: {} }); } catch { /* next time */ }
       return;
     }
+    await this.reloadMugil();
     this.wire();
-    this.step = this.state.library.chosen ? 1 : 0;
+    this.onlyComputers = false;
+    this.step = 0;
     $('#first-day').hidden = false;
     this.render();
+  }
+
+  /* From Mugil → Two computers: the same steps, any time. */
+  async openTwoComputers() {
+    try { this.state = await this.json('/api/admin/first-day'); } catch { return; }
+    await this.reloadMugil();
+    this.wire();
+    this.onlyComputers = true;
+    this.step = 0;
+    $('#first-day').hidden = false;
+    this.render();
+  }
+
+  steps() {
+    const part = this.mugil?.role || 'single';
+    return (this.onlyComputers ? TWO_COMPUTER_STEPS : STEPS)[part] || STEPS.single;
+  }
+
+  async reloadMugil() {
+    try { this.mugil = await this.json('/api/admin/mugil'); } catch { this.mugil = this.mugil || { role: 'single' }; }
+  }
+
+  stopPolling() {
+    clearTimeout(this.poll);
+    this.poll = null;
+  }
+
+  /* Ask again every few seconds while a step waits on the other computer. */
+  pollWhile(step, ms = 3000) {
+    this.stopPolling();
+    this.poll = setTimeout(async () => {
+      if ($('#first-day').hidden || this.steps()[this.step] !== step) return;
+      const before = JSON.stringify(this.mugil);
+      await this.reloadMugil();
+      if (JSON.stringify(this.mugil) !== before) this.render();
+      else this.pollWhile(step, ms);
+    }, ms);
   }
 
   wire() {
@@ -67,13 +153,20 @@ export class FirstDay {
   }
 
   async next() {
-    if (this.step >= STEPS.length - 1) { await this.finish(false); return; }
+    if (this.step >= this.steps().length - 1) { await this.finish(false); return; }
     this.step += 1;
     await this.reload();
+    await this.reloadMugil();
     this.render();
   }
 
   async finish(skipped) {
+    this.stopPolling();
+    if (this.onlyComputers) {
+      $('#first-day').hidden = true;
+      this.refresh?.();
+      return;
+    }
     try { await this.json('/api/admin/first-day', { method: 'POST', body: {} }); } catch { /* it will ask again */ }
     $('#first-day').hidden = true;
     this.toast(skipped ? i18n.t('You can do all of this from the pages on the left, any time.')
@@ -82,13 +175,22 @@ export class FirstDay {
   }
 
   render() {
-    const name = STEPS[this.step];
-    document.querySelectorAll('#fd-steps li').forEach((li, i) => {
+    this.stopPolling();
+    const steps = this.steps();
+    this.step = Math.min(this.step, steps.length - 1);
+    const name = steps[this.step];
+    const list = $('#fd-steps');
+    list.replaceChildren(...steps.map((step, i) => {
+      const li = el('li', null, STEP_LABEL[step]());
+      li.dataset.step = step;
       li.classList.toggle('current', i === this.step);
       li.classList.toggle('done', i < this.step);
-    });
+      return li;
+    }));
     $('#fd-back').hidden = this.step === 0;
-    $('#fd-next').textContent = this.step === STEPS.length - 1 ? i18n.t('Open the console') : i18n.t('Next');
+    $('#fd-skip-all').hidden = this.onlyComputers;
+    $('#fd-next').textContent = this.step === steps.length - 1
+      ? (this.onlyComputers ? i18n.t('Done') : i18n.t('Open the console')) : i18n.t('Next');
     $('#fd-note').textContent = '';
     const body = $('#fd-body');
     body.replaceChildren();
@@ -281,5 +383,366 @@ export class FirstDay {
     } catch {
       box.replaceChildren(el('p', 'hint', i18n.t('The addresses are on the Server page.')));
     }
+  }
+
+  /* -- 0. one computer or two ------------------------------------------- */
+
+  render_computers(body) {
+    $('#fd-title').textContent = i18n.t('How many computers will keep the library?');
+    body.append(el('p', 'lede',
+      i18n.t('Most homes need one. With two, the fast one runs the library, and one that is always on with a big disk keeps every original exactly as it was taken.')));
+    const part = this.mugil?.role || 'single';
+    const choices = [
+      ['single', i18n.t('One computer'),
+        i18n.t('This computer keeps everything: the library, the albums and the originals.')],
+      ['primary', i18n.t('Two computers: this one is the Primary'),
+        i18n.t('The fast one, a Mac mini for example. It runs the library the family browses and sends every original to the Secondary.')],
+      ['secondary', i18n.t('Two computers: this one is the Secondary'),
+        i18n.t('The one that is always on with the big disk, a Linux PC for example. It keeps the originals, never changes them, and has no library of its own.')],
+    ];
+    const group = el('div', 'fd-choices');
+    group.setAttribute('role', 'radiogroup');
+    for (const [value, label, hint] of choices) {
+      const row = el('label', 'fd-choice');
+      const box = el('input'); box.type = 'radio'; box.name = 'fd-part'; box.value = value;
+      box.checked = part === value;
+      box.onchange = () => this.choosePart(value);
+      const words = el('span');
+      words.append(el('strong', null, label), el('span', 'hint', hint));
+      row.append(box, words);
+      group.append(row);
+    }
+    body.append(group);
+    if (this.mugil?.paired) {
+      body.append(el('p', 'hint', i18n.t('Paired with {name}. To change this computer’s part, unpair the two on Mugil → Two computers first.', {
+        name: this.mugil.pairing?.partner_name || i18n.t('the other computer') })));
+    }
+  }
+
+  async choosePart(value) {
+    try {
+      this.mugil = await this.json('/api/admin/mugil/role', { method: 'POST', body: { role: value } });
+    } catch (exc) {
+      this.toast(exc.message, true);
+    }
+    this.render();
+  }
+
+  /* -- Secondary: the originals folder ----------------------------------- */
+
+  render_originals(body) {
+    $('#fd-title').textContent = i18n.t('Where should the originals be kept?');
+    body.append(el('p', 'lede',
+      i18n.t('Choose a folder on the big disk. This computer has no library of its own: leave Library settings empty here, and never add this disk as a library.')));
+    const folder = this.mugil?.originals_dir || '';
+    body.append(el('div', 'fd-chosen', folder || i18n.t('No folder chosen yet')));
+    const keeping = this.mugil?.keeping || {};
+    if (folder && keeping.free_bytes != null) {
+      body.append(el('p', 'hint', i18n.t('{free} free on this disk.', { free: size(keeping.free_bytes) })));
+    }
+    if (folder && keeping.files) {
+      // A disk that kept the originals for a computer that was replaced.
+      body.append(el('p', 'hint', i18n.t('This disk already keeps {files} originals ({size}). They are used as they are; nothing is sent again that is already here.', {
+        files: count(keeping.files), size: size(keeping.bytes) })));
+    }
+    const row = el('div', 'row');
+    const pick = el('button', 'btn primary', folder ? i18n.t('Choose a different folder') : i18n.t('Choose a folder'));
+    pick.type = 'button';
+    pick.disabled = !!this.mugil?.paired;
+    pick.onclick = () => this.pickFolder({
+      title: i18n.t('Choose the folder on the big disk for the originals'),
+      cta: i18n.t('Use this folder'),
+      pick: async (path) => {
+        try {
+          this.mugil = await this.json('/api/admin/mugil/role', {
+            method: 'POST', body: { role: 'secondary', originals_dir: path } });
+        } catch (exc) {
+          this.toast(exc.message, true);
+        }
+        this.render();
+      },
+    });
+    row.append(pick);
+    body.append(row);
+    if (!folder) $('#fd-note').textContent = i18n.t('The Primary cannot pair until a folder is chosen.');
+  }
+
+  /* -- Secondary: how the originals first arrive -------------------------- */
+
+  render_copying(body) {
+    $('#fd-title').textContent = i18n.t('How should the originals first arrive?');
+    const mode = this.mugil?.copy_mode || 'automatic';
+    const choices = [
+      ['automatic', i18n.t('Automatically'),
+        i18n.t('The Primary sends every original over the network as soon as the two are paired, each one checked. It carries on by itself after a restart, a power cut or the network going down. A large library takes days.')],
+      ['manual', i18n.t('I will copy them myself'),
+        i18n.t('Quicker for a large library: plug the Primary’s library disk into this computer, or bring the files on another disk, and copy them into the originals folder. Ninaivu checks what you copied and the Primary sends only what is missing or different.')],
+    ];
+    const group = el('div', 'fd-choices');
+    group.setAttribute('role', 'radiogroup');
+    for (const [value, label, hint] of choices) {
+      const row = el('label', 'fd-choice');
+      const box = el('input'); box.type = 'radio'; box.name = 'fd-copy'; box.value = value;
+      box.checked = mode === value;
+      box.onchange = async () => {
+        try {
+          this.mugil = await this.json('/api/admin/mugil/role', {
+            method: 'POST', body: { role: 'secondary', copy_mode: value } });
+        } catch (exc) {
+          this.toast(exc.message, true);
+        }
+        this.render();
+      };
+      const words = el('span');
+      words.append(el('strong', null, label), el('span', 'hint', hint));
+      row.append(box, words);
+      group.append(row);
+    }
+    body.append(group);
+    if (mode === 'manual') this.renderManual(body);
+  }
+
+  renderManual(body) {
+    const folder = this.mugil?.originals_dir || i18n.t('the originals folder');
+    const manual = this.mugil?.manual || {};
+    const box = el('div', 'fd-manual');
+    box.append(el('p', null, i18n.t('Copy each library folder of the Primary into {folder}, keeping its name and every folder inside it. Copy the files as they are: nothing needs converting or renaming.', { folder })));
+    const libraries = this.mugil?.primary?.libraries || [];
+    if (libraries.length) {
+      const list = el('ul', 'fd-people');
+      for (const lib of libraries) {
+        const li = el('li');
+        li.append(el('code', null, `${lib.root || lib.name} → ${folder}/${lib.name}`),
+          el('span', 'hint', i18n.t('{files} files, {size}', { files: count(lib.files), size: size(lib.bytes) })));
+        list.append(li);
+      }
+      box.append(list);
+    } else {
+      box.append(el('p', 'hint', i18n.t('Once the two are paired, the Primary’s library folders and their sizes are listed here.')));
+    }
+    box.append(el('p', 'hint', i18n.t('A copy that changed the files’ dates is fine: the Primary’s dates are put back. A file cut short or missing is sent over the network.')));
+    const row = el('div', 'row');
+    const state = manual.state || 'copying';
+    const progress = manual.progress || {};
+    if (state === 'copying') {
+      box.append(el('p', 'hint', i18n.t('Until you say the copy is finished, the Primary waits and sends nothing.')));
+      const done = el('button', 'btn primary', i18n.t('I have finished copying'));
+      done.type = 'button';
+      done.onclick = () => this.manualDone(true);
+      row.append(done);
+    } else if (state === 'checking') {
+      box.append(el('p', 'hint', progress.files_total
+        ? i18n.t('Checking what was copied: {done} of {total} files ({size} of {all}).', {
+          done: count(progress.files_done), total: count(progress.files_total),
+          size: size(progress.bytes_done), all: size(progress.bytes_total) })
+        : i18n.t('Looking at what was copied…')));
+      this.pollWhile('copying', 2000);
+    } else {
+      box.append(el('p', 'hint', i18n.t('Checked: {files} files ({size}). The Primary now sends only what is missing or different.', {
+        files: count(manual.files), size: size(manual.bytes) })));
+      const more = el('button', 'btn ghost', i18n.t('Copy more first'));
+      more.type = 'button';
+      more.onclick = () => this.manualDone(false);
+      row.append(more);
+    }
+    if (manual.error) box.append(el('p', 'hint error', manual.error));
+    box.append(row);
+    body.append(box);
+  }
+
+  async manualDone(done) {
+    try {
+      this.mugil = await this.json('/api/admin/mugil/manual', { method: 'POST', body: { done } });
+    } catch (exc) {
+      this.toast(exc.message, true);
+    }
+    this.render();
+  }
+
+  /* -- Secondary: pairing with the Primary --------------------------------- */
+
+  render_primary(body) {
+    $('#fd-title').textContent = i18n.t('Pair with the Primary');
+    const m = this.mugil || {};
+    if (m.paired) {
+      this.renderPaired(body, m.pairing?.partner_name);
+      const libraries = m.primary?.libraries || [];
+      const wanted = libraries.reduce((sum, lib) => sum + (Number(lib.bytes) || 0), 0);
+      const free = m.keeping?.free_bytes;
+      if (wanted && free != null && m.copy_mode !== 'manual' && wanted > free) {
+        body.append(el('p', 'hint error', i18n.t('The Primary’s library is {wanted} and this disk has {free} free. What fits is kept; give this computer a bigger disk for the rest.', {
+          wanted: size(wanted), free: size(free) })));
+      }
+      body.append(el('p', 'hint', m.copy_mode === 'manual'
+        ? i18n.t('The Primary waits until the copy you make by hand is checked.')
+        : i18n.t('The first copy starts about a minute after pairing and carries on by itself. You can close this; the Mugil page shows how far it has got.')));
+      return;
+    }
+    if (!m.originals_dir) {
+      body.append(el('p', 'lede', i18n.t('Choose the originals folder first.')));
+      return;
+    }
+    body.append(el('p', 'lede',
+      i18n.t('On the Primary, open Mugil → Two computers and press Show a code for the Secondary. Then type its address and the code here.')));
+    const form = el('form', 'row');
+    const url = el('input', 'input'); url.placeholder = i18n.t('mac-mini or 100.64.1.2'); url.required = true;
+    url.autocomplete = 'off'; url.spellcheck = false;
+    url.setAttribute('aria-label', i18n.t('The Primary’s address'));
+    const code = el('input', 'input'); code.placeholder = 'ABCD-EFGH'; code.required = true;
+    code.autocomplete = 'off'; code.spellcheck = false;
+    code.setAttribute('aria-label', i18n.t('Pairing code'));
+    const go = el('button', 'btn primary', i18n.t('Pair')); go.type = 'submit';
+    form.append(url, code, go);
+    form.onsubmit = async (event) => {
+      event.preventDefault();
+      go.disabled = true;
+      try {
+        this.mugil = await this.json('/api/admin/mugil/join', {
+          method: 'POST', body: { url: url.value.trim(), code: code.value.trim() } });
+        this.toast(i18n.t('The two computers are paired'));
+        this.render();
+      } catch (exc) {
+        go.disabled = false;
+        this.toast(exc.message, true);
+        await this.reloadMugil();
+      }
+    };
+    body.append(form);
+    // Or the Primary finds this one by itself and is tapped there.
+    const welcome = m.welcome || {};
+    const waiting = el('div', 'fd-waiting');
+    if (welcome.waiting) {
+      waiting.append(el('p', 'hint', i18n.t('Or let the Primary find this computer: it is waiting now. On the Primary, open Mugil → Two computers and tap the computer showing the same number.')));
+      const found = el('ul', 'tc-found');
+      for (const met of welcome.introduced || []) {
+        const li = el('li');
+        li.append(el('span', 'tc-name', met.name || met.address), el('span', 'tc-number', met.number));
+        found.append(li);
+      }
+      waiting.append(found);
+    } else {
+      const again = el('button', 'btn ghost', i18n.t('Wait for the Primary again'));
+      again.type = 'button';
+      again.onclick = async () => {
+        try { this.mugil = await this.json('/api/admin/mugil/welcome', { method: 'POST' }); } catch (exc) { this.toast(exc.message, true); }
+        this.render();
+      };
+      waiting.append(el('p', 'hint', i18n.t('The Primary can also find this computer, while it waits.')), again);
+    }
+    if (m.on_the_network === false) {
+      waiting.append(el('p', 'hint error', i18n.t('The family app answers this computer only, so the other computer cannot reach it. Turn on network access on the Server page.')));
+    }
+    body.append(waiting);
+    $('#fd-note').textContent = i18n.t('No Primary yet? Skip: this computer keeps waiting, and the two pair later.');
+    this.pollWhile('primary');
+  }
+
+  renderPaired(body, name) {
+    const m = this.mugil || {};
+    body.append(el('p', 'lede', i18n.t('Paired with {name}.', { name: name || i18n.t('the other computer') })));
+    if (m.same_version === false) {
+      body.append(el('p', 'hint error', i18n.t('This computer runs Ninaivu {mine} and the other runs {theirs}. Bring the older one up to date; a Linux Secondary can be updated from the Primary’s Mugil page.', {
+        mine: m.version, theirs: m.partner_version })));
+    }
+  }
+
+  /* -- Primary: pairing with the Secondary ---------------------------------- */
+
+  async render_partner(body) {
+    $('#fd-title').textContent = i18n.t('Pair with the Secondary');
+    const m = this.mugil || {};
+    if (m.paired) {
+      this.renderPaired(body, m.pairing?.partner_name);
+      const secondary = m.secondary || {};
+      const wanted = (m.libraries || []).reduce((sum, lib) => sum + (Number(lib.bytes) || 0), 0);
+      const free = secondary.health?.free_bytes;
+      if (wanted && free != null && wanted > free) {
+        body.append(el('p', 'hint error', i18n.t('The library is {wanted} and the Secondary has {free} free. What fits is sent; give it a bigger disk for the rest.', {
+          wanted: size(wanted), free: size(free) })));
+      }
+      body.append(el('p', 'hint', secondary.copy_mode === 'manual'
+        ? i18n.t('The Secondary is having the library copied to it by hand. Sending waits until that copy is checked, then sends only what is missing.')
+        : i18n.t('The first copy starts about a minute after pairing, and carries on by itself after a restart or the Secondary going away.')));
+      if (!(m.libraries || []).some((lib) => lib.files)) {
+        // A new Mac in place of one that failed: the Secondary has it all.
+        body.append(el('p', 'hint', i18n.t('Replacing a Primary that failed? Mugil → Two computers → Rebuild copies the library back from the Secondary.')));
+      }
+      return;
+    }
+    body.append(el('p', 'lede',
+      i18n.t('Set the Secondary up as the Secondary first. This computer looks for it on the house network and on Tailscale; tap it when both screens show the same number.')));
+    const found = el('ul', 'tc-found');
+    found.append(el('li', 'hint', i18n.t('Looking for the Secondary on the house network and on Tailscale…')));
+    body.append(found);
+    const byCode = el('div', 'fd-waiting');
+    const show = el('button', 'btn ghost', i18n.t('Show a code for the Secondary'));
+    show.type = 'button';
+    const out = el('p', 'tc-code');
+    out.hidden = true;
+    show.onclick = async () => {
+      try {
+        const answer = await this.json('/api/admin/mugil/code', { method: 'POST' });
+        out.textContent = answer.code;
+        out.hidden = false;
+        let addresses = [];
+        try {
+          const server = await this.json('/api/admin/server');
+          addresses = (server.endpoints?.family_urls || []).filter((u) => !/\/\/(localhost|127\.0\.0\.1|\[::1\])[:/]/.test(u));
+        } catch { /* the Server page has them */ }
+        if (addresses.length) {
+          out.append(el('small', null, i18n.t('This computer’s address: {address}', { address: addresses.join('  ·  ') })));
+        }
+        out.append(el('small', null, i18n.t('Type both on the Secondary within ten minutes.')));
+      } catch (exc) {
+        this.toast(exc.message, true);
+      }
+    };
+    byCode.append(el('p', 'hint', i18n.t('Cannot find it, or setting the Secondary up second? Show a code here and type it on the Secondary with this computer’s address.')), show, out);
+    body.append(byCode);
+    $('#fd-note').textContent = i18n.t('No Secondary yet? Skip: pair later on Mugil → Two computers.');
+    const step = this.step;
+    try {
+      const answer = await this.json('/api/admin/mugil/look', { method: 'POST' });
+      if (this.step !== step || $('#first-day').hidden) return;
+      found.replaceChildren();
+      const waiting = (answer.found || []).filter((f) => f.waiting && f.number);
+      if (!waiting.length) {
+        found.append(el('li', 'hint', i18n.t('No Secondary is waiting yet. Looking again in a moment.')));
+      }
+      for (const other of waiting) {
+        const li = el('li');
+        li.append(el('span', 'tc-name', other.name), el('span', 'tc-number', other.number),
+          el('span', 'tc-where', other.address));
+        const pair = el('button', 'btn primary small', i18n.t('Pair'));
+        pair.type = 'button';
+        pair.onclick = async () => {
+          pair.disabled = true;
+          try {
+            this.mugil = await this.json('/api/admin/mugil/pair', { method: 'POST', body: { found: other.id } });
+            this.toast(i18n.t('The two computers are paired'));
+            this.render();
+          } catch (exc) {
+            pair.disabled = false;
+            this.toast(exc.message, true);
+          }
+        };
+        li.append(pair);
+        found.append(li);
+      }
+    } catch (exc) {
+      found.replaceChildren(el('li', 'hint', exc.message));
+    }
+    // Paired from the Secondary with the code, or nothing found yet: ask again.
+    if (out.hidden) this.pollLook(step);
+    else this.pollWhile('partner');
+  }
+
+  pollLook(step) {
+    this.stopPolling();
+    this.poll = setTimeout(async () => {
+      if ($('#first-day').hidden || this.step !== step) return;
+      await this.reloadMugil();
+      this.render();
+    }, 8000);
   }
 }

@@ -48,6 +48,11 @@ TIMEOUT = 60
 #: How often the keeper looks at whether a run is owed, in seconds.
 LOOK_EVERY = 10 * 60.0
 
+#: After pairing, how long before the first copy starts by itself, in
+#: seconds: long enough for the Secondary's household to say the library is
+#: to be copied there by hand instead (mugil/adopt.py).
+FIRST_COPY_AFTER = 60.0
+
 #: After a run that did not finish, how long before one is tried by itself.
 RETRY_AFTER = 60 * 60.0
 
@@ -64,6 +69,11 @@ AWAY_FIRST, AWAY_LONGEST = 30.0, 10 * 60.0
 #: Answers that mean the Secondary is away (switched off, asleep, restarting,
 #: off the network) rather than that it refused: the run waits for it.
 AWAY = (0, 502, 503, 504)
+
+#: The Secondary is taking in a copy of the library made by hand
+#: (mugil/adopt.py): the run waits, as for one that is away, without
+#: saying it is away.
+NOT_YET = 425
 
 #: The record of what the Secondary confirmed, in the state folder.
 SENT = "mugil-sent.db"
@@ -234,6 +244,13 @@ def confirmed(state_dir: str | Path, root: str) -> dict[str, Any]:
     return {"files": row["files"], "bytes": row["bytes"]}
 
 
+def _paired_secondary(hello: dict[str, Any]) -> dict[str, Any]:
+    """*hello* when it came from the Secondary, ready or not."""
+    if hello.get("role") != "secondary":
+        raise PartnerError("The computer at that address is not the Secondary any more.", 409)
+    return hello
+
+
 def _ready(hello: dict[str, Any]) -> dict[str, Any]:
     """*hello* when the Secondary can keep originals now.
 
@@ -244,7 +261,19 @@ def _ready(hello: dict[str, Any]) -> dict[str, Any]:
         raise PartnerError("The computer at that address is not the Secondary any more.", 409)
     if not hello.get("originals_ready"):
         raise PartnerError("The Secondary's originals folder cannot be reached.", 503)
+    if (hello.get("manual") or {}).get("state", "ready") != "ready":
+        raise PartnerError("The Secondary is still taking in a copy made by hand.", NOT_YET)
     return hello
+
+
+def _still_to_send(conn: sqlite3.Connection, state_dir, roots: list[str]) -> int:
+    """Bytes of the library the Secondary has not confirmed yet, about."""
+    total = 0
+    for root in roots:
+        row = conn.execute("SELECT COALESCE(SUM(size), 0) FROM assets WHERE root=? AND trashed=0",
+                           (str(root),)).fetchone()
+        total += int(row[0] or 0) - int(confirmed(state_dir, root)["bytes"])
+    return max(0, total)
 
 
 class Courier:
@@ -269,6 +298,8 @@ class Courier:
         self._quit = threading.Event()
         self._progress: dict[str, Any] = {}
         self.last: dict[str, Any] = {}
+        self._first_copy_at = 0.0
+        self._nudge = threading.Event()
 
     # -- what it is doing ----------------------------------------------------
 
@@ -308,6 +339,7 @@ class Courier:
         self._stop.set()
         if join:
             self._quit.set()
+            self._nudge.set()
             for thread in (self._thread, self._keeper):
                 if thread is not None and thread is not threading.current_thread():
                     thread.join(timeout=10)
@@ -329,9 +361,28 @@ class Courier:
         wait = every if self.last.get("complete", True) else min(every, RETRY_AFTER)
         return now - last >= wait
 
+    def soon(self, after: float = FIRST_COPY_AFTER) -> None:
+        """Just paired: start the first copy in *after* seconds, not at the
+        next look."""
+        self._first_copy_at = time.time() + after
+        self._nudge.set()
+
     def _keep(self) -> None:
-        while not self._quit.wait(LOOK_EVERY):
+        while not self._quit.is_set():
+            wait = LOOK_EVERY
+            if self._first_copy_at:
+                wait = min(wait, max(0.5, self._first_copy_at - time.time()))
+            looked = not self._nudge.wait(wait)
+            self._nudge.clear()
+            if self._quit.is_set():
+                break
             try:
+                if self._first_copy_at and time.time() >= self._first_copy_at:
+                    self._first_copy_at = 0.0
+                    if self.ready() is None:
+                        self.start()
+                if not looked:
+                    continue
                 if self.owed():
                     self.start()
                 self.look_after_the_secondary()
@@ -401,11 +452,21 @@ class Courier:
     def run(self, totals: dict[str, Any]) -> dict[str, Any]:
         pair = pairing.load(self.cfg.state_dir) or {}
         partner = self.partner(self.cfg.mugil_partner_url, pair.get("key"))
-        hello = self._ask(lambda: _ready(partner.request("GET", "/api/mugil/hello")), partner)
+        hello = self._ask(lambda: _paired_secondary(partner.request("GET", "/api/mugil/hello")),
+                          partner)
         if hello is None:
             return {"complete": False, "stopped": True}
         from . import machines, wake                             # noqa: PLC0415
         machines.remember_hello(self.cfg.state_dir, hello)
+        # What this computer keeps, told first: a Secondary being copied to
+        # by hand says where each library goes and whether it fits.
+        self._tell_about_this_one(partner)
+        if (hello.get("manual") or {}).get("state", "ready") != "ready" \
+                or not hello.get("originals_ready"):
+            hello = self._ask(lambda: _ready(partner.request("GET", "/api/mugil/hello")), partner)
+            if hello is None:
+                return {"complete": False, "stopped": True}
+            machines.remember_hello(self.cfg.state_dir, hello)
         # When to wake this computer for its catch-up, and how (mugil/wake.py).
         asked = wake.what_to_ask(self.cfg)
         try:
@@ -413,6 +474,7 @@ class Courier:
             wake.remember_told(self.cfg.state_dir, asked)
         except PartnerError as exc:
             log.info("The Secondary was not told when to wake this computer: %s", exc)
+        self._check_room(hello, totals)
         conn = self.connect_db()
         try:
             # Only the library folders plugged in now: one that is away has
@@ -444,6 +506,50 @@ class Courier:
         stopped = self._stop.is_set()
         return {"complete": not stopped and not totals["failed"], "stopped": stopped}
 
+    def _tell_about_this_one(self, partner: Partner) -> None:
+        conn = self.connect_db()
+        try:
+            libraries = []
+            for root in list(self.cfg.libraries):
+                row = conn.execute("SELECT COUNT(*), COALESCE(SUM(size), 0) FROM assets "
+                                   "WHERE root=? AND trashed=0", (str(root),)).fetchone()
+                libraries.append({"root": str(root), "name": Path(root).name or "Library",
+                                  "files": int(row[0]), "bytes": int(row[1])})
+        finally:
+            if threading.current_thread() is self._thread:
+                conn.close()
+        try:
+            partner.request("PUT", "/api/mugil/about-primary", body={
+                "libraries": libraries, "algo": fingerprints.ALGO, "version": __version__})
+        except PartnerError as exc:
+            # An older Secondary does not know it; nothing depends on it.
+            log.info("The Secondary was not told about this computer: %s", exc)
+
+    def _check_room(self, hello: dict[str, Any], totals: dict[str, Any]) -> None:
+        """Say so, before sending, when what is still to send will not fit on
+        the Secondary's disk. The run still sends what fits (each original
+        there is one more kept twice) and stops when the disk is full."""
+        free = (hello.get("keeping") or {}).get("free_bytes")
+        if free is None:
+            return
+        conn = self.connect_db()
+        try:
+            needed = _still_to_send(conn, self.cfg.state_dir, list(self.cfg.libraries))
+        finally:
+            if threading.current_thread() is self._thread:
+                conn.close()
+        from .hold import RESERVE                                # noqa: PLC0415
+        if needed > max(0, int(free) - RESERVE):
+            totals["short_of_room"] = {"needed": needed, "free": int(free)}
+            with self._lock:
+                self._progress["short_of_room"] = totals["short_of_room"]
+            name = pairing.load(self.cfg.state_dir) or {}
+            self.notify("secondary_disk", "The Secondary's disk is too small for the originals",
+                        f"{needed // (1024 ** 3)} GB are still to be sent and "
+                        f"{int(free) // (1024 ** 3)} GB are free on "
+                        f"{name.get('partner_name') or 'the Secondary'}. What fits is sent; "
+                        "give it a bigger disk for the rest.")
+
     def _ask(self, call: Callable[[], Any], partner: Partner) -> Any:
         """*call*, waiting for the Secondary for as long as it is away.
 
@@ -456,16 +562,17 @@ class Courier:
             try:
                 return call()
             except PartnerError as exc:
-                if exc.status not in AWAY:
+                if exc.status not in (*AWAY, NOT_YET):
                     raise
+                waiting = "secondary_preparing" if exc.status == NOT_YET else "secondary_away"
                 with self._lock:
-                    self._progress.setdefault("secondary_away", time.time())
-                log.info("The Secondary is not answering (%s); waiting %.0f s", exc, pause)
+                    self._progress.setdefault(waiting, time.time())
+                log.info("The Secondary is not ready (%s); waiting %.0f s", exc, pause)
             while not self._stop.wait(pause):
                 try:
                     _ready(partner.request("GET", "/api/mugil/hello"))
                 except PartnerError as exc:
-                    if exc.status not in AWAY:
+                    if exc.status not in (*AWAY, NOT_YET):
                         raise
                     pause = min(pause * 2, AWAY_LONGEST)
                     continue
@@ -474,6 +581,7 @@ class Courier:
                 return None
             with self._lock:
                 self._progress.pop("secondary_away", None)
+                self._progress.pop("secondary_preparing", None)
             pause = AWAY_FIRST
 
     def _wait_for_the_household(self) -> None:
@@ -523,8 +631,10 @@ class Courier:
                               "digest": digest, "mtime": float(row["mtime"] or 0)})
             if not items:
                 continue
-            asked = {"library": library, "items": [
-                {k: i[k] for k in ("path", "size", "algo", "digest")} for i in items]}
+            # The name and the times are for a copy made by hand (mugil/adopt.py):
+            # the folder it went into, and the times it may have lost.
+            asked = {"library": library, "name": name, "items": [
+                {k: i[k] for k in ("path", "size", "algo", "digest", "mtime")} for i in items]}
             answer = self._ask(lambda asked=asked: partner.request("POST", "/api/mugil/have", body=asked),
                                partner)
             if answer is None:

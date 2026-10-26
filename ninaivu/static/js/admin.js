@@ -395,6 +395,9 @@ async function start(user) {
     pickFolder: (options) => openFolderPicker(options),
   });
   firstDay.maybeOpen();
+  // Mugil → Two computers opens the same steps again, any time.
+  const guide = document.getElementById('tc-guide');
+  if (guide) guide.onclick = () => firstDay.openTwoComputers();
   // A drive, memory card or phone plugged into the Ninaivu computer: asked
   // about here, with Import as the first answer (drives.js).
   drivePrompt ||= new DrivePrompt({
