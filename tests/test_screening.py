@@ -40,8 +40,9 @@ def test_a_family_member_sends_one_or_many_and_they_stay_visible(as_family, as_a
     assert as_family.get(f"/api/screening/{ids[0]}").get_json()["sent"] is True
 
     queue = _queue(as_admin)
-    assert [item["id"] for item in queue] == ids
-    first = queue[0]
+    # Oldest first, then by id: the three can be sent within one second.
+    assert sorted(item["id"] for item in queue) == sorted(ids)
+    first = next(item for item in queue if item["id"] == ids[0])
     assert first["requests"][0]["name"] == people["family"].display_name
     assert first["requests"][0]["note"] == "Bank statement"
     # Counted on the Overview's "Needs you".
