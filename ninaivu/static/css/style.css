@@ -2087,7 +2087,7 @@ body[data-role="guest"] .segmented button[data-layout="film"] { display: none; }
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
   }
-  .tile, .topbar, .selection-bar, .sheet-head, .viewer-chrome, .ios-install-banner {
+  .tile, .cell, .topbar, .selection-bar, .sheet-head, .viewer-chrome, .ios-install-banner {
     -webkit-user-select: none;
     user-select: none;
     -webkit-touch-callout: none;

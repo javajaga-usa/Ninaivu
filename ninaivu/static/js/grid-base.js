@@ -67,6 +67,8 @@ const FLAG_STACK = 1024;
 const STACK_ICON = '<svg viewBox="0 0 24 24"><rect x="3.5" y="7.5" width="13" height="13" rx="2.5"/><path d="M7.5 4h10A2.5 2.5 0 0 1 20 6.5v10"/></svg>';
 /** How long a mouse rests on a live photo before it plays. */
 const LIVE_HOVER_MS = 280;
+/** How long a finger rests on a tile before it is picked (wireLongPress). */
+const LONG_PRESS_MS = 450;
 
 const ICON = {
   video: '<svg viewBox="0 0 24 24"><path d="m8 5 11 7-11 7Z" fill="currentColor" stroke="none"/></svg>',
@@ -237,6 +239,7 @@ export class Grid extends EventTarget {
 
     this.container.addEventListener('click', (event) => this.onClick(event));
     this.container.addEventListener('dblclick', (event) => this.onClick(event, true));
+    this.wireLongPress();
 
     // A live photo plays where it sits when a mouse rests on it, as it does
     // in Photos. Not for touch: a finger on a tile is the start of a scroll
@@ -274,6 +277,63 @@ export class Grid extends EventTarget {
       clearTimeout(this.liveTimer);
       this.stopLive(node);
     });
+  }
+
+  /**
+   * A finger held on a tile picks it, as in a phone's photo app; taps then
+   * add and take away until the bar's cross ends it. A phone has no hover to
+   * bring up the tick, so before this the only way in was a section's
+   * "Select all" — which, over a search's one "Best matches" section, picked
+   * every result at once.
+   */
+  wireLongPress() {
+    this.press = null;            // { timer, x, y } while a finger rests
+    this.pressed = false;         // the hold picked a tile; swallow its click
+    const cancel = () => {
+      if (this.press) clearTimeout(this.press.timer);
+      this.press = null;
+    };
+    this.container.addEventListener('pointerdown', (event) => {
+      cancel();
+      this.pressed = false;
+      if (event.pointerType === 'mouse' || event.target.closest('.pick')) return;
+      const node = event.target.closest('.cell');
+      if (!node) return;
+      this.press = {
+        x: event.clientX,
+        y: event.clientY,
+        timer: setTimeout(() => {
+          this.press = null;
+          this.pressTile(node);
+        }, LONG_PRESS_MS),
+      };
+    });
+    this.container.addEventListener('pointermove', (event) => {
+      if (!this.press) return;
+      // A finger that travels is scrolling, not holding.
+      if (Math.abs(event.clientX - this.press.x) + Math.abs(event.clientY - this.press.y) > 10) cancel();
+    });
+    for (const kind of ['pointerup', 'pointercancel', 'pointerleave']) {
+      this.container.addEventListener(kind, cancel);
+    }
+    // The hold that picked a tile is not also a request for the browser's
+    // "Save image" menu.
+    this.container.addEventListener('contextmenu', (event) => {
+      if (this.pressed || this.press) event.preventDefault();
+    });
+  }
+
+  pressTile(node) {
+    if (!node.isConnected || !node.dataset.id) return;
+    const id = Number(node.dataset.id);
+    this.pressed = true;
+    this.rangeBase = null;
+    this.cursor = Number(node.dataset.n);
+    this.lastAnchor = this.cursor;
+    this.selection.add(id);
+    this.emitSelection();
+    this.render();
+    navigator.vibrate?.(12);
   }
 
   /** The mouse moved: tiles answer it again, and a live photo under it plays. */
@@ -1175,6 +1235,11 @@ export class Grid extends EventTarget {
   /* -- interaction ---------------------------------------------------- */
 
   onClick(event, isDouble = false) {
+    // The finger that held a tile until it was picked lifts as a click.
+    if (this.pressed) {
+      this.pressed = false;
+      if (event.target.closest('.cell')) return;
+    }
     const sectionButton = event.target.closest('[data-select-section]');
     if (sectionButton) {
       const head = sectionButton.parentElement;
