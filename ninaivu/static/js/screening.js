@@ -144,7 +144,8 @@ export class ScreeningPanel {
   tile(item, index) {
     const tile = el('div', 'fold-item scr-item');
     tile.dataset.id = item.id;
-    if (item.visibility_name === 'hidden') tile.classList.add('is-hidden');
+    const hidden = item.visibility_name === 'hidden' && !item.held;
+    if (hidden) tile.classList.add('is-hidden');
     if (item.explicit) tile.classList.add('is-explicit');
     const chosen = this.chosen.has(item.id);
     tile.classList.toggle('chosen', chosen);
@@ -180,7 +181,7 @@ export class ScreeningPanel {
     if (item.requests.length > 1) {
       badges.appendChild(el('span', 'badge', i18n.t('{count} asked', { count: item.requests.length })));
     }
-    if (item.visibility_name === 'hidden') badges.appendChild(el('span', 'badge', i18n.t('Hidden')));
+    if (hidden) badges.appendChild(el('span', 'badge', i18n.t('Hidden')));
     if (item.explicit) badges.appendChild(el('span', 'badge xp', i18n.t('Explicit')));
     if (badges.childElementCount) tile.appendChild(badges);
 

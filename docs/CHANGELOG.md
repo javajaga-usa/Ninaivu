@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Sent for screening, at once
+
+- **What a family member sends for screening leaves the family's view straight away.** It used to stay in the gallery until an administrator decided. Now it is gone for every family member the moment it is sent, the sender included: the gallery, albums, search, smart albums, films, the photo frame and share links, everything that follows who may see what. Administrators still see it, and it waits in the console's Screening queue. **Ignore** puts it back exactly as it was; **Hide**, **Mark explicit** and **Delete** apply on top of that. While it waits, what the AI read of it is kept, so an item that comes back has lost nothing. The Folders page shows such an item as hidden, "held while an admin screens it".
+- **Open pages catch up by themselves.** When an item is kept "Only to me", sent for screening, or hidden, flagged or deleted by an administrator, every family member's open gallery brings itself up to date within ten seconds, with nobody reloading. The page that made the change does it at once.
+
 ### Moving the index to another computer
 
 - **Export says "Preparing…" the moment it is pressed.** Before anything else, the export measures every thumbnail and face crop to see whether the drive has room, and on a large library that takes about half a minute; until now the page said nothing at all while it did. The console now answers at once with **Preparing: measuring what goes in and checking it fits…** as step 1 of 5, and the room check runs in the background. A drive that is too small is said as the export's result.

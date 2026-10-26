@@ -195,7 +195,6 @@ export const api = {
   keepPrivate: (ids, keep = true) => post('/api/private', { ids, private: keep }),
   // Sent for screening (api/api_screening.py).
   sendForScreening: (ids, note = '', sent = true) => post('/api/screening', { ids, note, sent }),
-  screeningState: (id) => request(`/api/screening/${id}`),
   deleteAlbum: (id) => request(`/api/albums/${id}`, { method: 'DELETE' }),
   // Photo books (static/js/books.js).
   bookOptions: () => request('/api/books/options'),

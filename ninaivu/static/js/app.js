@@ -3492,20 +3492,19 @@ function wireScrubber() {
 /* -- Send for screening --------------------------------------------------- */
 
 /* A family member asks an administrator to look at items: a screenshot of a
-   bank page, a document, something not for everyone. Nothing about who can
-   see them changes here; they wait in the console's Screening queue, where an
-   admin ignores, hides, marks explicit or deletes them (api/api_screening.py). */
+   bank page, a document, something not for everyone. They leave every family
+   member's view at once, the sender's too, and wait in the console's
+   Screening queue, where an admin ignores (they come back), hides, marks
+   explicit or deletes them (api/api_screening.py). */
 
-/** Item ids this viewer has sent and is waiting on, as far as this page knows. */
-const screeningSent = new Map();
 let screeningIds = [];
 
 function openScreening(ids) {
   if (!ids.length) return;
   screeningIds = ids;
   $('#screen-count').textContent = ids.length === 1
-    ? i18n.t('An admin will look at this and decide whether to keep, hide or delete it.')
-    : i18n.t('An admin will look at these {items} and decide whether to keep, hide or delete them.',
+    ? i18n.t('It leaves the family’s gallery now, and an admin decides whether it comes back.')
+    : i18n.t('These {items} leave the family’s gallery now, and an admin decides whether they come back.',
       { items: i18n.items(ids.length) });
   $('#screen-note').value = '';
   $('#screen-modal').hidden = false;
@@ -3524,36 +3523,23 @@ async function sendScreening(event) {
   const note = [reason, typed].filter(Boolean).join(' — ');
   try {
     const result = await api.sendForScreening(ids, note);
-    for (const id of ids) screeningSent.set(id, true);
     const count = (result.sent || 0) + (result.already || 0);
-    toast(count === 1 ? i18n.t('Sent to an admin. It stays here until they decide.')
-      : i18n.t('{items} sent to an admin. They stay here until an admin decides.',
+    toast(count === 1 ? i18n.t('Sent to an admin. It is out of the family’s gallery until they decide.')
+      : i18n.t('{items} sent to an admin. They are out of the family’s gallery until an admin decides.',
         { items: i18n.items(count) }));
     if (grid.selection.size) grid.clearSelection();
-    syncViewerScreening();
+    // Gone from here at once: the viewer showing one of them closes, and the
+    // gallery behind it is brought up to date where it stands.
+    if (!$('#viewer').hidden && ids.includes(viewer.item?.id)) viewer.close();
+    refreshCounts();
+    reload();
   } catch (exc) { toast(exc.message, true); }
 }
 
-/** The viewer's flag: send this one, or take the request back. */
-async function syncViewerScreening() {
+/** The viewer's button: for family members, on anything they can see. */
+function syncViewerScreening() {
   const button = $('#v-screen');
-  if (!button) return;
-  const item = viewer.item;
-  button.hidden = !item || !state.user?.can?.send_for_screening;
-  if (button.hidden) return;
-  if (!screeningSent.has(item.id)) {
-    try {
-      const answer = await api.screeningState(item.id);
-      screeningSent.set(item.id, !!answer.sent);
-    } catch { screeningSent.set(item.id, false); }
-    if (viewer.item !== item) return;
-  }
-  const sent = screeningSent.get(item.id);
-  button.classList.toggle('on', sent);
-  button.querySelector('.viewer-tools-more-label').textContent =
-    sent ? i18n.t('Sent for screening') : i18n.t('Send for screening');
-  button.title = sent ? i18n.t('Waiting for an admin. Press to take the request back.')
-    : i18n.t('Ask an admin to look at this');
+  if (button) button.hidden = !viewer.item || !state.user?.can?.send_for_screening;
 }
 
 function wireScreening() {
@@ -3568,18 +3554,7 @@ function wireScreening() {
   $('#screen-form').onsubmit = sendScreening;
   $('#sel-screen').onclick = () => openScreening([...grid.selection].slice(0, 2000));
   const button = $('#v-screen');
-  if (!button) return;
-  button.onclick = async () => {
-    const item = viewer.item;
-    if (!item) return;
-    if (!screeningSent.get(item.id)) { openScreening([item.id]); return; }
-    try {
-      await api.sendForScreening([item.id], '', false);
-      screeningSent.set(item.id, false);
-      toast(i18n.t('Request taken back.'));
-      syncViewerScreening();
-    } catch (exc) { toast(exc.message, true); }
-  };
+  if (button) button.onclick = () => { if (viewer.item) openScreening([viewer.item.id]); };
 }
 
 function wireGrid() {
@@ -3869,6 +3844,9 @@ let countsAskedAt = 0;
 // on this slower cadence and the strip itself asks only for the counters.
 const COUNTS_EVERY_MS = 30000;
 
+/** The server's count of changes to who may see what (onActivity). */
+let seenGeneration = null;
+
 
 // Coming back to the tab is the moment to catch up on what happened while it
 // was in the background, and to restart the loop that visibility stopped.
@@ -3921,6 +3899,17 @@ function onActivity(activity) {
       state.status.libraries_away_paths = activity.libraries_away_paths || [];
     }
     if (now !== before) refreshStatus();
+  }
+  // Who may see what moved: somebody kept an item "Only to me", sent it for
+  // screening, or an admin hid, flagged or deleted it. The gallery is brought
+  // up to date where it stands, so it leaves this screen too, within a tick.
+  if ('seen' in activity) {
+    const before = seenGeneration;
+    seenGeneration = activity.seen;
+    if (before !== null && before !== activity.seen) {
+      refreshCounts();
+      reload();
+    }
   }
   const scan = activity.scan;
   const strip = $('#scan-strip');
