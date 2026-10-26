@@ -1739,6 +1739,12 @@ def init_db(db_path: Path | str) -> sqlite3.Connection:
         # (storage/video_moments.py).
         from . import video_moments as video_moments_mod   # noqa: PLC0415
         video_moments_mod.create(conn)
+        # What was said in videos, from before the household asked for that
+        # feature gone (October 2026): dropped, with its trigger.
+        conn.executescript(
+            "DROP TRIGGER IF EXISTS video_words_follow_asset;"
+            "DROP TABLE IF EXISTS video_words;"
+            "DROP TABLE IF EXISTS video_words_done;")
         # The year each person was born, for Then and now
         # (storage/then_and_now.py).
         from . import then_and_now as then_and_now_mod     # noqa: PLC0415
