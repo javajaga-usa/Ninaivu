@@ -77,7 +77,7 @@ Install Ninaivu from source, at the version the Mac runs:
 sudo apt install -y git python3-venv
 sudo useradd --system --home-dir /opt/ninaivu --shell /usr/sbin/nologin ninaivu
 sudo git clone https://github.com/javajaga-usa/Ninaivu /opt/ninaivu
-sudo git -C /opt/ninaivu checkout v3.1.0           # the Mac's version
+sudo git -C /opt/ninaivu checkout v3.2.0           # the Mac's version
 sudo python3 -m venv /opt/ninaivu/.venv
 sudo /opt/ninaivu/.venv/bin/pip install -r /opt/ninaivu/requirements/requirements.txt
 ```
