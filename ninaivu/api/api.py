@@ -319,7 +319,7 @@ def _search_shield() -> dict[str, Any]:
         # People in only their underwear, on a model they are judged under.
         from ..media import revealing                           # noqa: PLC0415
         if revealing.applies(str(getattr(engine, "model_id", "") or "")):
-            bare = revealing.LINE
+            bare = revealing.line(_cfg())
     return {"search_shield": True, "near_explicit": near, "revealing": bare}
 
 

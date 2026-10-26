@@ -3561,7 +3561,8 @@ class Scanner:
 
         From the vectors tagging stored, as the screenshot check reads them:
         *ids* just tagged, or the whole folder's pictures not yet judged by
-        this version. Only while the explicit check is on.
+        this version. Those at the household's line or over are then flagged
+        explicit. Only while the explicit check is on.
         """
         if not getattr(self.cfg, "nsfw_filter", False):
             return
@@ -3589,7 +3590,7 @@ class Scanner:
             left_key = f"revealing_judged:{root}"
             left = self._as_left(
                 conn, db.meta_counter(conn, db.EMBEDDINGS_GENERATION_KEY),
-                scorer.model_id, revealing.VERSION)
+                scorer.model_id, revealing.VERSION, revealing.line(self.cfg))
             if left is not None and db.get_meta(conn, left_key) == left:
                 return
         started = time.time()
@@ -3609,10 +3610,14 @@ class Scanner:
             judged += len(rows)
             if ids is not None:
                 break
+        # Every score at the line, not only those just made: a lower line
+        # set since flags what was scored under the old one.
+        flagged = db.flag_revealing(conn, root, revealing.line(self.cfg), ids=ids)
         if ids is None:
-            if judged:
-                log.info("people in only their underwear: %s pictures judged in %s",
-                         f"{judged:,}", took(started))
+            if judged or flagged:
+                log.info("people in only their underwear: %s pictures judged, %s "
+                         "flagged explicit, in %s", f"{judged:,}", f"{flagged:,}",
+                         took(started))
             if left is not None and not (stoppable and self._stop.is_set()):
                 db.set_meta(conn, left_key, left)
                 conn.commit()
