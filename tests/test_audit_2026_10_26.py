@@ -5,13 +5,16 @@ family member saw in it what their search leaves out. M-01 the underwear
 check's flags stayed when its line was raised or it was turned off. L-01 a
 live photo's clip and a RAW's twin waited for the next scan to follow a
 flagged photograph. L-02 a hidden screenshot was flagged and unflagged at
-every catch-up.
+every catch-up. Part two, after the clean-content line (#331): M-02 an old
+model's scores, on its own scale, were flagged at the new model's line; M-03
+a raised explicit line never took back what the lower one flagged.
 """
 from __future__ import annotations
 
 import pytest
 
 from ninaivu.media import revealing
+from ninaivu.media.scanner import AI_VERSION
 from ninaivu.storage import db, smart
 
 from test_family_search_shield import (_ids, _judge, _picture_search, nearly,  # noqa: F401
@@ -165,3 +168,65 @@ def test_a_hidden_pictures_reading_is_forgotten_and_its_flag_kept(underwear):  #
     cfg.underwear_threshold = 0.5
     db.unflag_revealing(conn, cfg.active_root, revealing.line(cfg), 0.6)
     assert _flag(conn, underwear["bare"]) == (1, db.REVEALING_SOURCE)
+
+
+# -- M-02, M-03 (after #331) ----------------------------------------------------
+
+def _scored(people):
+    conn = people["conn"]
+    root = conn.execute("SELECT root FROM assets LIMIT 1").fetchone()[0]
+    ids = [r[0] for r in conn.execute("SELECT id FROM assets WHERE kind='picture' ORDER BY id")]
+    with db._write_lock:
+        conn.execute("UPDATE assets SET ai_version=?", (AI_VERSION,))
+        conn.commit()
+    return conn, root, ids
+
+
+def _nsfw(conn, aid):
+    return conn.execute("SELECT nsfw FROM assets WHERE id=?", (aid,)).fetchone()[0]
+
+
+def test_an_old_models_scores_are_not_flagged_at_the_new_line(people):
+    """After a change of model a picture keeps the old one's score, on its
+    own scale, until it is tagged again; CLIP's run far over SigLIP's line."""
+    conn, root, ids = _scored(people)
+    old, new = ids[:2]
+    with db._write_lock:
+        conn.execute("UPDATE assets SET nsfw=0, nsfw_score=0.3 WHERE id IN (?, ?)", (old, new))
+        conn.execute("UPDATE assets SET ai_version=0 WHERE id=?", (old,))
+        conn.commit()
+    assert db.flag_explicit_scores(conn, root, 0.005) == 1
+    assert _nsfw(conn, old) == 0 and _nsfw(conn, new) == 1
+
+
+def test_a_raised_line_takes_back_what_the_lower_one_flagged(people):
+    conn, root, ids = _scored(people)
+    under, over, manual, bare, stale = ids[:5]
+    with db._write_lock:
+        conn.execute("UPDATE assets SET nsfw=1, nsfw_score=0.007 WHERE id IN (?, ?, ?, ?)",
+                     (under, manual, bare, stale))
+        conn.execute("UPDATE assets SET nsfw=1, nsfw_score=0.5 WHERE id=?", (over,))
+        conn.execute("UPDATE assets SET nsfw_source='manual' WHERE id=?", (manual,))
+        conn.execute("UPDATE assets SET revealing=0.9, revealing_version=? WHERE id=?",
+                     (revealing.VERSION, bare))
+        conn.execute("UPDATE assets SET ai_version=0 WHERE id=?", (stale,))
+        conn.commit()
+    assert db.unflag_explicit_scores(conn, root, 0.01, revealing.LINE) == 1
+    assert _nsfw(conn, under) == 0
+    assert _nsfw(conn, over) == 1, "still over the line"
+    assert _nsfw(conn, manual) == 1, "an administrator's own verdict"
+    assert _nsfw(conn, bare) == 1, "the underwear check would flag it"
+    assert _nsfw(conn, stale) == 1, "an old model's score says nothing at this line"
+
+
+def test_a_live_clip_is_let_go_with_its_photograph(people):
+    conn, root, ids = _scored(people)
+    still, clip = ids[:2]
+    rel = conn.execute("SELECT rel_path FROM assets WHERE id=?", (clip,)).fetchone()[0]
+    with db._write_lock:
+        conn.execute("UPDATE assets SET is_live=1, live_video_path=?, nsfw=1, "
+                     "nsfw_score=0.007 WHERE id=?", (rel, still))
+        conn.execute("UPDATE assets SET live_clip=1, nsfw=1, nsfw_score=0 WHERE id=?", (clip,))
+        conn.commit()
+    assert db.unflag_explicit_scores(conn, root, 0.01, revealing.LINE) == 1
+    assert _nsfw(conn, still) == 0 and _nsfw(conn, clip) == 0

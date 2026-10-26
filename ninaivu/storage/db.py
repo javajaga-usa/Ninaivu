@@ -4087,9 +4087,14 @@ def flag_explicit_scores(conn: sqlite3.Connection, root: str, line: float, *,
     """
     if line <= 0:
         return 0
+    from ..media.scanner import AI_VERSION            # noqa: PLC0415
+
+    # Only a score the current model gave: a change of model leaves the old
+    # one's scores, on its own scale (CLIP's run far over SigLIP's line),
+    # until the picture is tagged again.
     where = ("root=? AND kind IN ('picture', 'video') AND nsfw=0 AND nsfw_score >= ? "
-             "AND nsfw_source<>'manual' AND visibility < 2")
-    args: list[Any] = [str(root), float(line)]
+             "AND nsfw_source<>'manual' AND visibility < 2 AND ai_version >= ?")
+    args: list[Any] = [str(root), float(line), AI_VERSION]
     if ids is not None:
         if not ids:
             return 0
@@ -4099,6 +4104,49 @@ def flag_explicit_scores(conn: sqlite3.Connection, root: str, line: float, *,
         flagged = conn.execute(f"UPDATE assets SET nsfw=1 WHERE {where}", args).rowcount
         conn.commit()
     return flagged
+
+
+def unflag_explicit_scores(conn: sqlite3.Connection, root: str, line: float,
+                           revealing_line: float) -> int:
+    """Take back the content check's flags that its line no longer gives:
+    every photo or video it flagged whose score, from the current model, is
+    under *line* — a line raised since it was flagged. An administrator's
+    verdict and the underwear check's flags are their own, and one the
+    underwear check would flag (``revealing`` at *revealing_line* or over,
+    when that check is on) keeps its flag. A live clip or RAW flagged with
+    its photograph is unflagged with it, unless its own score or an
+    administrator says otherwise. Returns how many were unflagged.
+    """
+    from ..media import revealing                    # noqa: PLC0415
+    from ..media.scanner import AI_VERSION            # noqa: PLC0415
+
+    if line <= 0:
+        return 0
+    where = ("root=? AND kind IN ('picture', 'video') AND nsfw=1 AND nsfw_source='auto' "
+             "AND nsfw_score < ? AND ai_version >= ? AND visibility < 2 "
+             "AND live_clip=0 AND raw_twin=0")
+    args: list[Any] = [str(root), float(line), AI_VERSION]
+    if revealing_line > 0:
+        where += " AND NOT (revealing_version=? AND revealing >= ?)"
+        args += [revealing.VERSION, float(revealing_line)]
+    found = [int(r[0]) for r in conn.execute(f"SELECT id FROM assets WHERE {where}", args)]
+    if not found:
+        return 0
+    companions = companion_map(conn, found)
+    others = list(dict.fromkeys(c for i in found for c in companions.get(i, ())))
+    with _write_lock:
+        for at in range(0, len(found), 500):
+            chunk = found[at:at + 500]
+            conn.execute(f"UPDATE assets SET nsfw=0 WHERE id IN ({','.join('?' * len(chunk))})",
+                         chunk)
+        for at in range(0, len(others), 500):
+            chunk = others[at:at + 500]
+            conn.execute(
+                "UPDATE assets SET nsfw=0 WHERE nsfw=1 AND nsfw_source='auto' "
+                "AND (nsfw_score IS NULL OR nsfw_score < ?) "
+                f"AND id IN ({','.join('?' * len(chunk))})", [float(line), *chunk])
+        conn.commit()
+    return len(found)
 
 
 def restore_screens(conn: sqlite3.Connection) -> int:
