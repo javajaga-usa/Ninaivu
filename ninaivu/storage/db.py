@@ -1739,6 +1739,12 @@ def init_db(db_path: Path | str) -> sqlite3.Connection:
         # (storage/video_moments.py).
         from . import video_moments as video_moments_mod   # noqa: PLC0415
         video_moments_mod.create(conn)
+        # What was said in videos, from before the household asked for that
+        # feature gone (October 2026): dropped, with its trigger.
+        conn.executescript(
+            "DROP TRIGGER IF EXISTS video_words_follow_asset;"
+            "DROP TABLE IF EXISTS video_words;"
+            "DROP TABLE IF EXISTS video_words_done;")
         # The year each person was born, for Then and now
         # (storage/then_and_now.py).
         from . import then_and_now as then_and_now_mod     # noqa: PLC0415
@@ -3825,6 +3831,10 @@ def _forget_rows(conn: sqlite3.Connection, rows, vocabulary: set[str]  # noqa: A
         marks = ",".join("?" * len(part))
         conn.execute(
             "UPDATE assets SET ocr_text=NULL, ocr_version=0, ai_version=0, "
+            # How much it looks like people in only their underwear is read
+            # off the vector that goes below. A flag it gave stays: hidden
+            # now, it is still explicit should it be shown again.
+            "revealing=0, revealing_version=0, "
             f"face_version=0, keyframe_version=0 WHERE id IN ({marks})", part)
         dropped += max(0, conn.execute(
             f"DELETE FROM embeddings WHERE asset_id IN ({marks})", part).rowcount)
@@ -3973,30 +3983,84 @@ def store_revealing_scores(conn: sqlite3.Connection,
         conn.commit()
 
 
+#: ``nsfw_source`` of a picture flagged explicit by the underwear check
+#: (:func:`flag_revealing`), so a higher line set since, or the check turned
+#: off, can take back exactly the flags it gave (:func:`unflag_revealing`).
+#: Like ``auto``, it is Ninaivu's own verdict and the tagger's may replace it.
+REVEALING_SOURCE = "underwear"
+
+
 def flag_revealing(conn: sqlite3.Connection, root: str, line: float, *,
                    ids: Sequence[int] | None = None) -> int:
     """Flag as explicit every picture of people in only their underwear
     scored at *line* or over, so it is out of the family app altogether, the
     gallery as well as search (media/revealing.py).
 
-    A verdict an administrator gave by hand is theirs and stays, and nothing
-    is unflagged here: the content check's own flag is the tagger's business.
-    *ids* narrows it to items just judged. Returns how many were flagged.
+    A verdict an administrator gave by hand is theirs and stays, and so does
+    the content check's own flag. A screenshot or document already hidden is
+    left alone: hidden is what keeps those out, and :func:`screens_not_explicit`
+    would only take the flag off again. *ids* narrows it to items just judged.
+    Returns how many were flagged.
     """
     if line <= 0:
         return 0
+    screen_sql, screen_params = screen_clause(conn)
     where = ("root=? AND kind='picture' AND revealing >= ? AND nsfw=0 "
-             "AND nsfw_source<>'manual'")
-    args: list[Any] = [str(root), float(line)]
+             f"AND nsfw_source<>'manual' AND NOT (visibility >= 2 AND {screen_sql})")
+    args: list[Any] = [str(root), float(line), *screen_params]
     if ids is not None:
         if not ids:
             return 0
         where += f" AND id IN ({','.join('?' * len(ids))})"
         args += [int(i) for i in ids]
     with _write_lock:
-        flagged = conn.execute(f"UPDATE assets SET nsfw=1 WHERE {where}", args).rowcount
+        flagged = [int(r[0]) for r in conn.execute(f"SELECT id FROM assets WHERE {where}", args)]
+        for at in range(0, len(flagged), 500):
+            chunk = flagged[at:at + 500]
+            conn.execute(
+                f"UPDATE assets SET nsfw=1, nsfw_source='{REVEALING_SOURCE}' "
+                f"WHERE id IN ({','.join('?' * len(chunk))})", chunk)
         conn.commit()
-    return flagged
+    return len(flagged)
+
+
+def unflag_revealing(conn: sqlite3.Connection, root: str, line: float,
+                     content_line: float) -> int:
+    """Take back the underwear check's flags that its line no longer gives:
+    every picture it flagged that scores under *line*, or all of them when
+    *line* is 0 (the check off). One the content check would flag on its own
+    (``nsfw_score`` at *content_line* or over) keeps its flag. A live clip or
+    RAW that was flagged with its photograph is unflagged with it, unless its
+    own score or an administrator says otherwise. Returns how many pictures."""
+    from ..media import revealing                    # noqa: PLC0415
+
+    # Only a picture judged by this version: one whose reading was forgotten
+    # (hidden, storage forget_ai_reading) has no score to go by.
+    where = (f"root=? AND kind='picture' AND nsfw=1 AND nsfw_source='{REVEALING_SOURCE}' "
+             "AND revealing_version=? AND (nsfw_score IS NULL OR nsfw_score < ?)")
+    args: list[Any] = [str(root), revealing.VERSION, float(content_line)]
+    if line > 0:
+        where += " AND revealing < ?"
+        args.append(float(line))
+    found = [int(r[0]) for r in conn.execute(f"SELECT id FROM assets WHERE {where}", args)]
+    if not found:
+        return 0
+    companions = companion_map(conn, found)
+    others = list(dict.fromkeys(c for i in found for c in companions.get(i, ())))
+    with _write_lock:
+        for at in range(0, len(found), 500):
+            chunk = found[at:at + 500]
+            conn.execute(
+                "UPDATE assets SET nsfw=0, nsfw_source='auto' "
+                f"WHERE id IN ({','.join('?' * len(chunk))})", chunk)
+        for at in range(0, len(others), 500):
+            chunk = others[at:at + 500]
+            conn.execute(
+                "UPDATE assets SET nsfw=0 WHERE nsfw=1 AND nsfw_source<>'manual' "
+                "AND (nsfw_score IS NULL OR nsfw_score < ?) "
+                f"AND id IN ({','.join('?' * len(chunk))})", [float(content_line), *chunk])
+        conn.commit()
+    return len(found)
 
 
 def restore_screens(conn: sqlite3.Connection) -> int:

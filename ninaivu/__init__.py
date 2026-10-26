@@ -393,6 +393,10 @@ class Services:
         self.moment_finder = MomentFinder(cfg, lambda: db.connect(cfg.db_path),
                                           engine=lambda: self.engine,
                                           hold=lambda: self.workload.hold("analysis"))
+        # The video frames kept for what was said in videos, a feature the
+        # household asked to be gone (October 2026), go with its words
+        # (storage/db.py drops those).
+        shutil.rmtree(Path(cfg.thumbs_dir) / "words", ignore_errors=True)
         # One album for the televisions at home, over DLNA; off unless an
         # administrator chooses one. See ninaivu/server/tv_album.py.
         from .server.tv_album import TvAlbum                     # noqa: PLC0415
