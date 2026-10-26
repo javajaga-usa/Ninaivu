@@ -3495,10 +3495,17 @@ class Scanner:
         # those the tagger writes from now on: a line lowered since (a
         # family member sees only clean content) reaches what was scored.
         if getattr(self.cfg, "nsfw_filter", False) and getattr(self.ai, "semantic", False):
-            flagged = db.flag_explicit_scores(conn, root, self._nsfw_threshold(), ids=ids)
-            if flagged and ids is None:
-                log.info("explicit content: %s more flagged at the line of %s",
-                         f"{flagged:,}", self._nsfw_threshold())
+            line = self._nsfw_threshold()
+            flagged = db.flag_explicit_scores(conn, root, line, ids=ids)
+            # And a line raised since takes back what the lower one flagged.
+            unflagged = (db.unflag_explicit_scores(conn, root, line, revealing.line(self.cfg))
+                         if ids is None else 0)
+            if flagged:
+                # A live photo's clip and a RAW's twin go with their photograph.
+                self._align_pairs(conn, root)
+            if (flagged or unflagged) and ids is None:
+                log.info("explicit content: %s more flagged and %s no longer at the "
+                         "line of %s", f"{flagged:,}", f"{unflagged:,}", line)
         if not getattr(self.cfg, "hide_screens", False):
             return
         scorer = None
