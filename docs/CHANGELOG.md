@@ -9,6 +9,11 @@
 - **Checking an export reads every file in it before the import is offered.** **Check** still says at once what the export holds, from its list; then it reads each file in it against the size and checksum written when it was made, with a progress bar, files and percent, while nothing is changed. **Import and restart** is offered only when that has passed, and the server refuses an export whose check failed. An export cut short on its way to the drive, or with a damaged file, is now found before the restart rather than after it, and the damaged file is named.
 - **Room to unpack is checked before the import.** An import unpacks the export beside Ninaivu's folder and keeps the old folder too; when that drive has too little room, the check and the import say how much is free and how much is needed, and nothing is asked for.
 - **Clearer words when an export cannot be used.** A folder holding only an export that never finished says so, and asks for the export to be made again. The import button says **Preparing the import…** at once, and while Ninaivu restarts to do it the page says how much it is unpacking. Every message about exports and imports, the ones with a folder or a file name in them included, is now in Tamil too.
+- **An export that this computer may not open is no longer called damaged.** An export is private to the account that made it. Carried from a Mac to a Linux computer on a drive that keeps owners, it arrives whole but belongs to the Mac's account, and the import said it "cannot be read as a Ninaivu export… may be damaged". It now says the file is there but this computer will not let Ninaivu open it, and gives the one command that fixes it (`sudo chmod a+r "<the file>"`). An empty file, one cut short on its way to the drive, and a drive that cannot be read each have their own words too.
+
+### Control Panel
+
+- **Headings read cleanly on Linux.** The small-caps headings (THIS COMPUTER, RESOURCE MODE, the card titles) set their letters a hair space apart, and a Linux desktop's font may not have that character, so Tk drew a box between every letter. On Linux they are now plain upper case, and **Restart** loses the arrow that drew as a box there too. The Mac and Windows look is unchanged.
 
 ## 3.2.0 — 26 October 2026
 

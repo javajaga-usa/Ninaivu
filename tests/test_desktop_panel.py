@@ -464,3 +464,11 @@ def test_switching_the_look_repaints_the_open_window(tmp_path, monkeypatch):
         if dashboard is not None:
             dashboard.finished.set()
         root.destroy()
+
+
+def test_linux_headings_have_no_letters_its_font_may_lack():
+    # Tk on a Linux desktop drew a box between every letter of a heading.
+    assert app.small_caps('This computer', 'linux') == 'THIS COMPUTER'
+    assert app.small_caps('This computer', 'darwin') == '\u200a'.join('THIS COMPUTER')
+    assert app.restart_label('linux') == 'Restart'
+    assert '↻' in app.restart_label('win32')

@@ -179,6 +179,30 @@ def test_a_file_that_is_not_an_export_is_refused(tmp_path):
         full_export.look(junk)
 
 
+def test_an_export_another_account_owns_says_so_rather_than_damaged(machines, monkeypatch):
+    # Made private on a Mac, carried on a drive that keeps owners to Linux:
+    # the file is whole, only not this account's to open.
+    bundle = backup.snapshot(machines.here, machines.base / "out", full=True)
+
+    def refused(*args, **kwargs):
+        raise PermissionError(13, "Permission denied")
+    monkeypatch.setattr(full_export.tarfile, "open", refused)
+    with pytest.raises(ValueError, match="sudo chmod a\\+r") as caught:
+        full_export.look(bundle)
+    assert "damaged" not in str(caught.value)
+
+
+def test_an_export_cut_short_or_empty_is_said_to_be(machines):
+    bundle = backup.snapshot(machines.here, machines.base / "out", full=True)
+    whole = bundle.read_bytes()
+    bundle.write_bytes(whole[:120])
+    with pytest.raises(ValueError, match="cut short"):
+        full_export.look(bundle)
+    bundle.write_bytes(b"")
+    with pytest.raises(ValueError, match="is empty"):
+        full_export.look(bundle)
+
+
 def test_an_export_from_a_newer_ninaivu_is_refused(machines, monkeypatch):
     monkeypatch.setattr(backup, "__version__", "999.0.0")
     bundle = backup.snapshot(machines.here, machines.base / "out", full=True)

@@ -108,10 +108,23 @@ def save_theme_preference(controller, choice):
     controller.save_setting('theme', choice)
 
 
-def small_caps(text):
+#: Systems whose interface face is known to have the hair space and the
+#: circle arrow. A Linux desktop's may not, and Tk there draws a box for a
+#: letter its font lacks: "T▯H▯I▯S", and a box for Restart's arrow.
+FULL_GLYPHS = ('darwin', 'win32')
+
+
+def small_caps(text, platform=None):
     """*text* as a spaced, upper-case label, the guide PDFs' small caps. Tk
-    has no letter-spacing, so the letters are set a hair space apart."""
+    has no letter-spacing, so the letters are set a hair space apart, where
+    the font has one; elsewhere it is only upper case."""
+    if (platform or sys.platform) not in FULL_GLYPHS:
+        return text.upper()
     return ' '.join(text.upper())
+
+
+def restart_label(platform=None):
+    return '↻  Restart' if (platform or sys.platform) in FULL_GLYPHS else 'Restart'
 
 
 def font_families(root, platform=None):
@@ -264,7 +277,7 @@ class Dashboard:
         actions.pack(side='left', anchor='w')
         self.start_button = self._action_button(actions, '▶  Start', lambda: self.run(self.controller.start, 'Starting'), 'Start.TButton')
         self.stop_button = self._action_button(actions, '■  Stop', lambda: self.run(self.controller.stop, 'Stopping'), 'Stop.TButton')
-        self.restart_button = self._action_button(actions, '↻  Restart', lambda: self.run(self.restart, 'Restarting'), 'TButton')
+        self.restart_button = self._action_button(actions, restart_label(), lambda: self.run(self.restart, 'Restarting'), 'TButton')
         self.paint(tk.Frame(actions, width=1), bg='border').pack(side='left', fill='y', padx=(4, 12), pady=4)
         self.button(actions, 'Open the family app', lambda: self.open_in_browser(False))
         self.button(actions, 'Open the console', lambda: self.open_in_browser(True))
