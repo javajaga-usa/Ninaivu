@@ -70,6 +70,7 @@ MESSAGES = (
     said('Another generative edit is running. Try again when it finishes.'),
     said('Another object-removal request is running. Try again when it finishes.'),
     said('Answers must be a list, one for each face at most.'),
+    said('Apart must be true or false.'),
     said('Archive Guardian is unavailable.'),
     said('Archive health check started.'),
     said('Ask about at most {max_faces} faces at a time.'),

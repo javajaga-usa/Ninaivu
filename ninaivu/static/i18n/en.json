@@ -3503,6 +3503,7 @@
   "Another generative edit is running. Try again when it finishes.": "Another generative edit is running. Try again when it finishes.",
   "Another object-removal request is running. Try again when it finishes.": "Another object-removal request is running. Try again when it finishes.",
   "Answers must be a list, one for each face at most.": "Answers must be a list, one for each face at most.",
+  "Apart must be true or false.": "Apart must be true or false.",
   "Archive Guardian is unavailable.": "Archive Guardian is unavailable.",
   "Archive health check started.": "Archive health check started.",
   "Ask about at most {max_faces} faces at a time.": "Ask about at most {max_faces} faces at a time.",
