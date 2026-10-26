@@ -761,6 +761,7 @@ function applyPermissions() {
   // "Only to me" is for anybody with a profile of their own in the household.
   $('#nav-private').hidden = !can.keep_private;
   syncPrivateControls();
+  $('#sel-screen').hidden = !can.send_for_screening;
   $('#sel-fav').hidden = !can.favorite;
   $('#sel-unfav').hidden = !can.favorite;
   $('#sel-download').hidden = !can.download;
@@ -1383,6 +1384,7 @@ function wireChrome() {
   wireJump();
   wireVisibility();
   wirePrivate();
+  wireScreening();
   wireMoments();
   wireMemories();
   wireMap();
@@ -3487,6 +3489,99 @@ function wireScrubber() {
    Grid / viewer wiring
    ======================================================================== */
 
+/* -- Send for screening --------------------------------------------------- */
+
+/* A family member asks an administrator to look at items: a screenshot of a
+   bank page, a document, something not for everyone. Nothing about who can
+   see them changes here; they wait in the console's Screening queue, where an
+   admin ignores, hides, marks explicit or deletes them (api/api_screening.py). */
+
+/** Item ids this viewer has sent and is waiting on, as far as this page knows. */
+const screeningSent = new Map();
+let screeningIds = [];
+
+function openScreening(ids) {
+  if (!ids.length) return;
+  screeningIds = ids;
+  $('#screen-count').textContent = ids.length === 1
+    ? i18n.t('An admin will look at this and decide whether to keep, hide or delete it.')
+    : i18n.t('An admin will look at these {items} and decide whether to keep, hide or delete them.',
+      { items: i18n.items(ids.length) });
+  $('#screen-note').value = '';
+  $('#screen-modal').hidden = false;
+  $('#screen-form').querySelector('input[name="screen-reason"]:checked')?.focus();
+}
+
+async function sendScreening(event) {
+  event.preventDefault();
+  const ids = screeningIds;
+  $('#screen-modal').hidden = true;
+  if (!ids.length) return;
+  // Written in the sender's language, as the admin will read it.
+  const picked = $('#screen-form').querySelector('input[name="screen-reason"]:checked')?.value;
+  const reason = picked ? i18n.t(picked) : '';
+  const typed = $('#screen-note').value.trim();
+  const note = [reason, typed].filter(Boolean).join(' — ');
+  try {
+    const result = await api.sendForScreening(ids, note);
+    for (const id of ids) screeningSent.set(id, true);
+    const count = (result.sent || 0) + (result.already || 0);
+    toast(count === 1 ? i18n.t('Sent to an admin. It stays here until they decide.')
+      : i18n.t('{items} sent to an admin. They stay here until an admin decides.',
+        { items: i18n.items(count) }));
+    if (grid.selection.size) grid.clearSelection();
+    syncViewerScreening();
+  } catch (exc) { toast(exc.message, true); }
+}
+
+/** The viewer's flag: send this one, or take the request back. */
+async function syncViewerScreening() {
+  const button = $('#v-screen');
+  if (!button) return;
+  const item = viewer.item;
+  button.hidden = !item || !state.user?.can?.send_for_screening;
+  if (button.hidden) return;
+  if (!screeningSent.has(item.id)) {
+    try {
+      const answer = await api.screeningState(item.id);
+      screeningSent.set(item.id, !!answer.sent);
+    } catch { screeningSent.set(item.id, false); }
+    if (viewer.item !== item) return;
+  }
+  const sent = screeningSent.get(item.id);
+  button.classList.toggle('on', sent);
+  button.querySelector('.viewer-tools-more-label').textContent =
+    sent ? i18n.t('Sent for screening') : i18n.t('Send for screening');
+  button.title = sent ? i18n.t('Waiting for an admin. Press to take the request back.')
+    : i18n.t('Ask an admin to look at this');
+}
+
+function wireScreening() {
+  const modal = $('#screen-modal');
+  if (!modal) return;
+  const close = () => { modal.hidden = true; };
+  $('#screen-close').onclick = $('#screen-cancel').onclick = close;
+  modal.addEventListener('mousedown', (event) => { if (event.target === modal) close(); });
+  modal.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') { event.stopPropagation(); close(); }
+  });
+  $('#screen-form').onsubmit = sendScreening;
+  $('#sel-screen').onclick = () => openScreening([...grid.selection].slice(0, 2000));
+  const button = $('#v-screen');
+  if (!button) return;
+  button.onclick = async () => {
+    const item = viewer.item;
+    if (!item) return;
+    if (!screeningSent.get(item.id)) { openScreening([item.id]); return; }
+    try {
+      await api.sendForScreening([item.id], '', false);
+      screeningSent.set(item.id, false);
+      toast(i18n.t('Request taken back.'));
+      syncViewerScreening();
+    } catch (exc) { toast(exc.message, true); }
+  };
+}
+
 function wireGrid() {
   grid.addEventListener('open', (event) => {
     viewer.open(grid.ids, event.detail.index, grid.thumbedIds(),
@@ -3532,7 +3627,9 @@ function wireGrid() {
 }
 
 function wireViewer() {
-  viewer.addEventListener('change', () => { syncViewerVisibility(); syncViewerPrivate(); });
+  viewer.addEventListener('change', () => {
+    syncViewerVisibility(); syncViewerPrivate(); syncViewerScreening();
+  });
 
   viewer.addEventListener('mutated', async (event) => {
     const { id, favorite } = event.detail;

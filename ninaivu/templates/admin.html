@@ -109,6 +109,7 @@
       <button role="tab" data-tab="large-files" data-group="library" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V10M10 20V4M15 20v-7M20 20v-4"/></svg><span class="tab-label" data-i18n="Large files">Large files</span></button>
       <span class="tab-group-label" aria-hidden="true" data-i18n="Review">Review</span>
       <button role="tab" data-tab="uploads" data-group="queues" aria-selected="false" id="uploads-tab" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4M7.5 8.5 12 4l4.5 4.5M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/></svg><span class="tab-label" data-i18n="Uploads">Uploads</span><span class="tab-count" id="uploads-count" hidden></span></button>
+      <button role="tab" data-tab="screening" data-group="queues" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 21V4"/><path d="M5 4h11l-2 4 2 4H5"/></svg><span class="tab-label" data-i18n="Screening">Screening</span><span class="tab-count" id="screening-count" hidden></span></button>
       <button role="tab" data-tab="straighten" data-group="queues" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v5h-5"/></svg><span class="tab-label" data-i18n="Straighten">Straighten</span></button>
       <span class="tab-group-label" aria-hidden="true" data-i18n="People & access">People &amp; access</span>
       <button role="tab" data-tab="people" data-group="people" aria-selected="false" hidden><svg class="tab-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8.5" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0M16 5.2a3.5 3.5 0 0 1 0 6.6M18.5 14.5A6.5 6.5 0 0 1 21.5 20"/></svg><span class="tab-label" data-i18n="People">People</span></button>
@@ -352,6 +353,37 @@
         <button class="btn ghost" id="faces-show-all" hidden data-i18n="Bring them all back">Bring them all back</button>
       </div>
       <div class="person-grid" id="faces-hidden" hidden></div>
+    </div>
+  </section>
+
+  <!-- Screening (static/js/screening.js): what family members sent to be
+       looked at, and the four decisions on one item or many. -->
+  <section class="panel" data-panel="screening">
+    <div class="block">
+      <div class="block-head">
+        <div>
+          <h2 data-i18n="Sent for screening">Sent for screening</h2>
+          <p class="hint" data-i18n="Family members sent these for you to look at. They stay in the family app until you decide. Hide is for documents and screenshots; Mark explicit is for adult content only; Delete moves them to the bin on the Folders page, where you can put them back.">Family members sent these for you to look at.
+            They stay in the family app until you decide. Hide is for documents
+            and screenshots; Mark explicit is for adult content only; Delete
+            moves them to the bin on the Folders page, where you can put them
+            back.</p>
+        </div>
+        <div class="fold-actions">
+          <button class="btn ghost small" id="scr-refresh" data-i18n="Refresh">Refresh</button>
+        </div>
+      </div>
+      <div class="fold-pickbar" id="scr-pickbar" hidden>
+        <span class="hint" id="scr-picked" data-i18n="Nothing chosen">Nothing chosen</span>
+        <button class="btn ghost small" id="scr-all" data-i18n="Choose all">Choose all</button>
+        <div class="spacer"></div>
+        <button class="btn ghost small" id="scr-ignore" disabled data-i18n="Ignore">Ignore</button>
+        <button class="btn danger small" id="scr-hide" disabled data-i18n="Hide">Hide</button>
+        <button class="btn small" id="scr-explicit" disabled data-i18n="Mark explicit">Mark explicit</button>
+        <button class="btn danger small" id="scr-delete" disabled data-i18n="Delete">Delete</button>
+      </div>
+      <div class="fold-items scr-items" id="scr-items"></div>
+      <p class="empty-note calm" id="scr-empty" hidden data-i18n="Nothing is waiting. When a family member sends something for screening, it appears here.">Nothing is waiting. When a family member sends something for screening, it appears here.</p>
     </div>
   </section>
 
@@ -2831,6 +2863,32 @@
       <summary data-i18n="Change the date">Change the date</summary>
       <div id="fv-date"></div>
     </details>
+  </div>
+</div>
+
+<div class="modal fold-viewer" id="scr-viewer" hidden role="dialog" aria-modal="true"
+     aria-labelledby="sv-name">
+  <div class="modal-card fv-card">
+    <div class="fv-head">
+      <div class="fv-title">
+        <h2 id="sv-name"></h2>
+        <p class="hint" id="sv-facts"></p>
+      </div>
+      <span class="hint fv-count" id="sv-count"></span>
+      <button class="btn ghost small" id="sv-close" data-i18n="Close">Close</button>
+    </div>
+    <div class="fv-body">
+      <button class="fv-step" id="sv-prev" aria-label="Previous" data-i18n-label="Previous">&#8249;</button>
+      <div class="fv-stage" id="sv-stage"></div>
+      <button class="fv-step" id="sv-next" aria-label="Next" data-i18n-label="Next">&#8250;</button>
+    </div>
+    <div class="scr-asks" id="sv-asks"></div>
+    <div class="fv-actions">
+      <button class="btn ghost small" id="sv-ignore" data-i18n="Ignore">Ignore</button>
+      <button class="btn danger small" id="sv-hide" data-i18n="Hide">Hide</button>
+      <button class="btn small" id="sv-explicit" data-i18n="Mark explicit">Mark explicit</button>
+      <button class="btn danger small" id="sv-delete" data-i18n="Delete">Delete</button>
+    </div>
   </div>
 </div>
 

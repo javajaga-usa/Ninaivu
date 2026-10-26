@@ -193,6 +193,9 @@ export const api = {
   albumRemove: (id, ids) => post(`/api/albums/${id}/items`, { ids, remove: true }),
   // "Only to me": keep these out of everybody else's view, or give them back.
   keepPrivate: (ids, keep = true) => post('/api/private', { ids, private: keep }),
+  // Sent for screening (api/api_screening.py).
+  sendForScreening: (ids, note = '', sent = true) => post('/api/screening', { ids, note, sent }),
+  screeningState: (id) => request(`/api/screening/${id}`),
   deleteAlbum: (id) => request(`/api/albums/${id}`, { method: 'DELETE' }),
   // Photo books (static/js/books.js).
   bookOptions: () => request('/api/books/options'),
