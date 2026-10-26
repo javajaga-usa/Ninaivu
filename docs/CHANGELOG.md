@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Moving the index to another computer
+
+- **Export says "Preparing…" the moment it is pressed.** Before anything else, the export measures every thumbnail and face crop to see whether the drive has room, and on a large library that takes about half a minute; until now the page said nothing at all while it did. The console now answers at once with **Preparing: measuring what goes in and checking it fits…** as step 1 of 5, and the room check runs in the background. A drive that is too small is said as the export's result.
+- **An export goes only into an empty folder.** A folder with anything in it already, an older export included, is refused before anything is written, with what is in it and a request to choose a different, empty folder. The server checks it, not only the page. What a computer leaves in a folder by itself (`.DS_Store`, `._` files, `Thumbs.db`, `desktop.ini`) does not count.
+- **Checking an export reads every file in it before the import is offered.** **Check** still says at once what the export holds, from its list; then it reads each file in it against the size and checksum written when it was made, with a progress bar, files and percent, while nothing is changed. **Import and restart** is offered only when that has passed, and the server refuses an export whose check failed. An export cut short on its way to the drive, or with a damaged file, is now found before the restart rather than after it, and the damaged file is named.
+- **Room to unpack is checked before the import.** An import unpacks the export beside Ninaivu's folder and keeps the old folder too; when that drive has too little room, the check and the import say how much is free and how much is needed, and nothing is asked for.
+- **Clearer words when an export cannot be used.** A folder holding only an export that never finished says so, and asks for the export to be made again. The import button says **Preparing the import…** at once, and while Ninaivu restarts to do it the page says how much it is unpacking. Every message about exports and imports, the ones with a folder or a file name in them included, is now in Tamil too.
+
 ## 3.2.0 — 26 October 2026
 
 Ninaivu 3.2 keeps family members to clean content everywhere: screenshots, documents, near-explicit items and photographs of people in only their underwear stay out of their search and smart albums, and explicit items are kept from them by one rule on every page. Family members can send photos and videos to an administrator for screening, and a Screening queue on the console lets an administrator ignore, hide, mark explicit or delete them, one or many at once. The first day asks whether one computer or two will keep the library, and a Secondary can be copied to by hand. Search results can be picked on a phone by holding a finger on a photo, the whole index can be exported and imported from the console, a slow start is no longer called a failure, the slowest pages on a large library are much faster, and writing down what is said in videos is gone.

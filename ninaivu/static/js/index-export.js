@@ -4,8 +4,10 @@
  *
  * Exporting runs in the background while Ninaivu goes on; the block polls
  * only while it does. Importing is two presses, like the reroot below it: a
- * check that reads what the file holds and changes nothing, and only then an
- * import, which Ninaivu does as it restarts.
+ * check that reads what the file holds, then reads every file in it through
+ * and changes nothing, and only then an import, which Ninaivu does as it
+ * restarts. Each press says at once what is happening, before the server
+ * has answered.
  */
 
 import { reportUnauthorized } from './api.js';
@@ -50,11 +52,21 @@ const when = (value) => {
 };
 
 const STEPS = {
+  preparing: i18n.key('Preparing: measuring what goes in and checking it fits…'),
   copying: i18n.key('Copying the index and the thumbnails…'),
   checking: i18n.key('Writing down a checksum for every file…'),
   verifying: i18n.key('Reading every file back against its checksum…'),
   packing: i18n.key('Packing it into one file…'),
 };
+
+const CHECK_STEPS = {
+  reading: i18n.key('Reading the list of what is in it…'),
+  checking: i18n.key('Reading every file in it against its checksum…'),
+};
+
+/** A finished job's error, in this page's language when the server sent
+ *  the sentence with its values (words.Said). */
+const reason = (job) => i18n.fromServer({ said: job.said, params: job.params, error: job.error || '' });
 
 /** 75 as "1 min 15 s": how long something took, or has been running. */
 function took(seconds) {
@@ -141,7 +153,7 @@ export class IndexExport {
     }
     this.render();
     if (!$('#ix-block')?.isConnected) return;
-    if (this.state.export?.running) this.timer = setTimeout(() => this.refresh(), POLL_MS);
+    if (this.state.export?.running || this.state.check?.running) this.timer = setTimeout(() => this.refresh(), POLL_MS);
     else if (this.importing) this.timer = setTimeout(() => this.refresh(), RESTART_POLL_MS);
   }
 
@@ -152,6 +164,11 @@ export class IndexExport {
     const box = el('div', 'mg-alert');
     box.append(el('strong', null, i18n.t('Importing: Ninaivu is restarting to put the export in place.')));
     box.append(el('code', 'mg-path', this.importing.bundle));
+    box.append(el('progress', 'ix-bar'));
+    if (this.importing.size) {
+      box.append(el('div', 'hint', i18n.t('It unpacks {size}, checks every file again, and then puts them in place.',
+        { size: bytes(this.importing.size) })));
+    }
     box.append(el('div', 'hint', i18n.t('Waiting for it to answer again, {time} so far. A large export takes a few minutes; this page checks every few seconds and shows the result here.',
       { time: took((Date.now() - this.importing.since) / 1000) })));
     report.replaceChildren(box);
@@ -173,8 +190,11 @@ export class IndexExport {
       const bar = el('progress', 'ix-bar');
       const total = ex.bytes_total || ex.files_total || 0;
       const done = ex.bytes_total ? ex.bytes_done : ex.files_done;
-      bar.max = Math.max(1, total);
-      bar.value = Math.min(done || 0, bar.max);
+      // No total yet while preparing: a bar that moves without a value.
+      if (total) {
+        bar.max = Math.max(1, total);
+        bar.value = Math.min(done || 0, bar.max);
+      }
       report.append(bar);
       if (ex.files_total) {
         const percent = total ? Math.floor((100 * (done || 0)) / total) : 0;
@@ -186,7 +206,7 @@ export class IndexExport {
         { time: took(ex.seconds), folder: ex.folder || '' })));
     } else if (ex.finished && !ex.ok) {
       report.append(el('div', 'mg-alert bad', i18n.t('The export on {when} failed after {time}: {reason}',
-        { when: when(ex.finished), time: took(ex.seconds), reason: ex.error || '' })));
+        { when: when(ex.finished), time: took(ex.seconds), reason: reason(ex) })));
     } else if (ex.bundle) {
       report.append(el('strong', null, i18n.t('Exported {when}, in {time}.', { when: when(ex.finished), time: took(ex.seconds) })));
       report.append(el('code', 'mg-path', ex.bundle));
@@ -201,7 +221,9 @@ export class IndexExport {
     const imported = $('#ix-import-report');
     if (this.importing) {
       this.renderImporting();
-    } else if (!this.looked) {
+    } else if (this.looked) {
+      this.showLook(this.looked.found);
+    } else {
       imported.replaceChildren();
       if (s.pending) {
         const box = el('div', 'mg-alert');
@@ -248,12 +270,16 @@ export class IndexExport {
       return;
     }
     $('#ix-export').disabled = true;
+    // Said before the server answers, so the press is never met with nothing.
+    const report = $('#ix-export-report');
+    report.hidden = false;
+    report.replaceChildren(el('strong', null, i18n.t('Preparing the export…')), el('progress', 'ix-bar'));
     try {
       this.state = await json('/api/admin/migration/export', {
         folder, without_secrets: $('#ix-without-secrets').checked,
       });
     } catch (exc) {
-      this.toast(exc.message, true);
+      report.replaceChildren(el('div', 'mg-alert bad', exc.message));
       $('#ix-export').disabled = false;
       return;
     }
@@ -275,8 +301,10 @@ export class IndexExport {
     try {
       const found = await json('/api/admin/migration/import/look', { path });
       this.looked = { path, found };
+      if (this.state) this.state.check = found.check;
       this.showLook(found);
-      $('#ix-import').disabled = false;
+      clearTimeout(this.timer);
+      this.timer = setTimeout(() => this.refresh(), POLL_MS);
     } catch (exc) {
       this.looked = null;
       report.replaceChildren(el('div', 'mg-alert bad', exc.message));
@@ -304,7 +332,42 @@ export class IndexExport {
     if (found.left_out?.length) {
       report.append(el('div', 'hint subtle', i18n.t('The keys and certificates were left out of it; this computer keeps its own.')));
     }
-    report.append(el('div', 'mg-alert', i18n.t('Importing replaces everything this computer’s Ninaivu knows. The index that is here now is kept beside it, in case.')));
+    const ok = this.showCheck(report, found);
+    if (ok) report.append(el('div', 'mg-alert', i18n.t('Importing replaces everything this computer’s Ninaivu knows. The index that is here now is kept beside it, in case.')));
+    $('#ix-import').disabled = !ok;
+  }
+
+  /** How the reading-through of *found* is going; true once it passed. */
+  showCheck(report, found) {
+    const check = this.state?.check;
+    if (!check || check.bundle !== found.bundle) return false;
+    if (check.running) {
+      report.append(el('strong', null, i18n.t('Checking it, step {step} of {steps}: {what}', {
+        step: check.step_number || 1, steps: check.steps || 2,
+        what: i18n.t(CHECK_STEPS[check.step] || CHECK_STEPS.reading) })));
+      const bar = el('progress', 'ix-bar');
+      if (check.bytes_total) {
+        bar.max = check.bytes_total;
+        bar.value = Math.min(check.bytes_done || 0, bar.max);
+      }
+      report.append(bar);
+      if (check.files_total) {
+        const percent = check.bytes_total ? Math.floor((100 * (check.bytes_done || 0)) / check.bytes_total) : 0;
+        report.append(el('div', 'hint', i18n.t('{done} of {total} files · {size_done} of {size_total} · {percent}%', {
+          done: count(check.files_done), total: count(check.files_total),
+          size_done: bytes(check.bytes_done), size_total: bytes(check.bytes_total), percent })));
+      }
+      report.append(el('div', 'hint subtle', i18n.t('Running for {time}. Nothing is changed while it is checked; Import is offered when it has passed.',
+        { time: took(check.seconds) })));
+      return false;
+    }
+    if (!check.ok) {
+      report.append(el('div', 'mg-alert bad', i18n.t('The check found a problem, so it cannot be imported: {reason}', { reason: reason(check) })));
+      return false;
+    }
+    report.append(el('div', 'hint', i18n.t('Checked in {time}: all {count} files are there and as they were written.',
+      { time: took(check.seconds), count: count(check.files_done) })));
+    return true;
   }
 
   async importNow() {
@@ -318,18 +381,27 @@ export class IndexExport {
       i18n.t('Everybody using Ninaivu is interrupted while it restarts.'),
     ].join('\n\n'))) return;
     $('#ix-import').disabled = true;
+    const report = $('#ix-import-report');
+    report.hidden = false;
+    report.replaceChildren(el('strong', null, i18n.t('Preparing the import…')), el('progress', 'ix-bar'));
     let result;
     try {
       result = await json('/api/admin/migration/import', { path });
     } catch (exc) {
       this.toast(exc.message, true);
-      $('#ix-import').disabled = false;
+      this.showLook(this.looked.found);
+      report.append(el('div', 'mg-alert bad', exc.message));
       return;
     }
-    this.looked = null;
     this.state = result;
+    this.looked = null;
     if (result.restarting) {
-      this.importing = { bundle: result.pending?.bundle || path, asked: result.pending?.asked_at || Date.now() / 1000, since: Date.now() };
+      this.importing = {
+        bundle: result.pending?.bundle || path,
+        asked: result.pending?.asked_at || Date.now() / 1000,
+        since: Date.now(),
+        size: result.looked?.unpacked_bytes || 0,
+      };
       clearTimeout(this.timer);
       this.timer = setTimeout(() => this.refresh(), RESTART_POLL_MS);
     }
