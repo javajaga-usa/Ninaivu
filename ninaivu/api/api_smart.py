@@ -17,9 +17,8 @@ from flask import abort, jsonify
 from ..server.auth import current_user, require_family
 from ..storage import db, smart
 from ._body import json_object
-from .api import (_conn, _filters_from_request, _roots, _semantic_ids, _thumb_version, _viewer,
-                  _viewer_limits,
-                  bp)
+from .api import (_conn, _filters_from_request, _roots, _search_shield, _semantic_ids,
+                  _thumb_version, _viewer, _viewer_limits, bp)
 
 
 def apply_rules(filters: dict[str, Any], album_id: int) -> None:
@@ -82,7 +81,9 @@ def _describe(album: dict[str, Any]) -> dict[str, Any]:
         place=rules.get("place", ""), kinds=rules.get("kinds") or None,
         favorites=bool(rules.get("favorites")), date_from=rules.get("date_from", ""),
         date_to=rules.get("date_to", ""), camera=rules.get("camera", ""),
-        tag=rules.get("tag", ""), folder=rules.get("folder", ""))
+        tag=rules.get("tag", ""), folder=rules.get("folder", ""),
+        # Its count and cover leave out what its search does (api._filters_from_request).
+        **(_search_shield() if text or rules.get("tag") else {}))
     user = current_user()
     names = []
     if rules.get("people"):

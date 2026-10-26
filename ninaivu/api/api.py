@@ -521,8 +521,10 @@ def _filters_from_request() -> dict[str, Any]:
         from .api_smart import apply_rules
         apply_rules(filters, smart_id)
     # Words typed or spoken into the search box, or a tag picked from its
-    # suggestions: a search, which for a family member leaves out more.
-    if request.args.get("q", "").strip() or filters["tag"]:
+    # suggestions: a search, which for a family member leaves out more. So is
+    # a smart album that holds words or a tag: it is a search kept under a
+    # name, and its words found there what the search box would leave out.
+    if request.args.get("q", "").strip() or filters["text"] or filters["tag"]:
         filters.update(_search_shield())
     return filters
 
@@ -1167,7 +1169,9 @@ def _segments_etag(conn, filters: dict[str, Any], stacked: bool = False) -> str 
     parts = (__version__, counters, sorted(viewer.items(), key=str), current_user().role,
              db.visibility_clause("a", viewer["max_visibility"]), _roots(),
              request.query_string, _recipe(), list(_cfg().thumb_sizes),
-             hashlib.sha256(mine.encode()).hexdigest(), stacked)
+             hashlib.sha256(mine.encode()).hexdigest(), stacked,
+             # A tag search's lines, which settings move and no counter does.
+             filters.get("near_explicit"), filters.get("revealing"))
     return hashlib.sha256(repr(parts).encode()).hexdigest()[:32]
 
 
