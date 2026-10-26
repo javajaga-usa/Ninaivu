@@ -33,6 +33,15 @@ class PageClient(FlaskClient):
 Flask.test_client_class = PageClient
 
 
+def _real_models_root() -> Path:
+    from ninaivu.media import model_catalog
+    return model_catalog.models_root()
+
+
+#: Where this machine's own models are, read before any test can move it.
+_REAL_MODELS_ROOT = _real_models_root()
+
+
 @pytest.fixture(autouse=True)
 def _models_stay_off_this_machine(request, tmp_path: Path):
     """No test may reach the developer's own AI model folder.
@@ -50,10 +59,15 @@ def _models_stay_off_this_machine(request, tmp_path: Path):
     """
     from ninaivu.media import model_catalog
 
-    if request.node.get_closest_marker("real_models"):
-        yield                       # it means the ones on this machine
-        return
     before = model_catalog._root
+    if request.node.get_closest_marker("real_models"):
+        # It means the ones on this machine, named outright: a test before it
+        # could leave its own empty folder configured, and the models the
+        # skip found at collection were then "not there".
+        model_catalog.configure(_REAL_MODELS_ROOT)
+        yield
+        model_catalog.configure(before)
+        return
     model_catalog.configure(tmp_path / "ai-models")
     yield
     model_catalog.configure(before)

@@ -233,3 +233,20 @@ def test_deleting_the_clip_takes_its_moments(clips):
         conn.commit()
     assert conn.execute("SELECT COUNT(*) FROM video_moments").fetchone()[0] == 0
     assert conn.execute("SELECT COUNT(*) FROM video_moments_done").fetchone()[0] == 0
+
+
+def test_the_totals_count_only_what_the_viewer_may_see(clips, people, as_family, as_admin):
+    """The clips and moments looked into so far were the whole library's: a
+    guest or family member learnt how many clips there were in corners they
+    cannot see, and how fast they grew (audit 2026-10-26 F-03)."""
+    clips["finder"].run()
+    conn, party = clips["conn"], clips["party"]
+    looked = as_admin.get("/api/moments").get_json()
+    assert looked["looked_clips"] == 1 and looked["looked_moments"] == 2
+    assert as_family.get("/api/moments").get_json()["looked_clips"] == 1
+    with db._write_lock:                                              # noqa: SLF001
+        conn.execute("UPDATE assets SET visibility=2 WHERE id=?", (party,))
+        conn.commit()
+    hidden = as_family.get("/api/moments").get_json()
+    assert (hidden["looked_clips"], hidden["looked_moments"]) == (0, 0)
+    assert as_admin.get("/api/moments").get_json()["looked_moments"] == 2

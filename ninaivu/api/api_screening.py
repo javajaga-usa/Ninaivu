@@ -67,10 +67,12 @@ def send_for_screening():
     if not ids:
         return jsonify({"sent": 0, "already": 0, "withdrawn": 0})
     if not wanted:
+        # Only what this person asked for, and back to the family only once
+        # nobody is still asking about it or the photograph it belongs to:
+        # a live photo's clip is held with its still, on the still's request.
+        mine = screening.sent_by(conn, ids, user.id)
         withdrawn = screening.withdraw(conn, ids, user.id)
-        # Back to the family only once nobody else is still asking.
-        still = screening.sent_any(conn, ids)
-        screening.release(conn, [i for i in ids if i not in still])
+        screening.release_withdrawn(conn, sorted(mine))
         return jsonify({"sent": 0, "already": 0, "withdrawn": withdrawn})
     allowed = _reachable(conn, ids, admin=user.is_admin)
     sent, already = screening.send(conn, allowed, user.id, note)

@@ -286,14 +286,19 @@ def test_hiding_the_logs_gives_the_height_back(tmp_path, monkeypatch, look):
 
         # Made taller while the logs were open: only the pane's height goes.
         dashboard.show_logs()
-        width, height = settle()
-        root.geometry(f"{width}x{height + 80}")
+        width, with_logs = settle()
+        root.geometry(f"{width}x{with_logs + 80}")
         width, height = settle()
         pane = dashboard.split.winfo_height() - dashboard.upper_pane.winfo_height()
         dashboard.hide_logs()
         root.update_idletasks()
         needed = min(root.winfo_reqheight(), dashboard._room()[1])
         expected = min(height, max(root.minsize()[1], needed, height - pane))
+        if height == with_logs:
+            # The screen had no room for 80 more (a laptop's display, the
+            # window already near its height): the window was never
+            # resized, so it goes back to the height it had before the logs.
+            expected = before[1]
         assert abs(settle()[1] - expected) <= 2, (before, opened, height, pane, needed, root.minsize())
         assert root.winfo_width() == width
     finally:

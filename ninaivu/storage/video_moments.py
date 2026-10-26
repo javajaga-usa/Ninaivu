@@ -228,6 +228,16 @@ def counts(conn: sqlite3.Connection) -> dict[str, int]:
         return {"clips": 0, "moments": 0}
 
 
+def looked_at(conn: sqlite3.Connection) -> dict[int, int]:
+    """``clip id -> moments`` for every clip looked into, for a caller that
+    counts only the clips somebody may see (api_video_moments.py)."""
+    try:
+        return {int(r[0]): int(r[1] or 0) for r in conn.execute(
+            "SELECT asset_id, moments FROM video_moments_done WHERE version > 0")}
+    except sqlite3.OperationalError:
+        return {}
+
+
 def _key(conn: sqlite3.Connection, model: str) -> tuple:
     path = conn.execute("PRAGMA database_list").fetchone()[2] or ""
     row = conn.execute("SELECT COUNT(*), COALESCE(MAX(rowid), 0) FROM video_moments").fetchone()
