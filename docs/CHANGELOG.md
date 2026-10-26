@@ -13,7 +13,7 @@
 
 ### Removed
 
-- **Writing down what is said in videos is gone.** Ninaivu no longer listens to the family's videos, the **Said in videos** strip above search results and the subtitles in the viewer are gone, and the **Writing down what is said in videos** job no longer runs or shows on the console. Voice stories, speaking to search and the moments inside videos are unchanged. Words already written down stay in the index untouched, and nothing reads them.
+- **Writing down what is said in videos is gone.** Ninaivu no longer listens to the family's videos, the **Said in videos** strip above search results and the subtitles in the viewer are gone, and the **Writing down what is said in videos** job no longer runs or shows on the console. Voice stories, speaking to search and the moments inside videos are unchanged. The words already written down, and the video frames kept for them, are deleted the next time Ninaivu starts.
 - **Finding moments in videos is off.** Ninaivu no longer looks through long videos for their scenes, the **Moments in videos** strip above search results does not show, and the job is not listed on the Activity page. The moments already found are kept. `"video_moments": true` in `config.json` turns it back on.
 
 ### Restarting without a false timeout
