@@ -26,7 +26,7 @@ import numpy as np
 
 #: Bumped when the descriptions, the line or how they are read change: every
 #: picture is judged again from its stored vector.
-VERSION = 1
+VERSION = 2
 
 #: People in nothing but their underwear.
 PROMPTS = (

@@ -728,6 +728,22 @@ class OnnxEngine(Engine):
         return rows
 
 
+def explicit_line(cfg: Any, engine: Any) -> float:
+    """Where the explicit check flags, on *engine*'s scale.
+
+    SigLIP's scores are sigmoid probabilities (``sigmoid_scores``), so its line
+    is the household's ``explicit_threshold``; any other engine's own line, or
+    CLIP's ``nsfw_threshold``.
+    """
+    if getattr(engine, "sigmoid_scores", False):
+        try:
+            return float(cfg.explicit_threshold)
+        except (AttributeError, TypeError, ValueError):
+            pass
+    own = getattr(engine, "nsfw_threshold", None)
+    return float(own) if own is not None else float(cfg.nsfw_threshold)
+
+
 def onnx_search_ready(cfg: Any) -> bool:
     """Whether search should run through the on-device engine: switched on,
     and its model and packages here."""

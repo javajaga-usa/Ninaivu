@@ -6,6 +6,12 @@
 
 - **Hold a finger on a photo to pick it, in search results and everywhere else.** On a phone or tablet, a search's results could only be picked all at once: there is no mouse to bring up each tile's tick, and the one **Select all** above **Best matches** took every result. Holding a finger on a tile for about half a second now picks it, without opening it, and each tap after that adds or takes away a photo until the cross on the bar ends it. The bar is the gallery's own, so adding to an album, favourites, download, export, who sees them and deleting work on search results exactly as they do in the gallery, for whoever is allowed each one. On a computer, the tick on each tile and Shift-click already worked in search results and are unchanged.
 
+### Only clean content for family members
+
+- **Explicit items are kept from family members everywhere, by one rule.** The fragment every family-facing query and the single-photo check already carry now leaves out explicit content too, so a page that forgot its own `nsfw = 0` (a new one, or one opened by its id) can no longer show it. Administrators see everything as before.
+- **The explicit check flags more of what it was unsure about.** On the SigLIP 2 picture search the line moves from 0.01 to 0.005 (**Explicit threshold** in the AI settings, `explicit_threshold`). A family library had about 3,900 photos and videos scored between the two, shown to the family until now; the next scan flags them from the scores already there, without reading any photograph again. Screenshots and documents stay hidden rather than explicit, and a photo an administrator marked "not explicit" stays as it is.
+- **The underwear check looks at videos too,** by the frame their search vector was made from.
+
 ### Family members' search
 
 - **Search no longer brings up screenshots, documents or near-explicit items for family members.** Words typed or spoken into the search box, a tag picked from its suggestions, the picture search, **Similar photos**, Ask Ninaivu and moments in videos now leave out every screenshot and document, even one an administrator showed to the family file by file, and every photo or video the explicit check scored at half its line or more (0.005 on the SigLIP picture search). These were the items search brought to the top: a family library had 285 WhatsApp screenshots shown by hand and about 3,900 photos and videos scored just under the line. Browsing the gallery is unchanged, an item an administrator marked "not explicit" by hand is found again, and administrators still see everything.

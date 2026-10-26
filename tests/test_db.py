@@ -177,8 +177,12 @@ def test_nsfw_hidden_unless_requested(conn):
     db.upsert_asset(conn, record("a/spicy.jpg", nsfw=1, nsfw_score=0.9))
     visible, total = db.query_assets(conn, "/lib", viewer_id=VIEWER, limit=10)
     assert total == 1 and visible[0]["filename"] == "safe.jpg"
-    _, with_nsfw = db.query_assets(conn, "/lib", viewer_id=VIEWER, include_nsfw=True, limit=10)
+    _, with_nsfw = db.query_assets(conn, "/lib", viewer_id=VIEWER, max_visibility=2,
+                                   include_nsfw=True, limit=10)
     assert with_nsfw == 2
+    # A family member sees only clean content, whatever is asked for.
+    _, family = db.query_assets(conn, "/lib", viewer_id=VIEWER, include_nsfw=True, limit=10)
+    assert family == 1
 
 
 def test_filters(conn):

@@ -2619,18 +2619,27 @@ ADMIN_ONLY_KINDS = ("audio",)
 
 
 def kind_guard(alias: str, max_visibility: int) -> str:
-    """SQL keeping administrator-only kinds away from everybody else.
+    """SQL keeping administrator-only kinds, and explicit content, away from
+    everybody else.
 
     Returns an empty string for an administrator, who sees everything. The
     kind names are inlined rather than parameterised because they are module
     constants, never user input — which keeps this a drop-in for the
     visibility clause without changing any caller's parameter list.
+
+    Explicit content is here as well as in each listing's own ``nsfw = 0``:
+    a family member sees only clean content (the household's rule,
+    2026-10-26), and one fragment every family-facing query already carries
+    is what stops a new one from forgetting it.
     """
-    if int(max_visibility) >= 2 or not ADMIN_ONLY_KINDS:
+    if int(max_visibility) >= 2:
         return ""
     dot = f"{alias}." if alias else ""
-    names = ",".join("'%s'" % k for k in ADMIN_ONLY_KINDS)
-    return f"{dot}kind NOT IN ({names})"
+    guard = f"{dot}nsfw = 0"
+    if ADMIN_ONLY_KINDS:
+        names = ",".join("'%s'" % k for k in ADMIN_ONLY_KINDS)
+        guard = f"{dot}kind NOT IN ({names}) AND {guard}"
+    return guard
 
 
 def visibility_clause(alias: str, max_visibility: int) -> str:
@@ -2665,12 +2674,13 @@ def private_owner_clause(alias: str, max_visibility: int,
 
 
 def hidden_from(asset: dict[str, Any] | None, max_visibility: int) -> bool:
-    """Is this item one of the administrator-only kinds, for this viewer?"""
+    """Is this item one of the administrator-only kinds, or explicit, for
+    this viewer? (:func:`kind_guard` for one item.)"""
     if not asset:
         return False
     if int(max_visibility) >= 2:
         return False
-    return str(asset.get("kind") or "") in ADMIN_ONLY_KINDS
+    return str(asset.get("kind") or "") in ADMIN_ONLY_KINDS or bool(asset.get("nsfw"))
 
 
 def query_assets(
@@ -3151,7 +3161,7 @@ def visible_to(asset: dict[str, Any] | None, max_visibility: int,
     if int(asset.get("visibility", 1)) > ceiling:
         return False
     if hidden_from(asset, max_visibility):
-        # Administrator-only by kind. This is the check that covers every route
+        # Administrator-only by kind, or explicit. This is the check that covers every route
         # fetching one item by id — the media stream, the download, the
         # metadata — where a list query's guard never runs.
         return False
@@ -3985,8 +3995,32 @@ def flag_revealing(conn: sqlite3.Connection, root: str, line: float, *,
     """
     if line <= 0:
         return 0
-    where = ("root=? AND kind='picture' AND revealing >= ? AND nsfw=0 "
+    where = ("root=? AND kind IN ('picture', 'video') AND revealing >= ? AND nsfw=0 "
              "AND nsfw_source<>'manual'")
+    args: list[Any] = [str(root), float(line)]
+    if ids is not None:
+        if not ids:
+            return 0
+        where += f" AND id IN ({','.join('?' * len(ids))})"
+        args += [int(i) for i in ids]
+    with _write_lock:
+        flagged = conn.execute(f"UPDATE assets SET nsfw=1 WHERE {where}", args).rowcount
+        conn.commit()
+    return flagged
+
+
+def flag_explicit_scores(conn: sqlite3.Connection, root: str, line: float, *,
+                         ids: Sequence[int] | None = None) -> int:
+    """Flag as explicit every photo and video the content check scored at
+    *line* or over and left unflagged: scored under a higher line, before
+    it was lowered. A verdict an administrator gave by hand stays, hidden
+    items are left as they are (a screenshot is hidden, not explicit), and
+    nothing is unflagged here. Returns how many were flagged.
+    """
+    if line <= 0:
+        return 0
+    where = ("root=? AND kind IN ('picture', 'video') AND nsfw=0 AND nsfw_score >= ? "
+             "AND nsfw_source<>'manual' AND visibility < 2")
     args: list[Any] = [str(root), float(line)]
     if ids is not None:
         if not ids:

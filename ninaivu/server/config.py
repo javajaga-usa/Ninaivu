@@ -854,6 +854,12 @@ class Config:
     #: Measured on a family library of 153,765 pictures: 0.005 flags 1,292,
     #: 0.02 flags 328 and 0.05 only 130. 0 turns the check off.
     underwear_threshold: float = 0.005
+    #: The explicit check's line on SigLIP 2's scale (sigmoid probabilities),
+    #: where ``nsfw_threshold`` above is CLIP's. 0.01 until 2026-10-26, when
+    #: a family library had about 3,900 photos and videos scored between
+    #: 0.005 and 0.01 still shown to the family; the household asked that
+    #: family members see only clean content.
+    explicit_threshold: float = 0.005
     #: Hide screenshots, documents and photographs of screens from everyone but
     #: administrators (media/screens.py). By name on every install; by picture
     #: once the search model has looked at it.
