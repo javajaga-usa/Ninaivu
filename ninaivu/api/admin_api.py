@@ -301,6 +301,12 @@ def attention():
     problems = len(logs.recent(50))
     # "Forgot password?" on the sign-in screen lands here (accounts_api.forgot).
     help_asked = count("SELECT COUNT(*) FROM users WHERE help_asked_at IS NOT NULL AND active=1")
+    # Items family members sent to be screened (api/api_screening.py).
+    from ..storage import screening                           # noqa: PLC0415
+    try:
+        screen_asks = screening.open_count(conn)
+    except sqlite3.Error:
+        screen_asks = 0
     items = [
         {"key": "signin_help", "count": help_asked, "page": "people",
          "title": said("Asked for help signing in"),
@@ -308,6 +314,9 @@ def attention():
         {"key": "uploads", "count": uploads, "page": "uploads",
          "title": said("Uploads awaiting approval"),
          "detail": said("Photographs the family sent, waiting to be filed or refused.")},
+        {"key": "screening", "count": screen_asks, "page": "screening",
+         "title": said("Sent for screening"),
+         "detail": said("Items family members asked you to look at: ignore, hide, mark explicit or delete.")},
         {"key": "faces", "count": groups, "page": "faces",
          "title": said("Groups of faces without a name"),
          "detail": said("Name one face and the rest of its group follow.")},

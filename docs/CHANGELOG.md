@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Sent for screening
+
+- **Family members can ask an administrator to look at photos and videos.** **Send for screening** is in the viewer and on the selection bar, so one item or a whole selection goes at once, from the gallery or from search results. The family member says what it is (a screenshot or a document, not suitable for everyone, or something else) and can add a short note. Nothing about who sees the item changes when it is sent: it stays in the family's gallery until an administrator decides, and pressing the viewer's button again takes the request back.
+- **A Screening queue on the console.** Under the queues, beside Uploads and Straighten, with its count on the tab and under **Needs you** on the Overview. Each item shows who sent it and why, opens full size, and can be **Ignored** (left as it is), **Hidden** (documents and screenshots), **Marked explicit** (adult content only, set by hand so no later pass undoes it) or **Deleted** (moved to the bin, which Recently deleted on the Folders page puts back). Choose several, or all, and decide for them at once. Each decision is written to the Activity log. Administrators do not get the button themselves, since they can hide or delete straight away.
+
+### Twelfth audit
+
+- **A smart album of words or a tag leaves out for a family member what their search does.** A smart album is a search kept under a name, and opened by a family member it still showed the screenshots, near-explicit items and underwear pictures their search leaves out; so did its count and cover in the sidebar, and a photo book or memory film made from it. Now all of them leave those out. A smart album of people, places, dates or kinds only is browsing, as before, and administrators still see everything.
+- **Raising the underwear threshold, or setting it to 0, takes back the flags it gave.** Pictures the underwear check flagged explicit stayed flagged for good, and nothing told them apart from the content check's own flags. Each one it flags is now marked as its own, and a higher line, or the check turned off, shows again the pictures that no longer reach it. One the content check would flag on its own stays flagged, and so does one an administrator marked by hand.
+- A live photo's clip and a RAW's twin are flagged with their photograph at once, instead of at the next scan. A screenshot that is already hidden is no longer flagged and unflagged again each time the library is checked. How much a hidden picture looks like underwear is forgotten with the AI's other readings of it.
+
 ### Picking several search results
 
 - **Hold a finger on a photo to pick it, in search results and everywhere else.** On a phone or tablet, a search's results could only be picked all at once: there is no mouse to bring up each tile's tick, and the one **Select all** above **Best matches** took every result. Holding a finger on a tile for about half a second now picks it, without opening it, and each tap after that adds or takes away a photo until the cross on the bar ends it. The bar is the gallery's own, so adding to an album, favourites, download, export, who sees them and deleting work on search results exactly as they do in the gallery, for whoever is allowed each one. On a computer, the tick on each tile and Shift-click already worked in search results and are unchanged.
@@ -19,7 +30,7 @@
 
 ### Removed
 
-- **Writing down what is said in videos is gone.** Ninaivu no longer listens to the family's videos, the **Said in videos** strip above search results and the subtitles in the viewer are gone, and the **Writing down what is said in videos** job no longer runs or shows on the console. Voice stories, speaking to search and the moments inside videos are unchanged. Words already written down stay in the index untouched, and nothing reads them.
+- **Writing down what is said in videos is gone.** Ninaivu no longer listens to the family's videos, the **Said in videos** strip above search results and the subtitles in the viewer are gone, and the **Writing down what is said in videos** job no longer runs or shows on the console. Voice stories, speaking to search and the moments inside videos are unchanged. The words already written down, and the video frames kept for them, are deleted the next time Ninaivu starts.
 - **Finding moments in videos is off.** Ninaivu no longer looks through long videos for their scenes, the **Moments in videos** strip above search results does not show, and the job is not listed on the Activity page. The moments already found are kept. `"video_moments": true` in `config.json` turns it back on.
 
 ### Restarting without a false timeout
