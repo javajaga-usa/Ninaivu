@@ -2879,6 +2879,9 @@ body.screen-down > :not(.downtime-screen) { visibility: hidden !important; }
 .export-check { display: flex; align-items: flex-start; gap: 10px; font-size: 13px; color: var(--text-2); line-height: 1.45; }
 .export-check input { margin-top: 2px; }
 .export-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 4px; }
+/* Send for screening: the reasons, as plain choices. */
+.screen-reasons { border: 0; margin: 0; padding: 0; display: grid; gap: 8px; }
+.screen-reasons legend { padding: 0; margin-bottom: 6px; }
 
 /* ==========================================================================
    Refinement: glass, light and motion. Colour, shadow, opacity and transform

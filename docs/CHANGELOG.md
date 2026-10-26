@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Sent for screening
+
+- **Family members can ask an administrator to look at photos and videos.** **Send for screening** is in the viewer and on the selection bar, so one item or a whole selection goes at once, from the gallery or from search results. The family member says what it is (a screenshot or a document, not suitable for everyone, or something else) and can add a short note. Nothing about who sees the item changes when it is sent: it stays in the family's gallery until an administrator decides, and pressing the viewer's button again takes the request back.
+- **A Screening queue on the console.** Under the queues, beside Uploads and Straighten, with its count on the tab and under **Needs you** on the Overview. Each item shows who sent it and why, opens full size, and can be **Ignored** (left as it is), **Hidden** (documents and screenshots), **Marked explicit** (adult content only, set by hand so no later pass undoes it) or **Deleted** (moved to the bin, which Recently deleted on the Folders page puts back). Choose several, or all, and decide for them at once. Each decision is written to the Activity log. Administrators do not get the button themselves, since they can hide or delete straight away.
+
 ### Family members' search
 
 - **Search no longer brings up screenshots, documents or near-explicit items for family members.** Words typed or spoken into the search box, a tag picked from its suggestions, the picture search, **Similar photos**, Ask Ninaivu and moments in videos now leave out every screenshot and document, even one an administrator showed to the family file by file, and every photo or video the explicit check scored at half its line or more (0.005 on the SigLIP picture search). These were the items search brought to the top: a family library had 285 WhatsApp screenshots shown by hand and about 3,900 photos and videos scored just under the line. Browsing the gallery is unchanged, an item an administrator marked "not explicit" by hand is found again, and administrators still see everything.

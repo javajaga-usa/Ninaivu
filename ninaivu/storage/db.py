@@ -1727,6 +1727,10 @@ def init_db(db_path: Path | str) -> sqlite3.Connection:
         # (storage/capsules.py).
         from .capsules import SCHEMA as CAPSULES_SCHEMA   # noqa: PLC0415
         conn.executescript(CAPSULES_SCHEMA)
+        # Items family members sent for an administrator to screen
+        # (storage/screening.py).
+        from .screening import SCHEMA as SCREENING_SCHEMA  # noqa: PLC0415
+        conn.executescript(SCREENING_SCHEMA)
         # A description of each photograph, written by the on-device AI
         # engine (storage/descriptions.py).
         from . import descriptions as descriptions_mod     # noqa: PLC0415
