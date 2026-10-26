@@ -28,13 +28,14 @@ $version = [regex]::Match($init, '__version__\s*=\s*"([^"]+)"').Groups[1].Value
 if (-not $version) { throw "no __version__ in ninaivu\__init__.py" }
 Write-Host "Ninaivu $version"
 
-# The Tamil font, Windows builds only. Macs and iPhones have Apple's Tamil
+# The Tamil font, Windows and Linux builds only (installers/linux/build.sh
+# fetches the same file). Macs and iPhones have Apple's Tamil
 # Sangam MN, which style.css prefers; Windows and the Android phones a Windows
 # computer serves have nothing as good, so this build carries Noto Sans Tamil
 # (SIL Open Font License) inside the package, where the Ninaivu wheel below
 # picks it up. Pinned to one commit of google/fonts and checked by hash, so a
 # release never ships a file nobody looked at. ninaivu/static/fonts/ is in
-# .gitignore: the font never enters the repository or the other builds.
+# .gitignore: the font never enters the repository or the Mac build.
 $fonts = Join-Path $root "ninaivu\static\fonts"
 New-Item -ItemType Directory -Force $fonts | Out-Null
 $fontCommit = "23e54b51ddffbc7713c583748e3bd86f62b1fa4a"

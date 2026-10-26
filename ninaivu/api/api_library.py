@@ -37,6 +37,12 @@ _COPY_FIRST = {
                     "Ninaivu at that.")
 
 
+#: A folder of media, against a system folder, as this computer writes them.
+_MEDIA_EXAMPLE = {
+    "win32": "C:\\Users\\you\\Pictures rather than C:\\",
+    "darwin": "/Users/you/Pictures rather than /",
+}.get(sys.platform, "/home/you/Pictures rather than /")
+
 # ---------------------------------------------------------------------------
 # Library management
 # ---------------------------------------------------------------------------
@@ -178,7 +184,7 @@ def _root_refusal(path: Path, cfg: Config) -> str:
     if is_forbidden_root(path):
         return (f"“{path}” is a system folder, so Ninaivu won't index it. "
                 f"Pick a folder that holds your media — for example "
-                f"C:\\Users\\you\\Pictures rather than C:\\.")
+                f"{_MEDIA_EXAMPLE}.")
     if cfg.lock_roots:
         allowed = ", ".join(str(r) for r in _browse_roots(cfg)) or "(none)"
         return (f"“{path}” is outside the folders this console may open, "

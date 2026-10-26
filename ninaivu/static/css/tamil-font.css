@@ -1,7 +1,8 @@
 /* Noto Sans Tamil, for the builds that carry it.
 
    Linked by the pages only when ninaivu/static/fonts/NotoSansTamil.ttf is
-   there, which is the Windows build (installers/windows/build.ps1); see the
+   there, which is the Windows and Linux builds (installers/windows/build.ps1,
+   installers/linux/build.sh); see the
    Tamil faces at the top of style.css for why. These redefine the same two
    faces, so they win over style.css's: Sangam MN first where the device has
    it, then the bundled file. The Noto file is variable and serves both

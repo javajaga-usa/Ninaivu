@@ -1679,8 +1679,8 @@ def _base_app(services: Services, face: str, template: str) -> Flask:
                 stamps[path] = seen
             return f"{path}?v={cache[path]}"
 
-        # Only the Windows build carries the Tamil font file; every other
-        # build would ask for it and get a 404 on every page. Looked at per
+        # Only the Windows and Linux builds carry the Tamil font file; every
+        # other build would ask for it and get a 404 on every page. Looked at per
         # page rather than once, so a font dropped in later is picked up.
         tamil_font = (Path(app.static_folder or "") / "fonts" / "NotoSansTamil.ttf").is_file()
 
@@ -1693,8 +1693,11 @@ def _base_app(services: Services, face: str, template: str) -> Flask:
             """The import map and preloads for a page's entry module."""
             return _page_modules(Path(app.static_folder or ""), entry, asset)
 
+        # Which computer this is, for the sample paths in the console's hints
+        # (static/js/i18n.js samplePaths): the folders typed there are on it.
         return {"asset": asset, "map_tiles": bool(getattr(cfg, "map_tiles", False)),
-                "tamil_font": tamil_font, "about": about(), "modules": modules}
+                "tamil_font": tamil_font, "about": about(), "modules": modules,
+                "host_os": "win32" if sys.platform.startswith("win") else sys.platform}
 
     @app.after_request
     def _ranges_sent_by_the_server(response):  # noqa: ANN001

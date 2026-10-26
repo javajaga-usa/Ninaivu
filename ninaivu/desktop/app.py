@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import os
 import queue
+import subprocess
 import sys
 import threading
 try:
@@ -127,6 +128,70 @@ def restart_label(platform=None):
     return '↻  Restart' if (platform or sys.platform) in FULL_GLYPHS else 'Restart'
 
 
+#: What a Tk with X's core fonts only draws as a box, and what it says
+#: instead. The Python in the portable Linux download (python-build-standalone)
+#: has such a Tk, built without Xft: it cannot see the desktop's own faces
+#: and has no fallback to another one, so the shapes and the typographer's
+#: punctuation that Inter or DejaVu would have are missing in all of them.
+PLAIN = (('▶  ', ''), ('■  ', ''), ('●  ', ''), ('○  ', ''), ('✕ ', ''),
+         ('↻  ', ''), ('●', '*'), ('•', '*'), ('…', '...'), ('—', '-'),
+         ('–', '-'), ('’', "'"), ('‘', "'"), ('“', '"'), ('”', '"'))
+
+#: Set once by :class:`Dashboard` when its Tk has core fonts only.
+_plain = False
+
+
+def core_fonts_only(root):
+    """Whether this Tk draws with X's core fonts, not Xft and fontconfig."""
+    try:
+        return str(root.tk.call('::tk::pkgconfig', 'get', 'fontsystem')) == 'x11'
+    except tk.TclError:
+        return False
+
+
+def glyphs(text, plain=None):
+    """*text* as this Tk can draw it: unchanged, or in plain letters where
+    its fonts would show a box (:data:`PLAIN`)."""
+    if not (_plain if plain is None else plain) or not text:
+        return text
+    for fancy, simple in PLAIN:
+        text = text.replace(fancy, simple)
+    return text
+
+
+if tk is not None:
+    class Words(tk.StringVar):
+        """A line the panel shows, said in letters this Tk can draw. Only for
+        what the panel writes; never for what someone types, a password above
+        all."""
+
+        def __init__(self, master=None, value=None, name=None):
+            super().__init__(master, glyphs(value) if value is not None else None, name)
+
+        def set(self, value):
+            return super().set(glyphs(value) if isinstance(value, str) else value)
+
+
+def desktop_dpi(platform=None, run=None):
+    """The density a Linux desktop is scaled to (Xft.dpi), when it is above
+    the X server's usual 96; else None. Never raises."""
+    if (platform or sys.platform) in FULL_GLYPHS or (platform is None and not os.environ.get('DISPLAY')):
+        return None
+    try:
+        out = (run or subprocess.run)(['xrdb', '-query'], capture_output=True, text=True, timeout=3).stdout or ''
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return None
+    for line in out.splitlines():
+        key, _, value = line.partition(':')
+        if key.strip() == 'Xft.dpi':
+            try:
+                dpi = float(value.strip())
+            except ValueError:
+                return None
+            return dpi if 110 <= dpi <= 480 else None
+    return None
+
+
 def font_families(root, platform=None):
     """The interface and code faces for this system: the one each system's
     own windows use, so the panel looks at home on all three."""
@@ -189,7 +254,15 @@ class Dashboard:
                 pass
 
         # Nor is Tk's scaling allowed to squash the window below the display's
-        # real density.
+        # real density. On Linux, Tk goes by what the X server says, which is
+        # 96 dots an inch on nearly every screen; a desktop scaled up for a
+        # high-density screen says so in Xft.dpi, which Tk does not read.
+        dpi = desktop_dpi()
+        if dpi:
+            try:
+                root.tk.call('tk', 'scaling', dpi / 72)
+            except tk.TclError:
+                pass
         try:
             current_scale = float(root.tk.call('tk', 'scaling'))
             if current_scale < 1.3333:
@@ -197,6 +270,10 @@ class Dashboard:
         except (tk.TclError, ValueError):
             pass
 
+        # Said in plain letters wherever this Tk would draw boxes; settled
+        # before the first line is written.
+        global _plain
+        _plain = core_fonts_only(root)
         ui, mono = font_families(root)
         self.fonts = {
             'brand':   tkfont.Font(root, family=ui, size=20, weight='bold'),
@@ -243,7 +320,7 @@ class Dashboard:
         self.paint(tk.Label(brand, text=small_caps('Control panel'), font=self.fonts['caps']),
                    bg='bg', fg='accent2').pack(side='left', padx=(10, 16), pady=(6, 0))
 
-        self.status = tk.StringVar(value='Checking server…')
+        self.status = Words(value='Checking server…')
         self.status_pill = tk.Frame(brand, highlightthickness=1, padx=12, pady=3)
         self.status_pill.pack(side='left', pady=(4, 0))
         self.status_label = tk.Label(self.status_pill, textvariable=self.status, font=self.fonts['pill'])
@@ -262,7 +339,7 @@ class Dashboard:
             option.pack(side='left')
             self.theme_buttons.append(option)
 
-        self.active_mode = tk.StringVar(value=self.mode_line())
+        self.active_mode = Words(value=self.mode_line())
         mode_pill = self.paint(tk.Frame(corner, highlightthickness=1, padx=12, pady=4),
                                bg='surface', highlightbackground='border')
         mode_pill.pack(side='right')
@@ -282,7 +359,7 @@ class Dashboard:
         self.button(actions, 'Open the family app', lambda: self.open_in_browser(False))
         self.button(actions, 'Open the console', lambda: self.open_in_browser(True))
 
-        self.endpoints_info = tk.StringVar(value=self.format_endpoints())
+        self.endpoints_info = Words(value=self.format_endpoints())
         self.endpoints_label = self.paint(
             tk.Label(action_row, textvariable=self.endpoints_info, font=self.fonts['small'], justify='right', anchor='e'),
             bg='bg', fg='text2')
@@ -323,8 +400,8 @@ class Dashboard:
             self.paint(tk.Frame(label_row, width=7, height=7), bg=f'card_{key}').pack(side='left', padx=(0, 7))
             self.paint(tk.Label(label_row, text=small_caps(title), font=self.fonts['caps']),
                        bg='surface', fg='text2').pack(side='left')
-            value = tk.StringVar(value='—')
-            detail = tk.StringVar(value='Waiting for readings')
+            value = Words(value='—')
+            detail = Words(value='Waiting for readings')
             self.paint(tk.Label(frame, textvariable=value, font=self.fonts['value']),
                        bg='surface', fg='text').pack(anchor='w', pady=(2, 1))
 
@@ -338,7 +415,7 @@ class Dashboard:
             self.cards[key] = (value, detail)
 
         # -- a minute of CPU ------------------------------------------------------
-        self.chart_title = tk.StringVar(value='Last 60 samples')
+        self.chart_title = Words(value='Last 60 samples')
         self.section(main, 'CPU activity', aside=self.chart_title)
 
         chart_container = self.paint(tk.Frame(main, highlightthickness=1, padx=8, pady=6),
@@ -369,14 +446,14 @@ class Dashboard:
             hint.pack(anchor='w', padx=(24, 0))
             self.mode_cards[mode] = (card, radio, words, hint)
 
-        self.mode_description = tk.StringVar()
+        self.mode_description = Words()
         self.paint(tk.Label(main, textvariable=self.mode_description, font=self.fonts['small'], wraplength=950, justify='left'),
                    bg='bg', fg='text2').pack(anchor='w', pady=(6, 0))
 
         mode_actions = self.paint(tk.Frame(main), bg='bg')
         mode_actions.pack(fill='x', pady=(8, 0))
         self.logs_visible = False
-        self.log_button_text = tk.StringVar(value='View logs')
+        self.log_button_text = Words(value='View logs')
         self.button(mode_actions, 'Apply mode', self.apply_selected_mode, True)
         self.log_button = self.button(mode_actions, 'View logs', self.toggle_logs, textvariable=self.log_button_text)
         # Shown only while Ninaivu is running on HTTPS (_sync_trust_button):
@@ -398,7 +475,7 @@ class Dashboard:
                             variable=self.start_at_sign_in,
                             command=self.toggle_start_at_sign_in).pack(side='left', padx=(8, 0))
 
-        self.notice = tk.StringVar(value='Applying a mode gracefully restarts a running server. '
+        self.notice = Words(value='Applying a mode gracefully restarts a running server. '
                                          'Closing this panel leaves Ninaivu running.')
         self.paint(tk.Label(main, textvariable=self.notice, font=self.fonts['small'], wraplength=950, justify='left'),
                    bg='bg', fg='text3').pack(anchor='w', pady=(8, 0))
@@ -606,6 +683,22 @@ class Dashboard:
         root = self.root
         return int(root.winfo_screenwidth() * 0.95), int(root.winfo_screenheight() * 0.88)
 
+    def _wanted_height(self):
+        """The height the window's contents ask for. The divided pane keeps
+        asking for the height its upper pane had when it was laid out, so a
+        line that came later (a notice wrapped onto two, the update advice)
+        never reached the window's own request, and the bottom of the
+        dashboard stayed cut off however long the panel was open."""
+        root = self.root
+        wanted = root.winfo_reqheight()
+        upper = getattr(self, 'upper_pane', None)
+        if upper is not None:
+            try:
+                wanted += max(0, upper.winfo_reqheight() - upper.winfo_height())
+            except tk.TclError:
+                pass
+        return wanted
+
     def _fit_window(self):
         """Open at the size the panel's contents ask for.
 
@@ -618,7 +711,7 @@ class Dashboard:
         root.update_idletasks()
         room_w, room_h = self._room()
         width = min(root.winfo_reqwidth(), room_w, self._scaled(1300))
-        height = min(root.winfo_reqheight(), room_h)
+        height = min(self._wanted_height(), room_h)
         root.minsize(min(self._scaled(820), width), min(self._scaled(620), height))
         x = max(0, (root.winfo_screenwidth() - width) // 2)
         y = max(0, (root.winfo_screenheight() - height) // 3)
@@ -644,7 +737,7 @@ class Dashboard:
             return
         room_w, room_h = self._room()
         width = max(current[0], min(root.winfo_reqwidth(), room_w, self._scaled(1300)))
-        height = max(current[1], min(root.winfo_reqheight(), room_h))
+        height = max(current[1], min(self._wanted_height(), room_h))
         if (width, height) != current:
             x = min(max(0, root.winfo_x()), max(0, root.winfo_screenwidth() - width))
             y = min(max(0, root.winfo_y()), max(0, root.winfo_screenheight() - height - 48))
@@ -673,7 +766,7 @@ class Dashboard:
         else:
             # The same height _grow_to_fit would give the dashboard: lower,
             # and its first reading would make the window taller again.
-            needed = min(root.winfo_reqheight(), self._room()[1])
+            needed = min(self._wanted_height(), self._room()[1])
             height = max(needed, current - pane_height)
         height = min(current, max(root.minsize()[1], height))
         if height != current:
@@ -746,7 +839,7 @@ class Dashboard:
 
         left = self.paint(tk.Frame(toolbar), bg='log_bg')
         left.pack(side='left')
-        self.paint(tk.Label(left, text='●', font=self.fonts['small']), bg='log_bg', fg='success').pack(side='left', padx=(0, 6))
+        self.paint(tk.Label(left, text=glyphs('●'), font=self.fonts['small']), bg='log_bg', fg='success').pack(side='left', padx=(0, 6))
         self.paint(tk.Label(left, text=small_caps('Live logs'), font=self.fonts['section']),
                    bg='log_bg', fg='log_text').pack(side='left', padx=(0, 14))
 
@@ -768,7 +861,7 @@ class Dashboard:
         right = self.paint(tk.Frame(toolbar), bg='log_bg')
         right.pack(side='right')
 
-        ttk.Button(right, text='✕ Hide', command=self.hide_logs).pack(side='right', padx=(6, 0))
+        ttk.Button(right, text=glyphs('✕ Hide'), command=self.hide_logs).pack(side='right', padx=(6, 0))
         ttk.Button(right, text='Clear view', command=self.clear_log_view).pack(side='right', padx=3)
         ttk.Button(right, text='Copy view', command=self.copy_logs).pack(side='right', padx=3)
         self.paint(tk.Frame(right, width=1), bg='border').pack(side='right', fill='y', padx=8, pady=4)
@@ -791,7 +884,7 @@ class Dashboard:
         self.log_text.pack(side='left', fill='both', expand=True)
         self.log_text.configure(yscrollcommand=scroll.set)
 
-        self.log_info = tk.StringVar(value='Waiting for server output. Log files stay on this computer.')
+        self.log_info = Words(value='Waiting for server output. Log files stay on this computer.')
         self.paint(tk.Label(panel, textvariable=self.log_info, font=self.fonts['small']),
                    bg='log_bg', fg='text2').pack(anchor='w', pady=(8, 0))
         self.log_tail = LogTail(self.log_path())
@@ -885,14 +978,14 @@ class Dashboard:
         if textvariable is not None:
             kwargs['textvariable'] = textvariable
         else:
-            kwargs['text'] = text
+            kwargs['text'] = glyphs(text)
         button = ttk.Button(parent, command=command, **kwargs)
         button.pack(side='left', padx=(0, 8))
         self.buttons.append(button)
         return button
 
     def _action_button(self, parent, text, command, style):
-        button = ttk.Button(parent, text=text, command=command, style=style)
+        button = ttk.Button(parent, text=glyphs(text), command=command, style=style)
         button.pack(side='left', padx=(0, 8))
         self.buttons.append(button)
         return button
@@ -1231,12 +1324,12 @@ class Dashboard:
         who = tk.StringVar(value=names[0])
         first, again = tk.StringVar(), tk.StringVar()
         rows = (('Username', ttk.Combobox(dialog, textvariable=who, values=names, state='readonly', width=28)),
-                ('New password', ttk.Entry(dialog, textvariable=first, show='•', width=30)),
-                ('The same again', ttk.Entry(dialog, textvariable=again, show='•', width=30)))
+                ('New password', ttk.Entry(dialog, textvariable=first, show=glyphs('•'), width=30)),
+                ('The same again', ttk.Entry(dialog, textvariable=again, show=glyphs('•'), width=30)))
         for row, (text, widget) in enumerate(rows, start=1):
             tk.Label(dialog, text=text, **label).grid(row=row, column=0, sticky='w', padx=(0, 12), pady=3)
             widget.grid(row=row, column=1, sticky='we', pady=3)
-        problem = tk.StringVar()
+        problem = Words()
         tk.Label(dialog, textvariable=problem, **{**label, 'fg': p['danger']},
                  wraplength=380).grid(row=4, column=0, columnspan=2, sticky='w', pady=(6, 0))
 
@@ -1363,6 +1456,29 @@ def missing_requirement():
     return None
 
 
+def windows_dpi_aware(windll=None):
+    """Tell Windows the panel draws for the screen's real density, so it is
+    sharp, not a blurred enlargement. Per-monitor v2 is Windows 10 1703 and
+    later; before that, per-monitor (8.1), then the whole system (Vista)."""
+    if windll is None:
+        import ctypes
+        windll = ctypes.windll
+        context = ctypes.c_void_p(-4)
+    else:
+        context = -4
+    # The first and last answer non-zero when they took; the middle one an
+    # HRESULT, 0 when it took.
+    for ask, took in ((lambda: windll.user32.SetProcessDpiAwarenessContext(context), bool),
+                      (lambda: windll.shcore.SetProcessDpiAwareness(2), lambda result: result == 0),
+                      (lambda: windll.user32.SetProcessDPIAware(), bool)):
+        try:
+            if took(ask()):
+                return True
+        except (AttributeError, OSError):
+            continue
+    return False
+
+
 def main():
     if tk is None:
         # A Python without Tk cannot show the panel; the tray does the same
@@ -1371,11 +1487,7 @@ def main():
         from .tray import main as tray_main
         return tray_main()
     if os.name == 'nt':
-        import ctypes
-        try:
-            ctypes.windll.user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4))
-        except (AttributeError, OSError):
-            pass
+        windows_dpi_aware()
     root = tk.Tk()
     # The web app's mark instead of Tk's feather, and on a Mac instead of
     # Python's rocket in the Dock, where the panel otherwise looks like any

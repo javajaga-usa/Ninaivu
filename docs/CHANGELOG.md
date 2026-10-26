@@ -14,6 +14,15 @@
 ### Control Panel
 
 - **Headings read cleanly on Linux.** The small-caps headings (THIS COMPUTER, RESOURCE MODE, the card titles) set their letters a hair space apart, and a Linux desktop's font may not have that character, so Tk drew a box between every letter. On Linux they are now plain upper case, and **Restart** loses the arrow that drew as a box there too. The Mac and Windows look is unchanged.
+- **No boxes on the Linux download.** Its Python's Tk draws with X's own fonts only, with no fallback to another one, so the shapes on Start, Stop and the status (▶ ■ ● ○ ✕), the password dots and curly quotes and dashes could all come out as boxes. Where the panel finds such a Tk it says those in plain letters instead (**Start**, **Running**, `...`, `*`). A Linux Python with the desktop's own fonts, and the Mac and Windows, are unchanged.
+- **Dark on Xfce and KDE.** Set to follow the computer, the panel only asked GNOME whether it was dark, so on MX Linux and Xubuntu (Xfce) and on KDE it stayed light. It now reads Xfce's theme, KDE's colours and a theme named in `GTK_THEME` too.
+- **Sharp on a scaled Linux desktop and on older Windows.** A Linux desktop scaled up for a high-density screen says so in `Xft.dpi`, which Tk does not read; the panel now does, and grows its fonts to match. Windows before 10 version 1703 is told the panel draws for the screen's real density, as later ones already were, instead of getting a blurred enlargement.
+- **The last lines are no longer cut off.** A notice that wrapped onto a second line, or the update advice below it, came after the window had measured itself, and stayed cut off at the bottom however long the panel was open. The window now grows for them.
+
+### On every computer
+
+- **Sample paths in the console are this computer's.** The hints in the folder boxes (adding an import source, the library, the second copy, restoring, rebuilding from the Secondary, a keepsake drive) showed `D:\Photo Archive` or `/Volumes/Backup` whatever Ninaivu ran on. They are now written the way the computer Ninaivu runs on writes them: `/media/you/…` on Linux, `/Volumes/…` on a Mac, `E:\…` on Windows, in English and Tamil. The refusal of a system folder gives this computer's example too.
+- **Tamil letters on Linux desktops.** The Linux download now carries the same Noto Sans Tamil as the Windows one, so a browser on a Linux computer without a Tamil font of its own shows Tamil instead of boxes. Macs keep Tamil Sangam MN.
 
 ## 3.2.0 — 26 October 2026
 
