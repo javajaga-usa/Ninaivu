@@ -311,11 +311,10 @@ def _search_shield() -> dict[str, Any]:
         return {}
     near = 0.0
     engine = _engine()
-    line = getattr(engine, "nsfw_threshold", None)
     bare = 0.0
     if getattr(_cfg(), "nsfw_filter", False):
-        if getattr(engine, "sigmoid_scores", False) and line:
-            near = float(line) * NEAR_EXPLICIT_SHARE
+        if getattr(engine, "sigmoid_scores", False):
+            near = ai_mod.explicit_line(_cfg(), engine) * NEAR_EXPLICIT_SHARE
         # People in only their underwear, on a model they are judged under.
         from ..media import revealing                           # noqa: PLC0415
         if revealing.applies(str(getattr(engine, "model_id", "") or "")):

@@ -58,7 +58,7 @@ def test_a_tag_search_is_answered_again_when_its_line_moves(nearly, as_family, a
     _picture_search(app, nearly["cfg"])
     first = as_family.get("/api/segments?tag=beach")
     assert nearly["near"] not in _ids(first)
-    app.config["MV_ENGINE"].nsfw_threshold = 0.02           # half of it is 0.01 > 0.007
+    nearly["cfg"].explicit_threshold = 0.02                 # half of it is 0.01 > 0.007
     again = as_family.get("/api/segments?tag=beach",
                           headers={"If-None-Match": first.headers["ETag"]})
     assert again.status_code == 200

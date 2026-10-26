@@ -3242,8 +3242,8 @@ class Scanner:
     # -- AI ---------------------------------------------------------------
     def _nsfw_threshold(self) -> float:
         """The engine's own line when its scores are on a different scale (SigLIP)."""
-        own = getattr(self.ai, "nsfw_threshold", None)
-        return float(own) if own is not None else float(self.cfg.nsfw_threshold)
+        from .. import ai as ai_mod                       # noqa: PLC0415
+        return ai_mod.explicit_line(self.cfg, self.ai)
 
     def _retag_if_the_model_changed(self, conn) -> None:
         """A different search model means every vector has to be made again.
@@ -3491,6 +3491,14 @@ class Scanner:
                      "hidden instead", f"{moved:,}")
         # The same vectors say whether people are in only their underwear.
         self._judge_revealing(conn, root, ids, stoppable=stoppable)
+        # And every score already at the explicit line is flagged, not only
+        # those the tagger writes from now on: a line lowered since (a
+        # family member sees only clean content) reaches what was scored.
+        if getattr(self.cfg, "nsfw_filter", False) and getattr(self.ai, "semantic", False):
+            flagged = db.flag_explicit_scores(conn, root, self._nsfw_threshold(), ids=ids)
+            if flagged and ids is None:
+                log.info("explicit content: %s more flagged at the line of %s",
+                         f"{flagged:,}", self._nsfw_threshold())
         if not getattr(self.cfg, "hide_screens", False):
             return
         scorer = None
@@ -3573,7 +3581,8 @@ class Scanner:
             return
         if scorer is None:
             return
-        where = "a.root=? AND a.kind='picture'"
+        # A video by the frame its vector was made from (the middle one).
+        where = "a.root=? AND a.kind IN ('picture', 'video')"
         params: list[Any] = [root]
         if ids is not None:
             if not ids:
