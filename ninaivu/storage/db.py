@@ -461,6 +461,10 @@ CREATE TABLE IF NOT EXISTS assets (
     -- 0..1, and which version of that judgement made it (media/screens.py).
     screen_score    REAL,
     screen_version  INTEGER NOT NULL DEFAULT 0,
+    -- How much the picture looks like people in nothing but their underwear,
+    -- 0..1, and which version of that judgement made it (media/revealing.py).
+    revealing       REAL NOT NULL DEFAULT 0,
+    revealing_version INTEGER NOT NULL DEFAULT 0,
     -- 0 public (guests too) · 1 family · 2 hidden (admins only)
     visibility      INTEGER NOT NULL DEFAULT 1,
     vis_source      TEXT NOT NULL DEFAULT 'default',
@@ -1036,6 +1040,8 @@ LATE_COLUMNS: dict[str, dict[str, str]] = {
         "nsfw_source": "TEXT NOT NULL DEFAULT 'auto'",
         "screen_score": "REAL",
         "screen_version": "INTEGER NOT NULL DEFAULT 0",
+        "revealing": "REAL NOT NULL DEFAULT 0",
+        "revealing_version": "INTEGER NOT NULL DEFAULT 0",
         "visibility": "INTEGER NOT NULL DEFAULT 1",
         "vis_source": "TEXT NOT NULL DEFAULT 'default'",
         "private_to": "INTEGER",
@@ -1338,7 +1344,7 @@ GENERATION_KEY = "assets_generation"
 #: (:data:`TAGS_GENERATION_KEY`), so the timeline and the sidebar's counts are
 #: not worked out again on every request while it runs.
 GENERATION_COLUMNS = ("root", "rel_path", "folder", "kind", "size", "visibility",
-                      "trashed", "nsfw", "date_key", "camera",
+                      "trashed", "nsfw", "nsfw_source", "revealing", "date_key", "camera",
                       "dup_group", "is_live", "live_clip", "raw_twin",
                       "stacked", "stack_count")
 
@@ -2712,6 +2718,7 @@ def query_assets(
     stacks: bool = False,
     search_shield: bool = False,
     near_explicit: float = 0.0,
+    revealing: float = 0.0,
 ) -> tuple[list[dict[str, Any]], int]:
     """Filtered, paginated asset query.
 
@@ -2732,7 +2739,9 @@ def query_assets(
     ``search_shield=True`` is a family member's search (see
     :func:`search_shield_clause`): no screenshot or document, even one shown
     to the family by hand, and nothing the explicit check scored at
-    ``near_explicit`` or over. It does nothing for an administrator.
+    ``near_explicit`` or over, nor any picture of people in only their
+    underwear scored at ``revealing`` or over. It does nothing for an
+    administrator.
 
     ``columns`` narrows each row to those asset columns plus ``favorite`` and
     ``rating``, returned as read with no JSON decoding. It is for callers that
@@ -2772,7 +2781,8 @@ def query_assets(
     if not include_nsfw:
         where.append("a.nsfw = 0")
     if search_shield and int(max_visibility) < 2:
-        shield_sql, shield_params = search_shield_clause(conn, "a", near_explicit)
+        shield_sql, shield_params = search_shield_clause(conn, "a", near_explicit,
+                                                          revealing)
         where.append(shield_sql)
         params.extend(shield_params)
     if visibility is not None:
@@ -3850,7 +3860,8 @@ def screen_clause(conn: sqlite3.Connection, alias: str = "") -> tuple[str, list[
 
 
 def search_shield_clause(conn: sqlite3.Connection, alias: str,
-                         near_explicit: float = 0.0) -> tuple[str, list[Any]]:
+                         near_explicit: float = 0.0,
+                         revealing: float = 0.0) -> tuple[str, list[Any]]:
     """SQL keeping a family member's search off what is nearly hidden.
 
     Search is where the few items the rules missed come to the top: words
@@ -3859,8 +3870,10 @@ def search_shield_clause(conn: sqlite3.Connection, alias: str,
     member's search leaves out every screenshot and document
     (:func:`screen_clause`), shown to the family by hand or not, and every
     item the explicit check scored at *near_explicit* or over, short of the
-    line that flags it. A score an administrator overruled by hand
-    (``nsfw_source='manual'``) is theirs and stands.
+    line that flags it, and every picture of people in nothing but their
+    underwear scored at *revealing* or over (media/revealing.py). A verdict
+    an administrator gave by hand (``nsfw_source='manual'``) is theirs and
+    stands against both scores.
     """
     dot = f"{alias}." if alias else ""
     screen_sql, params = screen_clause(conn, alias)
@@ -3868,6 +3881,9 @@ def search_shield_clause(conn: sqlite3.Connection, alias: str,
     if near_explicit > 0:
         clause += f" AND ({dot}nsfw_source='manual' OR {dot}nsfw_score < ?)"
         params = [*params, float(near_explicit)]
+    if revealing > 0:
+        clause += f" AND ({dot}nsfw_source='manual' OR {dot}revealing < ?)"
+        params = [*params, float(revealing)]
     return clause, params
 
 
@@ -3937,6 +3953,22 @@ def store_screen_scores(conn: sqlite3.Connection,
         conn.executemany(
             "UPDATE assets SET screen_score=?, screen_version=? WHERE id=?",
             [(round(float(score), 4), screens.SCREEN_VERSION, int(asset_id))
+             for asset_id, score in scores])
+        conn.commit()
+
+
+def store_revealing_scores(conn: sqlite3.Connection,
+                           scores: Sequence[tuple[int, float]]) -> None:
+    """Record how much each picture looks like people in only their
+    underwear, with this version (media/revealing.py)."""
+    from ..media import revealing                    # noqa: PLC0415
+
+    if not scores:
+        return
+    with _write_lock:
+        conn.executemany(
+            "UPDATE assets SET revealing=?, revealing_version=? WHERE id=?",
+            [(round(float(score), 4), revealing.VERSION, int(asset_id))
              for asset_id, score in scores])
         conn.commit()
 

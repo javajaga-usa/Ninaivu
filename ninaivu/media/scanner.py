@@ -36,7 +36,7 @@ from typing import Any, Callable, Iterable, Iterator
 import numpy as np
 from PIL import Image
 
-from . import audio_art, faces as faces_mod, media, screens, upright
+from . import audio_art, faces as faces_mod, media, revealing, screens, upright
 from .. import engine as jobs
 from ..archive import dates as capture_dates
 from ..storage import db, fingerprints, journal
@@ -3489,6 +3489,8 @@ class Scanner:
         if moved:
             log.info("screenshots and documents: %s no longer called explicit, "
                      "hidden instead", f"{moved:,}")
+        # The same vectors say whether people are in only their underwear.
+        self._judge_revealing(conn, root, ids, stoppable=stoppable)
         if not getattr(self.cfg, "hide_screens", False):
             return
         scorer = None
@@ -3549,6 +3551,68 @@ class Scanner:
         if ids is None:
             log.info("screenshots and documents: %s judged by picture, %s hidden "
                      "in %s", f"{judged:,}", f"{hidden:,}", took(started))
+            if left is not None and not (stoppable and self._stop.is_set()):
+                db.set_meta(conn, left_key, left)
+                conn.commit()
+
+    def _judge_revealing(self, conn, root: str, ids: list[int] | None = None,
+                         *, stoppable: bool = True) -> None:
+        """Score pictures for people in only their underwear (media/revealing.py).
+
+        From the vectors tagging stored, as the screenshot check reads them:
+        *ids* just tagged, or the whole folder's pictures not yet judged by
+        this version. Only while the explicit check is on.
+        """
+        if not getattr(self.cfg, "nsfw_filter", False):
+            return
+        try:
+            scorer = revealing.scorer_for(self.ai)
+        except Exception as exc:                          # noqa: BLE001
+            log.warning("could not prepare the underwear check: %s", exc)
+            return
+        if scorer is None:
+            return
+        where = "a.root=? AND a.kind='picture'"
+        params: list[Any] = [root]
+        if ids is not None:
+            if not ids:
+                return
+            where += f" AND a.id IN ({','.join('?' * len(ids))})"
+            params += [int(i) for i in ids]
+        else:
+            where += " AND a.revealing_version < ?"
+            params.append(revealing.VERSION)
+        # The whole folder's catch-up is skipped when no row or vector has
+        # moved since it last ran to the end, as the screenshot check's is.
+        left = left_key = None
+        if ids is None:
+            left_key = f"revealing_judged:{root}"
+            left = self._as_left(
+                conn, db.meta_counter(conn, db.EMBEDDINGS_GENERATION_KEY),
+                scorer.model_id, revealing.VERSION)
+            if left is not None and db.get_meta(conn, left_key) == left:
+                return
+        started = time.time()
+        judged = 0
+        while not (stoppable and self._stop.is_set()):
+            rows = conn.execute(
+                "SELECT a.id, e.vector FROM assets a JOIN embeddings e "
+                "ON e.asset_id=a.id AND e.model=? "
+                f"WHERE {where} LIMIT ?",
+                [scorer.model_id, *params, self.SCREEN_BATCH]).fetchall()
+            if not rows:
+                break
+            vectors = np.frombuffer(b"".join(r["vector"] for r in rows), dtype=np.float32)
+            scores = scorer.score(vectors)
+            db.store_revealing_scores(
+                conn, [(int(r["id"]), float(v)) for r, v in zip(rows, scores)])
+            judged += len(rows)
+            if ids is not None:
+                break
+        if ids is None:
+            if judged:
+                log.info("people in only their underwear: %s pictures judged in %s",
+                         f"{judged:,}", took(started))
             if left is not None and not (stoppable and self._stop.is_set()):
                 db.set_meta(conn, left_key, left)
                 conn.commit()

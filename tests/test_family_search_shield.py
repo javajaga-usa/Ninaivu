@@ -123,3 +123,97 @@ def test_no_nearer_line_on_clips_scale(nearly, as_family, app):
     app.config["MV_ENGINE"].sigmoid_scores = False
     found = _ids(as_family.get("/api/assets?q=beach&limit=500"))
     assert nearly["near"] in found and nearly["shown"] not in found
+
+
+# -- People in only their underwear ---------------------------------------------
+
+from ninaivu.media import revealing  # noqa: E402
+from ninaivu.runtime import siglip  # noqa: E402
+
+BARE, SWIM, PLAIN = np.eye(4, dtype="float32")[:3]
+
+
+class Siglip2:
+    """SigLIP 2's id and a text half that knows underwear from swimwear."""
+
+    semantic = True
+    model_id = siglip.MODEL_ID
+    search_floor = 0.0
+    sigmoid_scores = True
+    nsfw_threshold = 0.01
+    info = {"engine": "test", "semantic": True, "model": siglip.MODEL_ID}
+
+    def encode_text(self, query):
+        return PLAIN
+
+    def embed_texts(self, texts):
+        return np.stack([BARE if t in revealing.PROMPTS else SWIM for t in texts])
+
+
+def test_underwear_scores_high_and_swimwear_does_not():
+    scorer = revealing.scorer_for(Siglip2())
+    bare, swim, plain = scorer.score(np.stack([BARE, SWIM, PLAIN]))
+    assert bare > 0.99
+    assert swim == 0.0
+    assert plain < revealing.LINE
+    assert revealing.scorer_for(Engine()) is None, "a model nobody chose a line for"
+
+
+@pytest.fixture()
+def underwear(app, people):
+    """beach0 people in only their underwear, beach1 in swimsuits, both about a beach."""
+    conn = people["conn"]
+    ids = {r["filename"]: r["id"] for r in conn.execute("SELECT id, filename FROM assets")}
+    bare, swim = ids["beach0.jpg"], ids["beach1.jpg"]
+    with db._write_lock:
+        conn.execute("UPDATE assets SET tags='[\"beach\"]'")
+        conn.commit()
+    for aid in ids.values():
+        vector = BARE if aid == bare else SWIM if aid == swim else PLAIN
+        db.store_embedding(conn, aid, siglip.MODEL_ID, 4, vector.tobytes())
+    conn.commit()
+    cfg = app.config["MV_CONFIG"]
+    cfg.nsfw_filter = True
+    cfg.ai_enabled = True
+    engine = Siglip2()
+    app.config["MV_ENGINE"] = engine
+    app.config["MV_SERVICES"].engine = engine
+    return {"conn": conn, "cfg": cfg, "bare": bare, "swim": swim, "engine": engine,
+            "root": str(people["root"]) if "root" in people else cfg.active_root}
+
+
+def _judge(cfg, conn, engine, root):
+    from ninaivu.media.scanner import Scanner
+    scanner = Scanner(cfg)
+    scanner.ai = engine
+    scanner._judge_revealing(conn, root)
+
+
+def test_the_scan_judges_them_from_stored_vectors(underwear):
+    conn = underwear["conn"]
+    _judge(underwear["cfg"], conn, underwear["engine"], underwear["cfg"].active_root)
+    score = dict(conn.execute("SELECT id, revealing FROM assets").fetchall())
+    assert score[underwear["bare"]] > 0.99 and score[underwear["swim"]] == 0
+    assert {v for (v,) in conn.execute(
+        "SELECT revealing_version FROM assets WHERE kind='picture'")} == {revealing.VERSION}
+
+
+def test_family_search_leaves_out_people_in_only_their_underwear(underwear, as_family, as_admin):
+    _judge(underwear["cfg"], underwear["conn"], underwear["engine"],
+           underwear["cfg"].active_root)
+    url = "/api/segments?tag=beach"
+    family = _ids(as_family.get(url))
+    assert underwear["swim"] in family and underwear["bare"] not in family
+    assert underwear["bare"] in _ids(as_admin.get(url))
+    # Still in the gallery, and found again once an admin says it is fine.
+    assert underwear["bare"] in _ids(as_family.get("/api/assets?limit=500"))
+    answer = as_admin.post(f"/api/asset/{underwear['bare']}", json={"nsfw": False})
+    assert answer.status_code == 200
+    assert underwear["bare"] in _ids(as_family.get(url))
+
+
+def test_with_the_explicit_check_off_nothing_is_judged(underwear):
+    underwear["cfg"].nsfw_filter = False
+    conn = underwear["conn"]
+    _judge(underwear["cfg"], conn, underwear["engine"], underwear["cfg"].active_root)
+    assert conn.execute("SELECT MAX(revealing_version) FROM assets").fetchone()[0] == 0

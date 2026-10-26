@@ -301,7 +301,8 @@ def _search_shield() -> dict[str, Any]:
     """What a search by this caller leaves out beyond their own limits.
 
     Nothing for an administrator, who sees everything. For everybody else no
-    screenshot or document, and nothing scored near the explicit line: on
+    screenshot or document, no picture of people in only their underwear
+    (media/revealing.py), and nothing scored near the explicit line: on
     the scale SigLIP gives (sigmoid scores, ai.py) half the line still sits
     far above an ordinary photograph. CLIP's softmax scores sit close to its
     line on ordinary photographs, so no nearer line is drawn for it.
@@ -311,10 +312,15 @@ def _search_shield() -> dict[str, Any]:
     near = 0.0
     engine = _engine()
     line = getattr(engine, "nsfw_threshold", None)
-    if (getattr(_cfg(), "nsfw_filter", False) and getattr(engine, "sigmoid_scores", False)
-            and line):
-        near = float(line) * NEAR_EXPLICIT_SHARE
-    return {"search_shield": True, "near_explicit": near}
+    bare = 0.0
+    if getattr(_cfg(), "nsfw_filter", False):
+        if getattr(engine, "sigmoid_scores", False) and line:
+            near = float(line) * NEAR_EXPLICIT_SHARE
+        # People in only their underwear, on a model they are judged under.
+        from ..media import revealing                           # noqa: PLC0415
+        if revealing.applies(str(getattr(engine, "model_id", "") or "")):
+            bare = revealing.LINE
+    return {"search_shield": True, "near_explicit": near, "revealing": bare}
 
 
 def _viewer_limits() -> dict[str, Any]:
