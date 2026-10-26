@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Picking several search results
+
+- **Hold a finger on a photo to pick it, in search results and everywhere else.** On a phone or tablet, a search's results could only be picked all at once: there is no mouse to bring up each tile's tick, and the one **Select all** above **Best matches** took every result. Holding a finger on a tile for about half a second now picks it, without opening it, and each tap after that adds or takes away a photo until the cross on the bar ends it. The bar is the gallery's own, so adding to an album, favourites, download, export, who sees them and deleting work on search results exactly as they do in the gallery, for whoever is allowed each one. On a computer, the tick on each tile and Shift-click already worked in search results and are unchanged.
+
 ### Family members' search
 
 - **Search no longer brings up screenshots, documents or near-explicit items for family members.** Words typed or spoken into the search box, a tag picked from its suggestions, the picture search, **Similar photos**, Ask Ninaivu and moments in videos now leave out every screenshot and document, even one an administrator showed to the family file by file, and every photo or video the explicit check scored at half its line or more (0.005 on the SigLIP picture search). These were the items search brought to the top: a family library had 285 WhatsApp screenshots shown by hand and about 3,900 photos and videos scored just under the line. Browsing the gallery is unchanged, an item an administrator marked "not explicit" by hand is found again, and administrators still see everything.
