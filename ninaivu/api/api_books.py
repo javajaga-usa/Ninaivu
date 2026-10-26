@@ -31,8 +31,8 @@ from ..media import books as maker, taste as taste_mod
 from ..server.auth import current_user, require_family
 from ..storage import books as store, db
 from ._body import json_object
-from .api import _cfg, _conn, _engine, _roots, _safe_under, _semantic_ids, _thumb_version, \
-    _viewer, _viewer_limits, _visible_ids, bp
+from .api import _cfg, _conn, _engine, _roots, _safe_under, _search_shield, _semantic_ids, \
+    _thumb_version, _viewer, _viewer_limits, _visible_ids, bp
 
 #: Rows a pick looks at. A person can be in twenty thousand photographs; a
 #: book is thirty-six. Past this, an even sample across the whole run is read,
@@ -129,9 +129,14 @@ def _source() -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
         ranked, _ = _semantic_ids(rules["text"], _roots(), conn)
         if ranked is not None:
             rules["text"] = ""
+        searched = bool(rules["text"] or rules["tag"] or ranked is not None)
         filters = {k: v for k, v in rules.items() if v not in (None, "", False, [])}
         if ranked is not None:
             filters["ids"] = ranked
+        if searched:
+            # A smart album of words or a tag is a search, and leaves out for a
+            # family member what their search does (api._filters_from_request).
+            filters.update(_search_shield())
         meta["name"] = (smart.get(conn, sid) or {}).get("name", "")
     return filters, meta, data
 

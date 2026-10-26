@@ -3612,12 +3612,21 @@ class Scanner:
                 break
         # Every score at the line, not only those just made: a lower line
         # set since flags what was scored under the old one.
-        flagged = db.flag_revealing(conn, root, revealing.line(self.cfg), ids=ids)
+        line = revealing.line(self.cfg)
+        flagged = db.flag_revealing(conn, root, line, ids=ids)
+        if flagged:
+            # A live photo's clip and a RAW's twin go with it, now rather
+            # than at the next scan: each is opened by its own id.
+            self._align_pairs(conn, root)
         if ids is None:
-            if judged or flagged:
+            # And a higher line set since, or the check turned off, takes
+            # back what the old line flagged (the catch-up runs again when
+            # the line moves: it is in what it last ran to the end with).
+            unflagged = db.unflag_revealing(conn, root, line, self._nsfw_threshold())
+            if judged or flagged or unflagged:
                 log.info("people in only their underwear: %s pictures judged, %s "
-                         "flagged explicit, in %s", f"{judged:,}", f"{flagged:,}",
-                         took(started))
+                         "flagged explicit, %s no longer, in %s", f"{judged:,}",
+                         f"{flagged:,}", f"{unflagged:,}", took(started))
             if left is not None and not (stoppable and self._stop.is_set()):
                 db.set_meta(conn, left_key, left)
                 conn.commit()
