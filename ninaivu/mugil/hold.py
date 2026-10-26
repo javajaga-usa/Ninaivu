@@ -92,6 +92,19 @@ CREATE TABLE IF NOT EXISTS set_aside (
     set_at   REAL NOT NULL,
     PRIMARY KEY (library, rel_path, digest)
 );
+-- Files put on the disk by hand (a copy made with the computer's own file
+-- manager), fingerprinted here before the Primary sends anything
+-- (mugil/adopt.py). Their path is from the top of the originals folder.
+-- One the Primary then names, at that path with that content, is kept
+-- without crossing the network.
+CREATE TABLE IF NOT EXISTS found (
+    path     TEXT PRIMARY KEY,
+    size     INTEGER NOT NULL,
+    mtime    REAL NOT NULL,
+    algo     TEXT NOT NULL,
+    digest   TEXT NOT NULL,
+    seen_at  REAL NOT NULL
+);
 """
 
 
@@ -276,13 +289,27 @@ class Holding:
             folder = row["folder"]
         return self.folder / folder
 
-    def have(self, library: str, items: list[dict[str, Any]]) -> list[bool]:
+    def have(self, library: str, items: list[dict[str, Any]], name: str = "") -> list[bool]:
         """For each ``{path, size, algo, digest}``, whether that very file is
-        kept here, at that path."""
+        kept here, at that path.
+
+        A file copied onto the disk by hand and fingerprinted since
+        (:meth:`record_found`) counts when it is at that path with that very
+        content, and is kept from now on: it is given the Primary's modified
+        time (``mtime``, when the item names it), since a copy made by hand
+        may not have kept it, and nothing else about it changes. *name* is
+        the Primary's library folder name, so the folder copied by hand is
+        known as that library before anything has been sent to it."""
         out: list[bool] = []
         with self._lock, self._ledger() as conn:
             row = conn.execute("SELECT folder FROM libraries WHERE id=?", (library,)).fetchone()
-            base = self.folder / row["folder"] if row else None
+            if row is None and name and _LIBRARY_ID.match(str(library or "")) \
+                    and conn.execute("SELECT 1 FROM found LIMIT 1").fetchone():
+                base = self._library_folder(conn, library, name)
+                folder = base.name
+            else:
+                folder = row["folder"] if row else None
+                base = self.folder / folder if row else None
             for item in items:
                 rel = clean_path(item.get("path", ""))
                 kept = conn.execute(
@@ -296,8 +323,86 @@ class Holding:
                         ok = (base / rel).stat().st_size == int(kept["size"])
                     except OSError:
                         ok = False
+                elif rel and base is not None:
+                    ok = self._take_found(conn, library, folder, rel, item)
                 out.append(ok)
         return out
+
+    def _take_found(self, conn: sqlite3.Connection, library: str, folder: str, rel: str,
+                    item: dict[str, Any]) -> bool:
+        """Keep the file found at *rel* by hand, if it is the one *item*
+        describes and has not changed since it was fingerprinted."""
+        path = f"{folder}/{rel}"
+        found = conn.execute("SELECT size, mtime, algo, digest FROM found WHERE path=?",
+                             (path,)).fetchone()
+        try:
+            size = int(item.get("size") or -1)
+        except (TypeError, ValueError):
+            return False
+        if found is None or found["digest"] != item.get("digest") \
+                or found["algo"] != item.get("algo") or int(found["size"]) != size:
+            return False
+        target = self.folder / folder / rel
+        if not stays_inside(self.folder, target) or target.is_symlink():
+            return False
+        try:
+            now = target.stat()
+        except OSError:
+            return False
+        if now.st_size != size or abs(now.st_mtime - float(found["mtime"])) > 0.001:
+            return False                               # changed since: sent instead
+        mtime = now.st_mtime
+        try:
+            wanted = float(item.get("mtime")) if item.get("mtime") is not None else None
+        except (TypeError, ValueError):
+            wanted = None
+        if wanted is not None and abs(wanted - now.st_mtime) > 0.001:
+            try:
+                os.utime(target, (wanted, wanted))
+                mtime = wanted
+            except OSError:
+                pass
+        conn.execute(
+            "INSERT OR REPLACE INTO kept (library, rel_path, size, algo, digest, mtime, kept_at) "
+            "VALUES (?,?,?,?,?,?,?)",
+            (library, rel, size, found["algo"], found["digest"], float(mtime), time.time()))
+        conn.execute("DELETE FROM found WHERE path=?", (path,))
+        return True
+
+    # -- what was copied here by hand ----------------------------------------
+
+    def kept_paths(self) -> set[str]:
+        """Every kept file's path from the top of the originals folder."""
+        if not (self.folder / LEDGER).exists():
+            return set()
+        with self._lock, self._ledger() as conn:
+            return {f"{r[0]}/{r[1]}" for r in conn.execute(
+                "SELECT l.folder, k.rel_path FROM kept k JOIN libraries l ON l.id=k.library")}
+
+    def found_index(self) -> dict[str, tuple[int, float, str]]:
+        """``path: (size, mtime, algo)`` of every file fingerprinted already."""
+        if not (self.folder / LEDGER).exists():
+            return {}
+        with self._lock, self._ledger() as conn:
+            return {r[0]: (int(r[1]), float(r[2]), r[3])
+                    for r in conn.execute("SELECT path, size, mtime, algo FROM found")}
+
+    def record_found(self, rows: list[tuple[str, int, float, str, str]]) -> None:
+        """``(path, size, mtime, algo, digest)`` of files fingerprinted here."""
+        if not rows:
+            return
+        now = time.time()
+        with self._lock, self._ledger() as conn:
+            conn.executemany(
+                "INSERT OR REPLACE INTO found (path, size, mtime, algo, digest, seen_at) "
+                "VALUES (?,?,?,?,?,?)", [(*r, now) for r in rows])
+
+    def found_summary(self) -> dict[str, int]:
+        if not (self.folder / LEDGER).exists():
+            return {"files": 0, "bytes": 0}
+        with self._lock, self._ledger() as conn:
+            row = conn.execute("SELECT COUNT(*), COALESCE(SUM(size), 0) FROM found").fetchone()
+        return {"files": int(row[0]), "bytes": int(row[1])}
 
     def kept_file(self, library: str, rel: str,
                   digest: str = "") -> tuple[Path, dict[str, Any]] | None:

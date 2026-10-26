@@ -71,6 +71,34 @@ def _name(cfg) -> str:
     return display_name(cfg)
 
 
+def _adopter():
+    return getattr(current_app.config["MV_SERVICES"], "mugil_adopter", None)
+
+
+def _library_sizes(cfg) -> list[dict]:
+    """On the Primary: each library folder, its name on the Secondary, and
+    how many files and bytes it holds, as the index counts them."""
+    out = []
+    try:
+        conn = db.connect(cfg.db_path)
+    except Exception:                                            # noqa: BLE001 - nothing to count
+        return out
+    for root in list(cfg.libraries):
+        row = conn.execute("SELECT COUNT(*), COALESCE(SUM(size), 0) FROM assets "
+                           "WHERE root=? AND trashed=0", (str(root),)).fetchone()
+        out.append({"root": str(root), "name": Path(root).name or "Library",
+                    "files": int(row[0]), "bytes": int(row[1])})
+    return out
+
+
+def _start_sending() -> None:
+    """Just paired: the first copy starts in a minute, not at the next
+    look. A Secondary that is taking in a copy made by hand makes it wait."""
+    courier = _courier()
+    if courier is not None:
+        courier.soon()
+
+
 def _holding(cfg) -> Holding | None:
     folder = str(getattr(cfg, "mugil_originals_dir", "") or "")
     return Holding(folder) if folder else None
@@ -95,7 +123,14 @@ def mugil_status():
         "copy_every_hours": cfg.mugil_copy_every_hours,
         "family_copy": bool(getattr(cfg, "mugil_family_copy", False)),
         "free_space": bool(getattr(cfg, "mugil_free_space", False)),
+        "copy_mode": str(getattr(cfg, "mugil_copy_mode", "automatic") or "automatic"),
+        "version": __version__,
     }
+    other: dict = {}
+    if part != SINGLE and pair is not None:
+        other = machines.remembered(cfg.state_dir) or {}
+        answer["partner_version"] = other.get("version")
+        answer["same_version"] = machines.same_version(__version__, other.get("version"))
     if part == PRIMARY:
         courier = _courier()
         answer["sending"] = courier.status() if courier is not None else {}
@@ -107,6 +142,9 @@ def mugil_status():
         answer["freeing"] = _freeing().status() if _freeing() is not None else {}
         from ..mugil import fetch                                # noqa: PLC0415
         answer["fetched"] = fetch.summary(cfg.state_dir)
+        answer["libraries"] = _library_sizes(cfg)
+        answer["secondary"] = {k: other.get(k) for k in ("copy_mode", "manual", "health")} \
+            if pair is not None else {}
     elif part == SECONDARY:
         holding = _holding(cfg)
         answer["keeping"] = holding.summary() if holding is not None else {}
@@ -119,6 +157,8 @@ def mugil_status():
         answer["wake"] = wake.load(cfg.state_dir)
         beacon = getattr(current_app.config["MV_SERVICES"], "mugil_beacon", None)
         answer["listening"] = meeting.on_the_network(cfg) and not getattr(beacon, "problem", None)
+        answer["manual"] = _adopter().status() if _adopter() is not None else {}
+        answer["primary"] = machines.about_primary(cfg.state_dir) if pair is not None else {}
     if part != SINGLE:
         answer["on_the_network"] = meeting.on_the_network(cfg)
     return jsonify(answer)
@@ -131,8 +171,10 @@ def mugil_role():
     cfg = _cfg()
     data = json_body()
     if not isinstance(data, dict) or set(data) - {"role", "originals_dir", "copy_every_hours",
-                                                  "family_copy", "free_space"}:
+                                                  "family_copy", "free_space", "copy_mode"}:
         return jsonify({**refusal("Send role, originals_dir or copy_every_hours."), "status": 400}), 400
+    if "copy_mode" in data and data["copy_mode"] not in ("automatic", "manual"):
+        return jsonify({**refusal("Choose automatic or manual."), "status": 400}), 400
     for switch in ("family_copy", "free_space"):
         if switch in data and not isinstance(data[switch], bool):
             return jsonify({**refusal("Say true or false."), "status": 400}), 400
@@ -170,17 +212,32 @@ def mugil_role():
         cfg.mugil_free_space = data["free_space"]
         if not data["free_space"] and _freeing() is not None:
             _freeing().stop()
+    if "copy_mode" in data and data["copy_mode"] != cfg.mugil_copy_mode:
+        cfg.mugil_copy_mode = data["copy_mode"]
+        if data["copy_mode"] == "manual" and _adopter() is not None:
+            # Chosen now: the household is about to copy; the Primary waits.
+            cfg.save()
+            _adopter().copying()
+        elif _adopter() is not None:
+            _adopter().stop()
     cfg.save()
-    _audit(f"this computer is {wanted}; originals folder {folder or '(none)'}")
+    _audit(f"this computer is {wanted}; originals folder {folder or '(none)'}; "
+           f"first copy {cfg.mugil_copy_mode}")
     return mugil_status()
 
 
 @mugil_bp.post("/api/admin/mugil/code")
 @require_admin
 def mugil_code():
-    """On the Secondary: a code to type on the Primary, good for ten minutes."""
-    if role(_cfg()) != SECONDARY:
+    """A code for the other computer, good for ten minutes: on the
+    Secondary, to type on the Primary with this computer's address; on the
+    Primary, to type on the Secondary with this one's (``join``)."""
+    cfg = _cfg()
+    if role(cfg) == SINGLE:
         return jsonify({**refusal("Make this computer the Secondary first."), "status": 409}), 409
+    if role(cfg) == PRIMARY and pairing.load(cfg.state_dir) is not None:
+        return jsonify({**refusal("Unpair the two computers before changing this computer's part."),
+                        "status": 409}), 409
     code = _codes.new()
     _audit("pairing code shown")
     return jsonify({"code": code, "expires_in": pairing.CODE_LIFE})
@@ -220,6 +277,7 @@ def mugil_pair():
     cfg.mugil_partner_url = partner.url
     cfg.save()
     _audit(f"paired with {partner.url}")
+    _start_sending()
     return mugil_status()
 
 
@@ -246,6 +304,124 @@ def _pair_by_tap(cfg, ident: str):
     cfg.mugil_partner_url = met["url"]
     cfg.save()
     _audit(f"paired with {met['url']} ({met['number']})")
+    _start_sending()
+    return mugil_status()
+
+
+def partner_address(text: str, default_port: int) -> str:
+    """What was typed for the other computer, as an address to reach it at:
+    ``mac-mini``, ``100.64.1.2:8080`` and ``http://mac-mini.tail1234.ts.net``
+    all do. Without a port, the family app's (the one the house network
+    reaches; the console may answer this computer only)."""
+    text = str(text or "").strip().rstrip("/")
+    if not text:
+        return ""
+    if "://" not in text:
+        text = f"http://{text}"
+    from urllib.parse import urlsplit                            # noqa: PLC0415
+    parts = urlsplit(text)
+    try:
+        has_port = parts.port is not None
+    except ValueError:
+        return text
+    if not has_port and parts.hostname and parts.scheme == "http" and default_port \
+            and default_port != 80:
+        text = f"{parts.scheme}://{_host(parts.hostname)}:{default_port}"
+    return text
+
+
+@mugil_bp.post("/api/admin/mugil/join")
+@require_admin
+def mugil_join():
+    """On the Secondary: pair with the Primary at ``url``, with the code
+    its console shows. The other way round from :func:`mugil_pair`, for a
+    Secondary set up first, or one the Primary cannot find."""
+    cfg = _cfg()
+    if role(cfg) != SECONDARY:
+        return jsonify({**refusal("Make this computer the Secondary first."), "status": 409}), 409
+    if pairing.load(cfg.state_dir) is not None:
+        return jsonify({**refusal("This computer is paired already."), "status": 409}), 409
+    folder = str(getattr(cfg, "mugil_originals_dir", "") or "")
+    problem = folder_problem(folder, list(cfg.roots), cfg.state_dir) if folder \
+        else "Choose the originals folder first."
+    if problem:
+        return jsonify({"error": problem, "status": 409}), 409
+    data = json_body()
+    if not isinstance(data, dict) or not isinstance(data.get("url"), str) \
+            or not isinstance(data.get("code"), str) or not data["url"].strip():
+        return jsonify({**refusal("Send the Primary's address and the code it shows."),
+                        "status": 400}), 400
+    code = pairing.normal_code(data["code"])
+    url = partner_address(data["url"], int(getattr(cfg, "port", 0) or 0))
+    try:
+        partner = Partner(url, timeout=15)
+        private, hello = pairing.primary_hello(code)
+        answer = partner.request("POST", "/api/mugil/join", signed=False, body={
+            **hello, "name": _name(cfg), "port": int(getattr(cfg, "port", 0) or 0)})
+    except PartnerError as exc:
+        log.warning("Pairing with the Primary at %s did not work: %s", url, exc)
+        if exc.status == 403:
+            return jsonify({**refusal("That code is not the one the Primary shows, or it has "
+                                      "expired. Show a new code on the Primary and type it again."),
+                            "status": 403}), 403
+        if exc.status == 409:
+            return jsonify({**refusal("The Primary is paired with another computer already. "
+                                      "Unpair it there first."), "status": 409}), 409
+        if exc.status == 404:
+            return jsonify({**refusal("The computer at that address is not a Primary yet. On it, "
+                                      "choose Two computers, this is the Primary."),
+                            "status": 409}), 409
+        # Switched off, asleep, another network: this computer keeps
+        # waiting, so the Primary can pair with it when it is back.
+        if not _welcome().waiting:
+            _welcome().open()
+        return jsonify({**refusal("The Primary did not answer at that address. Check that it is "
+                                  "on and on this network. This computer keeps waiting, so the "
+                                  "Primary can also find it on its Two computers page."),
+                        "status": 502, "waiting": True}), 502
+    key = pairing.primary_key(private, code, answer)
+    if key is None:
+        return jsonify({**refusal("The other computer did not prove it knew the code."),
+                        "status": 502}), 502
+    from urllib.parse import urlsplit                            # noqa: PLC0415
+    pairing.save(cfg.state_dir, {
+        "key": key, "role": SECONDARY, "partner_name": str(answer.get("name") or "")[:200],
+        "partner_address": urlsplit(partner.url).hostname or "", "partner_url": partner.url,
+        "paired_at": time.time()})
+    machines.remember(cfg.state_dir, {
+        "machine": {"name": str(answer.get("name") or "")[:200], "role": PRIMARY},
+        "version": str(answer.get("version") or "")[:40] or None})
+    _welcome().close()
+    _audit(f"paired with the Primary at {partner.url}")
+    return mugil_status()
+
+
+@mugil_bp.post("/api/admin/mugil/manual")
+@require_admin
+def mugil_manual():
+    """On the Secondary copied to by hand: ``{"done": true}`` when the copy
+    is made (it is checked, then the Primary sends what is missing), or
+    ``{"done": false}`` to copy more first (the Primary waits)."""
+    cfg = _cfg()
+    adopter = _adopter()
+    if role(cfg) != SECONDARY or adopter is None:
+        return jsonify({**refusal("Make this computer the Secondary first."), "status": 409}), 409
+    if str(getattr(cfg, "mugil_copy_mode", "")) != "manual":
+        return jsonify({**refusal("Choose to copy the library by hand first."), "status": 409}), 409
+    data = json_body()
+    if not isinstance(data, dict) or not isinstance(data.get("done"), bool):
+        return jsonify({**refusal("Say true or false."), "status": 400}), 400
+    if data["done"]:
+        folder = str(getattr(cfg, "mugil_originals_dir", "") or "")
+        problem = folder_problem(folder, list(cfg.roots), cfg.state_dir) if folder \
+            else "Choose the originals folder first."
+        if problem:
+            return jsonify({"error": problem, "status": 409}), 409
+        adopter.finished_copying()
+        _audit("the copy made by hand is finished; checking it")
+    else:
+        adopter.copying()
+        _audit("copying more by hand; the Primary waits")
     return mugil_status()
 
 
@@ -651,7 +827,19 @@ def mugil_hello():
                     if holding is not None else {},
                     # Whether it sends the off-site copy itself (cloud/offsite.py).
                     "offsite": machines.offsite_summary(
-                        getattr(current_app.config["MV_SERVICES"], "offsite", None))})
+                        getattr(current_app.config["MV_SERVICES"], "offsite", None)),
+                    # How the originals first arrive (mugil/adopt.py): the
+                    # Primary waits while a copy made by hand is not ready.
+                    "copy_mode": str(getattr(cfg, "mugil_copy_mode", "automatic") or "automatic"),
+                    "manual": _manual_brief(cfg)})
+
+
+def _manual_brief(cfg) -> dict:
+    from ..mugil import adopt                                    # noqa: PLC0415
+    if not adopt.manual(cfg):
+        return {"state": adopt.READY}
+    status = _adopter().status() if _adopter() is not None else {"state": adopt.state(cfg)}
+    return {"state": status.get("state"), "progress": status.get("progress") or {}}
 
 
 @mugil_peer_bp.post("/api/mugil/have")
@@ -674,8 +862,15 @@ def mugil_have():
         # "none of them", and every original would be sent again onto it.
         return jsonify({"refused": "This computer has no originals folder it can read.",
                         "status": 503}), 503
+    from ..mugil import adopt                                    # noqa: PLC0415
+    if adopt.state(cfg) != adopt.READY:
+        # A copy made by hand that is not checked yet: everything would look
+        # missing, and be sent again over the network.
+        return jsonify({"refused": "The Secondary is still taking in a copy made by hand.",
+                        "status": 425}), 425
     items = [i for i in data["items"] if isinstance(i, dict)]
-    return jsonify({"have": holding.have(str(data.get("library", "")), items),
+    return jsonify({"have": holding.have(str(data.get("library", "")), items,
+                                         name=str(data.get("name", ""))),
                     "elsewhere": holding.kept_elsewhere(items)})
 
 
@@ -993,3 +1188,68 @@ def mugil_receive():
         status, said = REASONS.get(exc.why, (400, "The file was not kept."))
         return jsonify({"refused": said, "status": status}), status
     return jsonify(kept)
+
+
+@mugil_peer_bp.post("/api/mugil/join")
+def mugil_join_answer():
+    """On the Primary: a Secondary proving it knows the code this console
+    shows (:func:`mugil_join`)."""
+    cfg = _cfg()
+    if role(cfg) != PRIMARY:
+        return _not_here()
+    hello = json_body()
+    if not isinstance(hello, dict):
+        return jsonify({"refused": "Send the pairing request as JSON.", "status": 400}), 400
+    if pairing.load(cfg.state_dir) is not None:
+        return jsonify({"refused": "This computer is paired already.", "status": 409}), 409
+    try:
+        port = int(hello.get("port") or 0)
+    except (TypeError, ValueError):
+        port = 0
+    if not 0 < port < 65536:
+        return jsonify({"refused": "Say which port the Secondary answers on.", "status": 400}), 400
+    found = pairing.secondary_answer(_codes, hello)
+    if found is None:
+        return jsonify({"refused": "That code is not the one this computer is showing, or it has expired.",
+                        "status": 403}), 403
+    key, answer = found
+    # The address it came from: the one this computer can reach it at.
+    url = f"http://{_host(request.remote_addr or '')}:{port}"
+    pairing.save(cfg.state_dir, {
+        "key": key, "role": PRIMARY, "partner_name": str(hello.get("name") or "")[:200],
+        "partner_url": url, "paired_at": time.time()})
+    cfg.mugil_partner_url = url
+    cfg.save()
+    auth.audit(db.connect(cfg.db_path), None, "two_computers",
+               f"paired with the Secondary at {url}, with the code shown here")
+    _start_sending()
+    return jsonify({**answer, "name": _name(cfg), "version": __version__})
+
+
+@mugil_peer_bp.put("/api/mugil/about-primary")
+def mugil_about_primary():
+    """On the Secondary: what the Primary says of itself at each run (its
+    libraries and their sizes, its version, its kind of fingerprint), so this
+    console can say where a copy made by hand goes and whether it fits."""
+    cfg = _cfg()
+    if role(cfg) != SECONDARY:
+        return _not_here()
+    raw = read_at_most(JSON_MAX_BYTES)
+    if _signed(pairing.body_digest(raw)) is None:
+        return _unsigned()
+    try:
+        data = json.loads(raw)
+    except ValueError:
+        data = None
+    if not isinstance(data, dict):
+        return jsonify({"refused": "Send it as JSON.", "status": 400}), 400
+    libraries = [{"name": str(lib.get("name") or "")[:200], "root": str(lib.get("root") or "")[:1000],
+                  "files": int(lib.get("files") or 0), "bytes": int(lib.get("bytes") or 0)}
+                 for lib in (data.get("libraries") or [])[:50] if isinstance(lib, dict)]
+    algo = str(data.get("algo") or "")[:20]
+    machines.remember_primary(cfg.state_dir, {"libraries": libraries, "algo": algo,
+                                              "version": str(data.get("version") or "")[:40]})
+    if algo:
+        from ..mugil import adopt                                # noqa: PLC0415
+        adopt.remember_algo(cfg.state_dir, algo)
+    return jsonify({"ok": True})
