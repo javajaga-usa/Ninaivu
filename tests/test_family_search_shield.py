@@ -196,17 +196,31 @@ def test_the_scan_judges_them_from_stored_vectors(underwear):
     assert score[underwear["bare"]] > 0.99 and score[underwear["swim"]] == 0
     assert {v for (v,) in conn.execute(
         "SELECT revealing_version FROM assets WHERE kind='picture'")} == {revealing.VERSION}
+    flags = dict(conn.execute("SELECT id, nsfw FROM assets").fetchall())
+    assert flags[underwear["bare"]] == 1, "flagged explicit"
+    assert flags[underwear["swim"]] == 0
 
 
-def test_family_search_leaves_out_people_in_only_their_underwear(underwear, as_family, as_admin):
+def test_an_admins_not_explicit_is_kept(underwear):
+    conn = underwear["conn"]
+    with db._write_lock:
+        conn.execute("UPDATE assets SET nsfw_source='manual' WHERE id=?", (underwear["bare"],))
+        conn.commit()
+    _judge(underwear["cfg"], conn, underwear["engine"], underwear["cfg"].active_root)
+    assert conn.execute("SELECT nsfw FROM assets WHERE id=?",
+                        (underwear["bare"],)).fetchone()[0] == 0
+
+
+def test_family_members_see_people_in_only_their_underwear_nowhere(underwear, as_family,
+                                                                   as_admin):
     _judge(underwear["cfg"], underwear["conn"], underwear["engine"],
            underwear["cfg"].active_root)
     url = "/api/segments?tag=beach"
     family = _ids(as_family.get(url))
     assert underwear["swim"] in family and underwear["bare"] not in family
-    assert underwear["bare"] in _ids(as_admin.get(url))
-    # Still in the gallery, and found again once an admin says it is fine.
-    assert underwear["bare"] in _ids(as_family.get("/api/assets?limit=500"))
+    assert underwear["bare"] not in _ids(as_family.get("/api/assets?limit=500"))
+    assert underwear["bare"] in _ids(as_admin.get(url + "&nsfw=1"))
+    # Found again once an admin says it is fine.
     answer = as_admin.post(f"/api/asset/{underwear['bare']}", json={"nsfw": False})
     assert answer.status_code == 200
     assert underwear["bare"] in _ids(as_family.get(url))
@@ -217,3 +231,26 @@ def test_with_the_explicit_check_off_nothing_is_judged(underwear):
     conn = underwear["conn"]
     _judge(underwear["cfg"], conn, underwear["engine"], underwear["cfg"].active_root)
     assert conn.execute("SELECT MAX(revealing_version) FROM assets").fetchone()[0] == 0
+
+
+def test_a_lower_line_flags_what_was_scored_under_the_old_one(underwear):
+    conn = underwear["conn"]
+    cfg = underwear["cfg"]
+    with db._write_lock:
+        conn.execute("UPDATE assets SET revealing=0.003, revealing_version=? WHERE id=?",
+                     (revealing.VERSION, underwear["swim"]))
+        conn.commit()
+    assert db.flag_revealing(conn, cfg.active_root, revealing.line(cfg)) == 0
+    cfg.underwear_threshold = 0.002
+    assert db.flag_revealing(conn, cfg.active_root, revealing.line(cfg)) == 1
+    assert conn.execute("SELECT nsfw FROM assets WHERE id=?",
+                        (underwear["swim"],)).fetchone()[0] == 1
+
+
+def test_a_line_of_nought_flags_nothing(underwear):
+    cfg = underwear["cfg"]
+    cfg.underwear_threshold = 0
+    conn = underwear["conn"]
+    _judge(cfg, conn, underwear["engine"], cfg.active_root)
+    assert conn.execute("SELECT nsfw FROM assets WHERE id=?",
+                        (underwear["bare"],)).fetchone()[0] == 0

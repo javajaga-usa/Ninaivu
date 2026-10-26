@@ -849,6 +849,11 @@ class Config:
     nsfw_filter: bool = True
     #: How sure the screen must be before a photograph is held back as explicit (0–1).
     nsfw_threshold: float = 0.6
+    #: How much a picture must look like people in only their underwear before
+    #: it is flagged explicit too (media/revealing.py; SigLIP 2's scale, 0–1).
+    #: Measured on a family library of 153,765 pictures: 0.005 flags 1,292,
+    #: 0.02 flags 328 and 0.05 only 130. 0 turns the check off.
+    underwear_threshold: float = 0.005
     #: Hide screenshots, documents and photographs of screens from everyone but
     #: administrators (media/screens.py). By name on every install; by picture
     #: once the search model has looked at it.

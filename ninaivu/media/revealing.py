@@ -1,11 +1,12 @@
-"""People in nothing but their underwear: near explicit, for search.
+"""People in nothing but their underwear: explicit.
 
-A photograph of somebody in only a bra, or only boxers, is not what the
-explicit check is for (adult content, ai.NSFW_PROMPTS), and it stays in the
-gallery. It is what an adult word typed into the search box brings to the
-top, though, so a family member's search leaves it out (storage/db.py,
-``search_shield_clause``), the way it leaves out what the explicit check
-scored just under its line.
+A photograph of somebody in only a bra, only boxers or lingerie is kept out of
+the family app the way adult content is: one scored at :func:`line` or over is
+flagged explicit (storage/db.py, ``flag_revealing``), so family
+members see it neither in the gallery nor in search, and administrators still
+do. The household asked for it (2026-10-26); before that it was only left out
+of a family member's search (``search_shield_clause``), which still reads the
+score.
 
 The judgement reads the vectors tagging already stored, so no photograph is
 opened again. Each picture is scored against the descriptions below on their
@@ -56,8 +57,17 @@ def _known() -> dict[str, tuple[float, float]]:
     return MODELS
 
 
-#: A family member's search leaves out a picture scored at this or over.
-LINE = 0.05
+#: A picture scored at this or over is flagged explicit, unless the
+#: household set ``underwear_threshold`` (server/config.py) to another line.
+LINE = 0.005
+
+
+def line(cfg: Any) -> float:
+    """The line this household flags at; 0 when the check is off."""
+    try:
+        return max(0.0, float(getattr(cfg, "underwear_threshold", LINE)))
+    except (TypeError, ValueError):
+        return LINE
 
 
 class Scorer:
