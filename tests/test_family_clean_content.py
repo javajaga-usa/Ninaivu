@@ -11,6 +11,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from ninaivu import ai
+from ninaivu.media.scanner import AI_VERSION
 from ninaivu.server.config import Config
 from ninaivu.storage import db
 
@@ -43,6 +44,7 @@ def test_scores_at_a_lowered_line_are_flagged(people):
     ids = [r[0] for r in conn.execute("SELECT id FROM assets WHERE kind='picture' ORDER BY id")]
     near, low, kept, hidden = ids[:4]
     with db._write_lock:
+        conn.execute("UPDATE assets SET ai_version=?", (AI_VERSION,))
         conn.execute("UPDATE assets SET nsfw=0, nsfw_score=0.007 WHERE id IN (?, ?, ?)",
                      (near, kept, hidden))
         conn.execute("UPDATE assets SET nsfw=0, nsfw_score=0.002 WHERE id=?", (low,))
