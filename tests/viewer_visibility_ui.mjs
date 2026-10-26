@@ -32,7 +32,11 @@ for (let i = 0; i < 120; i++) {
   await page.waitForTimeout(500);
 }
 
-const id = await page.evaluate(() => document.querySelector('#grid .cell').dataset.id);
+// A tile shown to the family. screening_ui.mjs runs before this one on the
+// same library and leaves the photograph it hid hidden; when that was the
+// first tile, this test began on a hidden one (26 October 2026).
+const id = await page.evaluate(() => [...document.querySelectorAll('#grid .cell')]
+  .find((cell) => !cell.querySelector('.badge.vis'))?.dataset.id);
 const badge = (vis) => page.evaluate(([cellId, kind]) =>
   Boolean(document.querySelector(`#grid .cell[data-id="${cellId}"] .badge.vis.is-${kind}`)), [id, vis]);
 
