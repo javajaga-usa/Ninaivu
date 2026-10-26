@@ -13,6 +13,7 @@ panel is kept in the Control Panel's settings beside the resource mode.
 """
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 
@@ -136,7 +137,7 @@ def resolve(choice, system_dark):
     return 'dark' if system_dark else 'light'
 
 
-def system_prefers_dark(platform=None, run=subprocess.run):
+def system_prefers_dark(platform=None, run=subprocess.run, environ=None):
     """Whether the computer is set to dark. Never raises: a computer that will
     not say is taken to be light, which is every system's default."""
     platform = platform or sys.platform
@@ -151,17 +152,38 @@ def system_prefers_dark(platform=None, run=subprocess.run):
             with winreg.OpenKey(winreg.HKEY_CURRENT_USER,
                                 r'Software\Microsoft\Windows\CurrentVersion\Themes\Personalize') as key:
                 return winreg.QueryValueEx(key, 'AppsUseLightTheme')[0] == 0
-        # Linux and the Pi: GNOME's own switch, then the theme's name, which
-        # is how most other desktops say it.
-        out = run(['gsettings', 'get', 'org.gnome.desktop.interface', 'color-scheme'],
-                  capture_output=True, text=True, timeout=3)
-        if 'dark' in out.stdout.lower():
-            return True
-        out = run(['gsettings', 'get', 'org.gnome.desktop.interface', 'gtk-theme'],
-                  capture_output=True, text=True, timeout=3)
-        return 'dark' in out.stdout.lower()
     except (OSError, ValueError, subprocess.SubprocessError, ImportError):
         return False
+    return _linux_prefers_dark(run, environ=os.environ if environ is None else environ)
+
+
+def _linux_prefers_dark(run, environ):
+    """Linux and the Pi. Each desktop keeps the setting in its own place, and
+    a desktop that does not use one leaves it at its default, so any one of
+    them saying dark is taken as dark: a theme named in the environment,
+    GNOME's switch and theme, Xfce's (MX Linux, Xubuntu), then KDE's colours."""
+    if 'dark' in environ.get('GTK_THEME', '').lower():
+        return True
+    asks = (['gsettings', 'get', 'org.gnome.desktop.interface', 'color-scheme'],
+            ['gsettings', 'get', 'org.gnome.desktop.interface', 'gtk-theme'],
+            ['xfconf-query', '-c', 'xsettings', '-p', '/Net/ThemeName'])
+    for ask in asks:
+        try:
+            out = run(ask, capture_output=True, text=True, timeout=3)
+        except (OSError, ValueError, subprocess.SubprocessError):
+            continue
+        if 'dark' in (out.stdout or '').lower():
+            return True
+    config = environ.get('XDG_CONFIG_HOME') or os.path.join(environ.get('HOME') or os.path.expanduser('~'), '.config')
+    try:
+        with open(os.path.join(config, 'kdeglobals'), encoding='utf-8', errors='replace') as kde:
+            for line in kde:
+                if line.strip().lower().startswith(('colorscheme=', 'lookandfeelpackage=')):
+                    if 'dark' in line.lower():
+                        return True
+    except OSError:
+        pass
+    return False
 
 
 def contrast(fg, bg):

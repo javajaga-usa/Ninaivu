@@ -5,8 +5,8 @@
    ========================================================================== */
 
 /* Tamil. Apple's Tamil Sangam MN wherever the device has it (Macs, iPhones,
-   iPads); otherwise the device's own Tamil font. The Windows build also
-   bundles Noto Sans Tamil (installers/windows/build.ps1), and only there do
+   iPads); otherwise the device's own Tamil font. The Windows and Linux
+   builds also bundle Noto Sans Tamil (installers/windows/build.ps1), and only there do
    the pages link tamil-font.css, which redefines these two faces with that
    file behind Sangam MN. Naming the file here instead had every other build
    ask for a font it does not have, and log a 404 on every page.

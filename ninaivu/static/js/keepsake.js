@@ -92,7 +92,7 @@ export class KeepsakeCard {
     input.id = 'keepsake-folder';
     input.type = 'text';
     input.value = this.folder;
-    input.placeholder = '/Volumes/USB';
+    input.placeholder = i18n.samplePaths('/Volumes/USB');
     input.oninput = () => { this.folder = input.value; };
     row.appendChild(input);
     if (this.pickFolder) {

@@ -122,6 +122,28 @@ while IFS= read -r line; do
 done < <(cat "$root/requirements/requirements.txt" "$root/requirements/requirements-desktop.txt")
 [ "${#missing[@]}" -gt 0 ] && echo "left out (no linux-$arch wheel): ${missing[*]}" || true
 
+# The Tamil font, as the Windows build carries it (installers/windows/build.ps1
+# says why and pins the same file): many Linux desktops have no Tamil font,
+# and the console and the family app showed boxes for every Tamil letter. The
+# wheel below picks it up; ninaivu/static/fonts/ is in .gitignore.
+fonts="$root/ninaivu/static/fonts"
+mkdir -p "$fonts"
+font_base="https://raw.githubusercontent.com/google/fonts/23e54b51ddffbc7713c583748e3bd86f62b1fa4a/ofl/notosanstamil"
+while read -r want font url; do
+    if [ ! -f "$fonts/$font" ] || [ "$(sha256sum "$fonts/$font" | cut -d' ' -f1)" != "$want" ]; then
+        curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors -o "$fonts/$font" "$font_base/$url"
+        got=$(sha256sum "$fonts/$font" | cut -d' ' -f1)
+        if [ "$got" != "$want" ]; then
+            rm -f "$fonts/$font"
+            echo "$font: SHA-256 $got, expected $want" >&2
+            exit 1
+        fi
+    fi
+done <<FONTS
+aa3a9b321f4b0bb2c40203ffbde9af89713227866e0e13f76e5b9eeea727cf88 NotoSansTamil.ttf NotoSansTamil%5Bwdth,wght%5D.ttf
+f8ff8ce7d0a81bf8d5e121c635ef027250c531f2fd37d5988b8dd6e45f19d7f1 NotoSansTamil-OFL.txt OFL.txt
+FONTS
+
 # 3. Ninaivu and the extensions, bytecode only.
 python3 -m pip wheel --quiet --wheel-dir "$payload/wheels" --no-deps "$root" "$root/extensions/gemini" "$root/extensions/creative-studio"
 python3 "$root/installers/strip_sources.py" "$payload/wheels"/ninaivu*.whl

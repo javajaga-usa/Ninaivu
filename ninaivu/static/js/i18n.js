@@ -416,11 +416,59 @@ export function apply(root = document) {
     for (const node of root.querySelectorAll(`[${marker}]`)) {
       const key = node.getAttribute(marker);
       if (key) {
-        put(node, attribute, node.getAttribute(attribute), t(key),
+        const said = attribute === 'placeholder' ? samplePaths(t(key)) : t(key);
+        put(node, attribute, node.getAttribute(attribute), said,
           (text) => node.setAttribute(attribute, text));
       }
     }
   }
+  for (const node of root.querySelectorAll('[placeholder]')) {
+    if (node.hasAttribute('data-i18n-placeholder')) continue;
+    const here = samplePaths(node.getAttribute('placeholder'));
+    if (here !== node.getAttribute('placeholder')) node.setAttribute('placeholder', here);
+  }
+}
+
+/*
+ * A sample path in a hint, written the way the computer Ninaivu runs on
+ * writes one. The folders typed into the console are on that computer, so a
+ * Linux server showed "D:\Photo Archive" and "/Volumes/Backup", neither of
+ * which it has. The page says which computer it is (`data-host` on <html>);
+ * each sample is swapped whole, the longest first, and the translations
+ * keep the paths as they are, so this works in every language.
+ */
+const SAMPLE_PATHS = {
+  darwin: [
+    ['C:\\Users\\you\\Pictures', '/Users/you/Pictures'],
+    ['D:\\Photo Archive', '/Volumes/Photo Archive'],
+    ['D:\\OldPhotos', '/Volumes/OldPhotos'],
+    ['E:\\Restored', '/Volumes/Restored'],
+    ['/mnt/away-disk', '/Volumes/Away'],
+  ],
+  linux: [
+    ['C:\\Users\\you\\Pictures', '/home/you/Pictures'],
+    ['D:\\Photo Archive', '/media/you/Photo Archive'],
+    ['D:\\OldPhotos', '/media/you/OldPhotos'],
+    ['E:\\Restored', '/media/you/Restored'],
+    ['/Volumes/Backup/Ninaivu', '/media/you/Backup/Ninaivu'],
+    ['/Volumes/Photos/Library', '/media/you/Photos/Library'],
+    ['/Volumes/Backup', '/media/you/Backup'],
+    ['/Volumes/USB', '/media/you/USB'],
+  ],
+  win32: [
+    ['/Volumes/Backup/Ninaivu', 'E:\\Backup\\Ninaivu'],
+    ['/Volumes/Photos/Library', 'D:\\Photos\\Library'],
+    ['/mnt/away-disk', 'E:\\Away'],
+    ['/Volumes/USB', 'E:\\'],
+  ],
+};
+
+export function samplePaths(text, host = globalThis.document?.documentElement?.dataset.host) {
+  let out = String(text ?? '');
+  for (const [sample, here] of SAMPLE_PATHS[host] || []) {
+    out = out.split(sample).join(here);
+  }
+  return out;
 }
 
 /** Change language, redraw, and tell anything that draws its own text. */
