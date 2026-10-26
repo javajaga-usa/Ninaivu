@@ -167,13 +167,15 @@ def test_sample_paths_are_written_the_way_the_server_writes_them():
         "const out = {};\n"
         "for (const host of ['darwin', 'linux', 'win32', 'freebsd']) {\n"
         "  out[host] = ['e.g. D:\\\\OldPhotos or /Volumes/Backup', 'e.g. D:\\\\Photo Archive',\n"
-        "    '…or type a path, e.g. C:\\\\Users\\\\you\\\\Pictures', '/Volumes/Backup/Ninaivu',\n"
+        # The ellipsis as a JavaScript escape: on Windows a character outside
+        # the ANSI code page on node's command line came through as U+FFFD.
+        "    '\\u2026or type a path, e.g. C:\\\\Users\\\\you\\\\Pictures', '/Volumes/Backup/Ninaivu',\n"
         "    '/mnt/away-disk', '/Volumes/USB'].map((t) => samplePaths(t, host));\n"
         "}\n"
         "console.log(JSON.stringify(out));\n"
     ) % json.dumps((ROOT / "ninaivu" / "static" / "js" / "i18n.js").as_uri())
     done = subprocess.run([shutil.which("node"), "--input-type=module", "-e", script],
-                          capture_output=True, text=True, timeout=60, check=True)
+                          capture_output=True, encoding="utf-8", timeout=60, check=True)
     out = json.loads(done.stdout)
     assert out["linux"][:3] == ["e.g. /media/you/OldPhotos or /media/you/Backup",
                                 "e.g. /media/you/Photo Archive",
