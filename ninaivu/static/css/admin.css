@@ -607,6 +607,10 @@ body.admin .ios-install-banner {
 .fv-badges { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-height: 0; }
 .fv-badges:empty { display: none; }
 .fv-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+/* Screening (static/js/screening.js): who sent the item, and why. */
+.scr-asks { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; font-size: 13px; color: var(--text-2); }
+.scr-ask { overflow-wrap: anywhere; }
+.scr-item .where { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .fv-date summary { cursor: pointer; font-size: 13px; color: var(--text-2); }
 .fv-date .setting-field { padding-top: 8px; max-width: 340px; }
 .fv-date .setting-field .btn { margin-top: 8px; }

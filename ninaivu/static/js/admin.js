@@ -33,6 +33,7 @@ import { PerformancePanel } from './performance.js';
 import { TuningPanel } from './tuning.js';
 import { FacesPanel } from './faces.js';
 import { StraightenPanel } from './straighten.js';
+import { ScreeningPanel } from './screening.js';
 import { FirstDay } from './first-day.js';
 import { DrivePrompt } from './drives.js';
 import * as i18n from './i18n.js';
@@ -191,6 +192,7 @@ let handoverPanel;
 let advanced;
 let facesPanel;
 let straightenPanel = null;
+let screeningPanel = null;
 
 /* ======================================================================== */
 
@@ -751,6 +753,8 @@ function wireChrome() {
   // others it only polls while it is the tab on screen.
   straightenPanel = new StraightenPanel({ toast });
   straightenPanel.wire();
+  screeningPanel = new ScreeningPanel({ toast, onChange: () => loadAttention() });
+  screeningPanel.wire();
   $$('#faces-review-close').onclick = () => ($('#faces-review').hidden = true);
   $$('#faces-review').addEventListener('click', (event) => {
     if (event.target === $('#faces-review')) $('#faces-review').hidden = true;
@@ -785,6 +789,7 @@ const PAGE_DESCRIPTIONS = {
   faces: i18n.key('Review and organize the people in your photos.'),
   uploads: i18n.key('Review family contributions before they enter the library.'),
   straighten: i18n.key('Review suggested orientation corrections.'),
+  screening: i18n.key('Items family members asked you to look at.'),
   'ai-models': i18n.key('What the scan does with AI, and the models it does it with.'),
   'ai-server': i18n.key('Configure the service that powers your AI features.'),
   library: i18n.key('Library folders, and how they are indexed.'),
@@ -956,6 +961,7 @@ function showTab(name) {
   if (name === 'advanced') advanced?.show(); else advanced?.hide();
   if (name === 'faces') facesPanel?.show(); else facesPanel?.hide();
   if (name === 'straighten') straightenPanel?.show(); else straightenPanel?.hide();
+  if (name === 'screening') screeningPanel?.show(); else screeningPanel?.hide();
   if (name === 'overview') {
     // Visibility may have changed on another tab; re-ask rather than
     // showing a stale "what will they see" answer.
@@ -1380,7 +1386,7 @@ async function annotateSwitches(needLines) {
 // listing four things that are empty. The sidebar groups that hold a queue
 // with something in it are marked as well.
 const ATTENTION_GROUPS = {
-  uploads: 'queues', straighten: 'queues', faces: 'people', problems: 'backup', handover: 'backup',
+  uploads: 'queues', straighten: 'queues', screening: 'queues', faces: 'people', problems: 'backup', handover: 'backup',
   signin_help: 'people',
 };
 
@@ -1396,6 +1402,7 @@ async function loadAttention() {
     return;
   }
   const waiting = (data.items || []).filter((item) => item.count > 0);
+  screeningPanel?.setCount((data.items || []).find((item) => item.key === 'screening')?.count || 0);
   headline.textContent = !waiting.length ? i18n.t('Nothing is waiting for you.')
     : data.total === 1 ? i18n.t('1 thing is waiting for you.')
       : i18n.t('{count} things are waiting for you.', { count: data.total });

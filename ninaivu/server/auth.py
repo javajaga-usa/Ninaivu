@@ -458,6 +458,10 @@ class User:
                 "see_hidden": self.is_admin,
                 # "Only to me": keeping an item out of everybody else's view.
                 "keep_private": ROLE_RANK[self.role] >= ROLE_RANK[ROLE_FAMILY],
+                # Asking an administrator to look at an item: for family
+                # members, since an administrator decides there and then.
+                "send_for_screening": (ROLE_RANK[self.role] >= ROLE_RANK[ROLE_FAMILY]
+                                       and not self.is_admin),
             },
         }
 
@@ -717,6 +721,10 @@ def delete_user(conn: sqlite3.Connection, user_id: int,
     # forget who made it.
     conn.execute("UPDATE folder_rules SET created_by=NULL WHERE created_by=?", (user_id,))
     conn.execute("UPDATE users SET created_by=NULL WHERE created_by=?", (user_id,))
+    # Items they sent for screening still want a look; who asked is forgotten.
+    if _has_table(conn, "screening_requests"):
+        conn.execute("UPDATE OR REPLACE screening_requests SET user_id=NULL WHERE user_id=?",
+                     (user_id,))
 
     # Profile ids are reused — ``users.id`` is a plain INTEGER PRIMARY KEY, so
     # the next profile made after the newest is deleted gets its number — and

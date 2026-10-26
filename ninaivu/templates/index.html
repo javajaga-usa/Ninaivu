@@ -519,6 +519,7 @@
       <button class="btn ghost small" id="sel-album-remove" hidden data-i18n="Remove from album">Remove from album</button>
       <button class="btn ghost small" id="sel-private" hidden title="Hidden from other family members" data-i18n-title="Hidden from other family members" data-i18n="Keep only to me">Keep only to me</button>
       <button class="btn ghost small" id="sel-unprivate" hidden data-i18n="Show to family again">Show to family again</button>
+      <button class="btn ghost small" id="sel-screen" hidden title="Ask an admin to look at these" data-i18n-title="Ask an admin to look at these" data-i18n="Send for screening">Send for screening</button>
       <div class="sel-visibility admin-only" hidden>
         <span class="hint" data-i18n="Show to">Show to</span>
         <button class="btn ghost small" data-sel-vis="public" data-i18n="Everyone">Everyone</button>
@@ -729,6 +730,7 @@
         <button class="icon-btn" id="v-nearby" hidden title="Photos taken nearby" data-i18n-title="Photos taken nearby"><svg viewBox="0 0 24 24"><path d="M12 21s-6-5.3-6-10a6 6 0 0 1 12 0c0 4.7-6 10-6 10Z"/><circle cx="12" cy="11" r="2.2"/></svg><span class="viewer-tools-more-label" data-i18n="Photos taken nearby">Photos taken nearby</span></button>
         <a class="icon-btn" id="v-download-raw" hidden download title="Download the RAW file" data-i18n-title="Download the RAW file"><svg viewBox="0 0 24 24"><path d="M12 3v10M8 9.5 12 13l4-3.5"/><rect x="3.5" y="15.5" width="17" height="5" rx="1.5"/></svg><span class="viewer-tools-more-label" data-i18n="Download RAW">Download RAW</span></a>
         <button class="icon-btn" id="v-private" hidden title="Hidden from other family members" data-i18n-title="Hidden from other family members"><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><span class="viewer-tools-more-label" data-i18n="Keep only to me">Keep only to me</span></button>
+        <button class="icon-btn" id="v-screen" hidden title="Ask an admin to look at this" data-i18n-title="Ask an admin to look at this"><svg viewBox="0 0 24 24"><path d="M5 21V4"/><path d="M5 4h11l-2 4 2 4H5"/></svg><span class="viewer-tools-more-label" data-i18n="Send for screening">Send for screening</span></button>
         <button class="icon-btn" id="v-album" title="Add to album" data-i18n-title="Add to album"><svg viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18M9 21V9"/></svg><span class="viewer-tools-more-label" data-i18n="Add to album">Add to album</span></button>
         <div class="vis-picker admin-only" id="v-visibility" hidden role="group" aria-label="Who can see this" data-i18n-label="Who can see this">
           <button data-vis="public" title="Everyone, including guests" data-i18n-title="Everyone, including guests"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M4 12h16M12 4a14 14 0 0 1 0 16 14 14 0 0 1 0-16"/></svg></button>
@@ -1060,6 +1062,34 @@
     <div class="export-actions">
       <button class="btn ghost" type="button" id="export-cancel" data-i18n="Cancel">Cancel</button>
       <button class="btn primary" type="submit" data-i18n="Export">Export</button>
+    </div>
+  </form>
+</div>
+
+<!-- Send for screening (static/js/app.js, wireScreening): a family member
+     asks an admin to look at items. Nothing changes until an admin decides. -->
+<div class="modal" id="screen-modal" hidden role="dialog" aria-modal="true" aria-labelledby="screen-title">
+  <form class="modal-card narrow export-form" id="screen-form">
+    <div class="export-head">
+      <h2 id="screen-title" data-i18n="Send for screening">Send for screening</h2>
+      <button class="icon-btn" type="button" id="screen-close" aria-label="Close" data-i18n-label="Close"><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+    </div>
+    <p class="hint" id="screen-count"></p>
+    <fieldset class="screen-reasons">
+      <legend class="hint" data-i18n="What is it?">What is it?</legend>
+      <label class="export-check"><input type="radio" name="screen-reason" value="A screenshot or a document" checked>
+        <span data-i18n="A screenshot or a document">A screenshot or a document</span></label>
+      <label class="export-check"><input type="radio" name="screen-reason" value="Not suitable for everyone">
+        <span data-i18n="Not suitable for everyone">Not suitable for everyone</span></label>
+      <label class="export-check"><input type="radio" name="screen-reason" value="">
+        <span data-i18n="Something else">Something else</span></label>
+    </fieldset>
+    <label class="export-field"><span data-i18n="A note for the admin (optional)">A note for the admin (optional)</span>
+      <input type="text" class="input" id="screen-note" maxlength="160"></label>
+    <p class="hint" data-i18n="They stay in the gallery until an admin looks at them and decides to keep, hide or delete them.">They stay in the gallery until an admin looks at them and decides to keep, hide or delete them.</p>
+    <div class="export-actions">
+      <button class="btn ghost" type="button" id="screen-cancel" data-i18n="Cancel">Cancel</button>
+      <button class="btn primary" type="submit" data-i18n="Send to an admin">Send to an admin</button>
     </div>
   </form>
 </div>

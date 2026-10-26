@@ -3904,6 +3904,8 @@ from . import api_stories                                           # noqa: E402
 from . import api_webdav                                            # noqa: E402,F401
 # "Only to me": a family member's items kept out of everybody else's view.
 from . import api_private                                           # noqa: E402,F401
+# Sent for screening: family members flag items, an administrator decides.
+from . import api_screening                                         # noqa: E402,F401
 
 
 # The AI Playground's routes live in their own module and register on `bp`.
