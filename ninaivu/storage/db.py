@@ -1402,6 +1402,15 @@ _PLACE_COLUMNS = ("gps_lat", "gps_lon", "city", "country")
 _LAYOUT_COLUMNS = ("width", "height", "indexed_at", "rotation", "color",
                    "duration", "thumb")
 
+#: Bumped when who may see an item changes: its visibility, the explicit flag,
+#: or its going into the bin. Open family pages ask for it with each activity
+#: tick and bring their gallery up to date when it moves, so an item kept
+#: "Only to me", sent for screening or hidden by an admin leaves every open
+#: screen within seconds (static/js/app.js, onActivity). Not one of
+#: :data:`CHANGE_COUNTERS`: :data:`GENERATION_KEY` already covers the layout.
+SEEN_GENERATION_KEY = "assets_seen_generation"
+SEEN_COLUMNS = ("visibility", "nsfw", "trashed")
+
 #: Every counter the triggers keep.
 CHANGE_COUNTERS = (GENERATION_KEY, TAGS_GENERATION_KEY, FACES_GENERATION_KEY,
                    OCCASIONS_GENERATION_KEY, PLACES_GENERATION_KEY,
@@ -1424,7 +1433,8 @@ def _generation_schema() -> str:
     seeds = "\n".join(
         f"INSERT OR IGNORE INTO meta(key, value) VALUES ('{key}', "
         f"CAST(abs(random() % 1000000000000) AS TEXT));"
-        for key in (*CHANGE_COUNTERS, SCAN_GENERATION_KEY, FACE_GROUPS_GENERATION_KEY))
+        for key in (*CHANGE_COUNTERS, SCAN_GENERATION_KEY, FACE_GROUPS_GENERATION_KEY,
+                    SEEN_GENERATION_KEY))
     main, tags = bump(GENERATION_KEY), bump(TAGS_GENERATION_KEY)
     faces, occasions = bump(FACES_GENERATION_KEY), bump(OCCASIONS_GENERATION_KEY)
     places, vectors = bump(PLACES_GENERATION_KEY), bump(EMBEDDINGS_GENERATION_KEY)
@@ -1432,6 +1442,7 @@ def _generation_schema() -> str:
     scanned = bump(SCAN_GENERATION_KEY)
     albums = bump(ALBUMS_GENERATION_KEY)
     groups = bump(FACE_GROUPS_GENERATION_KEY)
+    seen = bump(SEEN_GENERATION_KEY)
     thumbed = "(OLD.thumb IS NULL) <> (NEW.thumb IS NULL)"
     # ``source`` too: confirming a face the matcher had already given to the
     # same person changes nothing else, and the face status counts confirmed
@@ -1446,6 +1457,10 @@ def _generation_schema() -> str:
         "assets_generation_update":
             f"AFTER UPDATE OF {', '.join(GENERATION_COLUMNS)} ON assets "
             f"WHEN {_changed(GENERATION_COLUMNS)} BEGIN {main} END",
+        "assets_seen_generation_delete": f"AFTER DELETE ON assets BEGIN {seen} END",
+        "assets_seen_generation_update":
+            f"AFTER UPDATE OF {', '.join(SEEN_COLUMNS)} ON assets "
+            f"WHEN {_changed(SEEN_COLUMNS)} BEGIN {seen} END",
         "assets_scan_generation_insert": f"AFTER INSERT ON assets BEGIN {scanned} END",
         "assets_scan_generation_delete": f"AFTER DELETE ON assets BEGIN {scanned} END",
         "assets_scan_generation_update":
@@ -3767,7 +3782,10 @@ def forget_ai_reading(conn: sqlite3.Connection, *, root: str | None = None,
     Sound files are left alone: no pass reads them, and their tags are the
     file's own. Returns how many items had something taken back.
     """
-    where = ["visibility >= 2", "kind != 'audio'"]
+    # An item held while an administrator screens it (storage/screening.py)
+    # is not hidden yet: Ignore puts it back as it was, reading and all.
+    where = ["visibility >= 2", "kind != 'audio'",
+             "COALESCE(vis_source, '') != 'screening'"]
     params: list[Any] = []
     if root is not None:
         where.append("root=?")

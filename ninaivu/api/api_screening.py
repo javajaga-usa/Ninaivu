@@ -2,14 +2,14 @@
 
 The family side (``/api/screening``, on the shared blueprint) takes one item
 from the viewer or many from a selection. It only ever takes items the caller
-can see now, narrowed by the gallery's own query, and it changes nothing about
-who can see them: the item stays in the family's gallery until an
-administrator acts on it.
+can see now, narrowed by the gallery's own query, and takes them out of every
+family member's view at once (storage/screening.py, ``hold``): administrators
+still see them. The decision then settles them.
 
 The console side (``/api/admin/screening``, console only) lists the queue and
 applies one decision to one item or many at once:
 
-* ``ignore`` — nothing is wrong with it; the request goes.
+* ``ignore`` — nothing is wrong with it; it goes back to who saw it before.
 * ``hide`` — documents and screenshots: only administrators see it now.
 * ``explicit`` — adult content only, marked by hand so no later pass undoes it.
 * ``delete`` — into the recycle bin, where Recently deleted can put it back.
@@ -67,10 +67,15 @@ def send_for_screening():
     if not ids:
         return jsonify({"sent": 0, "already": 0, "withdrawn": 0})
     if not wanted:
-        return jsonify({"sent": 0, "already": 0,
-                        "withdrawn": screening.withdraw(conn, ids, user.id)})
+        withdrawn = screening.withdraw(conn, ids, user.id)
+        # Back to the family only once nobody else is still asking.
+        still = screening.sent_any(conn, ids)
+        screening.release(conn, [i for i in ids if i not in still])
+        return jsonify({"sent": 0, "already": 0, "withdrawn": withdrawn})
     allowed = _reachable(conn, ids, admin=user.is_admin)
     sent, already = screening.send(conn, allowed, user.id, note)
+    # Out of the family's view at once, everywhere, until an admin decides.
+    screening.hold(conn, allowed)
     if sent:
         auth.audit(conn, user.id, "screening_sent",
                    f"{sent} item{'s' if sent != 1 else ''} sent for screening")
@@ -101,6 +106,9 @@ def _queue_item(row: dict[str, Any], entry: dict[str, Any],
         "thumb_v": _thumb_version(row),
         "rotation": int(row.get("rotation") or 0),
         "visibility_name": VIS_NAMES.get(level, "family"),
+        # Held from the family while it waits (storage/screening.py), which
+        # is not the same as an admin having hidden it.
+        "held": row.get("vis_source") == screening.HOLD_SOURCE,
         "explicit": bool(row.get("nsfw")),
         "playable": f".{ext}" in BROWSER_NATIVE,
         "needs_proxy": proxies.needs_proxy(ext, row.get("kind") or ""),
@@ -169,6 +177,9 @@ def screening_decide():
         return jsonify({"settled": 0, "action": action})
 
     payload: dict[str, Any] = {"action": action}
+    if action in ("ignore", "hide", "explicit"):
+        # What it was before it was sent, first; the decision on top of that.
+        screening.settle(conn, allowed)
     if action == "delete":
         response = _move_to_bin({"ids": allowed}, ask_password=False)
         if isinstance(response, tuple):
@@ -189,7 +200,8 @@ def screening_decide():
         settled_ids = allowed
     else:
         settled_ids = allowed
-    screening.settle(conn, settled_ids)
+    if action == "delete":
+        screening.settle(conn, settled_ids)
     words = {"ignore": "ignored", "hide": "hidden", "explicit": "marked explicit",
              "delete": "moved to the recycle bin"}[action]
     auth.audit(conn, user.id, "screening_" + action,

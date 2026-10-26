@@ -1,15 +1,17 @@
 """Sent for screening: family members flag items, an administrator decides.
 
-What is promised: a family member can send one item or many; sending changes
-nothing about who sees it; it waits in the console's queue with who sent it;
-an administrator can ignore, hide, mark explicit or delete one or many at
-once, and each takes the item out of the queue; nobody but an administrator
+What is promised: a family member can send one item or many; it leaves every
+family member's view at once, everywhere (gallery, albums, search, files),
+while administrators still see it; it waits in the console's queue with who
+sent it; an administrator can ignore (it comes back as it was), hide, mark
+explicit or delete one or many at once, and each takes the item out of the
+queue; the AI's reading of a held item is kept; nobody but an administrator
 can see the queue or decide.
 """
 
 from conftest import GUEST, login, ids_of  # noqa: F401
 from ninaivu.server import auth
-from ninaivu.storage import screening
+from ninaivu.storage import db, screening
 
 
 def _send(client, ids, **extra):
@@ -30,19 +32,35 @@ def _decide(client, ids, action):
     return response.get_json()
 
 
-def test_a_family_member_sends_one_or_many_and_they_stay_visible(as_family, as_admin, people):
+def _second_member(app, people):
+    """Another family member, to look from the outside."""
+    auth.create_user(people["conn"], "arjun", "riverstones42", display_name="Arjun",
+                     role=auth.ROLE_FAMILY, created_by=people["admin"].id)
+    return login(app.test_client(), "arjun", "riverstones42")
+
+
+def test_a_family_member_sends_one_or_many_and_they_vanish_at_once(app, as_family, as_admin,
+                                                                   people):
+    other = _second_member(app, people)
     ids = ids_of(as_family)[:3]
+    album = other.post("/api/albums", json={"name": "Trip", "ids": ids}).get_json()["id"]
     assert _send(as_family, ids[:1], note="Bank statement")["sent"] == 1
-    body = _send(as_family, ids)
-    assert body["sent"] == 2 and body["already"] == 1
-    # Still in the family's gallery until somebody decides.
-    assert set(ids) <= set(ids_of(as_family))
+    body = _send(as_family, ids[1:])
+    assert body["sent"] == 2
+    # Gone for every family member, the sender too, in the gallery, an album,
+    # and the file itself; administrators still have them.
+    for client in (as_family, other):
+        assert not set(ids) & set(ids_of(client))
+        assert not set(ids) & set(ids_of(client, f"/api/assets?album={album}&limit=200"))
+        assert client.get(f"/api/file/{ids[0]}").status_code == 404
+    assert set(ids) <= set(ids_of(as_admin))
     assert as_family.get(f"/api/screening/{ids[0]}").get_json()["sent"] is True
 
     queue = _queue(as_admin)
     # In the order they were sent; the two sent together, by id.
     assert [item["id"] for item in queue] == [ids[0], *sorted(ids[1:])]
     first = queue[0]
+    assert first["held"] is True
     assert first["requests"][0]["name"] == people["family"].display_name
     assert first["requests"][0]["note"] == "Bank statement"
     # Counted on the Overview's "Needs you".
@@ -50,12 +68,43 @@ def test_a_family_member_sends_one_or_many_and_they_stay_visible(as_family, as_a
     assert {i["key"]: i["count"] for i in attention}["screening"] == 3
 
 
-def test_withdrawing_takes_back_only_my_request(as_family, as_admin):
+def test_withdrawing_brings_it_back(as_family, as_admin):
     target = ids_of(as_family)[:1]
     _send(as_family, target)
+    assert target[0] not in ids_of(as_family)
     assert _send(as_family, target, sent=False)["withdrawn"] == 1
     assert _queue(as_admin) == []
+    assert target[0] in ids_of(as_family)
     assert as_family.get(f"/api/screening/{target[0]}").get_json()["sent"] is False
+
+
+def test_ignore_puts_back_exactly_what_it_was(as_family, as_admin, people):
+    conn = people["conn"]
+    target = ids_of(as_family)[:1]
+    as_admin.post("/api/visibility", json={"ids": target, "visibility": "public"})
+    _send(as_family, target)
+    row = conn.execute("SELECT visibility, vis_source FROM assets WHERE id=?", target).fetchone()
+    assert (row["visibility"], row["vis_source"]) == (2, screening.HOLD_SOURCE)
+    assert _decide(as_admin, target, "ignore")["settled"] == 1
+    row = conn.execute("SELECT visibility, vis_source FROM assets WHERE id=?", target).fetchone()
+    assert (row["visibility"], row["vis_source"]) == (0, "item")
+    assert target[0] in ids_of(as_family)
+
+
+def test_a_held_item_keeps_what_the_ai_read(as_family, as_admin, people):
+    conn = people["conn"]
+    target = ids_of(as_family)[:1]
+    conn.execute("UPDATE assets SET caption='a beach', caption_source='ai', ai_version=5 "
+                 "WHERE id=?", target)
+    conn.commit()
+    _send(as_family, target)
+    # The pass that takes back what AI read of hidden items, as a scan runs it.
+    db.forget_ai_reading(conn)
+    row = conn.execute("SELECT caption, ai_version FROM assets WHERE id=?", target).fetchone()
+    assert (row["caption"], row["ai_version"]) == ("a beach", 5)
+    _decide(as_admin, target, "ignore")
+    row = conn.execute("SELECT caption FROM assets WHERE id=?", target).fetchone()
+    assert row["caption"] == "a beach"
 
 
 def test_hide_and_explicit_take_items_out_of_the_family_view(as_family, as_admin, people):
@@ -73,11 +122,14 @@ def test_hide_and_explicit_take_items_out_of_the_family_view(as_family, as_admin
         f"SELECT id, visibility, nsfw, nsfw_source FROM assets WHERE id IN "
         f"({','.join('?' * 3)})", ids[:3]).fetchall()}
     assert rows[ids[0]]["visibility"] == auth.VIS_HIDDEN
+    assert conn.execute("SELECT vis_source FROM assets WHERE id=?",
+                        ids[:1]).fetchone()[0] == "item"
     assert rows[ids[2]]["nsfw"] == 1 and rows[ids[2]]["nsfw_source"] == "manual"
     # Admins still see everything.
     assert set(ids) <= set(ids_of(as_admin, "/api/assets?limit=200&nsfw=1"))
 
-    # Ignore leaves it as it was.
+    # Ignore brings it back.
+    assert ids[3] not in ids_of(as_family)
     assert _decide(as_admin, ids[3:], "ignore")["settled"] == 1
     assert ids[3] in ids_of(as_family)
     assert _queue(as_admin) == []

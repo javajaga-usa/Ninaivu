@@ -2993,6 +2993,7 @@ const VIS_WHY = {
   item: i18n.key('set here'),
   screen: i18n.key('screenshot or document'),
   private: i18n.key('only to its owner'),
+  screening: i18n.key('held while an admin screens it'),
   kind: i18n.key('audio stays admin-only'),
   default: '',
 };

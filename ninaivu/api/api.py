@@ -1004,6 +1004,12 @@ def activity():
     away = _cfg().libraries_away
     away_said = {"libraries_away": len(away),
                  "libraries_away_paths": away if user.is_admin else []}
+    # Who may see what, as a number that moves when it changes (an item kept
+    # "Only to me", sent for screening, hidden, flagged or deleted): an open
+    # gallery brings itself up to date when it does, on every device.
+    seen = db.meta_counter(_conn(), db.SEEN_GENERATION_KEY)
+    if seen is not None:
+        away_said["seen"] = seen
     if not user.is_admin:
         return jsonify({"jobs": [], "running": False,
                         "scan": {"status": "idle", "running": False,

@@ -7,13 +7,21 @@ it waits in the console's Screening queue until an administrator decides:
 ignore the request, hide the item (documents and screenshots), mark it
 explicit (adult content only) or move it to the recycle bin.
 
-The item stays exactly where it was until then. Sending is a question, not a
-decision, so nothing about who can see the item changes when it is sent.
+Sending takes the item out of the family's view at once, everywhere: the
+gallery, albums, search, films, share links, anything that honours
+visibility. It is *held*: its visibility is set to admin-only with the source
+``screening``, and what it was is kept in ``screening_holds``. Administrators
+still see it. The decision then settles it: Ignore puts back what it was,
+Hide and Mark explicit apply on top of that, Delete moves it to the bin. A
+hold is not a hide: the AI's reading of the item is kept (db.forget_ai_reading
+passes held items by), so an item that comes back has lost nothing.
 
-One table, ``screening_requests``: one row per item and person who sent it.
-A row is only ever open; the administrator's decision is written to the
-audit log and the rows are removed. An item moved to the bin takes its rows
-with it (the foreign key), so a request can never outlive its photograph.
+Two tables. ``screening_requests``: one row per item and person who sent it,
+only ever open; the administrator's decision is written to the audit log and
+the rows are removed. ``screening_holds``: one row per held item (a live
+photo's clip is held with its still), with the visibility to put back. An
+item moved to the bin takes its rows with it (the foreign keys), so neither
+can outlive its photograph.
 """
 
 from __future__ import annotations
@@ -23,7 +31,7 @@ import time
 from typing import Any, Sequence
 
 __all__ = ["SCHEMA", "NOTE_MAX", "ACTIONS", "send", "withdraw", "sent_by", "sent_any",
-           "open_count", "queue", "settle"]
+           "open_count", "queue", "settle", "hold", "release", "HOLD_SOURCE"]
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS screening_requests (
@@ -39,7 +47,16 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_screening_asset_user
     ON screening_requests(asset_id, user_id);
 CREATE INDEX IF NOT EXISTS idx_screening_created
     ON screening_requests(created_at);
+
+CREATE TABLE IF NOT EXISTS screening_holds (
+    asset_id       INTEGER PRIMARY KEY REFERENCES assets(id) ON DELETE CASCADE,
+    was_visibility INTEGER,
+    was_source     TEXT
+);
 """
+
+#: ``assets.vis_source`` while an item is held for screening.
+HOLD_SOURCE = "screening"
 
 #: The most a note may say: "this is my bank statement", not a letter.
 NOTE_MAX = 200
@@ -142,13 +159,71 @@ def queue(conn: sqlite3.Connection, limit: int = 500) -> list[dict[str, Any]]:
 
 
 def settle(conn: sqlite3.Connection, asset_ids: Sequence[int]) -> int:
-    """An administrator has decided: these items leave the queue."""
+    """An administrator has decided: these items leave the queue, and what
+    was held for them is put back as it was (the decision is applied after)."""
     ids = [int(i) for i in asset_ids]
     if not ids:
         return 0
+    release(conn, ids)
     from .db import _write_lock                                   # noqa: PLC0415
     with _write_lock:
         cursor = conn.execute(
             f"DELETE FROM screening_requests WHERE asset_id IN ({_marks(ids)})", ids)
         conn.commit()
     return cursor.rowcount
+
+
+def hold(conn: sqlite3.Connection, asset_ids: Sequence[int]) -> int:
+    """Take these items out of the family's view until an admin decides.
+
+    Only what the family can see now is held: an item already admin-only, or
+    kept "Only to me", is out of their view already and is left as it is.
+    Returns how many rows were held, live clips included.
+    """
+    from .db import _write_lock, with_live_clips                  # noqa: PLC0415
+    ids = with_live_clips(conn, [int(i) for i in asset_ids])
+    held = 0
+    with _write_lock:
+        for start in range(0, len(ids), 500):
+            chunk = ids[start:start + 500]
+            marks = _marks(chunk)
+            conn.execute(
+                f"INSERT OR IGNORE INTO screening_holds (asset_id, was_visibility, was_source) "
+                f"SELECT id, visibility, vis_source FROM assets "
+                f"WHERE id IN ({marks}) AND COALESCE(visibility, 1) < 2 "
+                f"AND private_to IS NULL", chunk)
+            cursor = conn.execute(
+                f"UPDATE assets SET visibility=2, vis_source=? "
+                f"WHERE id IN (SELECT asset_id FROM screening_holds WHERE asset_id IN ({marks})) "
+                f"AND COALESCE(visibility, 1) < 2", (HOLD_SOURCE, *chunk))
+            held += max(0, cursor.rowcount)
+        conn.commit()
+    return held
+
+
+def release(conn: sqlite3.Connection, asset_ids: Sequence[int]) -> int:
+    """Put held items back to what they were before they were sent.
+
+    An item whose visibility was changed again while it was held (an admin
+    hid its folder, say) keeps that later decision. Returns how many items
+    were put back.
+    """
+    from .db import _write_lock, with_live_clips                  # noqa: PLC0415
+    ids = with_live_clips(conn, [int(i) for i in asset_ids])
+    restored = 0
+    with _write_lock:
+        for start in range(0, len(ids), 500):
+            chunk = ids[start:start + 500]
+            marks = _marks(chunk)
+            cursor = conn.execute(
+                f"UPDATE assets SET "
+                f"visibility = COALESCE((SELECT was_visibility FROM screening_holds h "
+                f"  WHERE h.asset_id = assets.id), 1), "
+                f"vis_source = COALESCE((SELECT was_source FROM screening_holds h "
+                f"  WHERE h.asset_id = assets.id), 'default') "
+                f"WHERE id IN ({marks}) AND vis_source = ? "
+                f"AND id IN (SELECT asset_id FROM screening_holds)", (*chunk, HOLD_SOURCE))
+            restored += max(0, cursor.rowcount)
+            conn.execute(f"DELETE FROM screening_holds WHERE asset_id IN ({marks})", chunk)
+        conn.commit()
+    return restored
