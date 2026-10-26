@@ -3973,6 +3973,32 @@ def store_revealing_scores(conn: sqlite3.Connection,
         conn.commit()
 
 
+def flag_revealing(conn: sqlite3.Connection, root: str, line: float, *,
+                   ids: Sequence[int] | None = None) -> int:
+    """Flag as explicit every picture of people in only their underwear
+    scored at *line* or over, so it is out of the family app altogether, the
+    gallery as well as search (media/revealing.py).
+
+    A verdict an administrator gave by hand is theirs and stays, and nothing
+    is unflagged here: the content check's own flag is the tagger's business.
+    *ids* narrows it to items just judged. Returns how many were flagged.
+    """
+    if line <= 0:
+        return 0
+    where = ("root=? AND kind='picture' AND revealing >= ? AND nsfw=0 "
+             "AND nsfw_source<>'manual'")
+    args: list[Any] = [str(root), float(line)]
+    if ids is not None:
+        if not ids:
+            return 0
+        where += f" AND id IN ({','.join('?' * len(ids))})"
+        args += [int(i) for i in ids]
+    with _write_lock:
+        flagged = conn.execute(f"UPDATE assets SET nsfw=1 WHERE {where}", args).rowcount
+        conn.commit()
+    return flagged
+
+
 def restore_screens(conn: sqlite3.Connection) -> int:
     """Undo the rule: every item it hid goes back to the level it would have.
 
