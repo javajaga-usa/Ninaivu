@@ -31,7 +31,8 @@ takes minutes rather than hours.
 ## The quick way: export and import the whole index
 
 The console's **Migration** page has **Export and import the whole index**.
-On the old computer, **Export** writes one file to a folder you choose, with
+On the old computer, **Export** writes one file to an empty folder you choose
+(a folder with anything in it already is refused), with
 the index and everything Ninaivu worked out beside it: the thumbnails, face
 crops, memory films, letters, photo books, coloured photographs, working
 copies and the thumbnail keys, along with the settings, the certificate
@@ -40,8 +41,12 @@ without them). Ninaivu carries on while it is made. From the command line it
 is `ninaivu backup --full --out <folder>`.
 
 On the new computer, start Ninaivu, open the same page, give **Import from**
-the file (or the folder it is in) and press **Check first**: it reads the file
-and says what it holds without changing anything. **Import and restart** then
+the file (or the folder it is in) and press **Check first**: it says what the
+file holds, then reads every file in it against its checksum, with progress,
+without changing anything. It also checks there is room beside Ninaivu's
+folder to unpack it. Only when that has passed is **Import and restart**
+offered; an export cut short on its way to the drive is found here, not after
+the restart. **Import and restart** then
 restarts Ninaivu, which puts the file in place before it opens anything, with
 every check `ninaivu restore` makes. The state folder that was there is kept
 beside it as `.ninaivu_pre_restore_…`, and an import that fails leaves it in

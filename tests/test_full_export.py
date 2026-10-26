@@ -302,3 +302,147 @@ def test_the_console_refuses_an_import_it_cannot_read(console, tmp_path):
     reply = client.post("/api/admin/migration/import", json={"path": str(tmp_path / "nothing")})
     assert reply.status_code == 400
     assert full_export.pending(cfg.state_dir) is None
+
+
+# --- saying at once what is happening, and refusing early -----------------
+
+def test_an_export_goes_only_into_an_empty_folder(machines):
+    cfg = SimpleNamespace(state_dir=machines.here, roots=[], mirror_dir="")
+    out = machines.base / "usb"
+    out.mkdir()
+    (out / "holiday.jpg").write_bytes(b"x")
+    with pytest.raises(full_export.Refused) as refused:
+        full_export.Exporter().start(cfg, out)
+    assert "not empty" in refused.value.said and "holiday.jpg" in refused.value.said
+    assert refused.value.said.template.startswith("{folder} is not empty")
+
+
+def test_what_a_computer_leaves_in_a_folder_does_not_make_it_full(machines):
+    cfg = SimpleNamespace(state_dir=machines.here, roots=[], mirror_dir="")
+    out = machines.base / "usb"
+    out.mkdir()
+    for name in (".DS_Store", "._holiday.jpg", "Thumbs.db", "desktop.ini"):
+        (out / name).write_bytes(b"x")
+    full_export.check_export_folder(out, cfg)
+
+
+def test_an_export_says_it_is_preparing_before_it_has_measured_anything(machines, monkeypatch):
+    import threading
+    measuring = threading.Event()
+    go_on = threading.Event()
+    real = full_export.size_of_export
+
+    def slow(state_dir):
+        measuring.set()
+        go_on.wait(10)
+        return real(state_dir)
+
+    monkeypatch.setattr(full_export, "size_of_export", slow)
+    exporter = full_export.Exporter()
+    cfg = SimpleNamespace(state_dir=machines.here, roots=[], mirror_dir="")
+    out = machines.base / "usb"
+    out.mkdir()
+    started = exporter.start(cfg, out)
+    assert started["running"] and started["step"] == "preparing"
+    assert measuring.wait(10)
+    assert exporter.status()["step_number"] == 1
+    go_on.set()
+    exporter._thread.join(60)
+    assert exporter.status()["ok"]
+
+
+def test_a_drive_too_small_is_said_as_the_export_result(machines, monkeypatch):
+    exporter = full_export.Exporter()
+    cfg = SimpleNamespace(state_dir=machines.here, roots=[], mirror_dir="")
+    out = machines.base / "usb"
+    out.mkdir()
+    monkeypatch.setattr(full_export.shutil, "disk_usage",
+                        lambda path: SimpleNamespace(free=1024, total=1, used=1))
+    exporter.start(cfg, out)
+    exporter._thread.join(60)
+    done = exporter.status()
+    assert not done["ok"] and "Choose a bigger drive" in done["error"]
+    assert done["said"].startswith("{folder} has {free} MB free") and done["params"]["free"] == "0"
+    assert list(out.iterdir()) == []
+
+
+def _check(bundle: Path) -> dict:
+    checker = full_export.Checker()
+    checker.start(full_export.look(bundle))
+    checker._thread.join(60)
+    return checker.status()
+
+
+def test_a_whole_export_reads_through(machines):
+    bundle = backup.snapshot(machines.here, machines.base / "out", full=True)
+    done = _check(bundle)
+    assert done["ok"] and not done["error"]
+    assert done["files_done"] == done["files_total"] > 0
+    assert done["bytes_done"] == done["bytes_total"] > 0
+
+
+def test_an_export_cut_short_is_found_before_the_restart(machines):
+    bundle = backup.snapshot(machines.here, machines.base / "out", full=True)
+    data = bundle.read_bytes()
+    bundle.write_bytes(data[: len(data) - 200])
+    done = _check(bundle)
+    assert not done["ok"] and "cut short" in done["error"]
+
+
+def test_a_damaged_file_in_an_export_is_named(machines):
+    bundle = backup.snapshot(machines.here, machines.base / "out", full=True)
+    unpacked = machines.base / "unpacked"
+    with tarfile.open(bundle) as tar:
+        tar.extractall(unpacked, filter="data")
+    (unpacked / "state" / "faces" / "1.jpg").write_bytes(b"something else")
+    with tarfile.open(bundle, "w:gz") as tar:
+        tar.add(unpacked / "state", arcname="state")
+    done = _check(bundle)
+    assert not done["ok"] and "faces/1.jpg" in done["error"] and "damaged" in done["error"]
+
+
+def test_an_export_that_never_finished_is_said_plainly(tmp_path):
+    (tmp_path / f"{backup.PARTIAL_PREFIX}abc.tmp").write_bytes(b"half")
+    with pytest.raises(full_export.Refused) as refused:
+        full_export.look(tmp_path)
+    assert "never finished" in refused.value.said
+
+
+def test_an_import_with_no_room_to_unpack_is_refused(machines, monkeypatch):
+    bundle = backup.snapshot(machines.here, machines.base / "out", full=True)
+    assert full_export.look(bundle)["unpacked_bytes"] > 0
+    monkeypatch.setattr(full_export.shutil, "disk_usage",
+                        lambda path: SimpleNamespace(free=1024, total=1, used=1))
+    with pytest.raises(full_export.Refused) as refused:
+        full_export.ask_for_import(machines.there, bundle)
+    assert "Make room" in refused.value.said
+    assert full_export.pending(machines.there) is None
+
+
+def test_the_console_refuses_a_folder_that_is_not_empty(console, tmp_path):
+    client, cfg = console
+    out = tmp_path / "usb"
+    out.mkdir()
+    (out / "notes.txt").write_text("mine")
+    reply = client.post("/api/admin/migration/export", json={"folder": str(out)})
+    assert reply.status_code == 400
+    body = reply.get_json()
+    assert "not empty" in body["error"] and body["said"].startswith("{folder} is not empty")
+    assert body["params"]["name"] == "notes.txt"
+
+
+def test_the_console_checks_an_export_and_will_not_import_a_damaged_one(console, tmp_path):
+    from ninaivu.api import migration_api
+    client, cfg = console
+    source = _state(tmp_path / "elsewhere", "elsewhere")
+    bundle = backup.snapshot(source, tmp_path / "usb", full=True)
+    data = bundle.read_bytes()
+    bundle.write_bytes(data[: len(data) - 200])
+    looked = client.post("/api/admin/migration/import/look", json={"path": str(bundle)})
+    assert looked.status_code == 200 and looked.get_json()["check"]["running"] in (True, False)
+    migration_api._the_checker()._thread.join(60)
+    state = client.get("/api/admin/migration/export").get_json()
+    assert state["check"]["ok"] is False and "cut short" in state["check"]["error"]
+    reply = client.post("/api/admin/migration/import", json={"path": str(bundle)})
+    assert reply.status_code == 400 and "cut short" in reply.get_json()["error"]
+    assert full_export.pending(cfg.state_dir) is None

@@ -35,7 +35,7 @@ from ..server import auth
 from ..storage import db
 from ..storage import reroot as reroot_kit
 from ._body import json_object
-from ..words import refusal, said
+from ..words import body_for, refusal, said
 
 log = logging.getLogger(__name__)
 
@@ -281,6 +281,7 @@ def reroot():
 # --- the whole index, out and in (storage/full_export.py) --------------------
 
 _exporter = None
+_checker = None
 _exporter_lock = threading.Lock()
 
 
@@ -293,11 +294,22 @@ def _the_exporter():
         return _exporter
 
 
+def _the_checker():
+    global _checker
+    from ..storage import full_export                    # noqa: PLC0415
+    with _exporter_lock:
+        if _checker is None:
+            _checker = full_export.Checker()
+        return _checker
+
+
 def _export_state(cfg) -> dict[str, Any]:
     from ..storage import full_export                    # noqa: PLC0415
     from . import server_api                             # noqa: PLC0415
     return {
         "export": _the_exporter().status(cfg.state_dir),
+        # The reading-through of the export last checked for an import.
+        "check": _the_checker().status(),
         "pending": full_export.pending(cfg.state_dir),
         "last_import": full_export.last_result(cfg.state_dir),
         # Whether the console can restart by itself to do an import, or the
@@ -324,7 +336,7 @@ def export_start():
         _the_exporter().start(cfg, Path(folder),
                               without_secrets=bool(body.get("without_secrets")))
     except full_export.Refused as refused:
-        return jsonify({"error": refused.said}), 400
+        return jsonify(body_for(refused.said)), 400
     auth.audit(db.connect(cfg.db_path), current_user().id, "index_export", folder)
     return jsonify(_export_state(cfg)), 202
 
@@ -332,15 +344,20 @@ def export_start():
 @migration_bp.post("/api/admin/migration/import/look")
 @require_admin
 def import_look():
-    """What the export at a path (or the newest in a folder) holds."""
+    """What the export at a path (or the newest in a folder) holds, from its
+    manifest; and the start of reading every file in it through
+    (full_export.Checker), which the page follows with the export status."""
     from ..storage import full_export                    # noqa: PLC0415
     path = str(json_object().get("path") or "").strip()
     if not path:
         return jsonify({"error": "Give the export file, or the folder it is in."}), 400
+    cfg = _cfg()
     try:
-        return jsonify(full_export.look(Path(path)))
+        found = full_export.look(Path(path), cfg.state_dir)
+        check = _the_checker().start(found)
     except full_export.Refused as refused:
-        return jsonify({"error": refused.said}), 400
+        return jsonify(body_for(refused.said)), 400
+    return jsonify({**found, "check": check})
 
 
 @migration_bp.post("/api/admin/migration/import")
@@ -361,12 +378,22 @@ def import_ask():
     cfg = _cfg()
     if _the_exporter().running:
         return jsonify({"error": "An export is being made. Wait for it to finish first."}), 409
+    checker = _the_checker()
+    if checker.running:
+        return jsonify({"error": "The export is still being checked. Wait for the check to finish."}), 409
     user = current_user()
     try:
+        found = full_export.look(Path(path), cfg.state_dir)
+        checked = checker.result_for(found["bundle"])
+        if checked is not None and not checked.get("ok"):
+            # Read through and found wanting: restarting would only fail.
+            return jsonify({"error": checked.get("error") or "",
+                            **({"said": checked["said"], "params": checked["params"]}
+                               if checked.get("said") else {})}), 400
         found = full_export.ask_for_import(cfg.state_dir, Path(path),
                                            by=getattr(user, "username", "") or "")
     except full_export.Refused as refused:
-        return jsonify({"error": refused.said}), 400
+        return jsonify(body_for(refused.said)), 400
     except OSError:
         log.exception("could not ask for the import")
         return jsonify({"error": "The import could not be asked for: Ninaivu could not write in its own folder."}), 500

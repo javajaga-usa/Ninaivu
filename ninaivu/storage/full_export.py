@@ -18,6 +18,7 @@ there is kept beside it, as a restore keeps it.
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import io
 import json
 import logging
@@ -34,7 +35,7 @@ from typing import Any
 
 from .. import __version__
 from . import backup
-from ..words import said
+from ..words import Said, said
 
 log = logging.getLogger(__name__)
 
@@ -46,8 +47,19 @@ RESULT = "import-result.json"
 #: What the last export did, so the console still says it after a restart.
 EXPORT_RESULT = "export-result.json"
 
-#: The steps of an export, in order (backup._snapshot).
-EXPORT_STEPS = ("copying", "checking", "verifying", "packing")
+#: The steps of an export, in order: measuring what goes in and whether it
+#: fits, then backup._snapshot's own.
+EXPORT_STEPS = ("preparing", "copying", "checking", "verifying", "packing")
+
+#: The steps of checking an export before it is imported (:class:`Checker`).
+CHECK_STEPS = ("reading", "checking")
+
+#: What a computer leaves in a folder by itself. A folder holding only these
+#: is still an empty folder to the person who just made it.
+LITTER = frozenset({
+    ".ds_store", ".localized", ".spotlight-v100", ".fseventsd", ".trashes",
+    ".temporaryitems", ".documentrevisions-v100", "thumbs.db", "desktop.ini",
+    "$recycle.bin", "system volume information", "lost+found"})
 
 #: Room a full export needs on top of what it holds: the manifest, the tar's
 #: headers, and a disk that should not be left with nothing at all.
@@ -75,6 +87,20 @@ def _read_json(path: Path) -> dict[str, Any] | None:
     except (OSError, ValueError):
         return None
     return data if isinstance(data, dict) else None
+
+
+def _mb(n: int) -> str:
+    return f"{n // 1048576:,}"
+
+
+def _error_fields(error: str | None) -> dict[str, Any]:
+    """*error* as the console's state keeps it: the English, and for a
+    sentence with values in it the template and the values, so the page can
+    say it in Tamil (words.Said)."""
+    fields: dict[str, Any] = {"error": str(error) if error else None}
+    if isinstance(error, Said):
+        fields.update(said=error.template, params=error.params)
+    return fields
 
 
 def _write_json(path: Path, data: dict[str, Any]) -> None:
@@ -107,14 +133,22 @@ def size_of_export(state_dir: Path | str) -> int:
     return total
 
 
+def things_in(folder: Path) -> list[str]:
+    """What is in *folder*, leaving out what a computer puts there by itself
+    (:data:`LITTER`, and the ``._`` files a Mac writes on other disks)."""
+    return sorted(entry.name for entry in os.scandir(folder)
+                  if entry.name.casefold() not in LITTER
+                  and not entry.name.startswith("._"))
+
+
 def check_export_folder(folder: Path, cfg) -> None:
     """Refused, in words for the console, if a full export must not go
     in *folder*."""
     if not str(folder).strip() or not folder.is_absolute():
         raise Refused(said("Give the full path of the folder to write the export to."))
     if not folder.is_dir():
-        raise Refused(f"{folder} is not a folder on this computer. Check the drive "
-                         "is plugged in and the path is right.")
+        raise Refused(Said("{folder} is not a folder on this computer. Check the drive "
+                           "is plugged in and the path is right.", folder=folder))
     try:
         backup.check_folder(folder, cfg)
     except ValueError as exc:
@@ -122,6 +156,19 @@ def check_export_folder(folder: Path, cfg) -> None:
     if backup._inside(folder, Path(cfg.state_dir)):
         raise Refused(said(
             "The export cannot go inside Ninaivu's own folder. Choose a folder on the drive you are taking to the other computer."))
+    # Empty, so the export is the only thing there: nothing of somebody's is
+    # mixed in with it, and an older export is never taken for the new one
+    # when the other computer is pointed at the folder.
+    try:
+        inside = things_in(folder)
+    except OSError:
+        raise Refused(Said("{folder} cannot be read. Check the drive is plugged in "
+                           "and Ninaivu may use it.", folder=folder)) from None
+    if inside:
+        raise Refused(Said(
+            "{folder} is not empty: it has {count} things in it already, such as {name}. "
+            "Choose a different folder, one with nothing in it, for the export.",
+            folder=folder, count=len(inside), name=inside[0]))
 
 
 class Exporter:
@@ -159,15 +206,11 @@ class Exporter:
         with self._lock:
             if self.running:
                 raise Refused(said("An export is already being made."))
-            needed = size_of_export(cfg.state_dir) + SPARE_BYTES
-            free = shutil.disk_usage(folder).free
-            if free < needed:
-                raise Refused(
-                    f"{folder} has {free // 1048576:,} MB free, and the export needs about "
-                    f"{needed // 1048576:,} MB. Choose a bigger drive.")
-            self._state = {"running": True, "step": "copying", "folder": str(folder),
-                           "started": time.time(), "expected_bytes": needed - SPARE_BYTES,
-                           "without_secrets": without_secrets}
+            # Answered at once, "preparing": measuring what goes in walks
+            # every thumbnail, which on a large library is half a minute
+            # before anything else can be said.
+            self._state = {"running": True, "step": "preparing", "folder": str(folder),
+                           "started": time.time(), "without_secrets": without_secrets}
             self._thread = threading.Thread(
                 target=self._run, args=(Path(cfg.state_dir), folder, without_secrets),
                 name="full-export", daemon=True)
@@ -183,18 +226,27 @@ class Exporter:
         made = None
         error = None
         try:
-            made = backup.snapshot(
-                state_dir, folder, full=True, progress=self._step,
-                leave_out=backup.KEPT_HOME if without_secrets else (),
-                blank_secrets=without_secrets)
-            if made is None:
-                error = "The export could not be made. Ninaivu's log says what went wrong."
+            needed = size_of_export(state_dir) + SPARE_BYTES
+            free = shutil.disk_usage(folder).free
+            with self._lock:
+                self._state["expected_bytes"] = needed - SPARE_BYTES
+            if free < needed:
+                error = Said("{folder} has {free} MB free, and the export needs about "
+                             "{needed} MB. Choose a bigger drive.",
+                             folder=folder, free=_mb(free), needed=_mb(needed))
+            else:
+                made = backup.snapshot(
+                    state_dir, folder, full=True, progress=self._step,
+                    leave_out=backup.KEPT_HOME if without_secrets else (),
+                    blank_secrets=without_secrets)
+                if made is None:
+                    error = said("The export could not be made. Ninaivu's log says what went wrong.")
         except Exception:                                 # noqa: BLE001
             log.exception("the full export failed")
-            error = "The export could not be made. Ninaivu's log says what went wrong."
+            error = said("The export could not be made. Ninaivu's log says what went wrong.")
         with self._lock:
-            self._state.update({"step": None, "finished": time.time(), "error": error,
-                                "ok": made is not None})
+            self._state.update({"step": None, "finished": time.time(),
+                                **_error_fields(error), "ok": made is not None})
             if made is not None:
                 self._state.update({"bundle": str(made), "bytes": made.stat().st_size})
             kept = {key: value for key, value in self._state.items() if key != "running"}
@@ -221,19 +273,26 @@ def find_bundle(path: Path) -> Path:
             found = sorted(path.glob(f"{prefix}*.tar.gz"), reverse=True)
             if found:
                 return found[0]
-        raise Refused(f"There is no Ninaivu export in {path}.")
-    raise Refused(f"{path} is not on this computer. Check the drive is plugged in "
-                     "and the path is right.")
+        if any(path.glob(f"{backup.PARTIAL_PREFIX}*.tmp")):
+            raise Refused(Said("The export in {folder} was never finished: only part of it "
+                               "was written. Make the export again.", folder=path))
+        raise Refused(Said("There is no Ninaivu export in {folder}.", folder=path))
+    raise Refused(Said("{folder} is not on this computer. Check the drive is plugged in "
+                       "and the path is right.", folder=path))
 
 
-def look(path: Path) -> dict[str, Any]:
+def look(path: Path, state_dir: Path | str | None = None) -> dict[str, Any]:
     """What the bundle at *path* holds, read from its manifest without
-    unpacking it. Refused when it is not one Ninaivu can import.
+    unpacking it. Refused when it is not one Ninaivu can import, or, given
+    the *state_dir* it would go into, when there is no room to unpack it.
 
     Everything is checked again when it is imported, before anything is
     replaced; this is so the console can say what is about to come in.
     """
     archive = find_bundle(path)
+    if archive.name.startswith(backup.PARTIAL_PREFIX):
+        raise Refused(Said("{name} is an export that was never finished: only part of it "
+                           "was written. Make the export again.", name=archive.name))
     manifest = None
     try:
         with tarfile.open(archive, "r:gz") as tar:
@@ -244,20 +303,39 @@ def look(path: Path) -> dict[str, Any]:
                     break
     except (OSError, ValueError, tarfile.TarError, EOFError, zlib.error) as exc:
         log.warning("could not read %s as an export: %s", archive, exc)
-        raise Refused(f"{archive.name} cannot be read as a Ninaivu export. It may be "
-                      "damaged, or not a Ninaivu export at all.") from None
+        raise Refused(Said("{name} cannot be read as a Ninaivu export. It may be "
+                           "damaged, or not a Ninaivu export at all.", name=archive.name)) from None
     if not isinstance(manifest, dict) or not isinstance(manifest.get("files"), dict):
-        raise Refused(f"{archive.name} is not a Ninaivu export: it has no list of what is in it.")
+        raise Refused(Said("{name} is not a Ninaivu export: it has no list of what is in it.",
+                           name=archive.name))
     files = manifest["files"]
     if "index.db" not in files:
-        raise Refused(f"{archive.name} has no index in it.")
+        raise Refused(Said("{name} has no index in it.", name=archive.name))
     from ..cloud import index_copy                         # noqa: PLC0415
     if manifest.get("kind") == index_copy.KIND:
         raise Refused(said(
             "That is the copy of the index kept in Drive. Bring it back from the Restore page instead."))
     if _version_key(manifest.get("version")) > _version_key(__version__):
-        raise Refused(f"It was made by Ninaivu {manifest.get('version')}, newer than this "
-                         f"one ({__version__}). Update Ninaivu here first, then import it.")
+        raise Refused(Said("It was made by Ninaivu {made_by}, newer than this one ({version}). "
+                           "Update Ninaivu here first, then import it.",
+                           made_by=manifest.get("version"), version=__version__))
+    unpacked = 0
+    for entry in files.values():
+        with contextlib.suppress(TypeError, ValueError, AttributeError):
+            unpacked += int(entry.get("size") or 0)
+    if state_dir is not None:
+        # Unpacked beside the state folder (cli/backup_restore), and the
+        # folder that is there now is kept beside it, so the whole of it.
+        beside = Path(state_dir).expanduser().absolute().parent
+        try:
+            free = shutil.disk_usage(beside).free
+        except OSError:
+            free = None
+        if free is not None and free < unpacked + SPARE_BYTES:
+            raise Refused(Said(
+                "This computer has {free} MB free beside Ninaivu's folder, and unpacking "
+                "the export needs about {needed} MB. Make room on that drive first.",
+                free=_mb(free), needed=_mb(unpacked + SPARE_BYTES)))
     folders: dict[str, int] = {}
     for name in files:
         top = str(name).split("/", 1)[0]
@@ -272,6 +350,7 @@ def look(path: Path) -> dict[str, Any]:
         "created_at": manifest.get("created_at"),
         "from": manifest.get("source_state_dir"),
         "files": len(files),
+        "unpacked_bytes": unpacked,
         "counts": manifest.get("counts") or {},
         "folders": folders,
         "thumbnails": folders.get("thumbs", 0),
@@ -282,11 +361,131 @@ def look(path: Path) -> dict[str, Any]:
 def ask_for_import(state_dir: Path | str, path: Path, *, by: str = "") -> dict[str, Any]:
     """Have the next start import the bundle at *path*. Refused if it
     cannot be imported. Returns what :func:`look` said of it."""
-    found = look(path)
+    found = look(path, state_dir)
     _write_json(Path(state_dir) / PENDING, {
         "bundle": found["bundle"], "asked_at": time.time(), "by": by,
         "bytes": found["bytes"]})
     return found
+
+
+class Checker:
+    """Reads an export through before it is imported, one at a time, in the
+    background: every file in it against the size and checksum its manifest
+    wrote down, without unpacking anything.
+
+    :func:`look` reads only the manifest at the front, so an export cut short
+    on its way to the drive looks whole there; found here, it is found before
+    the restart rather than after it.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._thread: threading.Thread | None = None
+        self._state: dict[str, Any] = {"running": False}
+
+    @property
+    def running(self) -> bool:
+        return self._thread is not None and self._thread.is_alive()
+
+    def status(self) -> dict[str, Any]:
+        with self._lock:
+            state = {**self._state, "running": self.running}
+        if state.get("started"):
+            state["seconds"] = round((state.get("finished") or time.time()) - state["started"], 1)
+        if state["running"] and state.get("step") in CHECK_STEPS:
+            state["step_number"] = CHECK_STEPS.index(state["step"]) + 1
+            state["steps"] = len(CHECK_STEPS)
+        return state
+
+    def result_for(self, bundle: Path | str) -> dict[str, Any] | None:
+        """The finished check of *bundle*, if the last one was of it."""
+        state = self.status()
+        if state.get("bundle") != str(bundle) or state["running"] or "ok" not in state:
+            return None
+        return state
+
+    def start(self, found: dict[str, Any]) -> dict[str, Any]:
+        """Begin reading the bundle :func:`look` described as *found*."""
+        with self._lock:
+            if self.running:
+                raise Refused(said("An export is already being checked. Wait for it to finish."))
+            self._state = {"running": True, "step": "reading", "bundle": found["bundle"],
+                           "started": time.time(), "files_done": 0,
+                           "files_total": int(found.get("files") or 0), "bytes_done": 0,
+                           "bytes_total": int(found.get("unpacked_bytes") or 0)}
+            self._thread = threading.Thread(target=self._run, args=(Path(found["bundle"]),),
+                                            name="export-check", daemon=True)
+            self._thread.start()
+        return self.status()
+
+    def _run(self, archive: Path) -> None:
+        error = None
+        try:
+            error = self._read(archive)
+        except (OSError, tarfile.TarError, EOFError, zlib.error) as exc:
+            log.warning("the export %s could not be read through: %s", archive, exc)
+            error = Said("{name} is cut short or damaged part-way through. Copy it to this "
+                         "drive again, or make the export again.", name=archive.name)
+        except Exception:                                 # noqa: BLE001
+            log.exception("checking the export failed")
+            error = said("The export could not be checked. Ninaivu's log says what went wrong.")
+        with self._lock:
+            self._state.update({"step": None, "finished": time.time(), "ok": error is None,
+                                **_error_fields(error)})
+
+    def _count(self, size: int) -> None:
+        with self._lock:
+            self._state["files_done"] += 1
+            self._state["bytes_done"] += size
+
+    def _read(self, archive: Path) -> str | None:
+        """None when every file is there and as written; otherwise why not."""
+        files: dict[str, Any] = {}
+        # The manifest is near the front, after the few names that sort
+        # before it: read to it first, then through everything.
+        with tarfile.open(archive, "r:gz") as tar:
+            for member in tar:
+                if member.name == "state/backup_manifest.json" and member.isfile():
+                    handle = tar.extractfile(member)
+                    manifest = json.loads(handle.read().decode("utf-8")) if handle else {}
+                    files = (manifest.get("files") or {}) if isinstance(manifest, dict) else {}
+                    break
+        if not files:
+            return Said("{name} is not a Ninaivu export: it has no list of what is in it.",
+                        name=archive.name)
+        with self._lock:
+            self._state["step"] = "checking"
+        seen: set[str] = set()
+        with tarfile.open(archive, "r:gz") as tar:
+            for member in tar:
+                if not member.isfile():
+                    continue
+                name = member.name[len("state/"):] if member.name.startswith("state/") else ""
+                if name == "backup_manifest.json":
+                    continue
+                expected = files.get(name)
+                if not isinstance(expected, dict):
+                    return Said("{name} has something in it the export never listed ({file}), "
+                                "so it is not as it was made. Make the export again.",
+                                name=archive.name, file=member.name)
+                handle = tar.extractfile(member)
+                digest = hashlib.sha256()
+                size = 0
+                while handle is not None and (chunk := handle.read(1024 * 1024)):
+                    digest.update(chunk)
+                    size += len(chunk)
+                if size != expected.get("size") or digest.hexdigest() != expected.get("sha256"):
+                    return Said("{file} in {name} is not as it was written: it is damaged. "
+                                "Copy the export to this drive again, or make it again.",
+                                name=archive.name, file=name)
+                seen.add(name)
+                self._count(size)
+        missing = [name for name in files if name not in seen]
+        if missing:
+            return Said("{name} is cut short: {missing} of its {total} files are not in it. "
+                        "It may not have finished copying to this drive.",
+                        name=archive.name, missing=len(missing), total=len(files))
+        return None
 
 
 def pending(state_dir: Path | str) -> dict[str, Any] | None:
