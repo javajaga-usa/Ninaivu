@@ -5239,5 +5239,8 @@
   "{name} is an export that was never finished: only part of it was written. Make the export again.": "{name} ஒருபோதும் முடியாத ஏற்றுமதி: அதன் ஒரு பகுதி மட்டுமே எழுதப்பட்டது. ஏற்றுமதியை மீண்டும் செய்யுங்கள்.",
   "{name} is cut short or damaged part-way through. Copy it to this drive again, or make the export again.": "{name} இடையில் துண்டிக்கப்பட்டுள்ளது அல்லது சேதமடைந்துள்ளது. அதை இந்த இயக்ககத்துக்கு மீண்டும் நகலெடுங்கள், அல்லது ஏற்றுமதியை மீண்டும் செய்யுங்கள்.",
   "{name} is cut short: {missing} of its {total} files are not in it. It may not have finished copying to this drive.": "{name} முழுமையாக இல்லை: அதன் {total} கோப்புகளில் {missing} இல்லை. இந்த இயக்ககத்துக்கு நகலெடுப்பது முடியாமல் போயிருக்கலாம்.",
-  "{name} is not a Ninaivu export: it has no list of what is in it.": "{name} நினைவு ஏற்றுமதி அல்ல: அதில் உள்ளவற்றின் பட்டியல் இல்லை."
+  "{name} is not a Ninaivu export: it has no list of what is in it.": "{name} நினைவு ஏற்றுமதி அல்ல: அதில் உள்ளவற்றின் பட்டியல் இல்லை.",
+  "{name} is there, but this computer will not let Ninaivu open it: the file still belongs to the account that made it on the other computer. In a terminal here, run: sudo chmod a+r \"{path}\" and try again.": "{name} இங்கே உள்ளது, ஆனால் இந்தக் கணினி நினைவை அதைத் திறக்க விடவில்லை: மற்றக் கணினியில் அதை உருவாக்கிய கணக்கிற்கே அந்தக் கோப்பு இன்னும் சொந்தமாக உள்ளது. இங்கே ஒரு முனையத்தில் sudo chmod a+r \"{path}\" என இயக்கி, மீண்டும் முயலுங்கள்.",
+  "{name} is empty: nothing of the export reached this drive. Copy it to the drive again, or make the export again.": "{name} காலியாக உள்ளது: ஏற்றுமதியின் எதுவும் இந்த இயக்ககத்தை அடையவில்லை. அதை இயக்ககத்துக்கு மீண்டும் நகலெடுங்கள், அல்லது ஏற்றுமதியை மீண்டும் செய்யுங்கள்.",
+  "{name} could not be read from the drive ({reason}). Check the drive is plugged in, then try again.": "{name} ஐ இயக்ககத்திலிருந்து படிக்க முடியவில்லை ({reason}). இயக்ககம் இணைக்கப்பட்டுள்ளதா எனப் பார்த்து, மீண்டும் முயலுங்கள்."
 }

@@ -18,6 +18,7 @@ there is kept beside it, as a restore keeps it.
 from __future__ import annotations
 
 import contextlib
+import gzip
 import hashlib
 import io
 import json
@@ -281,6 +282,37 @@ def find_bundle(path: Path) -> Path:
                        "and the path is right.", folder=path))
 
 
+def unreadable(archive: Path, exc: BaseException, *, cut_short: bool = False) -> Said:
+    """Why *archive* could not be read, in words that say what to do.
+
+    An export made on a Mac is private to the account that made it (0600,
+    owned by uid 501). Carried on a drive that keeps owners — HFS+ or ext4 —
+    to a Linux computer, it is a whole, sound file that another account may
+    not open; said as "damaged", it sent people off to make it again.
+    """
+    if isinstance(exc, PermissionError):
+        return Said("{name} is there, but this computer will not let Ninaivu open it: "
+                    "the file still belongs to the account that made it on the other "
+                    "computer. In a terminal here, run: sudo chmod a+r \"{path}\" and "
+                    "try again.", name=archive.name, path=archive)
+    try:
+        size = archive.stat().st_size
+    except OSError:
+        size = None
+    if size == 0:
+        return Said("{name} is empty: nothing of the export reached this drive. Copy it "
+                    "to the drive again, or make the export again.", name=archive.name)
+    if cut_short or isinstance(exc, (EOFError, zlib.error)) or "end of data" in str(exc):
+        return Said("{name} is cut short or damaged part-way through. Copy it to this "
+                    "drive again, or make the export again.", name=archive.name)
+    if isinstance(exc, OSError) and not isinstance(exc, gzip.BadGzipFile):
+        return Said("{name} could not be read from the drive ({reason}). Check the drive "
+                    "is plugged in, then try again.", name=archive.name,
+                    reason=exc.strerror or str(exc))
+    return Said("{name} cannot be read as a Ninaivu export. It may be "
+                "damaged, or not a Ninaivu export at all.", name=archive.name)
+
+
 def look(path: Path, state_dir: Path | str | None = None) -> dict[str, Any]:
     """What the bundle at *path* holds, read from its manifest without
     unpacking it. Refused when it is not one Ninaivu can import, or, given
@@ -303,8 +335,7 @@ def look(path: Path, state_dir: Path | str | None = None) -> dict[str, Any]:
                     break
     except (OSError, ValueError, tarfile.TarError, EOFError, zlib.error) as exc:
         log.warning("could not read %s as an export: %s", archive, exc)
-        raise Refused(Said("{name} cannot be read as a Ninaivu export. It may be "
-                           "damaged, or not a Ninaivu export at all.", name=archive.name)) from None
+        raise Refused(unreadable(archive, exc)) from None
     if not isinstance(manifest, dict) or not isinstance(manifest.get("files"), dict):
         raise Refused(Said("{name} is not a Ninaivu export: it has no list of what is in it.",
                            name=archive.name))
@@ -424,8 +455,7 @@ class Checker:
             error = self._read(archive)
         except (OSError, tarfile.TarError, EOFError, zlib.error) as exc:
             log.warning("the export %s could not be read through: %s", archive, exc)
-            error = Said("{name} is cut short or damaged part-way through. Copy it to this "
-                         "drive again, or make the export again.", name=archive.name)
+            error = unreadable(archive, exc, cut_short=True)
         except Exception:                                 # noqa: BLE001
             log.exception("checking the export failed")
             error = said("The export could not be checked. Ninaivu's log says what went wrong.")
