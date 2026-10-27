@@ -6,6 +6,10 @@
 
 - **The Faces tab no longer says "99+" for good.** It counted every unnamed group of three or more faces, and a library with hundreds of thousands of faces always has hundreds of those, mostly strangers in the background. Now **Needs you**, the Faces tab and the People & access dot count only the unnamed faces seen in **25 photographs or more**, somebody who keeps turning up and is worth naming, and the Overview calls them **Faces seen often, without a name**. The Faces page still lists every group, largest first.
 
+### Quicker console pages
+
+- **Pages that read the whole library on every open now remember or read less.** Measured on a library of 210,000 items: the folder picker for a profile's folders and the suggested locations were each most of a second on every open and are now remembered until the library changes; the duplicates review and the sidebar's count of duplicates read only the duplicates instead of every item (a quarter of the time or less); the largest-files list counts through the size index instead of reading every item; and the Space screen works out how fast the library grows in one read instead of three. Nothing they show has changed.
+
 ### Fixed
 
 - **Maintenance mode shows family members the downtime notice again.** A signed-in family member got an empty, broken gallery instead of the notice, both on a page already open and after a refresh, and the gallery did not come back when maintenance ended: the screen lock's watch on the page's requests replaced the notice's own. The two now work together. An open gallery also asks every minute, and whenever it comes back into view, whether maintenance has started, and once it ends (or another mode is chosen) the gallery comes back by itself within ten seconds.
