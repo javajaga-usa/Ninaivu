@@ -332,9 +332,53 @@ def two_computers(services, now: float) -> dict[str, Any]:
     return _check("two_computers", title, OK, line, page)
 
 
+#: A phone with a key not heard from for this long is worth a look.
+PHONE_QUIET_DAYS = 14
+
+
+def phones(services, now: float) -> dict[str, Any]:
+    """Phones backing themselves up with a phone key (api/api_webdav.py): a
+    phone whose app stopped sending (Tailscale off, the app closed for good, a
+    new phone) says nothing, so its silence is what is looked for."""
+    from ..media import phone_backup, phone_keys                  # noqa: PLC0415
+    from ..storage import db                                      # noqa: PLC0415
+
+    title, page = said("Phones back themselves up"), "uploads"
+    conn = db.connect(services.cfg.db_path)
+    try:
+        keys = phone_keys.listed(conn)
+        phone_backup.init_schema(conn)
+    except sqlite3.OperationalError:
+        keys = []
+    if not keys:
+        return _check("phones", title, OFF, said("No phone has a key to back itself up."), page)
+    quiet = []
+    for key in keys:
+        # Heard from: the phone asked something here, or a file it sent to
+        # the always-on computer was collected.
+        last_file = conn.execute(
+            "SELECT MAX(finished_at) FROM phone_backups WHERE device_id=?",
+            (phone_keys.device_id(key["id"]),)).fetchone()[0] or 0
+        heard = max(float(key["last_used_at"] or 0), float(last_file))
+        since = heard or float(key["created_at"] or 0)
+        if now - since > PHONE_QUIET_DAYS * DAY:
+            quiet.append((key, heard))
+    if not quiet:
+        return _check("phones", title, OK,
+                      f"All {len(keys)} phone{'s' if len(keys) != 1 else ''} with a key "
+                      f"sent or checked in within {PHONE_QUIET_DAYS} days.", page)
+    names = ", ".join(
+        f"{k['name']} ({k['person']}): " + (f"last heard from {_age(now - heard)}" if heard
+                                            else "never sent anything")
+        for k, heard in quiet[:4])
+    return _check("phones", title, ATTENTION,
+                  f"{len(quiet)} of {len(keys)} phones with a key have gone quiet. {names}.",
+                  page, said("On that phone, check that Tailscale is connected and the sync app's automatic transfer is still on. Revoke the key of a phone no longer used."))
+
+
 CHECKS: list[Callable[[Any, float], dict[str, Any]]] = [
     copies, cloud_copy, restore_tests, index_in_drive, local_backups, drives, archive,
-    storage_check, room_to_grow, two_computers,
+    storage_check, room_to_grow, two_computers, phones,
 ]
 
 _TITLES = {
@@ -345,6 +389,7 @@ _TITLES = {
     "copies": said("Every photograph in more than one place"),
     "room_to_grow": said("Room for new photographs"),
     "two_computers": said("The two computers"),
+    "phones": said("Phones back themselves up"),
 }
 
 

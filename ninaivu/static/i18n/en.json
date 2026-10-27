@@ -4994,5 +4994,8 @@
   "Sent to an admin. It is out of the family’s gallery until they decide.": "Sent to an admin. It is out of the family’s gallery until they decide.",
   "These {items} leave the family’s gallery now, and an admin decides whether they come back.": "These {items} leave the family’s gallery now, and an admin decides whether they come back.",
   "held while an admin screens it": "held while an admin screens it",
-  "{items} sent to an admin. They are out of the family’s gallery until an admin decides.": "{items} sent to an admin. They are out of the family’s gallery until an admin decides."
+  "{items} sent to an admin. They are out of the family’s gallery until an admin decides.": "{items} sent to an admin. They are out of the family’s gallery until an admin decides.",
+  "Phones back themselves up": "Phones back themselves up",
+  "No phone has a key to back itself up.": "No phone has a key to back itself up.",
+  "On that phone, check that Tailscale is connected and the sync app's automatic transfer is still on. Revoke the key of a phone no longer used.": "On that phone, check that Tailscale is connected and the sync app's automatic transfer is still on. Revoke the key of a phone no longer used."
 }

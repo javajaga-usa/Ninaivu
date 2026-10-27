@@ -5248,5 +5248,8 @@
   "Start Ninaivu again on that computer, the way it is usually started (the Control Panel, or the launcher). If the import was done, it starts with the imported index; if not, with the one that was there.": "அந்தக் கணினியில் வழக்கமாகத் தொடங்கும் முறையில் (கட்டுப்பாட்டுப் பலகம், அல்லது தொடக்கி) நினைவை மீண்டும் தொடங்குங்கள். இறக்குமதி முடிந்திருந்தால், இறக்குமதி செய்த அட்டவணையுடன் தொடங்கும்; இல்லையென்றால், முன்பு இருந்ததுடன்.",
   "What the restart did is in {path}, and what Ninaivu said as it started is in {log}, on that computer.": "மறுதொடக்கம் என்ன செய்தது என்பது {path} இல் உள்ளது, தொடங்கும்போது நினைவு சொன்னது {log} இல் உள்ளது, அந்தக் கணினியில்.",
   "This page keeps checking and shows the result if it comes back.": "இந்தப் பக்கம் தொடர்ந்து சரிபார்த்து, அது திரும்பி வந்தால் முடிவைக் காட்டும்.",
-  "Ninaivu could not restart itself to do it. What the restart did is in {path} on the Ninaivu computer. Restart Ninaivu to do it.": "அதைச் செய்ய நினைவால் தானாக மீண்டும் தொடங்க முடியவில்லை. மறுதொடக்கம் என்ன செய்தது என்பது நினைவு கணினியில் {path} இல் உள்ளது. அதைச் செய்ய நினைவை மீண்டும் தொடங்குங்கள்."
+  "Ninaivu could not restart itself to do it. What the restart did is in {path} on the Ninaivu computer. Restart Ninaivu to do it.": "அதைச் செய்ய நினைவால் தானாக மீண்டும் தொடங்க முடியவில்லை. மறுதொடக்கம் என்ன செய்தது என்பது நினைவு கணினியில் {path} இல் உள்ளது. அதைச் செய்ய நினைவை மீண்டும் தொடங்குங்கள்.",
+  "Phones back themselves up": "கைப்பேசிகள் தாமாகவே காப்புப்பிரதி எடுக்கின்றன",
+  "No phone has a key to back itself up.": "தானாகக் காப்புப்பிரதி எடுக்க எந்தக் கைப்பேசிக்கும் phone key இல்லை.",
+  "On that phone, check that Tailscale is connected and the sync app's automatic transfer is still on. Revoke the key of a phone no longer used.": "அந்தக் கைப்பேசியில் Tailscale இணைந்திருக்கிறதா, ஒத்திசைவுச் செயலியின் தானியங்கி அனுப்புதல் இன்னும் இயக்கத்தில் உள்ளதா எனப் பாருங்கள். இனிப் பயன்படுத்தாத கைப்பேசியின் key-ஐ ரத்து செய்யுங்கள்."
 }

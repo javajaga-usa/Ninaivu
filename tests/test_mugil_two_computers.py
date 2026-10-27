@@ -1222,6 +1222,20 @@ def test_a_phone_sends_to_the_secondary_and_the_primary_collects(two_apps, tmp_p
     # The phone is still told it is safely home, and sending it again is no new file.
     assert phone.head("/dav/2024/06/IMG_0001.png", headers=_basic(key)).status_code == 200
     assert run(services.mugil_courier)["inbox"]["collected"] == 0
+
+    # An app that sends under a temporary name and renames it when whole
+    # (FolderSync's way): kept there too, and collected under its real name.
+    other_photo = _png((200, 30, 10))
+    assert phone.put("/dav/2024/06/IMG_0003.png.tmp", data=other_photo,
+                     headers=_basic(key)).status_code == 201
+    assert second.get("/api/admin/mugil").get_json()["phone_inbox"]["waiting"] == 0
+    moved = phone.open("/dav/2024/06/IMG_0003.png.tmp", method="MOVE",
+                       headers={**_basic(key), "Destination": "/dav/2024/06/IMG_0003.png"})
+    assert moved.status_code == 201, moved.get_data(as_text=True)
+    assert phone.head("/dav/2024/06/IMG_0003.png", headers=_basic(key)).status_code == 200
+    assert second.get("/api/admin/mugil").get_json()["phone_inbox"]["waiting"] == 1
+    assert run(services.mugil_courier)["inbox"]["collected"] == 1
+    assert not list((folder / ".ninaivu-phone-inbox" / "held").iterdir())
     api_webdav.cancel_pending()
     assert phone_backup.SAFE
 

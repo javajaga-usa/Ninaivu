@@ -97,33 +97,91 @@ Uploads** for the administrator, unless the administrator switched on
 
 ### Backing up by itself
 
-A sync app on the phone (PhotoSync, on iPhone and Android, is one) can send
-new photographs home without anybody opening a page. Each phone gets its own
-**phone key**, made by its owner in the family app:
+A sync app on the phone sends new photographs and videos home every night
+without anybody opening a page, wherever the phone is: at home, or in another
+country over Tailscale. Each phone gets its own **phone key**, made by its
+owner in the family app, and the app signs in with it.
 
-1. On the phone, open **Back up this phone**, check the phone's name, and
-   under **Back up automatically** press **Make a key for this phone**. Copy
-   the key; it is shown only once.
-2. In the sync app, add a **WebDAV** destination: the address Ninaivu gives
-   with the key (it ends in `/dav/`), your username, and the key as the
-   password.
-3. Turn on the app's automatic transfer, for example whenever the phone
-   arrives home or joins the home Wi-Fi.
+Which app:
+
+- **iPhone: PhotoSync**, with its Autotransfer add-on (a small one-time
+  purchase). An iPhone lets no app run in the background whenever it likes;
+  PhotoSync is woken by iOS once a night while the phone charges, which is
+  the most dependable trigger there is.
+- **Android: PhotoSync** the same way, or **FolderSync** (free with
+  adverts), which runs on a schedule by itself.
+
+What every phone needs first:
+
+1. **Tailscale**, signed in to the family's Tailscale, and set to stay on.
+   On an iPhone: Tailscale → Settings → **VPN On Demand** on. On Android:
+   Settings → Network → VPN → the gear beside Tailscale → **Always-on VPN**.
+   At home on the house Wi-Fi it works without Tailscale too.
+2. **A phone key.** On the phone, open the family app, **Back up this
+   phone**, check the phone's name, and under **Back up automatically** press
+   **Make a key for this phone**. Copy the key; it is shown only once. Under
+   it is the address to send to; it ends in `/dav/`. With two computers it is
+   the always-on computer's address, so phones can send while the Mac sleeps.
+
+**iPhone, with PhotoSync:**
+
+1. PhotoSync → Settings → Configure → **WebDAV** → add a server. Fill it in
+   from the address: **Server** is the part between `http://` and the `:`,
+   **Port** is the number after the `:`, **Directory** is `/dav`, **SSL**
+   off (Ninaivu is reached over Tailscale, which already encrypts), **Login**
+   your Ninaivu username, **Password** the phone key.
+2. In the same server's settings, keep the photographs exactly as they are:
+   send the **original** format (HEIC stays HEIC, not converted to JPG), Live
+   Photos as **both the photo and the video**, and the location and other
+   details left in. Ninaivu dates and files each photo by what is inside it.
+3. PhotoSync → Settings → **Autotransfer** → WebDAV → **when you charge your
+   device**, at **2:00 am** (when the Mac does its nightly work). Source
+   **Recents**, starting from today. Choose **Wi-Fi only** if mobile data is
+   dear.
+4. iPhone Settings → General → **Background App Refresh**: on, and on for
+   PhotoSync. Do not swipe PhotoSync away in the app switcher; iOS does not
+   wake an app that was closed that way.
+
+**Android, with FolderSync** (PhotoSync works as on the iPhone):
+
+1. FolderSync → Accounts → add **WebDAV**: the address Ninaivu gave as
+   the server address, your username, the phone key as the password.
+2. Folder pairs → add: the account, remote folder `/`, local folder
+   `DCIM/Camera` (add another pair for `Pictures` or WhatsApp's folder if you
+   want those too), sync type **To remote folder**. Schedule it daily at
+   2:00, **Wi-Fi only** if mobile data is dear. Never turn on deleting the
+   source files after syncing. FolderSync sends each file under a temporary
+   name and renames it at the end; Ninaivu files it when it is renamed.
+3. Settings → Apps → FolderSync (and Tailscale) → Battery →
+   **Unrestricted**, so Android does not stop them at night.
+
+**The photographs from before today.** Years of photographs over a slow link
+are best sent once, at home or over a good connection: the family app's
+backup screen sends them and carries on where it stopped if the connection
+drops, where a sync app starts a file again from the beginning. Then the app
+needs to send only what is new each night.
 
 What the app sends goes through the same checks as the backup screen: it is
-recognised if the library already has it, waits under **Review → Uploads**
-unless phone backups are trusted, and is filed by the date it was taken
-whatever folder the app chose. A key can only add photographs: it cannot open,
-list or delete anything in the library. The inbox answers only at home and
-over Tailscale or WireGuard, never the internet. Revoke a lost phone's key under
-**Back up automatically** in the family app, or anyone's from the console
-under **Review → Uploads → Phone keys**, which also shows what each key has
-sent and when.
+recognised by its content if the library already has it (whatever it is
+called and wherever the app put it), and is kept byte for byte as it was
+sent. It waits under **Review → Uploads** unless phone backups are trusted,
+and is filed by the date it was taken whatever folder the app chose. A key
+can only add photographs: it cannot open, list or delete anything in the
+library. The inbox answers only at home and over Tailscale or WireGuard,
+never the internet. Revoke a lost phone's key under **Back up
+automatically** in the family app, or anyone's from the console under
+**Review → Uploads → Phone keys**, which also shows what each key has sent
+and when.
 
-An iPhone lets such an app send only when its trigger fires, so expect new
-photographs to arrive when the phone gets home rather than the moment they
-are taken. One file can be up to **phone_upload_max_gb** (8 GB unless
-changed); the backup screen has no such limit.
+**Is it working?** The console's Overview has **Phones back themselves
+up**: it names any phone with a key that has not been heard from for two
+weeks, which usually means Tailscale was turned off, the app was closed for
+good, or the phone was replaced. Expect new photographs the morning after
+they are taken, not the moment they are taken. If the Mac is asleep at night
+nothing arrives; let it wake by itself (`sudo pmset repeat wakeorpoweron
+MTWRFSU 01:55:00`) or let the always-on computer take the phones' files.
+One file can be up to **phone_upload_max_gb** (8 GB unless changed); the
+backup screen has no such limit.
 
 ## Is everything safe?
 
