@@ -6,6 +6,10 @@
 
 - **The Faces tab no longer says "99+" for good.** It counted every unnamed group of three or more faces, and a library with hundreds of thousands of faces always has hundreds of those, mostly strangers in the background. Now **Needs you**, the Faces tab and the People & access dot count only the unnamed faces seen in **25 photographs or more**, somebody who keeps turning up and is worth naming, and the Overview calls them **Faces seen often, without a name**. The Faces page still lists every group, largest first.
 
+### Quicker console pages
+
+- **Pages that read the whole library on every open now remember or read less.** Measured on a library of 210,000 items: the folder picker for a profile's folders and the suggested locations were each most of a second on every open and are now remembered until the library changes; the duplicates review and the sidebar's count of duplicates read only the duplicates instead of every item (a quarter of the time or less); the largest-files list counts through the size index instead of reading every item; and the Space screen works out how fast the library grows in one read instead of three. Nothing they show has changed.
+
 ### Fixed
 
 - Install on the AI models page and in Home & Extensions no longer fails with "No such file or directory" for the app's own Python after Ninaivu was moved or renamed while running: it follows the app to where it is now, and when it cannot (the app replaced or in the Trash) it says to quit and open Ninaivu again instead of failing.
