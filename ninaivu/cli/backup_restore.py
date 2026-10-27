@@ -233,6 +233,13 @@ def _keep_this_computer(local: Path, imported: Path) -> None:
             theirs[name] = mine[name]
         else:
             theirs.pop(name, None)
+    if not theirs.get("https"):
+        # No choice recorded here: the next start would decide by whether
+        # Ninaivu's certificate authority is in the folder, and the import
+        # just brought the other computer's. Recorded as this computer would
+        # have decided it, from its own (server/https_choice.decide).
+        from ..utils import tls                              # noqa: PLC0415
+        theirs["https"] = "on" if tls.ca_certificate_path(local.parent).is_file() else "off"
     imported.write_text(json.dumps(theirs, indent=2), encoding="utf-8")
 
 

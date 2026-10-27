@@ -161,8 +161,22 @@ def test_a_full_import_keeps_how_this_computer_is_reached(machines):
     assert settings["home_name"] == "here" and settings["roots"] == ["/Volumes/Photos"]
     # ... and this computer stays where it was, its defaults included.
     assert settings["admin_port"] == 3000 and settings["network_access"] is False
-    for name in ("port", "console_on_network", "https"):
+    for name in ("port", "console_on_network"):
         assert name not in settings
+    # Never chose a scheme here, and had no certificate: HTTP, not the HTTPS
+    # the other computer's certificate authority, now in the folder, would
+    # have made the next start pick.
+    assert settings["https"] == "off"
+
+
+def test_a_full_import_keeps_https_where_this_computer_served_it(machines):
+    (machines.here / "config.json").write_text(json.dumps({"https": "off"}))
+    tls = machines.there / "tls"
+    tls.mkdir()
+    (tls / "ninaivu-ca.crt").write_text("this computer's CA")
+    bundle = backup.snapshot(machines.here, machines.base / "out", full=True)
+    assert restore.restore_backup(bundle)
+    assert json.loads((machines.there / "config.json").read_text())["https"] == "on"
 
 
 def test_a_backup_restore_keeps_the_thumbnails_this_machine_has(machines):
