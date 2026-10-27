@@ -315,6 +315,15 @@ def _export_state(cfg) -> dict[str, Any]:
         # Whether the console can restart by itself to do an import, or the
         # administrator has to (server_api._restart_problem).
         "restart_problem": server_api._restart_problem(),
+        # Whether the helper that restarts this server is still at work: a
+        # page waiting on an import's restart that finds this server still
+        # answering, with the import still waiting and no helper, knows the
+        # restart did not happen.
+        "restarting": server_api._restart_in_progress(),
+        # Where that computer says why, for the page to name when Ninaivu
+        # does not come back; it cannot ask a server that is down.
+        "restart_log": str(server_api.RESTART_LOG),
+        "server_log": str(server_api.SERVER_LOG),
     }
 
 
@@ -407,7 +416,23 @@ def import_ask():
         if not restarting:
             problem = reply.get("error")
     return jsonify({**_export_state(cfg), "looked": found, "restarting": restarting,
-                    "restart_problem": problem}), 202
+                    "restart_problem": problem,
+                    # How long the page, which cannot ask a server that is
+                    # down, waits before saying it has not come back.
+                    "patience_seconds": import_patience(found)}), 202
+
+
+#: How long the page waits for Ninaivu to answer after an import before it
+#: says Ninaivu has not come back: the stop (files in hand are finished
+#: first) and the start, and then the unpacking and putting in place at a
+#: slow disk's pace, twice over.
+IMPORT_PATIENCE_BASE = 5 * 60
+IMPORT_PATIENCE_BYTES_PER_SECOND = 20 * 1024 * 1024
+
+
+def import_patience(found: dict[str, Any]) -> int:
+    size = int(found.get("unpacked_bytes") or found.get("bytes") or 0)
+    return IMPORT_PATIENCE_BASE + 2 * size // IMPORT_PATIENCE_BYTES_PER_SECOND
 
 
 @migration_bp.post("/api/admin/migration/import/cancel")

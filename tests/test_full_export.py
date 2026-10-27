@@ -145,6 +145,40 @@ def test_a_full_import_brings_the_thumbnails_and_replaces_the_old_ones(machines)
     assert not list(machines.base.glob(".ninaivu_restore_unpacked_*"))
 
 
+def test_a_full_import_keeps_how_this_computer_is_reached(machines):
+    # The other computer's ports and console settings came with its settings,
+    # and after the import's restart Ninaivu answered where the page waiting
+    # for it was not looking.
+    (machines.here / "config.json").write_text(json.dumps({
+        "home_name": "here", "port": 8080, "admin_port": 3001,
+        "console_on_network": True, "https": "on", "roots": ["/Volumes/Photos"]}))
+    (machines.there / "config.json").write_text(json.dumps({
+        "home_name": "there", "admin_port": 3000, "network_access": False}))
+    bundle = backup.snapshot(machines.here, machines.base / "out", full=True)
+    assert restore.restore_backup(bundle)
+    settings = json.loads((machines.there / "config.json").read_text())
+    # The household's settings and library folders come with the export ...
+    assert settings["home_name"] == "here" and settings["roots"] == ["/Volumes/Photos"]
+    # ... and this computer stays where it was, its defaults included.
+    assert settings["admin_port"] == 3000 and settings["network_access"] is False
+    for name in ("port", "console_on_network"):
+        assert name not in settings
+    # Never chose a scheme here, and had no certificate: HTTP, not the HTTPS
+    # the other computer's certificate authority, now in the folder, would
+    # have made the next start pick.
+    assert settings["https"] == "off"
+
+
+def test_a_full_import_keeps_https_where_this_computer_served_it(machines):
+    (machines.here / "config.json").write_text(json.dumps({"https": "off"}))
+    tls = machines.there / "tls"
+    tls.mkdir()
+    (tls / "ninaivu-ca.crt").write_text("this computer's CA")
+    bundle = backup.snapshot(machines.here, machines.base / "out", full=True)
+    assert restore.restore_backup(bundle)
+    assert json.loads((machines.there / "config.json").read_text())["https"] == "on"
+
+
 def test_a_backup_restore_keeps_the_thumbnails_this_machine_has(machines):
     bundle = backup.snapshot(machines.here, machines.base / "out")
     assert restore.restore_backup(bundle)
@@ -313,6 +347,10 @@ def test_the_console_asks_for_an_import_and_can_take_it_back(console, tmp_path):
     body = reply.get_json()
     # A test server cannot restart itself; it says so instead.
     assert body["restarting"] is False and body["restart_problem"]
+    # What the page needs to tell a slow import from a server that is gone,
+    # which it cannot ask once the server is down.
+    assert body["patience_seconds"] >= 300
+    assert body["restart_log"].endswith("restart.log") and body["server_log"].endswith("server.log")
     assert body["pending"]["bundle"] == str(bundle)
     assert full_export.pending(cfg.state_dir)["bundle"] == str(bundle)
 
@@ -470,3 +508,10 @@ def test_the_console_checks_an_export_and_will_not_import_a_damaged_one(console,
     reply = client.post("/api/admin/migration/import", json={"path": str(bundle)})
     assert reply.status_code == 400 and "cut short" in reply.get_json()["error"]
     assert full_export.pending(cfg.state_dir) is None
+
+
+def test_the_wait_for_an_import_grows_with_its_size():
+    from ninaivu.api import migration_api
+    small = migration_api.import_patience({"unpacked_bytes": 0})
+    large = migration_api.import_patience({"unpacked_bytes": 40 * 1024 ** 3})
+    assert small == 300 and large > small + 60 * 60

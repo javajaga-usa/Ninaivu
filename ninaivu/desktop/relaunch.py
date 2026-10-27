@@ -137,6 +137,14 @@ def main(argv=None):
         controller.settings['scheme'] = 'https' if args.https == 'on' else 'http'
         controller.settings.pop('port', None)
     controller.save_mode(mode)
+    from .control import ninaivu_root, python_for_server
+    if not python_for_server(ninaivu_root()).is_file():
+        # This server was started on another interpreter than the checkout's
+        # .venv (start.py uses the one it runs on where it could not make a
+        # .venv), and the panel's start would refuse with "Python environment
+        # is missing", leaving Ninaivu stopped. This helper runs on the
+        # server's own interpreter, which certainly starts it.
+        os.environ['NINAIVU_PYTHON'] = sys.executable
     say(controller.start())
     return 0
 

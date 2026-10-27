@@ -4,7 +4,9 @@ What the page reads (machine and process readings, the resource modes, the
 server log a piece at a time) and what it does (restart through a detached
 helper, stop) - and that none of it is open to anyone but an admin.
 """
+import sys
 import time
+from pathlib import Path
 
 import pytest
 
@@ -202,6 +204,37 @@ def test_the_helper_waits_out_a_slow_stop_and_starts_in_the_chosen_mode(monkeypa
     monkeypatch.setattr(relaunch.time, "sleep", lambda s: None)
     assert relaunch.main(["--mode", "standard"]) == 0
     assert events == ["stopped", "mode standard", "started standard"]
+
+
+def test_the_helper_starts_on_the_servers_own_python_without_a_venv(monkeypatch, tmp_path):
+    # start.py runs the server on the Python it runs on where it could not
+    # make a .venv; the panel's start then refused with "Python environment
+    # is missing", and the console's restart left Ninaivu stopped.
+    from ninaivu.desktop import control, relaunch
+
+    seen = []
+
+    class FakeController:
+        mode = "standard"
+
+        def stop(self):
+            return "Ninaivu stopped cleanly."
+
+        def save_mode(self, mode):
+            self.mode = mode
+
+        def start(self):
+            seen.append(control.python_for_server(tmp_path))
+            return "Ninaivu is running."
+
+    # Set and emptied, so what the helper sets is taken away after the test.
+    monkeypatch.setenv("NINAIVU_PYTHON", "")
+    monkeypatch.delenv("NINAIVU_HOME", raising=False)
+    monkeypatch.setattr(control, "Controller", FakeController)
+    monkeypatch.setattr(control, "ninaivu_root", lambda: tmp_path)
+    monkeypatch.setattr(relaunch.time, "sleep", lambda s: None)
+    assert relaunch.main([]) == 0
+    assert seen == [Path(sys.executable)]
 
 
 # --- network access ----------------------------------------------------------------

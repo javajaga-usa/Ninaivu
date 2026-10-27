@@ -50,7 +50,12 @@ the restart. **Import and restart** then
 restarts Ninaivu, which puts the file in place before it opens anything, with
 every check `ninaivu restore` makes. The state folder that was there is kept
 beside it as `.ninaivu_pre_restore_…`, and an import that fails leaves it in
-use and says why on the same page. If Ninaivu cannot restart itself (run by a
+use and says why on the same page. The settings come across, except how this
+computer is reached and what it runs on: its ports, network and console
+switches, HTTPS, tuning and AI models folder stay as they were here, so
+Ninaivu comes back where the page is waiting for it. If it has not answered
+after longer than the import should take, the page says so, and names the
+restart and server logs on that computer. If Ninaivu cannot restart itself (run by a
 service, say) the import waits for its next start. `ninaivu restore <file>`
 does the same with Ninaivu stopped.
 

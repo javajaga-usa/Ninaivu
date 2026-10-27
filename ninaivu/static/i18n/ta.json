@@ -5242,5 +5242,11 @@
   "Sent to an admin. It is out of the family’s gallery until they decide.": "நிர்வாகிக்கு அனுப்பப்பட்டது. அவர் முடிவு செய்யும் வரை இது குடும்பத் தொகுப்பில் இருக்காது.",
   "These {items} leave the family’s gallery now, and an admin decides whether they come back.": "இந்த {items} இப்போதே குடும்பத் தொகுப்பிலிருந்து விலகும்; இவை திரும்ப வருமா என்பதை ஒரு நிர்வாகி முடிவு செய்வார்.",
   "held while an admin screens it": "நிர்வாகி சரிபார்க்கும் வரை நிறுத்தி வைக்கப்பட்டது",
-  "{items} sent to an admin. They are out of the family’s gallery until an admin decides.": "{items} நிர்வாகிக்கு அனுப்பப்பட்டன. நிர்வாகி முடிவு செய்யும் வரை இவை குடும்பத் தொகுப்பில் இருக்காது."
+  "{items} sent to an admin. They are out of the family’s gallery until an admin decides.": "{items} நிர்வாகிக்கு அனுப்பப்பட்டன. நிர்வாகி முடிவு செய்யும் வரை இவை குடும்பத் தொகுப்பில் இருக்காது.",
+  "Ninaivu is back. Sign in again to see how the import went.": "நினைவு திரும்பி வந்துவிட்டது. இறக்குமதி எப்படி நடந்தது என்று பார்க்க மீண்டும் உள்நுழையுங்கள்.",
+  "Ninaivu has not come back after {time}. It may have stopped.": "{time} ஆகியும் நினைவு திரும்பி வரவில்லை. அது நின்றுபோயிருக்கலாம்.",
+  "Start Ninaivu again on that computer, the way it is usually started (the Control Panel, or the launcher). If the import was done, it starts with the imported index; if not, with the one that was there.": "அந்தக் கணினியில் வழக்கமாகத் தொடங்கும் முறையில் (கட்டுப்பாட்டுப் பலகம், அல்லது தொடக்கி) நினைவை மீண்டும் தொடங்குங்கள். இறக்குமதி முடிந்திருந்தால், இறக்குமதி செய்த அட்டவணையுடன் தொடங்கும்; இல்லையென்றால், முன்பு இருந்ததுடன்.",
+  "What the restart did is in {path}, and what Ninaivu said as it started is in {log}, on that computer.": "மறுதொடக்கம் என்ன செய்தது என்பது {path} இல் உள்ளது, தொடங்கும்போது நினைவு சொன்னது {log} இல் உள்ளது, அந்தக் கணினியில்.",
+  "This page keeps checking and shows the result if it comes back.": "இந்தப் பக்கம் தொடர்ந்து சரிபார்த்து, அது திரும்பி வந்தால் முடிவைக் காட்டும்.",
+  "Ninaivu could not restart itself to do it. What the restart did is in {path} on the Ninaivu computer. Restart Ninaivu to do it.": "அதைச் செய்ய நினைவால் தானாக மீண்டும் தொடங்க முடியவில்லை. மறுதொடக்கம் என்ன செய்தது என்பது நினைவு கணினியில் {path} இல் உள்ளது. அதைச் செய்ய நினைவை மீண்டும் தொடங்குங்கள்."
 }
