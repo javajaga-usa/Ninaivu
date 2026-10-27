@@ -104,7 +104,7 @@ def test_refused_shutdown_never_force_kills(tmp_path,monkeypatch):
     c=control(tmp_path,monkeypatch)
     monkeypatch.setattr(c,'record',lambda:{'pid':42,'admin_port':3000,'token':'synthetic'})
     monkeypatch.setattr(c,'capture_running_settings',lambda:None)
-    from ninaivu.server import stop
+    from ninaivu.desktop import control as stop
     monkeypatch.setattr(stop,'ask_to_stop',lambda *_,**__:False)
     monkeypatch.setattr(stop,'end_it',lambda *_:pytest.fail('Must not force-kill from desktop UI'),raising=False)
     with pytest.raises(RuntimeError,match='No process'):
@@ -116,10 +116,24 @@ def test_https_stop_uses_configured_transport(tmp_path,monkeypatch):
     calls=[]
     monkeypatch.setattr(c,'record',lambda:None if calls else {'pid':42,'admin_port':3000,'token':'synthetic'})
     monkeypatch.setattr(c,'capture_running_settings',lambda:None)
-    from ninaivu.server import stop
+    from ninaivu.desktop import control as stop
     monkeypatch.setattr(stop,'ask_to_stop',lambda *args,**kwargs:calls.append(args) or True)
     assert c.stop()=='Ninaivu stopped cleanly.'
     assert calls==[(3000,'synthetic',10.0,'https')]
+
+
+def test_stop_works_once_the_app_has_moved_away(tmp_path,monkeypatch):
+    """Ninaivu.app moved, replaced or in the Trash while the panel ran: nothing
+    is left to import from, and Stop said "No module named
+    'ninaivu.server.stop'". What Stop needs is imported when the panel starts."""
+    import sys
+    from ninaivu.desktop import control as module
+    c=control(tmp_path,monkeypatch);calls=[]
+    monkeypatch.setattr(c,'record',lambda:None if calls else {'pid':42,'admin_port':3000,'token':'synthetic'})
+    monkeypatch.setattr(c,'capture_running_settings',lambda:None)
+    monkeypatch.setitem(sys.modules,'ninaivu.server.stop',None)
+    monkeypatch.setattr(module,'ask_to_stop',lambda *args,**kwargs:calls.append(args) or True)
+    assert c.stop()=='Ninaivu stopped cleanly.'
 
 
 def test_stop_waits_for_owned_launcher_before_restart(tmp_path,monkeypatch):
@@ -127,7 +141,7 @@ def test_stop_waits_for_owned_launcher_before_restart(tmp_path,monkeypatch):
     monkeypatch.setattr(c,'record',lambda:None if calls else {'pid':42,'admin_port':3000,'token':'synthetic'})
     monkeypatch.setattr(c,'capture_running_settings',lambda:None)
     states=iter([None,None,0]);c.started=SimpleNamespace(poll=lambda:next(states))
-    from ninaivu.server import stop
+    from ninaivu.desktop import control as stop
     from ninaivu.desktop import control as module
     monkeypatch.setattr(stop,'ask_to_stop',lambda *args,**kwargs:calls.append(args) or True)
     sleeps=[];monkeypatch.setattr(module.time,'sleep',lambda n:sleeps.append(n))
@@ -142,7 +156,7 @@ def test_stop_waits_for_the_server_to_let_go_of_the_state_folder(tmp_path,monkey
     c=control(tmp_path,monkeypatch);calls=[]
     monkeypatch.setattr(c,'record',lambda:None if calls else {'pid':4242,'admin_port':3000,'token':'synthetic'})
     monkeypatch.setattr(c,'capture_running_settings',lambda:None)
-    from ninaivu.server import stop
+    from ninaivu.desktop import control as stop
     from ninaivu.desktop import control as module
     server=SimpleNamespace(name='the server')
     monkeypatch.setattr(module,'_server_process',lambda record:server if record['pid']==4242 else None)

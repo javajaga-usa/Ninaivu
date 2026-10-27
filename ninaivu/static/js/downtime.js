@@ -6,15 +6,22 @@
  * ninaivu/server/workload.py). The server then answers family members and
  * guests with 503 and `maintenance: true` instead of photographs; this covers
  * the page with a notice saying so, the first time any request is answered
- * that way, and looks every half a minute whether it is over. When it is, the
+ * that way, and looks every few seconds whether it is over. When it is, the
  * page is loaded again, so the gallery comes back by itself. Administrators
  * are not refused, so they never see it.
+ *
+ * A gallery left open asks no questions of its own, so it would not have
+ * heard about maintenance until someone touched it. The page therefore also
+ * asks whether maintenance is on every minute while it is in front of
+ * someone, and again whenever it comes back into view.
  */
 
 import * as i18n from './i18n.js';
 
 /** How often the notice asks whether maintenance is over. */
-const LOOK_EVERY = 30000;
+const LOOK_EVERY = 10000;
+/** How often an open page asks whether maintenance has started. */
+const WATCH_EVERY = 60000;
 
 const nativeFetch = window.fetch.bind(window);
 
@@ -24,6 +31,7 @@ export class DowntimeNotice {
     this.timer = null;
     this.since = null;
     this.watchFetch();
+    this.watchPage();
     // Redrawn in the language just chosen.
     i18n.onChange(() => { if (this.root) this.draw(); });
   }
@@ -42,6 +50,39 @@ export class DowntimeNotice {
       }
       return response;
     };
+  }
+
+  /** Ask now and then, and on coming back into view, whether maintenance has
+   *  begun: a page nobody is touching makes no requests to be refused. */
+  watchPage() {
+    const ask = () => { if (!document.hidden) this.check(); };
+    setInterval(ask, WATCH_EVERY);
+    document.addEventListener('visibilitychange', ask);
+    window.addEventListener('pageshow', ask);
+    window.addEventListener('focus', ask);
+    ask();
+  }
+
+  async check() {
+    if (this.root || this.checking) return;
+    this.checking = true;
+    try {
+      const ask = (path) => nativeFetch(path, {
+        headers: { Accept: 'application/json', 'X-Ninaivu-Background': '1' },
+        credentials: 'same-origin',
+        cache: 'no-store',
+      }).then((response) => (response.ok ? response.json() : null));
+      const state = await ask('/api/maintenance');
+      if (!state || !state.on) return;
+      // Administrators carry on during maintenance; only those it refuses
+      // are told.
+      const me = await ask('/api/me');
+      if (me && me.role === 'admin') return;
+      this.since = state.since || null;
+      this.show();
+    } catch { /* the server is away: the next look will tell */ } finally {
+      this.checking = false;
+    }
   }
 
   async show() {
@@ -92,6 +133,7 @@ export class DowntimeNotice {
       const response = await nativeFetch('/api/maintenance', {
         headers: { Accept: 'application/json', 'X-Ninaivu-Background': '1' },
         credentials: 'same-origin',
+        cache: 'no-store',
       });
       const data = response.ok ? await response.json() : null;
       if (data && !data.on) {
