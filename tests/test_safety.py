@@ -197,3 +197,37 @@ def test_the_console_shows_it_and_the_family_app_does_not(app, people):
                                                    "storage"}
     family = login(app.test_client(), *FAMILY)
     assert family.get("/api/admin/safety").status_code in (401, 403, 404)
+
+
+def test_phones_off_without_keys_then_a_quiet_phone_is_named(services, people):
+    from ninaivu.media import phone_backup, phone_keys
+
+    conn = db.connect(services.cfg.db_path)
+    phone_keys.init_schema(conn)
+    phone_backup.init_schema(conn)
+    assert check(services, "phones")[0]["status"] == safety.OFF
+
+    family_id = conn.execute("SELECT id FROM users WHERE role='family' LIMIT 1").fetchone()[0]
+    row, _key = phone_keys.make(conn, family_id, "Amma's iPhone")
+    # A key made today has had no time to be quiet.
+    assert check(services, "phones")[0]["status"] == safety.OK
+
+    long_ago = time.time() - (safety.PHONE_QUIET_DAYS + 3) * safety.DAY
+    conn.execute("UPDATE phone_keys SET created_at=?, last_used_at=? WHERE id=?",
+                 (long_ago, long_ago, row["id"]))
+    conn.commit()
+    quiet, _ = check(services, "phones")
+    assert quiet["status"] == safety.ATTENTION
+    assert "Amma's iPhone" in quiet["summary"] and "17 days ago" in quiet["summary"]
+    assert quiet["page"] == "uploads"
+
+    # A file it sent through the always-on computer counts as hearing from it.
+    conn.execute("INSERT INTO phone_backups(user_id, device_id, fingerprint, filename, size, "
+                 "state, finished_at) VALUES (?,?,?,?,?,?,?)",
+                 (family_id, phone_keys.device_id(row["id"]), "x", "IMG.png", 1, "staged",
+                  time.time() - 3600))
+    conn.commit()
+    assert check(services, "phones")[0]["status"] == safety.OK
+    # A revoked key is no longer looked for.
+    phone_keys.revoke(conn, row["id"])
+    assert check(services, "phones")[0]["status"] == safety.OFF
