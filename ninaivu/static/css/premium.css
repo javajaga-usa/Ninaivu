@@ -644,6 +644,6 @@ body #ai-playground .ap-card:hover { box-shadow: 0 6px 16px -6px color-mix(in sr
 }
 :lang(ta) :is(.side-title, .tab-group-label, .admin-eyebrow, .console-tag, .tag,
   .ar-defaults-label, .ar-health-kicker, th, .field > span) {
-  font-size: 11.5px;
+  font-size: 12px;
 }
-:lang(ta) :is(.bar-menu-head, .gate-face, .pf-level) { font-size: 12px; }
+:lang(ta) :is(.bar-menu-head, .gate-face, .pf-level) { font-size: 12.5px; }
