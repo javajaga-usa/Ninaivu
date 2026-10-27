@@ -347,3 +347,22 @@ def anon(app, people):
 
 def ids_of(client, path="/api/assets?limit=200"):
     return [item["id"] for item in client.get(path).get_json()["items"]]
+
+
+def stop_panel(dashboard) -> None:
+    """End a Control Panel window's reading threads and wait for them.
+
+    Setting ``finished`` alone left a reading half-way (a sample takes a
+    while on Windows) running into later tests: there it imported Ninaivu
+    modules a launcher test had taken away, and once garbage-collected the
+    destroyed window's Tk variables off the main thread, which Tk ends the
+    process for (Windows fatal exception 0x80000003).
+    """
+    import threading
+
+    if dashboard is None:
+        return
+    dashboard.finished.set()
+    for thread in threading.enumerate():
+        if thread.name.startswith("ninaivu-panel-") and thread is not threading.current_thread():
+            thread.join(timeout=15)

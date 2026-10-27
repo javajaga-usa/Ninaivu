@@ -544,7 +544,16 @@ def _spawn_relauncher(mode, network=None, https=None):
     own process group and, where allowed, outside any job object this server
     belongs to, which would otherwise take it down with the server.
     """
-    command = [sys.executable, "-m", "ninaivu.desktop.relaunch"]
+    # The Python this server runs on as it is now: with Ninaivu.app moved or
+    # renamed while it ran, sys.executable and ROOT name a folder that is no
+    # longer there, and the restart (an import's too) failed with "No such
+    # file or directory" while Ninaivu went on as it was.
+    from ..media.components import own_python               # noqa: PLC0415
+    try:
+        python = own_python()
+    except ValueError as exc:
+        raise OSError(str(exc)) from None
+    command = [python, "-m", "ninaivu.desktop.relaunch"]
     if mode:
         command += ["--mode", mode]
     if network is not None:
@@ -554,7 +563,7 @@ def _spawn_relauncher(mode, network=None, https=None):
     # Owner-only, and trimmed when it has grown: it holds the addresses the
     # server answers on (ninaivu/desktop/control.py, open_log).
     log = open_log(RESTART_LOG)                        # handed to the child
-    kwargs = dict(cwd=str(ROOT), stdin=subprocess.DEVNULL, stdout=log, stderr=log,
+    kwargs = dict(cwd=str(ROOT if ROOT.is_dir() else Path(python).parent), stdin=subprocess.DEVNULL, stdout=log, stderr=log,
                   env=dict(os.environ, NINAIVU_STATE_DIR=str(_cfg().state_dir)))
     try:
         if os.name == "nt":

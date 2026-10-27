@@ -21,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 # The module imports tkinter at the top; a Python without Tk cannot test it.
 pytest.importorskip("tkinter")
 from ninaivu.desktop import app  # noqa: E402
+from conftest import stop_panel  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -237,8 +238,7 @@ def test_the_window_opens_with_the_logs_hidden_until_asked(tmp_path, monkeypatch
         dashboard.toggle_logs()
         assert dashboard.logs_visible is True
     finally:
-        if dashboard is not None:
-            dashboard.finished.set()
+        stop_panel(dashboard)
         root.destroy()
 
 
@@ -302,8 +302,7 @@ def test_hiding_the_logs_gives_the_height_back(tmp_path, monkeypatch, look):
         assert abs(settle()[1] - expected) <= 2, (before, opened, height, pane, needed, root.minsize())
         assert root.winfo_width() == width
     finally:
-        if dashboard is not None:
-            dashboard.finished.set()
+        stop_panel(dashboard)
         root.destroy()
 
 
@@ -466,8 +465,7 @@ def test_switching_the_look_repaints_the_open_window(tmp_path, monkeypatch):
         dashboard.pump()
         assert root.cget("bg") == dark["bg"]
     finally:
-        if dashboard is not None:
-            dashboard.finished.set()
+        stop_panel(dashboard)
         root.destroy()
 
 

@@ -21,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 pytest.importorskip("tkinter")
 from ninaivu.desktop import app, theme  # noqa: E402
+from conftest import stop_panel  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -252,6 +253,5 @@ def test_a_line_that_comes_later_is_not_cut_off_the_bottom(tmp_path, monkeypatch
         if upper.winfo_reqheight() + 120 < root.winfo_screenheight():
             assert upper.winfo_height() >= upper.winfo_reqheight()
     finally:
-        if dashboard is not None:
-            dashboard.finished.set()
+        stop_panel(dashboard)
         root.destroy()

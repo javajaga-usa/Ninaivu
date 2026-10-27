@@ -122,11 +122,29 @@ def _columns(conn: sqlite3.Connection, schema: str, table: str) -> list[str]:
     return [r[1] for r in conn.execute(f"PRAGMA {schema}.table_info({table})")]
 
 
+def _same_account(conn: sqlite3.Connection) -> str:
+    """The WHERE for a session in ``old.sessions s`` whose account *new* (main)
+    has as the same account, turned on and not signed out since."""
+    here = set(_columns(conn, "main", "users"))
+    since = (" AND s.created_at > COALESCE(mu.signed_out_at, 0)"
+             if "signed_out_at" in here else "")
+    return (" WHERE EXISTS (SELECT 1 FROM main.users mu JOIN old.users ou ON ou.id = mu.id "
+            "WHERE mu.id = s.user_id AND mu.active = 1 "
+            "AND ou.username = mu.username AND ou.created_at IS mu.created_at"
+            f"{since})")
+
+
 def carry_sessions(old: Path, new: Path) -> int:
     """Copy the Pi's own sign-ins from *old* into *new*. Returns how many.
 
-    Only for accounts *new* still has, and only sessions not yet expired: an
-    account the Mac removed since signs out here too.
+    Only sessions not yet expired, of accounts *new* still has as the same
+    account and still turned on: an account the Mac removed since signs out
+    here too. The same account is the same id, username and creation time.
+    An id alone is not: a deleted account's id is given to the next one made,
+    and an old family session came across as a new administrator's. And only
+    sessions begun after the account last had every session ended on the Mac
+    (``users.signed_out_at``: a new password, "Sign out everywhere"), which
+    the snapshots, carrying none of the Pi's sessions, could not say otherwise.
     """
     if not old.is_file():
         return 0
@@ -143,10 +161,9 @@ def carry_sessions(old: Path, new: Path) -> int:
                 names = ", ".join(shared)
                 where = ""
                 if table == "sessions":
-                    where = (" WHERE user_id IN (SELECT id FROM main.users) "
-                             f"AND expires_at > {time.time()!r}")
+                    where = _same_account(conn) + f" AND s.expires_at > {time.time()!r}"
                 cursor = conn.execute(f"INSERT OR IGNORE INTO main.{table} ({names}) "
-                                      f"SELECT {names} FROM old.{table}{where}")
+                                      f"SELECT {names} FROM old.{table} s{where}")
                 carried += max(0, cursor.rowcount)
             conn.commit()
         finally:

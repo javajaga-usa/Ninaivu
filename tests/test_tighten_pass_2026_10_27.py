@@ -64,6 +64,11 @@ def test_suggested_locations_are_kept_until_a_place_or_a_time_moves(as_admin, sc
     first, second, third = [r[0] for r in conn.execute(
         "SELECT id FROM assets ORDER BY id LIMIT 3")]
     conn.execute("UPDATE assets SET gps_lat = NULL, gps_lon = NULL, captured_at = NULL")
+    # One day for the three, so the suggestions are one group: the first ids
+    # are whichever files the scan's workers finished first, and those can be
+    # of different days (groups go a day at a time).
+    conn.execute("UPDATE assets SET date_key = '2019-07-21' WHERE id IN (?, ?, ?)",
+                 (first, second, third))
     conn.execute("UPDATE assets SET gps_lat = 11.41, gps_lon = 76.69, city = 'Ooty', "
                  "country = 'IN', captured_at = 1563700000, date_source = 'exif' WHERE id = ?",
                  (first,))

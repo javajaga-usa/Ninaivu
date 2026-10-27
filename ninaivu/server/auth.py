@@ -235,6 +235,12 @@ LATE_USER_COLUMNS: dict[str, str] = {
     # a new password or PIN is set for them (``ask_for_help``).
     "help_asked_at": "REAL",
     "on_picker": "INTEGER NOT NULL DEFAULT 1",
+    # When every session the account had was last ended: a new password, the
+    # profile turned off, "Sign out everywhere". Sessions are deleted here
+    # then, but a read-only replica holds its own, which the snapshots it is
+    # handed never carry; it keeps only those begun after this
+    # (replica/receive.carry_sessions).
+    "signed_out_at": "REAL",
 }
 
 #: Same repair for sessions. Existing sessions predate the face binding and
@@ -643,8 +649,9 @@ def set_password(conn: sqlite3.Connection, user_id: int, password: str) -> None:
     if problem := password_problem(password):
         raise ValueError(problem)
     conn.execute(
-        "UPDATE users SET password=?, must_change=0, help_asked_at=NULL WHERE id=?",
-        (hash_password(password), user_id),
+        "UPDATE users SET password=?, must_change=0, help_asked_at=NULL, "
+        "signed_out_at=? WHERE id=?",
+        (hash_password(password), time.time(), user_id),
     )
     conn.commit()
 
@@ -654,6 +661,7 @@ def set_active(conn: sqlite3.Connection, user_id: int, active: bool) -> None:
     if not active:
         # Disabling a profile ends every session it has open.
         conn.execute("DELETE FROM sessions WHERE user_id=?", (user_id,))
+        conn.execute("UPDATE users SET signed_out_at=? WHERE id=?", (time.time(), user_id))
     conn.commit()
 
 
@@ -1219,6 +1227,7 @@ def end_session(conn: sqlite3.Connection, token: str) -> None:
 
 def end_all_sessions(conn: sqlite3.Connection, user_id: int) -> int:
     cur = conn.execute("DELETE FROM sessions WHERE user_id=?", (user_id,))
+    conn.execute("UPDATE users SET signed_out_at=? WHERE id=?", (time.time(), user_id))
     conn.commit()
     return cur.rowcount
 

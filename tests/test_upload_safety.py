@@ -5,7 +5,6 @@ from pathlib import Path
 
 import pytest
 from PIL import Image
-from werkzeug.datastructures import FileStorage
 
 from ninaivu.storage import db
 from ninaivu.media import upload_review
@@ -75,11 +74,13 @@ def test_missing_library_is_not_recreated(as_family, cfg, tmp_path):
 
 
 def test_failed_write_removes_partial_upload(as_family, cfg, monkeypatch):
-    def interrupted(self, destination, *args, **kwargs):
+    from ninaivu.media import upload_review
+
+    def interrupted(upload, destination, base):
         destination.write(b"partial")
         raise OSError("disk full")
 
-    monkeypatch.setattr(FileStorage, "save", interrupted)
+    monkeypatch.setattr(upload_review, "_write_keeping_free", interrupted)
     result = upload(as_family, photo()).get_json()
     assert result["total"] == 0
     assert len(result["errors"]) == 1

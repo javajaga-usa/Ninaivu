@@ -288,7 +288,11 @@ def test_sessions_of_removed_accounts_are_not_carried(tmp_path):
     auth.start_session(old, keep.id)
     auth.start_session(old, gone.id)
     new = db.connect(tmp_path / "new.db")
-    auth.create_user(new, "maya", "summerdays24", role=auth.ROLE_FAMILY)
+    same = auth.create_user(new, "maya", "summerdays24", role=auth.ROLE_FAMILY)
+    # The same account, as a hand-over carries it: made at the same moment.
+    made = old.execute("SELECT created_at FROM users WHERE id=?", (keep.id,)).fetchone()[0]
+    new.execute("UPDATE users SET created_at=? WHERE id=?", (made, same.id))
+    new.commit()
     db.close_all()
     assert carry_sessions(tmp_path / "old.db", tmp_path / "new.db") == 1
 

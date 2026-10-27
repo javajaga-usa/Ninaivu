@@ -32,6 +32,18 @@ Every screen of the family app and the console was opened on a computer and a ph
 - **Maintenance mode shows family members the downtime notice again.** A signed-in family member got an empty, broken gallery instead of the notice, both on a page already open and after a refresh, and the gallery did not come back when maintenance ended: the screen lock's watch on the page's requests replaced the notice's own. The two now work together. An open gallery also asks every minute, and whenever it comes back into view, whether maintenance has started, and once it ends (or another mode is chosen) the gallery comes back by itself within ten seconds.
 - Install on the AI models page and in Home & Extensions no longer fails with "No such file or directory" for the app's own Python after Ninaivu was moved or renamed while running: it follows the app to where it is now, and when it cannot (the app replaced or in the Trash) it says to quit and open Ninaivu again instead of failing.
 - Stop in the Control Panel works after Ninaivu.app was moved, replaced or put in the Trash while running. It had failed with "No module named 'ninaivu.server.stop'", because what it needed was only looked for when the button was pressed.
+- After such a move the console's **Restart** (and an index import's restart) runs from where Ninaivu is now instead of failing on the folder that is gone, and a package installed then says it is used once Ninaivu is opened again.
+- An index import keeps this computer's **Maintenance mode** as it was: an export made in Maintenance mode no longer shuts the family out of the computer it is imported on, and leaving Maintenance there no longer brings back the other computer's mode and Tuning profile. A read-only Pi's own settings (which hand-over it serves, the Mac's address) are kept too.
+
+### Fourteenth audit
+
+The fixes for the project audit of 26 October (docs/development/audit-2026-10-26.md):
+
+- **A sign-in on the Pi belongs to one account.** When an account was deleted on the Mac and another made before the Pi's next copy, the new account was given the old one's number, and a family member still signed in on the Pi became that account there, an administrator included. The Pi now keeps a sign-in only for the same account (number, username and when it was made), still turned on.
+- **A new password or "Sign out everywhere" on the Mac now signs the Pi out too**, as does turning a profile off. Sign-ins begun on the Pi after it are kept.
+- **An upload no longer fills the space kept free for the index.** The space was checked by the size the browser gave for the file, which is usually none; the file is now written a piece at a time and refused before the disk falls under 2 GB free, also when several arrive at once.
+- **A setting changed on its own reaches the Pi.** The content filter, open browsing and the other family settings travel with the hand-over, but only a changed index made one due, so the Pi kept the old setting until something else changed.
+- **Video copies no longer run Python in the moment between starting ffmpeg and ffmpeg running**, which is not safe in a server with threads and was seen to crash a trial copy; ffmpeg is lowered in priority once it has started instead.
 
 ## 3.3.0 — 26 October 2026
 

@@ -1,7 +1,9 @@
-"""Characterizations of defects found in the 2026-10-26 audit.
+"""Characterizations of defects found in the 2026-10-26 audit, inverted now
+that they are fixed (tests/test_audit_2026_10_27.py has them in the suite).
 
-These pass while the defects exist; invert the relevant assertions when fixing
-them. Run explicitly with PYTHONPATH=.:tests and pytest -p conftest.
+They passed while the defects existed; they now pass because they are gone.
+A-05 has no characterization here: its test checks the source.
+Run explicitly with PYTHONPATH=.:tests and pytest -p conftest.
 All data is synthetic. Disk-space readings and media decoding are stubbed in
 the upload test so it never fills a real disk.
 """
@@ -33,9 +35,8 @@ def test_replaced_account_inherits_previous_replica_session(tmp_path):
     db.close_all()
     carry_sessions(old_path, new_path)
     new = db.connect(new_path)
-    inherited = auth.session_user(new, token)
-    assert inherited.username == 'replacement' and inherited.is_admin
-    print('CONFIRMED: old family token becomes replacement administrator session')
+    assert auth.session_user(new, token) is None
+    print('FIXED: old family token is not carried to the replacement account')
 
 
 def test_password_reset_does_not_revoke_replica_session(tmp_path):
@@ -50,8 +51,8 @@ def test_password_reset_does_not_revoke_replica_session(tmp_path):
     auth.end_all_sessions(new, user.id)
     db.close_all()
     carry_sessions(old_path, new_path)
-    assert auth.session_user(db.connect(new_path), token).username == 'maya'
-    print('CONFIRMED: pre-reset replica token survives new credentials and session revocation')
+    assert auth.session_user(db.connect(new_path), token) is None
+    print('FIXED: pre-reset replica token ends with the new credentials')
 
 
 def test_settings_change_does_not_trigger_publication(tmp_path):
@@ -64,8 +65,8 @@ def test_settings_change_does_not_trigger_publication(tmp_path):
     publisher._remember(folder=str(publisher.folder), at=time.time() - 120,
                         stamp=publisher._index_stamp())
     cfg.open_browsing = False
-    assert publisher.due() is False
-    print('CONFIRMED: closing open browsing does not make unchanged index publish settings')
+    assert publisher.due() is True
+    print('FIXED: closing open browsing makes a hand-over due')
 
 
 def test_upload_writes_past_free_space_floor(tmp_path, monkeypatch):
@@ -78,10 +79,11 @@ def test_upload_writes_past_free_space_floor(tmp_path, monkeypatch):
     monkeypatch.setattr(upload_review, '_refuse_oversized', lambda _: None)
     monkeypatch.setattr(upload_review.scanner, 'build_record',
                         lambda *a: {'kind': 'video', 'date_key': '', 'size': 4096})
-    result = upload_review.stage(conn, cfg, upload, 'clip.mp4', '/library', '', 1)
-    assert result['status'] == 'pending'
-    assert sum(p.stat().st_size for p in (tmp_path / 'pending-uploads').rglob('*.mp4')) == 4096
-    print('CONFIRMED: multipart upload writes 4096 bytes with only 1024 bytes above reserve')
+    import pytest
+    with pytest.raises(ValueError, match='not enough free space'):
+        upload_review.stage(conn, cfg, upload, 'clip.mp4', '/library', '', 1)
+    assert not list((tmp_path / 'pending-uploads').rglob('*.mp4'))
+    print('FIXED: multipart upload is refused with only 1024 bytes above reserve')
 
 
 def test_legacy_settings_route_does_not_trigger_replica(as_admin, cfg, tmp_path):
@@ -95,5 +97,5 @@ def test_legacy_settings_route_does_not_trigger_replica(as_admin, cfg, tmp_path)
     response = as_admin.post('/api/settings', json={'nsfw_filter': not before})
     assert response.status_code == 200, response.get_json()
     assert cfg.nsfw_filter != before
-    assert publisher.due() is False
-    print('CONFIRMED: settings API saves a setting without making publication due')
+    assert publisher.due() is True
+    print('FIXED: settings API change makes publication due')

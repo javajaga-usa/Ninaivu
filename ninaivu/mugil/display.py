@@ -305,6 +305,32 @@ def _duration(probe: dict[str, Any]) -> float:
         return 0.0
 
 
+def run_lowered(command: list[str], *, timeout: float) -> subprocess.CompletedProcess:
+    """``subprocess.run(command, capture_output=True, timeout=timeout)``, with
+    the program at a lower priority than the server, so an encode does not
+    slow the family's gallery.
+
+    Lowered from here, once it has started, not by a ``preexec_fn`` in the
+    child: that runs Python between fork and exec, which is not safe in a
+    server with threads (a lock another thread held at the fork is held for
+    ever in the child), and a trial encode was seen to crash there.
+    """
+    with subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE) as process:
+        if hasattr(os, "setpriority"):
+            with contextlib.suppress(OSError):
+                os.setpriority(os.PRIO_PROCESS, process.pid, 10)
+        try:
+            out, err = process.communicate(timeout=timeout)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.communicate()
+            raise
+        except BaseException:
+            process.kill()
+            raise
+    return subprocess.CompletedProcess(command, process.returncode, out, err)
+
+
 def make_video(source: Path, target: Path) -> int:
     """Write *source* as an HEVC display copy at *target*; its size."""
     from ..media import media                                    # noqa: PLC0415
@@ -316,15 +342,9 @@ def make_video(source: Path, target: Path) -> int:
     partial = target.with_name(target.name + ".partial")
     target.parent.mkdir(parents=True, exist_ok=True)
     try:
-        def lower():
-            if hasattr(os, "nice"):
-                with contextlib.suppress(OSError):
-                    os.nice(10)
-        done = subprocess.run(video_command(media.FFMPEG, source, partial, encoder,
-                                            audio=has_sound(before)),
-                              capture_output=True, check=False,
-                              timeout=max(MIN_SECONDS, length * TIME_ALLOWANCE),
-                              preexec_fn=lower if os.name == "posix" else None)
+        done = run_lowered(video_command(media.FFMPEG, source, partial, encoder,
+                                         audio=has_sound(before)),
+                           timeout=max(MIN_SECONDS, length * TIME_ALLOWANCE))
         if done.returncode != 0 or not partial.is_file():
             said = done.stderr.decode("utf-8", "replace").strip().splitlines()[-1:] or ["ffmpeg"]
             raise NotMade("failed", said[0][:200])
