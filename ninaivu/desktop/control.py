@@ -19,6 +19,10 @@ except ImportError:
 from ..media import model_catalog
 from ..server.config import Config
 from ..server import runfile, starting
+# Imported now, not when Stop is pressed: Ninaivu.app moved, replaced or put
+# in the Trash while the panel runs leaves nothing to import from, and Stop
+# failed with "No module named 'ninaivu.server.stop'" just when it was needed.
+from ..server.stop import ask_to_stop
 from ..utils.resources import budget, environment
 
 
@@ -592,7 +596,6 @@ class Controller:
         self.capture_running_settings()
         self.save_mode(self.mode)
         # Reuse the existing authenticated local shutdown protocol. Never force-kill.
-        from ..server.stop import ask_to_stop
         args=self.settings.get('arguments',[])
         scheme = self.scheme(record, args)
         server = _server_process(record)
@@ -789,7 +792,6 @@ def main(argv=None) -> int:
         if psutil is None and runfile.read(controller.cfg.state_dir):
             # Without psutil the panel cannot tell a live run file from a stale
             # one; asking costs nothing, and a server that is not there says no.
-            from ..server.stop import ask_to_stop
             record = runfile.read(controller.cfg.state_dir) or {}
             scheme = record.get('scheme') or 'http'
             try:
