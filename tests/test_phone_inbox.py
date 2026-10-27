@@ -7,6 +7,7 @@ PROPFIND or HEAD to see what is there.
 
 import base64
 import io
+import os
 import time
 from pathlib import Path
 
@@ -219,6 +220,73 @@ def test_a_rename_moves_only_the_remembered_path(phone):
     assert phone.head("/dav/2024/IMG_0005.png", headers=phone.auth_headers).status_code == 200
     assert phone.head("/dav/upload/IMG_0005.png",
                       headers=phone.auth_headers).status_code == 404
+
+
+def _held(phone):
+    cfg = phone.application.config["MV_CONFIG"]
+    folder = Path(cfg.state_dir) / "phone-backup" / "held"
+    return [p for p in folder.iterdir() if p.is_file()] if folder.exists() else []
+
+
+def test_a_file_sent_under_a_temporary_name_is_filed_when_renamed(phone, people):
+    data = photo((30, 60, 220))
+    sent = put(phone, "Camera/IMG_0010.png.tmp", data)
+    assert sent.status_code == 201, sent.data
+    # Held as sent and answered about, but not a backup until it is renamed.
+    assert pending(people["conn"]) == []
+    head = phone.head("/dav/Camera/IMG_0010.png.tmp", headers=phone.auth_headers)
+    assert head.status_code == 200 and int(head.headers["Content-Length"]) == len(data)
+    listing = phone.open("/dav/Camera/IMG_0010.png.tmp", method="PROPFIND",
+                         headers={**phone.auth_headers, "Depth": "0"})
+    assert listing.status_code == 207
+    assert f"<D:getcontentlength>{len(data)}".encode() in listing.data
+
+    moved = phone.open("/dav/Camera/IMG_0010.png.tmp", method="MOVE",
+                       headers={**phone.auth_headers,
+                                "Destination": "http://localhost/dav/Camera/IMG_0010.png"})
+    assert moved.status_code == 201, moved.data
+    rows = pending(people["conn"])
+    assert len(rows) == 1 and rows[0]["filename"] == "IMG_0010.png"
+    assert phone.head("/dav/Camera/IMG_0010.png", headers=phone.auth_headers).status_code == 200
+    assert phone.head("/dav/Camera/IMG_0010.png.tmp",
+                      headers=phone.auth_headers).status_code == 404
+    assert _held(phone) == []
+
+
+@pytest.mark.parametrize("name", [".IMG_0011.png.part", "IMG_0011.png.x7k2q", "~IMG_0011.png"])
+def test_the_temporary_names_apps_use_are_recognised(phone, people, name):
+    assert put(phone, name, photo((90, 10, 90))).status_code == 201
+    moved = phone.open(f"/dav/{name}", method="MOVE",
+                       headers={**phone.auth_headers, "Destination": "/dav/IMG_0011.png"})
+    assert moved.status_code == 201
+    assert len(pending(people["conn"])) == 1
+
+
+def test_an_unfinished_file_can_be_deleted_by_its_app_and_is_let_go_in_time(phone, people):
+    put(phone, "IMG_0012.png.part", photo())
+    assert phone.delete("/dav/IMG_0012.png.part", headers=phone.auth_headers).status_code == 204
+    assert _held(phone) == []
+    # One the app never renames or deletes goes after HELD_FOR.
+    put(phone, "IMG_0013.png.part", photo())
+    [held] = _held(phone)
+    old = time.time() - api_webdav.HELD_FOR - 60
+    os.utime(held, (old, old))
+    put(phone, "IMG_0014.png.part", photo((1, 2, 3)))
+    assert len(_held(phone)) == 1 and held not in _held(phone)
+    assert pending(people["conn"]) == []
+
+
+def test_a_temporary_file_renamed_to_something_else_is_refused(phone, people):
+    put(phone, "notes.pdf.tmp", b"%PDF-1.4 not a photo")
+    moved = phone.open("/dav/notes.pdf.tmp", method="MOVE",
+                       headers={**phone.auth_headers, "Destination": "/dav/notes.pdf"})
+    assert moved.status_code == 415
+    assert _held(phone) == [] and pending(people["conn"]) == []
+
+
+def test_a_key_still_cannot_read_a_held_file(phone):
+    put(phone, "IMG_0015.png.tmp", photo())
+    assert phone.get("/dav/IMG_0015.png.tmp", headers=phone.auth_headers).status_code == 403
 
 
 def test_a_dates_change_after_sending_is_accepted(phone):

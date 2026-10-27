@@ -19,6 +19,12 @@ by the date it was taken rather than the folder the phone chose. When the
 person's backups need no review, the files are filed a minute after the phone
 stops sending, one stand-down of the indexer for the lot.
 
+**Temporary names.** Some apps (FolderSync does by default) send a file
+under a name of their own, ``IMG_0001.HEIC.tmp`` or ``.IMG_0001.HEIC.part``,
+and rename it once it has all arrived. Such a file is held as it is, and
+filed when the app renames it to a photograph's name; one never renamed is let
+go after two days.
+
 **Home and the house's own devices only.** The inbox does not answer the
 internet (``server/remote.from_the_internet``): over Tailscale or WireGuard,
 or on the home network.
@@ -28,10 +34,14 @@ from __future__ import annotations
 
 import base64
 import binascii
+import hashlib
 import logging
+import secrets
 import threading
+import time
 from datetime import datetime, timezone
 from email.utils import format_datetime
+from pathlib import Path
 from typing import Any
 from urllib.parse import quote, unquote, urlsplit
 from xml.sax.saxutils import escape
@@ -56,6 +66,11 @@ _PIECE = 1024 * 1024
 _RECHECK = 256 * 1024 * 1024
 #: Seconds after the last file before a trusted person's backups are filed.
 FILE_AFTER = 60.0
+#: How sync apps end the name of a file still on its way.
+_TEMPORARY_ENDINGS = (".part", ".partial", ".tmp", ".temp", ".upload", ".uploading",
+                      ".filepart", ".crdownload", "~")
+#: A file sent under a temporary name and never renamed is let go after this.
+HELD_FOR = 2 * 86400.0
 
 
 def _ready(conn) -> None:
@@ -162,6 +177,19 @@ def _is_file(path: str) -> bool:
     return bool(path) and _supported(path.rsplit("/", 1)[-1]) is not None
 
 
+def _is_temporary(path: str) -> bool:
+    """A name a sync app gives a file while it is still arriving, to rename
+    it once it is whole: ``IMG_0001.HEIC.tmp``, ``.IMG_0001.HEIC.x7k2``,
+    ``IMG_0001.HEIC.part``."""
+    name = path.rsplit("/", 1)[-1] if path else ""
+    if not name or _supported(name) is not None:
+        return False
+    lower = name.lower()
+    if lower.startswith((".", "~")) or lower.endswith(_TEMPORARY_ENDINGS):
+        return True
+    return "." in name and _supported(name.rsplit(".", 1)[0]) is not None
+
+
 def _href(path: str, folder: bool) -> str:
     href = PREFIX + "/" + quote(path)
     if folder and not href.endswith("/"):
@@ -191,6 +219,8 @@ def webdav(sub: str = ""):
         return response
     _key_id()
     path = _path(sub)
+    if _is_temporary(path):
+        return _held(path)
     if g.phone_key.get("inbox") is not None:
         return _on_the_secondary(path)
     handler = {
@@ -399,8 +429,34 @@ def _put(path: str):
         return _plain(415, "Ninaivu takes photographs, video and audio. That file "
                            "type is not one of them.")
     cfg = _cfg()
-    limit = max(1, int(getattr(cfg, "phone_upload_max_gb", 8) or 8)) * 1024 ** 3
     length = request.content_length
+    refused = _refuse_before_reading(cfg, length)
+    if refused is not None:
+        return refused
+    root, scope = _destination()
+    target = phone_backup.incoming(cfg)
+    try:
+        received = _read_into(target, request.environ["wsgi.input"], length, _limit(cfg))
+        if length is None:
+            # Sent in chunks, so its size is known only now. Past the
+            # allowance it would fail its review staging and be answered 415,
+            # which a sync app takes as "never send this file again".
+            over = _over_quota(cfg, received)
+            if over is not None:
+                raise _Refused(over.status_code, over.get_data(as_text=True).strip())
+    except _Refused as refusal:
+        target.unlink(missing_ok=True)
+        return _plain(refusal.status, refusal.message)
+    return _file_arrived(cfg, path, name, target, received, root, scope)
+
+
+def _limit(cfg) -> int:
+    return max(1, int(getattr(cfg, "phone_upload_max_gb", 8) or 8)) * 1024 ** 3
+
+
+def _refuse_before_reading(cfg, length: int | None) -> Response | None:
+    """The answer to a PUT that is refused before a byte of it is read."""
+    limit = _limit(cfg)
     stream = request.environ.get("wsgi.input")
     if stream is None or (length is None and not request.environ.get("wsgi.input_terminated")):
         return _plain(411, "Say how large the file is with Content-Length.")
@@ -408,18 +464,20 @@ def _put(path: str):
         return _plain(413, f"Ninaivu takes files up to {limit // 1024 ** 3} GB from a phone.")
     if length is not None and length <= 0:
         return _plain(400, "That file is empty.")
-    root, scope = _destination()
-    if length:
-        # Before a byte is read: a phone over its person's allowance of files
-        # waiting for review is told to try later (507, which sync apps retry),
-        # not that the file is unwelcome.
-        over = _over_quota(cfg, length)
-        if over is not None:
-            return over
-    target = phone_backup.incoming(cfg)
+    if length and g.phone_key.get("inbox") is None:
+        # A phone over its person's allowance of files waiting for review is
+        # told to try later (507, which sync apps retry), not that the file
+        # is unwelcome.
+        return _over_quota(cfg, length)
+    return None
+
+
+def _read_into(target: Path, stream, length: int | None, limit: int) -> int:
+    """Write what the phone sends to *target* (a new file); how much came.
+    Raises _Refused, leaving *target* for the caller to remove."""
     if not phone_backup.has_room(target.parent, length or 0):
-        return _plain(507, "Ninaivu's computer is nearly out of space, so this file "
-                           "cannot be taken right now.")
+        raise _Refused(507, "Ninaivu's computer is nearly out of space, so this file "
+                            "cannot be taken right now.")
     received = 0
     try:
         with open(target, "xb") as out:
@@ -437,25 +495,20 @@ def _put(path: str):
                     if not phone_backup.has_room(target.parent, 0):
                         raise _Refused(507, "Ninaivu's computer is nearly out of space, "
                                             "so this file cannot be taken right now.")
-        if length is not None and received != length:
-            raise _Refused(400, "The file did not arrive whole. Send it again.")
-        if received == 0:
-            raise _Refused(400, "That file is empty.")
-        if length is None:
-            # Sent in chunks, so its size is known only now. Past the
-            # allowance it would fail its review staging and be answered 415,
-            # which a sync app takes as "never send this file again".
-            over = _over_quota(cfg, received)
-            if over is not None:
-                raise _Refused(over.status_code, over.get_data(as_text=True).strip())
-    except _Refused as refusal:
-        target.unlink(missing_ok=True)
-        return _plain(refusal.status, refusal.message)
     except OSError as exc:
-        target.unlink(missing_ok=True)
-        log.warning("a phone's upload of %s could not be written: %s", name, exc)
-        return _plain(500, "The file could not be written. Send it again.")
+        log.warning("a phone's upload to %s could not be written: %s", target.name, exc)
+        raise _Refused(500, "The file could not be written. Send it again.") from exc
+    if length is not None and received != length:
+        raise _Refused(400, "The file did not arrive whole. Send it again.")
+    if received == 0:
+        raise _Refused(400, "That file is empty.")
+    return received
 
+
+def _file_arrived(cfg, path: str, name: str, target: Path, received: int,
+                  root: str, scope: str):
+    """A whole file at *target*, sent for *path*: checked, and filed as the
+    family app's backup screen files it. *target* is moved or removed."""
     conn = _conn()
     _ready(conn)
     key = g.phone_key
@@ -502,6 +555,124 @@ class _Refused(Exception):
         super().__init__(message)
         self.status = status
         self.message = message
+
+
+# ---------------------------------------------------------------------------
+# Files sent under a temporary name, held until the app renames them
+# ---------------------------------------------------------------------------
+
+def _held_folder() -> Path:
+    inbox = g.phone_key.get("inbox")
+    base = inbox.base if inbox is not None else phone_backup.incoming(_cfg()).parent
+    return base / "held"
+
+
+def _held_file(path: str) -> Path:
+    digest = hashlib.sha256(path.encode("utf-8")).hexdigest()[:32]
+    return _held_folder() / f"{_key_id()}-{digest}"
+
+
+def _let_go_of_old_ones(folder: Path) -> None:
+    """Files held longer than HELD_FOR: the app gave up on them."""
+    cutoff = time.time() - HELD_FOR
+    try:
+        for held in folder.iterdir():
+            try:
+                if held.stat().st_mtime < cutoff:
+                    held.unlink()
+            except OSError:
+                continue
+    except OSError:
+        return
+
+
+def _held(path: str):
+    """A path with a temporary name: kept as sent, answered about, and filed
+    when the app renames it to a photograph's name."""
+    method = request.method
+    held = _held_file(path)
+    if method == "PUT":
+        cfg = _cfg()
+        length = request.content_length
+        refused = _refuse_before_reading(cfg, length)
+        if refused is not None:
+            return refused
+        held.parent.mkdir(parents=True, exist_ok=True)
+        _let_go_of_old_ones(held.parent)
+        arriving = held.parent / f".arriving-{secrets.token_hex(8)}"
+        try:
+            _read_into(arriving, request.environ["wsgi.input"], length, _limit(cfg))
+        except _Refused as refusal:
+            arriving.unlink(missing_ok=True)
+            return _plain(refusal.status, refusal.message)
+        known = held.exists()
+        arriving.replace(held)
+        return Response(status=204 if known else 201)
+    if method in ("HEAD", "PROPFIND"):
+        try:
+            facts = held.stat()
+        except OSError:
+            return Response(status=404)
+        if method == "HEAD":
+            response = Response(status=200, mimetype="application/octet-stream")
+            response.headers["Content-Length"] = str(facts.st_size)
+            response.headers["Last-Modified"] = _http_date(facts.st_mtime)
+            return response
+        row = {"size": facts.st_size, "modified": facts.st_mtime, "finished_at": 0,
+               "sha256": "", "id": int(facts.st_mtime)}
+        body = ('<?xml version="1.0" encoding="utf-8"?>\n<D:multistatus xmlns:D="DAV:">'
+                + _file_entry(path, row) + "</D:multistatus>")
+        return Response(body, status=207, mimetype="application/xml")
+    if method == "DELETE":
+        # The app's own unfinished file, and nothing else, may be deleted.
+        if not held.exists():
+            return Response(status=404)
+        held.unlink(missing_ok=True)
+        return Response(status=204)
+    if method == "PROPPATCH":
+        return _proppatch(path)
+    if method == "MKCOL":
+        return _mkcol(path)
+    if method == "MOVE":
+        return _move_held(path, held)
+    return _plain(403, "A phone key can only send photographs to Ninaivu.")
+
+
+def _move_held(path: str, held: Path):
+    destination = _path(urlsplit(request.headers.get("Destination", "")).path
+                        .removeprefix(PREFIX))
+    if not destination:
+        return _plain(400, "Say where to with a Destination header.")
+    if not held.exists():
+        return Response(status=404)
+    if _is_temporary(destination):
+        held.replace(_held_file(destination))
+        return Response(status=201)
+    name = _supported(destination.rsplit("/", 1)[-1])
+    if name is None:
+        held.unlink(missing_ok=True)
+        return _plain(415, "Ninaivu takes photographs, video and audio. That file "
+                           "type is not one of them.")
+    cfg = _cfg()
+    size = held.stat().st_size
+    inbox = g.phone_key.get("inbox")
+    if inbox is not None:
+        from ..mugil.inbox import Refused                     # noqa: PLC0415
+        try:
+            with open(held, "rb") as stream:
+                known = inbox.receive(_key_id(), destination, name, stream, length=size,
+                                      limit=_limit(cfg), modified=_modified())
+        except Refused as refusal:
+            return _plain(refusal.status, refusal.message)
+        held.unlink(missing_ok=True)
+        return Response(status=204 if known else 201)
+    over = _over_quota(cfg, size)
+    if over is not None:
+        return over
+    root, scope = _destination()
+    target = phone_backup.incoming(cfg)
+    held.replace(target)
+    return _file_arrived(cfg, destination, name, target, size, root, scope)
 
 
 # ---------------------------------------------------------------------------

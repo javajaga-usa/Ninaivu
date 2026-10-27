@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Phones back themselves up
+
+- **Sync apps that send under a temporary name now work.** FolderSync on Android (by default) and several other apps send each file as `IMG_0001.HEIC.tmp` or `.IMG_0001.HEIC.part` and rename it once it has all arrived. The phone inbox used to refuse such a name, so those apps never backed anything up. Now the file is held as sent, answered about while it waits, and filed when the app renames it, with the same checks as every phone backup (recognised by its content if the library has it, kept byte for byte). The app may delete its own unfinished file; one it never renames is let go after two days. Works on the always-on computer too.
+- **The Overview says when a phone has gone quiet.** A new check, **Phones back themselves up**, names any phone with a key that has neither checked in nor sent a file for two weeks (Tailscale switched off, the app closed for good, a new phone), so a backup that stopped is noticed before a phone is lost.
+- **Step-by-step setup for iPhone and Android**, in English and Tamil, under Backup → Backing up by itself: Tailscale left on, PhotoSync sending every night while the phone charges, FolderSync on a schedule, the settings that keep originals exact, and sending years of old photographs once over the resumable backup screen.
+
 ### Faces waiting for a name
 
 - **The Faces tab no longer says "99+" for good.** It counted every unnamed group of three or more faces, and a library with hundreds of thousands of faces always has hundreds of those, mostly strangers in the background. Now **Needs you**, the Faces tab and the People & access dot count only the unnamed faces seen in **25 photographs or more**, somebody who keeps turning up and is worth naming, and the Overview calls them **Faces seen often, without a name**. The Faces page still lists every group, largest first.
