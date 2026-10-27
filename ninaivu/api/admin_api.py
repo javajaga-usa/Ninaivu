@@ -1054,8 +1054,17 @@ def location_suggestions():
     from ..storage import geo
 
     hours = _location_window(request.args.get("hours", 1))
-    return jsonify({"hours": hours, "windows": list(geo.WINDOWS),
-                    **geo.location_suggestions(_conn(), _location_libraries(), max_hours=hours)})
+    conn = _conn()
+    libraries = _location_libraries()
+    # Every photograph without a place read against every one with: over a
+    # second on each open at 210,000 items. Kept until a place or a time
+    # changes (filling them in moves the places counter), and for a few
+    # minutes at most, for a date's source that neither counter follows.
+    found = db.cached_aggregate(
+        conn, ("location_suggestions", tuple(libraries), hours),
+        lambda: geo.location_suggestions(conn, libraries, max_hours=hours),
+        also=(db.PLACES_GENERATION_KEY, db.SCAN_GENERATION_KEY), max_age=300)
+    return jsonify({"hours": hours, "windows": list(geo.WINDOWS), **found})
 
 
 @admin_bp.post("/api/admin/locations/apply")
@@ -1105,7 +1114,8 @@ def folders():
             "SUM(visibility=1) family, SUM(visibility=2) hidden "
             "FROM assets WHERE root=? AND trashed=0 GROUP BY folder",
             (root,),
-        )])
+        # Only read below: handed over as kept, not copied on every open.
+        )], shared=True)
 
     totals: dict[str, dict[str, int]] = {}
     for row in rows:
@@ -2443,13 +2453,7 @@ def assignable():
     conn = _conn()
     out: list[dict[str, Any]] = []
     for root in cfg.roots:
-        total, rows = db.cached_aggregate(conn, ("assignable", root), lambda root=root: (
-            conn.execute("SELECT COUNT(*) n FROM assets WHERE root=? AND trashed=0",
-                         (root,)).fetchone()["n"] or 0,
-            [dict(entry) for entry in conn.execute(
-                "SELECT folder, COUNT(*) n FROM assets WHERE root=? AND trashed=0 "
-                "AND folder != '' GROUP BY folder", (root,))],
-        ))
+        total, rows = db.folder_counts(conn, root)
         out.append({
             "path": root,
             "label": Path(root).name or root,

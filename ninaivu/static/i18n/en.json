@@ -4997,5 +4997,11 @@
   "{items} sent to an admin. They are out of the family’s gallery until an admin decides.": "{items} sent to an admin. They are out of the family’s gallery until an admin decides.",
   "Phones back themselves up": "Phones back themselves up",
   "No phone has a key to back itself up.": "No phone has a key to back itself up.",
-  "On that phone, check that Tailscale is connected and the sync app's automatic transfer is still on. Revoke the key of a phone no longer used.": "On that phone, check that Tailscale is connected and the sync app's automatic transfer is still on. Revoke the key of a phone no longer used."
+  "On that phone, check that Tailscale is connected and the sync app's automatic transfer is still on. Revoke the key of a phone no longer used.": "On that phone, check that Tailscale is connected and the sync app's automatic transfer is still on. Revoke the key of a phone no longer used.",
+  "Nothing matched “{q}”. Try fewer words, or a description like “red car at night”.": "Nothing matched “{q}”. Try fewer words, or a description like “red car at night”.",
+  "{count} selected": "{count} selected",
+  "Thing": "Thing",
+  "Tag": "Tag",
+  "What it is for": "What it is for",
+  "Workflow file": "Workflow file"
 }

@@ -792,6 +792,7 @@ export class ProfileSheet {
     const nameInput = el('input', 'input');
     nameInput.value = user.name;
     nameInput.maxLength = 60;
+    nameInput.setAttribute('aria-label', i18n.t('Display name'));
     const saveName = el('button', 'btn', i18n.t('Save'));
     saveName.type = 'button';
     saveName.onclick = async () => {

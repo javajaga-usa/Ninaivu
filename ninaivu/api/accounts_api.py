@@ -1525,11 +1525,9 @@ def scope_folders():
     root = _cfg().active_root
     if not root:
         return jsonify({"folders": []})
-    rows = conn.execute(
-        "SELECT folder, COUNT(*) n FROM assets WHERE root=? AND trashed=0 "
-        "GROUP BY folder ORDER BY folder",
-        (root,),
-    ).fetchall()
+    # Remembered with the console's other folder picker (/api/admin/assignable):
+    # read afresh, it was most of a second on every open at 210,000 items.
+    _, rows = db.folder_counts(conn, root)
 
     # Roll leaf counts up into every ancestor so parents show a useful total.
     totals: dict[str, int] = {}

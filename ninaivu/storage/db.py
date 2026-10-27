@@ -824,7 +824,11 @@ CREATE INDEX IF NOT EXISTS idx_assets_vis      ON assets(root, visibility);
 -- (120 ms a call at 200,000) instead of the handful.
 CREATE INDEX IF NOT EXISTS idx_assets_private  ON assets(private_to) WHERE private_to IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_assets_phash    ON assets(phash);
-CREATE INDEX IF NOT EXISTS idx_assets_dupgroup ON assets(dup_group);
+-- Duplicates: a small share of a library, found without a walk. Partial, as
+-- idx_assets_private is: whole, it held a NULL for every other photograph,
+-- and the duplicates review and the sidebar's count of them read every row
+-- the viewer may see (half a second each at 210,000 items) to find a tenth.
+CREATE INDEX IF NOT EXISTS idx_assets_dupgroup ON assets(dup_group) WHERE dup_group IS NOT NULL;
 -- Photo stacks: a few thousand rows of a library, found without a walk.
 CREATE INDEX IF NOT EXISTS idx_assets_stack    ON assets(stack_key) WHERE stack_key IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_assets_folder   ON assets(root, folder);
@@ -2879,7 +2883,9 @@ def query_assets(
     if is_live:
         where.append("a.is_live = 1")
     if min_size:
-        where.append("a.size >= ?")
+        # Few items are this large: said so, the count reads the size index
+        # instead of every row the viewer may see (0.6 s at 210,000 items).
+        where.append("likelihood(a.size >= ?, 0.01)")
         params.append(int(min_size))
     if exclude_reviewed_large:
         # "Keep" on the largest-files screen, not a statement about anything
@@ -4337,6 +4343,24 @@ def clear_folder_rule(conn: sqlite3.Connection, root: str, folder: str,
     for at in range(0, len(hidden_now), 500):
         forget_ai_reading(conn, ids=hidden_now[at:at + 500])
     return len(changes)
+
+
+def folder_counts(conn: sqlite3.Connection, root: str) -> tuple[int, list[dict[str, Any]]]:
+    """How many items one library folder holds outside the bin, and how many
+    each folder in it holds (``folder``, ``n``; the top level left out).
+
+    Remembered until the library changes, and handed to every caller as the
+    same object, so it must only be read: the console's folder pickers ask
+    for it on each open, and read and copied afresh it was most of a second
+    on a library of 210,000 items.
+    """
+    return cached_aggregate(conn, ("folder_counts", root), lambda: (
+        int(conn.execute("SELECT COUNT(*) FROM assets WHERE root=? AND trashed=0",
+                         (root,)).fetchone()[0] or 0),
+        [dict(entry) for entry in conn.execute(
+            "SELECT folder, COUNT(*) n FROM assets WHERE root=? AND trashed=0 "
+            "AND folder != '' GROUP BY folder ORDER BY folder", (root,))],
+    ), shared=True)
 
 
 def folder_rules(conn: sqlite3.Connection, root: str) -> list[dict[str, Any]]:
