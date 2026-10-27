@@ -12,9 +12,9 @@ name: Docs site
 on:
   push:
     branches: [main]
-    paths: ["docs/**", "mkdocs.yml", ".github/workflows/docs.yml", "ninaivu/static/icons/**"]
+    paths: ["docs/**", "mkdocs.yml", "tools/docs-theme/**", ".github/workflows/docs.yml", "ninaivu/static/icons/**"]
   pull_request:
-    paths: ["docs/**", "mkdocs.yml", ".github/workflows/docs.yml"]
+    paths: ["docs/**", "mkdocs.yml", "tools/docs-theme/**", ".github/workflows/docs.yml"]
   workflow_dispatch:
 
 # Read-only by default; only the job that publishes may write to Pages.

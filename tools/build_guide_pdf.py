@@ -44,8 +44,8 @@ VERSION = re.search(r'__version__ = "([^"]+)"', (ROOT / "ninaivu" / "__init__.py
 
 TAB_RUN = 253   # mm: the height of the right margin, A4's 297 less the top and bottom margins in guide_pdf.css
 
-SITE_URL = "https://javajaga-usa.github.io/Ninaivu-releases/"
-REPO_URL = "https://github.com/javajaga-usa/Ninaivu-releases"   # the public downloads; the source is private
+SITE_URL = "https://javajaga-usa.github.io/Ninaivu/"
+REPO_URL = "https://github.com/javajaga-usa/Ninaivu"
 
 PAGES = [
     ("index.md", "#e8590c"), ("install.md", "#0b7285"), ("first-day.md", "#2b8a3e"),
@@ -126,7 +126,7 @@ LANGUAGES = {
         "legend": "",
         "keys": [],
         "fine": "",
-        "links": [("The guide, online", SITE_URL), ("Download", REPO_URL + "/releases"), ("Report a problem", REPO_URL + "/issues")],
+        "links": [("The guide, online", SITE_URL), ("Source", REPO_URL), ("Report a problem", REPO_URL + "/issues")],
         "ver": "Ninaivu {v} · MIT licence",
         "keywords": "Ninaivu, administrator, Docker, command line, guide",
         "html_lang": "en",

@@ -3,7 +3,7 @@
 The docs site — Install, The first day, Family and roles, Backup, Remote
 access, AI, Troubleshooting — is built from [`index.md`](index.md) and [`site/`](site/install.md) with
 `mkdocs serve` (`pip install mkdocs-material`) and published at
-<https://javajaga-usa.github.io/Ninaivu-releases/>. Everything below is on it too,
+<https://javajaga-usa.github.io/Ninaivu/>. Everything below is on it too,
 under *More*.
 
 - [A tour of the screens](screens.md) — every page, pictured and explained.

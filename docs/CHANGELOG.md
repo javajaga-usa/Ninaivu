@@ -2,12 +2,13 @@
 
 ## Unreleased
 
-### The source goes private; the downloads stay public
+### Quieter
 
-- **Downloads move to [github.com/javajaga-usa/Ninaivu-releases](https://github.com/javajaga-usa/Ninaivu-releases/releases).** The source repository is to become private, so each release is published to a public releases-only repository instead (`RELEASES_REPO`, written with the `RELEASES_TOKEN` secret), and the tag is still made here on the commit it was built from. The gate checks the public repository can be written to, is public, and has no release or tag of that version before anything is built. Without the token, as in a fork, a release goes to its own repository as before. The update check before each build brings a library across from the latest release in the public repository.
-- **The guide moves to [javajaga-usa.github.io/Ninaivu-releases](https://javajaga-usa.github.io/Ninaivu-releases/).** GitHub Free has no Pages for a private repository, so while the source is private the docs site is pushed to the releases repository's `gh-pages` branch. The README, the guide PDFs, the install pages, the administrator guide and the systemd units point there, and "Report a problem" goes to the releases repository's issues. The docs say where `git clone` needs an account with access.
-- **Build provenance is skipped while the source is private.** GitHub makes attestations only for public repositories on the Free plan; `SHA256SUMS.txt` still goes out with every release.
-- **The checks can run on the household's Mac mini.** Repository variables send the macOS jobs to a runner on the Mac (`MAC_RUNNER`) and the Linux ones to runners in Docker on it (`LINUX_RUNNER`, `LINUX_ARM64_RUNNER`, `BASIC_TIER_RUNNER`; `installers/ci-runner/`), and `WINDOWS_TESTS` = `weekly` keeps the Windows suite to Sunday nights. With none set, everything runs on GitHub's runners as before. The Docker image is built on a pull request only when what goes into it changes. docs/development/self-hosted-runners.md has the steps.
+- **The guide site asks search engines not to list it.** Every page carries `noindex, nofollow` (tools/docs-theme/main.html), so the site drops out of Google and the like as they next visit it. The repository stays public.
+
+### Ready for a private source repository, if it is ever made private
+
+- **Nothing changes while the repository is public.** The release workflow can publish to a separate public releases repository (`RELEASES_REPO`, with a `RELEASES_TOKEN` secret), the docs site can go to that repository's Pages when this one is private, and provenance is skipped for a private repository (GitHub Free makes none there). Repository variables can send the checks to runners at home (`MAC_RUNNER`, `LINUX_RUNNER`, `LINUX_ARM64_RUNNER`, `BASIC_TIER_RUNNER`, `WINDOWS_TESTS`; `installers/ci-runner/`, docs/development/self-hosted-runners.md). With none of them set, everything runs and publishes where it always did.
 
 ## 3.4.0 — 27 October 2026
 

@@ -1,18 +1,19 @@
 # The docs site: `pip install mkdocs-material` then `mkdocs serve`.
-# .github/workflows/docs.yml publishes it on every push to main, to the Pages
-# of the public Ninaivu-releases repository (the source repository is private).
+# .github/workflows/docs.yml publishes it to GitHub Pages on every push to main.
 site_name: Ninaivu
 site_description: Your family's photographs, at home.
-site_url: https://javajaga-usa.github.io/Ninaivu-releases/
-repo_url: https://github.com/javajaga-usa/Ninaivu-releases
-repo_name: javajaga-usa/Ninaivu-releases
-edit_uri: ""   # the source is private: no "edit this page" links
+site_url: https://javajaga-usa.github.io/Ninaivu/
+repo_url: https://github.com/javajaga-usa/Ninaivu
+repo_name: javajaga-usa/Ninaivu
+edit_uri: edit/main/docs/
 docs_dir: docs
 site_dir: site-build
 copyright: © 2026 Jagadeesh Rajendran · MIT licence
 
 theme:
   name: material
+  # Asks search engines not to list the site (tools/docs-theme/main.html).
+  custom_dir: tools/docs-theme
   logo: assets/icon-192.png
   favicon: assets/icon-192.png
   palette:

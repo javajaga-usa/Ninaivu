@@ -10,11 +10,11 @@ use it. This page is in English only.
 
 | | |
 | --- | --- |
-| Source code | Private: <https://github.com/javajaga-usa/Ninaivu>, for the GitHub accounts its owner has added |
-| Downloads (the page the guide points to) | <https://github.com/javajaga-usa/Ninaivu-releases/releases/latest> |
-| Reporting a problem | <https://github.com/javajaga-usa/Ninaivu-releases/issues> |
-| Extensions (Creative Studio, Gemini and the rest) | `extensions/` in the source; the portable downloads carry them |
-| The docs site | <https://javajaga-usa.github.io/Ninaivu-releases/> |
+| Source code | <https://github.com/javajaga-usa/Ninaivu> |
+| Downloads (the page the guide points to) | <https://github.com/javajaga-usa/Ninaivu/releases/latest> |
+| Reporting a problem | <https://github.com/javajaga-usa/Ninaivu/issues> |
+| Extensions (Creative Studio, Gemini and the rest) | <https://github.com/javajaga-usa/Ninaivu/tree/main/extensions> |
+| The docs site | <https://javajaga-usa.github.io/Ninaivu/> |
 
 When reporting a problem, say which version (**System → Home & extensions** shows it
 under *This home*), what was done, and what the log said.
@@ -93,9 +93,7 @@ had not stopped by then.
 
 ## Docker
 
-For a NAS or a Linux box. The source is private, so `git clone` needs a
-GitHub account with access to it (see [From a checkout](#from-a-checkout));
-without one, use the published image named below.
+For a NAS or a Linux box:
 
 ```bash
 git clone https://github.com/javajaga-usa/Ninaivu.git
@@ -122,9 +120,7 @@ covers systemd, reverse proxies, HTTPS and large libraries.
 ## From a checkout
 
 Running from the source needs Python 3.12 or newer (the portable downloads
-bring their own), and, since the repository is private, a GitHub account its
-owner has added: `git clone` asks for that account's name and a token (or use
-`gh auth login` first).
+bring their own).
 
 ```bash
 git clone https://github.com/javajaga-usa/Ninaivu.git

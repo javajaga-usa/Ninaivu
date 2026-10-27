@@ -491,7 +491,7 @@ def test_the_linux_build_compiles_with_the_python_it_bundles():
 
 def test_the_service_files_point_at_this_project():
     unit = (ROOT / "installers" / "systemd" / "ninaivu.service").read_text(encoding="utf-8")
-    assert "Documentation=https://javajaga-usa.github.io/Ninaivu-releases/" in unit
+    assert "Documentation=https://github.com/javajaga-usa/Ninaivu" in unit
     from ninaivu.desktop import autostart
     with pytest.raises(RuntimeError) as raised:
         autostart.enable(root=ROOT, platform="linux")
@@ -555,18 +555,4 @@ def test_with_no_variables_set_every_job_runs_where_it_always_did():
                 assert runs_on in hosted, (path.name, name, runs_on)
     flow = _workflow("tests.yml")
     assert "vars.WINDOWS_TESTS != 'weekly'" in flow["jobs"]["test"]["strategy"]["matrix"]["os"]
-
-
-def test_the_downloads_and_the_guide_point_at_the_public_repository():
-    public = "https://github.com/javajaga-usa/Ninaivu-releases"
-    for page in ("README.md", "docs/site/install.md", "docs/site/ta/install.md", "docs/admin-guide.md"):
-        text = (ROOT / page).read_text(encoding="utf-8")
-        assert public + "/releases" in text, page
-        assert "github.com/javajaga-usa/Ninaivu/releases" not in text, page
-        assert "javajaga-usa.github.io/Ninaivu/" not in text, page
-    assert "site_url: https://javajaga-usa.github.io/Ninaivu-releases/" in (ROOT / "mkdocs.yml").read_text()
-    release = _workflow("release.yml")
-    publish = next(s for s in release["jobs"]["release"]["steps"]
-                   if "softprops/action-gh-release" in s.get("uses", ""))
-    assert publish["with"]["repository"] == "${{ env.PUBLISH_TO }}"
 

@@ -71,9 +71,7 @@ takes a while over the network; after that only changes go.
 
 ## On the Pi
 
-Install Ninaivu from source, at the version the Mac runs. The repository is
-private, so `git clone` asks for a GitHub account its owner has added and a
-token for it:
+Install Ninaivu from source, at the version the Mac runs:
 
 ```bash
 sudo apt install -y git python3-venv
