@@ -34,7 +34,7 @@ concurrency:
 jobs:
   models:
     name: Real models · ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.os == 'macos-14' && (vars.MAC_RUNNER || 'macos-14') || (vars.LINUX_RUNNER || 'ubuntu-latest') }}
     timeout-minutes: 60
     strategy:
       fail-fast: false

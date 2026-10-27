@@ -12,11 +12,25 @@ name: Docker Build & Push
 # publishes one image for both; its arm64 half is built under emulation
 # there, which is slower but makes one digest to attest.
 
+# Built and started on a push or pull request only when what goes into the
+# image changes: a private repository's minutes on GitHub Free cover a few
+# hours of building it on every change (tests.yml says more). Every release
+# builds and pushes it whatever changed.
 on:
   push:
     branches: [main]
+    paths:
+      - "installers/docker/**"
+      - "requirements/**"
+      - "pyproject.toml"
+      - ".github/workflows/docker.yml"
   pull_request:
     branches: [main]
+    paths:
+      - "installers/docker/**"
+      - "requirements/**"
+      - "pyproject.toml"
+      - ".github/workflows/docker.yml"
   workflow_call:
     inputs:
       version:
@@ -80,7 +94,9 @@ jobs:
   build-arm64:
     name: Build and start (arm64, not pushed)
     if: inputs.version == ''
-    runs-on: ubuntu-24.04-arm
+    # GitHub's arm64 runners are free for public repositories only; a runner
+    # in Docker on the Mac mini is arm64 too (and builds with the Mac's Docker).
+    runs-on: ${{ vars.LINUX_ARM64_RUNNER || 'ubuntu-24.04-arm' }}
     timeout-minutes: 45
     permissions:
       contents: read
@@ -189,8 +205,10 @@ jobs:
       # A signed statement, kept by GitHub, that this digest was built by this
       # workflow from this commit — the same provenance the release's
       # installers carry. `gh attestation verify oci://ghcr.io/<owner>/ninaivu:<tag>
-      # --owner <owner>` checks it.
+      # --owner <owner>` checks it. None while the source repository is
+      # private: GitHub makes them only for public ones on the Free plan.
       - name: Build provenance
+        if: ${{ !github.event.repository.private }}
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-name: ghcr.io/${{ github.repository_owner }}/ninaivu

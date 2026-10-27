@@ -136,7 +136,7 @@ def unit_text(*, python: str, source: str, state: str, binds: list[tuple[str, st
     lines = [
         "[Unit]",
         "Description=Ninaivu read-only replica (the Pi's copy of the Mac's library)",
-        "Documentation=https://github.com/javajaga-usa/Ninaivu/blob/main/docs/pi-replica.md",
+        "Documentation=https://javajaga-usa.github.io/Ninaivu-releases/pi-replica/",
         "After=network-online.target local-fs.target",
         "Wants=network-online.target",
         f"RequiresMountsFor={systemd_quote(source)} {systemd_quote(state)}",

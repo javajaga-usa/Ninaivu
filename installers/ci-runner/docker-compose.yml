@@ -1,0 +1,53 @@
+# Linux runners for GitHub Actions, in Docker on the household's Mac mini
+# (docs/development/self-hosted-runners.md). The Mac's own macOS runner is
+# installed beside this, not in it.
+#
+#   cp .env.example .env        # then put the token in .env
+#   docker compose up -d
+#
+# Each runner takes one job and then starts again from a clean container
+# (EPHEMERAL), so nothing a job leaves behind reaches the next. They run on
+# Apple silicon, so they are arm64 Linux: the jobs a repository variable sends
+# here (LINUX_RUNNER, LINUX_ARM64_RUNNER, BASIC_TIER_RUNNER) are the ones
+# that may run on arm64. The Linux x64 download is still built on GitHub's.
+#
+# The Mac's Docker socket is shared so that the Docker image's check can
+# build and start the image. A job here can therefore start containers on the
+# Mac: only this private repository's own workflows run on these runners.
+
+x-runner: &runner
+  image: myoung34/github-runner:ubuntu-noble
+  restart: always
+  env_file: .env
+  environment: &env
+    RUNNER_SCOPE: repo
+    REPO_URL: https://github.com/javajaga-usa/Ninaivu
+    EPHEMERAL: "true"
+    RANDOM_RUNNER_SUFFIX: "true"
+    DISABLE_AUTO_UPDATE: "false"
+  volumes:
+    - /var/run/docker.sock:/var/run/docker.sock
+
+services:
+  # The test jobs: three at a time, so a pull request's suite and the release
+  # gate (which waits for that suite) never hold every runner between them.
+  linux:
+    <<: *runner
+    environment:
+      <<: *env
+      RUNNER_NAME_PREFIX: mac-mini-linux
+      LABELS: ninaivu-linux
+    deploy:
+      replicas: 3
+    mem_limit: 8g
+
+  # The Basic tier: the whole suite as a 2 GB machine with no swap would run
+  # it. tests.yml checks the limit is there before it starts.
+  basic:
+    <<: *runner
+    environment:
+      <<: *env
+      RUNNER_NAME_PREFIX: mac-mini-linux-2gb
+      LABELS: ninaivu-linux-2gb
+    mem_limit: 2g
+    memswap_limit: 2g

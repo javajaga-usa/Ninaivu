@@ -11,6 +11,8 @@ on:
   # day of a release. Started by hand from the Actions page as well.
   schedule:
     - cron: "23 2 * * *"
+    # Sundays: Windows, when WINDOWS_TESTS is "weekly" (see the test job).
+    - cron: "41 3 * * 0"
   workflow_dispatch:
 
 # Nothing in the four jobs below is allowed to fail quietly. A check that
@@ -23,6 +25,15 @@ on:
 # Every job has a time limit, a few times what it takes on a good day, and
 # every test has one too (pytest-timeout, pyproject.toml): a test that hangs
 # fails in minutes, by name, instead of holding a runner for six hours.
+
+# Where the jobs run. With no repository variables set, on GitHub's own
+# runners, as always. A private repository on GitHub Free has 2,000 minutes a
+# month (Windows counts twice, macOS ten times), which this suite spends in
+# about two runs, so the household's Mac mini runs it instead
+# (docs/development/self-hosted-runners.md): MAC_RUNNER names its macOS
+# runner, LINUX_RUNNER the Linux ones in Docker on it, BASIC_TIER_RUNNER the
+# one held to 2 GB. WINDOWS_TESTS "weekly" keeps Windows, which has no runner
+# at home, to Sunday night and "Run workflow", on Python 3.12 only.
 
 # Nothing here writes to the repository.
 permissions:
@@ -42,7 +53,7 @@ concurrency:
 jobs:
   test:
     name: Tests · ${{ matrix.os }} · Python ${{ matrix.python-version }}
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.os == 'ubuntu-latest' && (vars.LINUX_RUNNER || 'ubuntu-latest') || matrix.os }}
     # Windows runners take 30 to 45 minutes for the whole suite, and a run that
     # reached its last tests was cancelled at 45, which the release gate reads
     # as a failure. The limit is for a hang, not for a slow machine. On
@@ -55,7 +66,9 @@ jobs:
       # rest hides which one this is.
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        # (Names, not runners: the job's runs-on maps them, and the checks
+        # keep their names whichever machine runs them.)
+        os: ${{ fromJSON((vars.WINDOWS_TESTS != 'weekly' || github.event_name == 'workflow_dispatch' || github.event.schedule == '41 3 * * 0') && '["ubuntu-latest", "windows-latest"]' || '["ubuntu-latest"]') }}
         # Both ends of what pyproject.toml promises: the oldest interpreter
         # Ninaivu claims to run on, and the one it is developed against. The
         # versions in between do not break on their own — a change that fails
@@ -63,6 +76,7 @@ jobs:
         # interpreters on three operating systems to learn that is how a suite
         # stops being run at all.
         python-version: ["3.12", "3.14"]
+        exclude: ${{ fromJSON(vars.WINDOWS_TESTS == 'weekly' && '[{"os":"windows-latest","python-version":"3.14"}]' || '[]') }}
         # No macOS run: it was the slowest job (close to an hour) and said
         # little the Linux runs do not. The Mac build is still made and
         # opened on every pull request that touches it (release.yml), and
@@ -110,7 +124,7 @@ jobs:
 
   lint:
     name: Lint
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.LINUX_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -163,7 +177,7 @@ jobs:
   # The two kinds of computer Ninaivu is tested on (docs/ROADMAP.md, server/tiers.py).
   basic-tier:
     name: Basic tier · 2 GB, no GPU
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.BASIC_TIER_RUNNER || vars.LINUX_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -186,6 +200,15 @@ jobs:
         env:
           NINAIVU_HARDWARE_TIER: basic
         run: |
+          # In a container (a runner in Docker on the Mac mini) there is no
+          # systemd: the container itself is held to 2 GB with no swap
+          # (installers/ci-runner/docker-compose.yml), and checked here.
+          if [ ! -d /run/systemd/system ]; then
+            limit=$(cat /sys/fs/cgroup/memory.max 2>/dev/null || echo max)
+            [ "$limit" != max ] && [ "$limit" -le $((2 * 1024 * 1024 * 1024)) ] || {
+              echo "::error::no systemd and no 2 GB limit on this runner (memory.max: $limit)"; exit 1; }
+            exec python -m pytest -q -m "not tier_full"
+          fi
           sudo systemd-run --wait --pipe --collect --same-dir \
             --uid="$(id -u)" --gid="$(id -g)" \
             -p MemoryMax=2G -p MemorySwapMax=0 \
@@ -195,8 +218,9 @@ jobs:
 
   full-tier:
     name: Full tier · Apple silicon, model stack
-    # macos-14 runners are Apple silicon (M1): the image model runs on MPS.
-    runs-on: macos-14
+    # macos-14 runners are Apple silicon (M1): the image model runs on MPS,
+    # as it does on the household's Mac mini when that runs it.
+    runs-on: ${{ vars.MAC_RUNNER || 'macos-14' }}
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -205,7 +229,7 @@ jobs:
       # addresses the console lists) waits out an mDNS timeout. On 5 Oct that
       # made test_https.py alone take 22 minutes and the job hit its limit.
       - name: Let the runner resolve its own name
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && runner.environment == 'github-hosted'
         run: |
           name=$(hostname)
           echo "127.0.0.1 ${name} ${name%%.*} ${name%%.*}.local" | sudo tee -a /etc/hosts
@@ -231,7 +255,7 @@ jobs:
 
   browser:
     name: Browser tests (${{ matrix.engine }})
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.LINUX_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 30
     # Every suite on Chromium; the critical flows on WebKit too, Safari's
     # engine, since the family app is mostly used on iPhones
@@ -272,7 +296,7 @@ jobs:
 
   audit:
     name: Dependency audit
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.LINUX_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 30
     # On a pull request it blocks only when the change touches what Ninaivu
     # depends on. An advisory somebody published this morning about a library

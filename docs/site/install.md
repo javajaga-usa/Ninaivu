@@ -9,7 +9,7 @@ removes everything it made.
 ## Download
 
 The downloads are on the Ninaivu download page,
-[github.com/javajaga-usa/Ninaivu/releases/latest](https://github.com/javajaga-usa/Ninaivu/releases/latest).
+[github.com/javajaga-usa/Ninaivu-releases/releases/latest](https://github.com/javajaga-usa/Ninaivu-releases/releases/latest).
 Pick the file for your computer:
 
 | Computer | File |

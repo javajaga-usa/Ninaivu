@@ -92,8 +92,11 @@ def test_the_release_workflow_builds_four_portable_downloads_and_signs_only_with
                                  "release", "docker"}
     assert flow["jobs"]["release"]["needs"] == ["gate", "windows", "macos", "linux", "linux-arm64",
                                                 "pair-across"]
-    assert flow["jobs"]["macos"]["runs-on"] == "macos-14", "Apple silicon"
-    assert flow["jobs"]["linux-arm64"]["runs-on"] == "ubuntu-24.04-arm", "built natively, not emulated"
+    # GitHub's runners unless a repository variable names one at home (the
+    # Mac mini, Apple silicon too; its Linux runners are arm64 as well).
+    assert flow["jobs"]["macos"]["runs-on"] == "${{ vars.MAC_RUNNER || 'macos-14' }}", "Apple silicon"
+    assert flow["jobs"]["linux-arm64"]["runs-on"] == "${{ vars.LINUX_ARM64_RUNNER || 'ubuntu-24.04-arm' }}", \
+        "built natively, not emulated"
     for job in ("windows", "macos", "linux", "linux-arm64"):
         assert "strategy" not in flow["jobs"][job], f"{job}: one build, no matrix"
     files = next(s for s in flow["jobs"]["release"]["steps"] if s.get("uses", "").startswith("softprops/"))["with"]["files"]

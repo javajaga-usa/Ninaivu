@@ -126,6 +126,10 @@ When started with `--https`, Ninaivu creates an embedded small Certificate Autho
 Docker provides an isolated, rootless, and multi-stage container deployment with automatic restarts and health monitoring.
 
 #### 1. Setup Directories & Environment
+
+The source repository is private: `git clone` needs a GitHub account its
+owner has added (or use the published image, `ghcr.io/javajaga-usa/ninaivu`).
+
 ```bash
 git clone https://github.com/javajaga-usa/Ninaivu.git /opt/ninaivu
 cd /opt/ninaivu
@@ -332,7 +336,7 @@ launchctl load ~/Library/LaunchAgents/local.ninaivu.plist
 
 ### Caddy (Automatic HTTPS & LAN Isolation)
 
-Caddy automatically provisions Let's Encrypt certificates and supports HTTP/3. Use the supplied [installers/caddy/Caddyfile](https://github.com/javajaga-usa/Ninaivu/blob/main/installers/caddy/Caddyfile) as it is, with your own names in place of `photos.home.arpa` and `admin.photos.home.arpa`. It is not repeated here, because a copy drifts from the file; what it does, and why:
+Caddy automatically provisions Let's Encrypt certificates and supports HTTP/3. Use the supplied `installers/caddy/Caddyfile` (in a checkout of the source) as it is, with your own names in place of `photos.home.arpa` and `admin.photos.home.arpa`. It is not repeated here, because a copy drifts from the file; what it does, and why:
 
 - It serves only the names it lists and closes a connection for any other
   (`:443 { abort }`). A site label of `:443` on its own would answer every
@@ -350,7 +354,7 @@ Ninaivu takes every visitor for this computer (see *Why this is safe* below).
 
 ### Nginx (High-Performance Caching & HTTP/2 / HTTP/3)
 
-The supplied [installers/nginx/ninaivu.conf](https://github.com/javajaga-usa/Ninaivu/blob/main/installers/nginx/ninaivu.conf) optimizes static thumbnail delivery and disables buffering for real-time progress events:
+The supplied `installers/nginx/ninaivu.conf` (in a checkout of the source) optimizes static thumbnail delivery and disables buffering for real-time progress events:
 
 ```nginx
 # Critical for real-time SSE progress events: the archive's progress stream,
