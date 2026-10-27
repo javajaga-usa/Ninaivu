@@ -2490,7 +2490,7 @@
   "Google is no longer accepting the saved permission — connect the account again on the Cloud page": "சேமித்த அனுமதியை Google இனி ஏற்கவில்லை — முகில் பக்கத்தில் கணக்கை மீண்டும் இணையுங்கள்",
   "Graphics card in half precision when available, otherwise CPU": "இருந்தால் graphics card-இல் half precision-இல்; இல்லையெனில் CPU",
   "Graphics card through DirectML when available, otherwise CPU": "இருந்தால் DirectML வழியாக graphics card-இல்; இல்லையெனில் CPU",
-  "Groups of faces without a name": "பெயரில்லாத முகக் குழுக்கள்",
+  "Faces seen often, without a name": "அடிக்கடி வரும், பெயரில்லாத முகங்கள்",
   "If it lands at a different path on the new machine — a drive letter that changed — reroot it below rather than letting it rescan.": "புதிய கணினியில் இது வேறு பாதையில் வந்தால் — டிரைவ் எழுத்து மாறியிருந்தால் — மீண்டும் ஸ்கேன் செய்ய விடாமல், கீழே அதன் வேரை மாற்றுங்கள்.",
   "Indexed files are no longer where they were": "பட்டியலிட்ட கோப்புகள் இருந்த இடத்தில் இப்போது இல்லை",
   "Indexing new files": "புதிய கோப்புகளைப் பட்டியலிடுதல்",

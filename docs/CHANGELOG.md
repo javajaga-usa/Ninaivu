@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Faces waiting for a name
+
+- **The Faces tab no longer says "99+" for good.** It counted every unnamed group of three or more faces, and a library with hundreds of thousands of faces always has hundreds of those, mostly strangers in the background. Now **Needs you**, the Faces tab and the People & access dot count only the unnamed faces seen in **25 photographs or more**, somebody who keeps turning up and is worth naming, and the Overview calls them **Faces seen often, without a name**. The Faces page still lists every group, largest first.
+
 ### Fixed
 
 - Install on the AI models page and in Home & Extensions no longer fails with "No such file or directory" for the app's own Python after Ninaivu was moved or renamed while running: it follows the app to where it is now, and when it cannot (the app replaced or in the Trash) it says to quit and open Ninaivu again instead of failing.

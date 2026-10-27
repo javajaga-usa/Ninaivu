@@ -682,17 +682,21 @@ def _unnamed_clusters(conn: sqlite3.Connection, guard: str, params: list,
 
 def count_unnamed_clusters(conn: sqlite3.Connection, roots: "Sequence[str] | str",
                            *, max_visibility: int = 2, scope: str | None = None,
-                           min_size: int = 3, limit: int = 60) -> int:
+                           min_size: int = 3, limit: int = 60, min_photos: int = 0) -> int:
     """How many groups :func:`list_unnamed_clusters` would list, without
-    building them: the console's overview only wants the number."""
+    building them: the console's overview only wants the number.
+
+    *min_photos* counts only the groups seen in at least that many
+    photographs: somebody who keeps turning up, rather than a stranger in
+    three pictures of one afternoon."""
     guard, params = _face_visibility_sql("a", max_visibility, scope, roots)
     return int(conn.execute(
         "SELECT COUNT(*) FROM (SELECT f.cluster_key "
         "FROM faces f JOIN assets a ON a.id = f.asset_id "
         f"WHERE {guard} AND f.person_id IS NULL AND f.cluster_key IS NOT NULL "
         f"AND NOT {_IGNORED} "
-        "GROUP BY f.cluster_key HAVING COUNT(*) >= ? LIMIT ?)",
-        (*params, int(min_size), int(limit))).fetchone()[0])
+        "GROUP BY f.cluster_key HAVING COUNT(*) >= ? AND COUNT(DISTINCT f.asset_id) >= ? LIMIT ?)",
+        (*params, int(min_size), int(min_photos), int(limit))).fetchone()[0])
 
 
 def hide_cluster(conn: sqlite3.Connection, cluster_key: str) -> int:

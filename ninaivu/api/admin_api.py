@@ -251,6 +251,13 @@ def first_day_done():
 #: Overview that the page asks for every ten seconds, and that only moves when
 #: somebody names faces — which here makes it count again at once.
 UNNAMED_FRESH_FOR = 60.0
+#: A group of unnamed faces is counted as waiting only once it is in this
+#: many photographs. Every group of three or more was counted before, and a
+#: library of 270,000 faces always had hundreds of them, mostly strangers in
+#: the background: the Faces tab said "99+" for good, which says nothing.
+#: Somebody seen in this many photographs is somebody worth naming; the
+#: Faces page still lists every group.
+FACES_WORTH_NAMING = 25
 _unnamed_seen: dict[tuple, tuple[float, int, int]] = {}
 _unnamed_lock = threading.Lock()
 
@@ -263,7 +270,8 @@ def _unnamed_groups(conn, roots, max_visibility: int) -> int:
     if held is not None and held[1] == edits and now - held[0] < UNNAMED_FRESH_FOR:
         return held[2]
     groups = db.count_unnamed_clusters(conn, roots, max_visibility=max_visibility,
-                                       min_size=3, limit=200)
+                                       min_size=3, limit=100,
+                                       min_photos=FACES_WORTH_NAMING)
     with _unnamed_lock:
         if len(_unnamed_seen) >= 64:                 # one per index and viewer, bounded (C-51)
             _unnamed_seen.clear()
@@ -322,7 +330,7 @@ def attention():
          "title": said("Sent for screening"),
          "detail": said("Items family members asked you to look at: ignore, hide, mark explicit or delete.")},
         {"key": "faces", "count": groups, "page": "faces",
-         "title": said("Groups of faces without a name"),
+         "title": said("Faces seen often, without a name"),
          "detail": said("Name one face and the rest of its group follow.")},
         {"key": "straighten", "count": turns, "page": "straighten",
          "title": said("Photographs that may be on their side"),
