@@ -6,6 +6,17 @@
 
 - **The Faces tab no longer says "99+" for good.** It counted every unnamed group of three or more faces, and a library with hundreds of thousands of faces always has hundreds of those, mostly strangers in the background. Now **Needs you**, the Faces tab and the People & access dot count only the unnamed faces seen in **25 photographs or more**, somebody who keeps turning up and is worth naming, and the Overview calls them **Faces seen often, without a name**. The Faces page still lists every group, largest first.
 
+### Every screen checked
+
+Every screen of the family app and the console was opened on a computer and a phone, light and dark, in English and Tamil, and checked by machine and by eye.
+
+- **Fields no longer fold flat.** The password fields in Your profile and the format and size choices in Export had squashed to the height of their text.
+- **Faint text reads.** In the light look the palest grey and the blue under white button labels were below the contrast a reader needs; both are a shade deeper, so every primary button, hint and count now reads at WCAG AA. Amber and green words in the console (Performance, Activity, AI models, Server) are deep enough to read on white.
+- **Tamil labels are readable.** The small spaced capitals that head groups in English (the sidebar's People and Albums, the menus, the console's sections and table headings) came out in Tamil as tiny letters pulled apart. In Tamil they are a readable size and set solid. The search suggestions, the "selected" count and the no-match message are in Tamil too.
+- **On a phone:** the viewer's heart, share, details and voice buttons keep their full width instead of squeezing to 21 px; a filter's remove cross is a 24 px target; the console no longer scrolls sideways on Health, Visibility and Move to another computer in Tamil; and the console's guide card steps aside so each page starts with what it is for.
+- **The sign-in picker** is as wide as the household: two or three faces sit together instead of at the far ends of a wide card.
+- Every field in Advanced settings and the AI server workflow form has a name a screen reader can say.
+
 ### Fixed
 
 - Install on the AI models page and in Home & Extensions no longer fails with "No such file or directory" for the app's own Python after Ninaivu was moved or renamed while running: it follows the app to where it is now, and when it cannot (the app replaced or in the Trash) it says to quit and open Ninaivu again instead of failing.

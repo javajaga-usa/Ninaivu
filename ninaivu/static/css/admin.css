@@ -306,7 +306,9 @@ button.folder-toggle:hover { background: var(--surface-3, var(--surface-2)); col
     gap: 8px;
   }
   .admin-tabs { order: 3; width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; padding-bottom: 2px; }
-  .folder-row { grid-template-columns: 1fr; gap: 6px; }
+  .folder-row { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .folder-row > * { min-width: 0; max-width: 100%; }
+  .folder-toggle { width: 24px; height: 24px; }
   .cards { grid-template-columns: repeat(auto-fit, minmax(135px, 1fr)); }
   .admin-main {
     padding: 12px max(12px, env(safe-area-inset-right, 0px)) calc(40px + env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-left, 0px));
@@ -374,9 +376,14 @@ body.admin .ios-install-banner {
    own value so it stays legible rather than being inverted into mud. */
 :root {
   --vis-public: #1f8a4c;
-  --vis-family: #0b7fd4;
+  --vis-family: #0a70bd;
   --vis-hidden: #c0392b;
   --vis-explicit: #9b3fa0;
+  /* Words that warn, or say all is well, in amber and green. The bright
+     gold and green of the dots are too pale to read as text on white
+     (1.9:1 and 3:1); these are the same hues, deep enough to read. */
+  --warn: #8a6212;
+  --ok-text: #17804a;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -384,6 +391,8 @@ body.admin .ios-install-banner {
     --vis-family: #6fb4e8;
     --vis-hidden: #ef7a6d;
     --vis-explicit: #d99ad9;
+    --warn: #e2b45e;
+    --ok-text: #5fc98d;
   }
 }
 :root[data-theme="dark"] {
@@ -391,11 +400,13 @@ body.admin .ios-install-banner {
   --vis-family: #6fb4e8;
   --vis-hidden: #ef7a6d;
   --vis-explicit: #d99ad9;
+  --warn: #e2b45e;
+  --ok-text: #5fc98d;
 }
 
 .red-word { color: var(--vis-hidden); font-weight: 600; }
 
-.fold-actions { display: flex; align-items: center; gap: 14px; }
+.fold-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
 .fold-filters { padding: 0; margin: 2px 0 6px; }
 .fold-filters .chip { cursor: pointer; font: inherit; font-size: 12.5px; padding: 5px 11px; }
 .fold-filters .chip .n { font-variant-numeric: tabular-nums; }
@@ -1095,7 +1106,7 @@ body.admin .ios-install-banner {
   font-size: 12.5px; color: var(--text-2); text-align: right;
   display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
 }
-.am-status.good { color: #1f9d57; }
+.am-status.good { color: var(--ok-text); }
 .am-status.good > :first-child, .am-status.good:not(:has(*)) {
   padding: 2px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 600;
   background: #22a45d14; border: 1px solid #22a45d40;
@@ -1469,7 +1480,7 @@ body.admin .admin-bar .brand span:not(.console-tag) { display: inline; }
 .sv-mode.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
 .sv-mode-head { display: flex; align-items: center; gap: 8px; }
 .sv-mode-now {
-  margin-left: auto; font-size: 11px; font-weight: 600; color: #1f9d57;
+  margin-left: auto; font-size: 11px; font-weight: 600; color: var(--ok-text);
   padding: 1px 8px; border-radius: 999px; background: #22a45d14;
 }
 .sv-mode-text { font-size: 12.5px; color: var(--text-2, var(--text)); }
@@ -1545,14 +1556,14 @@ body.admin .admin-bar .brand span:not(.console-tag) { display: inline; }
   color: var(--text-2); background: var(--surface-2);
   border-radius: var(--r-sm, 6px);
 }
-.mg-form { display: grid; gap: 12px; margin: 14px 0; max-width: 620px; }
-.mg-form label { display: grid; gap: 4px; }
+.mg-form { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; margin: 14px 0; max-width: 620px; }
+.mg-form label { display: grid; gap: 4px; min-width: 0; }
 .mg-form label span { font-size: 12.5px; color: var(--text-2); }
 .mg-form input { width: 100%; font-family: var(--mono, ui-monospace), monospace; }
 .mg-form label.toggle { display: flex; align-items: center; gap: 10px; }
 .mg-form label.toggle input { width: 16px; height: 16px; flex: none; }
 .mg-form label.toggle span { font-size: inherit; color: inherit; }
-.mg-actions { display: flex; gap: 8px; }
+.mg-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .ix-bar { width: 100%; height: 8px; accent-color: var(--accent); }
 .mg-report {
   display: grid; gap: 6px; margin: 14px 0; padding: 14px;
@@ -1586,8 +1597,8 @@ body.admin .admin-bar .brand span:not(.console-tag) { display: inline; }
   color: var(--text-3);
 }
 .pf-level.act { color: var(--danger); }
-.pf-level.consider { color: var(--gold); }
-.pf-level.good { color: #22a45d; }
+.pf-level.consider { color: var(--warn); }
+.pf-level.good { color: var(--ok-text); }
 .pf-title { font-size: 14px; }
 .pf-detail { margin: 0; font-size: 13px; color: var(--text-2); line-height: 1.5; }
 .admin .pf-value { font-size: 20px; margin: 8px 0 4px; }
@@ -1603,8 +1614,8 @@ body.admin .admin-bar .brand span:not(.console-tag) { display: inline; }
   font-size: 12px; padding: 2px 8px; border-radius: 999px;
   border: 1px solid var(--border-soft); color: var(--text-2);
 }
-.pf-chip.good { color: #22a45d; border-color: color-mix(in srgb, #22a45d 40%, transparent); }
-.pf-chip.warn { color: var(--gold); border-color: color-mix(in srgb, var(--gold) 40%, transparent); }
+.pf-chip.good { color: var(--ok-text); border-color: color-mix(in srgb, #22a45d 40%, transparent); }
+.pf-chip.warn { color: var(--warn); border-color: color-mix(in srgb, var(--gold) 40%, transparent); }
 .pf-chip.bad { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
 
 /* Tuning (tuning.js): one row a knob, its number on the right. */
@@ -1769,9 +1780,11 @@ body.admin {
 .admin-guide-kicker, .admin-guide-topics { display: none; }
 .admin-guide h2 { margin: 0; font-size: 15px; line-height: 1.35; letter-spacing: -.01em; font-weight: 650; }
 .admin-guide-description { margin: 0; max-width: 90ch; color: var(--text-2); font-size: 13px; line-height: 1.5; }
-@media (max-width: 440px) {
-  .admin-guide { align-items: flex-start; gap: 12px; padding: 12px 14px; margin-top: -4px; }
-  .admin-guide-art { width: 36px; height: 34px; margin-top: 2px; }
+/* On a phone the guide steps aside. Under the page's own title and line, it
+   said the page's purpose a second time and pushed what the page is for
+   below the first screen. */
+@media (max-width: 640px) {
+  .admin-guide { display: none; }
   .admin-page-heading { margin-bottom: 20px; }
 }
 
@@ -1946,7 +1959,7 @@ body.admin {
 .job-status-state { font-weight: 560; }
 .job-status-state.is-complete { color: var(--ok, #1a7f4b); }
 .job-status-state.is-running { color: var(--accent); }
-.job-status-state.is-unavailable { color: var(--gold); }
+.job-status-state.is-unavailable { color: var(--warn); }
 .job-status-state.is-off,
 .job-status-row.is-off .job-status-detail { color: var(--text-3); }
 .job-status-detail { color: var(--text-2); font-variant-numeric: tabular-nums; }

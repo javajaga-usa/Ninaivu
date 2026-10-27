@@ -140,6 +140,7 @@ export class AdvancedPanel {
     const fixed = !!(setting.runtime || setting.managed_by);
     if (setting.choices?.length && !fixed) {
       const pick = el('select', 'input');
+      pick.setAttribute('aria-label', setting.name);
       for (const choice of setting.choices) {
         const o = el('option', null, choice); o.value = choice;
         if (String(setting.value) === choice) o.selected = true;
@@ -163,6 +164,8 @@ export class AdvancedPanel {
     // A list is one entry per line: a comma is a legal character in a folder name.
     const input = setting.kind === 'list' ? el('textarea', 'input') : el('input', 'input');
     if (setting.kind === 'list') input.rows = Math.min(6, Math.max(2, (setting.value || []).length + 1));
+    // The setting's name is the field's label; it is shown above it in code.
+    input.setAttribute('aria-label', setting.name);
     input.disabled = fixed;
     if (setting.secret) {
       input.type = 'password';

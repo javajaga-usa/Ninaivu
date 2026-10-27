@@ -627,3 +627,23 @@ body #ai-playground .ap-card:hover { box-shadow: 0 6px 16px -6px color-mix(in sr
   }
   .toast, .side-item, .album-card, .trip-card { transition: none; }
 }
+
+/* Tamil labels ---------------------------------------------------------- */
+
+/* Tamil has no capitals. The small, spaced-out capitals that head a group in
+   English ("PEOPLE", "ADD PHOTOS", the console's section names, table
+   headings) came out in Tamil as 9-10 px letters pulled apart, which splits
+   the vowel signs from their consonants. In Tamil they are a readable size
+   and set solid. */
+:lang(ta) :is(.side-title, .bar-menu-head, .tab-group-label, .admin-eyebrow, .console-tag,
+  .gate-face, .shortcut-group, .viewer-info-head h3, .similar h4, .album-modal-list-wrap h4,
+  .fd-steps li, .ar-defaults-label, .ar-health-kicker, .pf-level, .tag, th, .field > span,
+  .suggestions .kind, .admin-groups button) {
+  letter-spacing: 0;
+  text-transform: none;
+}
+:lang(ta) :is(.side-title, .tab-group-label, .admin-eyebrow, .console-tag, .tag,
+  .ar-defaults-label, .ar-health-kicker, th, .field > span) {
+  font-size: 11.5px;
+}
+:lang(ta) :is(.bar-menu-head, .gate-face, .pf-level) { font-size: 12px; }
