@@ -34,6 +34,30 @@ def test_an_id_chooses_the_command_and_nothing_else():
     assert len(command) == 5
 
 
+def test_a_moved_python_is_followed(monkeypatch, tmp_path):
+    """Ninaivu.app moved while running: sys.executable names nothing, and
+    pip runs from where the program is now."""
+    moved = tmp_path / "python3.12"
+    moved.write_text("")
+    monkeypatch.setattr(components.sys, "executable", str(tmp_path / "gone" / "python3"))
+    monkeypatch.setattr(components, "_running_program", lambda: str(moved))
+    assert components.install_command("heif")[0] == str(moved)
+
+
+@pytest.mark.parametrize("now", ["", "/Users/a/.Trash/Ninaivu.app/Contents/Resources/python/bin/python3.12"])
+def test_a_python_that_is_gone_says_what_to_do(monkeypatch, tmp_path, now):
+    """Neither followed nor in a place worth installing into: Install is
+    refused with what to do, not FileNotFoundError."""
+    monkeypatch.setattr(components.sys, "executable", str(tmp_path / "gone" / "python3"))
+    monkeypatch.setattr(components, "_running_program", lambda: now)
+    monkeypatch.setattr(components.os.path, "isfile",
+                        lambda path: bool(now) and path == now)
+    with pytest.raises(ValueError, match="open it again"):
+        components.install_command("heif")
+    shown = components.describe("heif")
+    assert "open it again" in shown["cannot"] and shown["command"] == ""
+
+
 def test_the_family_port_does_not_route_it(scanned):
     from ninaivu import build_services, create_home_app
 

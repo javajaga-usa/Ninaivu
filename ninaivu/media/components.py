@@ -969,6 +969,56 @@ def _hold_installed(steps: list[list[str] | Fetch], component_id: str) -> list[l
             for step in steps]
 
 
+def _running_program() -> str:
+    """Where the program this process runs is now, or "" when unknown.
+
+    Asked of the system rather than taken from ``sys.executable``, which is
+    only where the program was when it started: the system follows the file
+    when its folder is moved or renamed.
+    """
+    if sys.platform == "darwin":
+        try:
+            import ctypes                                       # noqa: PLC0415
+            libproc = ctypes.CDLL("/usr/lib/libproc.dylib")
+            buffer = ctypes.create_string_buffer(4096)          # PROC_PIDPATHINFO_MAXSIZE
+            if libproc.proc_pidpath(os.getpid(), buffer, ctypes.sizeof(buffer)) > 0:
+                return os.fsdecode(buffer.value)
+        except (OSError, AttributeError):
+            return ""
+        return ""
+    try:
+        return os.readlink("/proc/self/exe")
+    except OSError:
+        return ""
+
+
+def own_python() -> str:
+    """The Python Ninaivu runs on, to install a package into. Raises
+    ValueError, saying what to do, when it is no longer there.
+
+    ``sys.executable`` is where it was when Ninaivu started. When Ninaivu's
+    folder is moved, renamed or replaced while it runs — Ninaivu.app dragged
+    into another folder, a new version unpacked over the old one — that path
+    names nothing, and every Install failed with "No such file or directory"
+    and a path that looked right. A moved folder is followed to where it is
+    now; anything else is said plainly, since only opening Ninaivu again
+    from where it is now puts the two back together.
+    """
+    if os.path.isfile(sys.executable):
+        return sys.executable
+    now = _running_program()
+    # Not one in the Trash: what was installed there would go when the Trash
+    # is emptied, and the copy in use would still be without it.
+    if (now and os.path.isfile(now) and "/.Trash" not in now
+            and os.path.basename(now).startswith("python")):
+        return now
+    raise ValueError(
+        "Ninaivu was moved, renamed or replaced while it was running, so the "
+        f"Python it started with is no longer at {sys.executable}. Quit "
+        "Ninaivu (Stop, then quit the Control Panel), open it again from "
+        "where it is now, and press Install again.")
+
+
 def install_command(component_id: str, manager: str | None = None) -> list[str] | Fetch:
     """What to run to install this, or raise ValueError saying why not.
 
@@ -978,7 +1028,7 @@ def install_command(component_id: str, manager: str | None = None) -> list[str] 
     """
     entry = catalogue_entry(component_id)
     if entry["kind"] == "package":
-        command = [sys.executable, "-m", "pip", "install"]
+        command = [own_python(), "-m", "pip", "install"]
         if entry.get("no_deps"):
             command.append("--no-deps")
         return command + [entry["requirement"]]
@@ -1015,7 +1065,7 @@ def install_steps(component_id: str, manager: str | None = None) -> list[list[st
     entry = catalogue_entry(component_id)
     steps = []
     if entry["kind"] == "package" and entry.get("also"):
-        steps.append([sys.executable, "-m", "pip", "install", *entry["also"]])
+        steps.append([own_python(), "-m", "pip", "install", *entry["also"]])
     steps.append(install_command(component_id, manager))
     return steps
 

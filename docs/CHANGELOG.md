@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixed
+
+- Install on the AI models page and in Home & Extensions no longer fails with "No such file or directory" for the app's own Python after Ninaivu was moved or renamed while running: it follows the app to where it is now, and when it cannot (the app replaced or in the Trash) it says to quit and open Ninaivu again instead of failing.
+
 ## 3.3.0 — 26 October 2026
 
 Ninaivu 3.3 takes what a family member sends for screening out of every family member's view at once, until an administrator decides, and open galleries catch up by themselves within ten seconds. The index can be moved to another computer more safely: the export answers at once, goes only into an empty folder, and is read through and checked before any import is offered. On a phone, a dot on a console section always has a count behind it. The Control Panel reads cleanly on Linux (no boxes, dark on Xfce and KDE, sharp on scaled screens), sample paths are this computer's, Tamil shows on Linux desktops, and the thirteenth audit's fixes are in.
