@@ -19,7 +19,9 @@ Every screen of the family app and the console was opened on a computer and a ph
 
 ### Fixed
 
+- **Maintenance mode shows family members the downtime notice again.** A signed-in family member got an empty, broken gallery instead of the notice, both on a page already open and after a refresh, and the gallery did not come back when maintenance ended: the screen lock's watch on the page's requests replaced the notice's own. The two now work together. An open gallery also asks every minute, and whenever it comes back into view, whether maintenance has started, and once it ends (or another mode is chosen) the gallery comes back by itself within ten seconds.
 - Install on the AI models page and in Home & Extensions no longer fails with "No such file or directory" for the app's own Python after Ninaivu was moved or renamed while running: it follows the app to where it is now, and when it cannot (the app replaced or in the Trash) it says to quit and open Ninaivu again instead of failing.
+- Stop in the Control Panel works after Ninaivu.app was moved, replaced or put in the Trash while running. It had failed with "No module named 'ninaivu.server.stop'", because what it needed was only looked for when the button was pressed.
 
 ## 3.3.0 — 26 October 2026
 
