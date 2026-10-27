@@ -210,6 +210,30 @@ def _prepare_replacement(existing: Path, extracted: Path, candidate: Path) -> No
         # The bundle's settings were moved into the candidate above.
         _keep_local_secrets(existing / "config.json", candidate / "config.json",
                             candidate / "config.json")
+    if kind == backup_lib.FULL_KIND:
+        _keep_this_computer(existing / "config.json", candidate / "config.json")
+
+
+def _keep_this_computer(local: Path, imported: Path) -> None:
+    """The imported settings, with this computer's own way of being reached
+    and run (backup.THIS_COMPUTER) kept as they were here.
+
+    A setting this computer left at its default is left at the default, not
+    the other computer's value.
+    """
+    try:
+        mine = json.loads(local.read_text(encoding="utf-8"))
+        theirs = json.loads(imported.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return                      # a new computer, or no settings carried
+    if not isinstance(mine, dict) or not isinstance(theirs, dict):
+        return
+    for name in backup_lib.THIS_COMPUTER:
+        if name in mine:
+            theirs[name] = mine[name]
+        else:
+            theirs.pop(name, None)
+    imported.write_text(json.dumps(theirs, indent=2), encoding="utf-8")
 
 
 def _left_out(extracted: Path) -> list[str]:

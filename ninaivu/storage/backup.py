@@ -44,7 +44,7 @@ log = logging.getLogger(__name__)
 
 __all__ = ["snapshot", "bundles", "latest", "prune", "BackupKeeper", "PREFIX",
            "check_folder", "tidy_records", "KEPT_HOME", "TLS_MATERIAL", "away_from_home",
-           "FULL_EXTRAS", "FULL_KIND", "EXPORT_PREFIX"]
+           "FULL_EXTRAS", "FULL_KIND", "EXPORT_PREFIX", "THIS_COMPUTER"]
 
 PREFIX = "ninaivu_backup_"
 
@@ -93,6 +93,21 @@ FULL_EXTRAS = ("thumbs", "faces", "films", "letters", "books", "colour",
 
 #: The ``kind`` a full export's manifest gives.
 FULL_KIND = "full"
+
+#: Settings in ``config.json`` that belong to the computer, not to the
+#: household: how it is reached on the network and what it runs on. A full
+#: export moves the household to another computer, and its import keeps
+#: these as the computer it lands on had them. Taken from the export, the
+#: other computer's ports, addresses and console settings came along, and
+#: after the import's restart Ninaivu answered somewhere other than the page
+#: that was waiting for it (cli/backup_restore._keep_this_computer).
+THIS_COMPUTER = ("host", "network_access", "https", "port", "admin_port",
+                 "admin_host", "console_on_network", "console_from_internet",
+                 "allowed_hosts", "trusted_proxies", "tailnet_https",
+                 "remote_access", "remote_networks", "remote_hostname",
+                 "tv_port", "workers", "server_threads", "tuning",
+                 "tuning_profile", "hardware_tier", "ai_gpu",
+                 "ai_image_device", "ai_models_dir")
 
 #: Left out of a scheduled bundle written outside the state folder. There it
 #: may sit on a shared or removable disk (a FAT or exFAT one keeps no

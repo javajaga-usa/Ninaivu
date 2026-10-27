@@ -31,7 +31,10 @@ async function json(url, body) {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
     if (response.status === 401) reportUnauthorized(url);
-    throw new Error(i18n.fromServer(data, response.statusText));
+    const error = new Error(i18n.fromServer(data, response.statusText));
+    // It answered: while an import restarts Ninaivu, that alone says it is back.
+    error.status = response.status;
+    throw error;
   }
   return data;
 }
@@ -83,6 +86,10 @@ const count = (n) => Number(n || 0).toLocaleString(i18n.locale());
  *  waiting for Ninaivu to come back from an import. */
 const POLL_MS = 1000;
 const RESTART_POLL_MS = 3000;
+/** How often to keep asking once Ninaivu is overdue: it may still come back. */
+const OVERDUE_POLL_MS = 10000;
+/** How long to wait for an import's restart when the server did not say. */
+const DEFAULT_PATIENCE_S = 5 * 60;
 
 export class IndexExport {
   constructor({ toast, pickFolder } = {}) {
@@ -140,8 +147,13 @@ export class IndexExport {
     } catch (exc) {
       if (this.importing) {
         // Ninaivu is down while it imports: keep saying so, and keep asking.
+        // An answer of any kind (a sign-in asked for, the imported index
+        // knowing nothing of this session) is Ninaivu back; no answer for
+        // longer than the import should take is Ninaivu not coming back, and
+        // the page says so rather than counting on for ever.
+        if (exc.status) this.importing.back = true;
         this.renderImporting();
-        this.timer = setTimeout(() => this.refresh(), RESTART_POLL_MS);
+        this.timer = setTimeout(() => this.refresh(), this.overdue() ? OVERDUE_POLL_MS : RESTART_POLL_MS);
       } else {
         this.toast(exc.message, true);
       }
@@ -150,6 +162,11 @@ export class IndexExport {
     const last = this.state.last_import;
     if (this.importing && last && last.at >= this.importing.asked && !this.state.pending) {
       this.importing = null;
+    } else if (this.importing && this.state.pending && !this.state.restarting) {
+      // This server is still answering, the import still waits, and the
+      // helper that was to restart it has given up: no restart is coming.
+      this.importing = null;
+      this.restartFailed = true;
     }
     this.render();
     if (!$('#ix-block')?.isConnected) return;
@@ -157,10 +174,37 @@ export class IndexExport {
     else if (this.importing) this.timer = setTimeout(() => this.refresh(), RESTART_POLL_MS);
   }
 
+  /** Whether Ninaivu has been gone longer than this import should take. */
+  overdue() {
+    const imp = this.importing;
+    return Boolean(imp && !imp.back && Date.now() - imp.since > 1000 * (imp.patience || DEFAULT_PATIENCE_S));
+  }
+
   /** The import report while Ninaivu restarts to do it. */
   renderImporting() {
     const report = $('#ix-import-report');
     report.hidden = false;
+    const gone = took((Date.now() - this.importing.since) / 1000);
+    if (this.importing.back) {
+      const box = el('div', 'mg-alert');
+      box.append(el('strong', null, i18n.t('Ninaivu is back. Sign in again to see how the import went.')));
+      box.append(el('code', 'mg-path', this.importing.bundle));
+      report.replaceChildren(box);
+      return;
+    }
+    if (this.overdue()) {
+      const box = el('div', 'mg-alert bad');
+      box.append(el('strong', null, i18n.t('Ninaivu has not come back after {time}. It may have stopped.', { time: gone })));
+      box.append(el('code', 'mg-path', this.importing.bundle));
+      box.append(el('div', 'hint', i18n.t('Start Ninaivu again on that computer, the way it is usually started (the Control Panel, or the launcher). If the import was done, it starts with the imported index; if not, with the one that was there.')));
+      if (this.importing.restartLog) {
+        box.append(el('div', 'hint subtle', i18n.t('What the restart did is in {path}, and what Ninaivu said as it started is in {log}, on that computer.',
+          { path: this.importing.restartLog, log: this.importing.serverLog || '' })));
+      }
+      box.append(el('div', 'hint subtle', i18n.t('This page keeps checking and shows the result if it comes back.')));
+      report.replaceChildren(box);
+      return;
+    }
     const box = el('div', 'mg-alert');
     box.append(el('strong', null, i18n.t('Importing: Ninaivu is restarting to put the export in place.')));
     box.append(el('code', 'mg-path', this.importing.bundle));
@@ -170,7 +214,7 @@ export class IndexExport {
         { size: bytes(this.importing.size) })));
     }
     box.append(el('div', 'hint', i18n.t('Waiting for it to answer again, {time} so far. A large export takes a few minutes; this page checks every few seconds and shows the result here.',
-      { time: took((Date.now() - this.importing.since) / 1000) })));
+      { time: gone })));
     report.replaceChildren(box);
   }
 
@@ -230,7 +274,12 @@ export class IndexExport {
         box.append(el('strong', null, i18n.t('An import is waiting for Ninaivu to restart.')));
         box.append(el('code', 'mg-path', s.pending.bundle));
         box.append(el('div', 'hint subtle', i18n.t('Asked for {when}.', { when: when(s.pending.asked_at) })));
-        if (s.restart_problem) box.append(el('div', 'hint subtle', i18n.t('Restart Ninaivu to do it.')));
+        if (this.restartFailed) {
+          box.append(el('div', 'hint', i18n.t('Ninaivu could not restart itself to do it. What the restart did is in {path} on the Ninaivu computer. Restart Ninaivu to do it.',
+            { path: s.restart_log || '' })));
+        } else if (s.restart_problem) {
+          box.append(el('div', 'hint subtle', i18n.t('Restart Ninaivu to do it.')));
+        }
         const cancel = el('button', 'btn small ghost', i18n.t('Do not import it'));
         cancel.type = 'button';
         cancel.onclick = () => this.cancel();
@@ -395,12 +444,16 @@ export class IndexExport {
     }
     this.state = result;
     this.looked = null;
+    this.restartFailed = false;
     if (result.restarting) {
       this.importing = {
         bundle: result.pending?.bundle || path,
         asked: result.pending?.asked_at || Date.now() / 1000,
         since: Date.now(),
         size: result.looked?.unpacked_bytes || 0,
+        patience: result.patience_seconds || DEFAULT_PATIENCE_S,
+        restartLog: result.restart_log || '',
+        serverLog: result.server_log || '',
       };
       clearTimeout(this.timer);
       this.timer = setTimeout(() => this.refresh(), RESTART_POLL_MS);
@@ -414,6 +467,7 @@ export class IndexExport {
   async cancel() {
     try {
       this.state = await json('/api/admin/migration/import/cancel', {});
+      this.restartFailed = false;
     } catch (exc) {
       this.toast(exc.message, true);
       return;
