@@ -1087,7 +1087,7 @@ async function reload({ resetScroll = false } = {}) {
       showEmpty(
         state.filters.q ? i18n.t('No matches') : i18n.t('Nothing to show'),
         state.filters.q
-          ? `Nothing matched “${state.filters.q}”. Try fewer words, or a description like “red car at night”.`
+          ? i18n.t('Nothing matched “{q}”. Try fewer words, or a description like “red car at night”.', { q: state.filters.q })
           : i18n.t('This filter has no items yet.'),
         { scene: state.filters.q ? 'search' : 'filter' },
       );
@@ -1867,6 +1867,15 @@ function wireSearch() {
   };
 }
 
+// What each suggestion is, in the reader's language; the server sends the
+// English word for its kind.
+const SUGGESTION_KINDS = {
+  concept: () => i18n.t('Thing'),
+  tag: () => i18n.t('Tag'),
+  folder: () => i18n.t('Folder'),
+  camera: () => i18n.t('Camera'),
+};
+
 async function updateSuggestions(value) {
   const list = $('#suggestions');
   if (!value || value.length < 2) {
@@ -1895,7 +1904,7 @@ async function updateSuggestions(value) {
     li.setAttribute('role', 'option');
     const kind = document.createElement('span');
     kind.className = 'kind';
-    kind.textContent = entry.type;
+    kind.textContent = SUGGESTION_KINDS[entry.type] ? SUGGESTION_KINDS[entry.type]() : entry.type;
     const label = document.createElement('span');
     label.textContent = entry.value;
     li.append(kind, label);
@@ -1938,7 +1947,7 @@ function renderFilterBar() {
     $('#search').value = '';
     $('#clear-search').hidden = true;
   }]);
-  if (state.filters.tag) chips.push(['Tag', state.filters.tag, () => (state.filters.tag = '')]);
+  if (state.filters.tag) chips.push([i18n.t('Tag'), state.filters.tag, () => (state.filters.tag = '')]);
   if (state.filters.folder) chips.push([i18n.t('Folder'), state.filters.folder, () => (state.filters.folder = '')]);
   if (state.filters.camera) chips.push([i18n.t('Camera'), state.filters.camera, () => (state.filters.camera = '')]);
   if (state.filters.person) {
@@ -3568,7 +3577,7 @@ function wireGrid() {
   grid.addEventListener('selection', (event) => {
     const count = event.detail.ids.length;
     $('#selection-bar').hidden = count === 0;
-    $('#sel-count').textContent = `${count} selected`;
+    $('#sel-count').textContent = i18n.t('{count} selected', { count });
   });
 
   let scrubberIdle = 0;

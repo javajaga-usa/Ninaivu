@@ -36,11 +36,11 @@
   --border-soft:  #e9ecf1;
   --text:         #10151c;
   --text-2:       #5b6675;
-  --text-3:       #8b94a3;
-  --accent:       #0b7fd4;
+  --text-3:       #687180;
+  --accent:       #0a70bd;
   --accent-2:     #6d5efc;
   --accent-fg:    #ffffff;
-  --accent-weak:  rgba(11, 127, 212, 0.10);
+  --accent-weak:  rgba(10, 112, 189, 0.10);
   --danger:       #d8353d;
   --gold:         #f0a92e;
   /* Shadows come in layers, a tight one for the edge and a wide, faint one
@@ -721,7 +721,8 @@ button.job-row:focus-visible { outline: 2px solid var(--accent); outline-offset:
   background: var(--accent); border-color: var(--accent);
   color: var(--accent-fg); font-weight: 560;
 }
-.chip .n { opacity: .55; margin-left: 4px; font-size: 11px; }
+.chip .n { color: var(--text-3); margin-left: 4px; font-size: 11px; }
+.chip.active .n { color: inherit; opacity: .8; }
 
 .folder-list { display: flex; flex-direction: column; gap: 1px; max-height: 220px; overflow-y: auto; }
 .folder-list button {
@@ -930,7 +931,12 @@ button.job-row:focus-visible { outline: 2px solid var(--accent); outline-offset:
   background: var(--surface); border: 1px solid var(--border);
 }
 .pill b { font-weight: 600; }
-.pill button { display: grid; place-items: center; color: var(--text-3); }
+/* The cross is 13 px; the button around it is a 24 px circle that reaches into
+   the pill's padding, so a finger can find it without the pill growing. */
+.pill button {
+  display: grid; place-items: center; color: var(--text-3);
+  width: 24px; height: 24px; margin: -5px -7px -5px -3px; border-radius: 50%;
+}
 .pill button svg { width: 13px; height: 13px; }
 .pill button:hover { color: var(--danger); }
 
@@ -1518,8 +1524,11 @@ button.job-row:focus-visible { outline: 2px solid var(--accent); outline-offset:
 .dir-list button:hover { background: var(--surface-2); }
 .dir-list svg { width: 17px; height: 17px; color: var(--accent); }
 .modal-foot { display: flex; align-items: center; gap: 8px; }
+/* `flex: 1 1 auto`, not `flex: 1`: a field in a column (the password form in
+   Your profile, the selects in Export) took a basis of 0 there and folded to
+   the height of its text. In a row it still takes the room left over. */
 .input {
-  flex: 1; height: 32px; padding: 0 10px; border-radius: var(--r-md);
+  flex: 1 1 auto; height: 32px; padding: 0 10px; border-radius: var(--r-md);
   border: 1px solid var(--border); background: var(--surface); font-size: 13px;
 }
 .shortcuts {
@@ -1578,6 +1587,15 @@ button.job-row:focus-visible { outline: 2px solid var(--accent); outline-offset:
   .viewer.info-open .filmstrip { right: 0; }
   .viewer.info-open .viewer-nav.next { right: 18px; }
   .viewer-title strong { max-width: 40vw; }
+  /* The buttons keep their size and the name gives way: squeezed to fit, the
+     heart, share, details and voice buttons were 21 px wide and side by side,
+     too narrow to hit, and the date line ran onto a second row. */
+  .viewer-top { gap: 8px; }
+  .viewer-title { flex: 1 1 auto; }
+  .viewer-title strong { max-width: none; }
+  .viewer-title span { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .viewer-tools { flex: none; }
+  .viewer-tools > .icon-btn { flex: none; width: 32px; }
 }
 
 /* The topbar "More" menu. Below this width there isn't room for upload, map,
@@ -1960,7 +1978,10 @@ body[data-role="guest"] .segmented button[data-layout="film"] { display: none; }
    Profile picker ("who's watching?")
    ========================================================================== */
 
-.gate-card.picker { width: min(1020px, 100%); }
+/* The card is as wide as the household: two or three faces sit together in
+   a card their size rather than at the far ends of a wide one. */
+.gate-card.picker { width: min(560px, 100%); }
+.gate-card.picker:has(.picker-grid > :nth-child(4)) { width: min(1020px, 100%); }
 .gate-face {
   font-size: 11px; font-weight: 650; letter-spacing: .06em; text-transform: uppercase;
   color: var(--accent); background: var(--accent-weak);
@@ -1972,8 +1993,8 @@ body[data-role="guest"] .segmented button[data-layout="film"] { display: none; }
   /* Up to seven tiles a row: each column is at least a seventh of the row
      (less the six gaps), so an eighth never fits however wide the card. */
   display: grid; gap: 22px 16px;
-  grid-template-columns: repeat(auto-fit, minmax(max(116px, calc((100% - 96px) / 7)), 1fr));
-  justify-items: center; padding: 10px 0 4px;
+  grid-template-columns: repeat(auto-fit, minmax(max(116px, calc((100% - 96px) / 7)), 160px));
+  justify-content: center; justify-items: center; padding: 10px 0 4px;
 }
 .picker-tile {
   display: flex; flex-direction: column; align-items: center; gap: 9px;
