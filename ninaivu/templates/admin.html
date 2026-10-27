@@ -2258,8 +2258,8 @@
         </ol>{% endraw %}
         <div class="ai-workflow-form">
           <input type="text" class="input" id="ai-workflow-name" maxlength="80" placeholder="Name, e.g. Qwen image edit" data-i18n-placeholder="Name, e.g. Qwen image edit">
-          <select id="ai-workflow-purpose" class="select"></select>
-          <input type="file" id="ai-workflow-file" accept=".json,application/json">
+          <select id="ai-workflow-purpose" class="select" aria-label="What it is for" data-i18n-label="What it is for"></select>
+          <input type="file" id="ai-workflow-file" accept=".json,application/json" aria-label="Workflow file" data-i18n-label="Workflow file">
         </div>
         <textarea class="input ai-workflow-json" id="ai-workflow-json" rows="10" spellcheck="false"
                   placeholder='{"3": {"class_type": "KSampler", "inputs": {…}}, …}'></textarea>
