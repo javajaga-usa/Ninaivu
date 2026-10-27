@@ -25,6 +25,7 @@ folder, or the same one emptied, is copied to from the beginning.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -416,15 +417,23 @@ class Publisher:
         except OSError:
             log.warning("could not note the hand-over in %s", self._record_path())
 
-    def _index_stamp(self) -> list[int]:
-        """What changes whenever the index does, read without opening it."""
-        out = []
+    def _index_stamp(self) -> list[int | str]:
+        """What changes whenever the index or the family's settings do, read
+        without opening the index.
+
+        The settings travel in the hand-over's manifest (:func:`family_settings`),
+        not in the index: one changed on its own (the content filter, open
+        browsing) writes nothing to the index, and the Pi kept the old one
+        until something else happened to change the index."""
+        out: list[int | str] = []
         for suffix in ("", "-wal"):
             try:
                 st = os.stat(f"{self.cfg.db_path}{suffix}")
                 out += [st.st_mtime_ns, st.st_size]
             except OSError:
                 out += [0, 0]
+        settings = json.dumps(family_settings(self.cfg), sort_keys=True, default=str)
+        out.append(hashlib.sha256(settings.encode("utf-8")).hexdigest()[:16])
         return out
 
     # -- running -----------------------------------------------------------

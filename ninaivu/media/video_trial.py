@@ -166,17 +166,10 @@ def try_one(state_dir: str | Path, row: dict[str, Any]) -> dict[str, Any]:
     try:
         before = display._probe(source)
         length = display._duration(before)
-
-        def lower():
-            if hasattr(os, "nice"):
-                with contextlib.suppress(OSError):
-                    os.nice(10)
-        done = subprocess.run(display.video_command(media.FFMPEG, source, partial, encoder,
-                                                    lines=None,
-                                                    audio=display.has_sound(before)),
-                              capture_output=True, check=False,
-                              timeout=max(MIN_SECONDS, (length or 0) * TIME_ALLOWANCE),
-                              preexec_fn=lower if os.name == "posix" else None)
+        done = display.run_lowered(display.video_command(media.FFMPEG, source, partial, encoder,
+                                                         lines=None,
+                                                         audio=display.has_sound(before)),
+                                   timeout=max(MIN_SECONDS, (length or 0) * TIME_ALLOWANCE))
         seconds = round(time.monotonic() - started, 1)
         if done.returncode != 0 or not partial.is_file():
             said = done.stderr.decode("utf-8", "replace").strip().splitlines()[-1:] or ["ffmpeg"]

@@ -992,6 +992,11 @@ def _running_program() -> str:
         return ""
 
 
+def moved_while_running() -> bool:
+    """Whether the Python Ninaivu started with is no longer where it was."""
+    return not os.path.isfile(sys.executable)
+
+
 def own_python() -> str:
     """The Python Ninaivu runs on, to install a package into. Raises
     ValueError, saying what to do, when it is no longer there.
@@ -1102,8 +1107,9 @@ def describe(component_id: str) -> dict[str, Any]:
         # package manager.
         "download": any(isinstance(step, Fetch) for step in steps),
         # Imports happen once, at start, so a package that has just arrived is
-        # only used after a restart.
-        "needs_restart": bool(entry.get("restart")) and not present,
+        # only used after a restart. With Ninaivu moved while it runs, any
+        # package: this process still looks for its packages where they were.
+        "needs_restart": (bool(entry.get("restart")) or moved_while_running()) and not present,
     }
 
 

@@ -107,7 +107,16 @@ THIS_COMPUTER = ("host", "network_access", "https", "port", "admin_port",
                  "remote_access", "remote_networks", "remote_hostname",
                  "tv_port", "workers", "server_threads", "tuning",
                  "tuning_profile", "hardware_tier", "ai_gpu",
-                 "ai_image_device", "ai_models_dir")
+                 "ai_image_device", "ai_models_dir",
+                 # How it is running now: an export made in Maintenance mode
+                 # put the computer it landed on into Maintenance too, the
+                 # family shut out, and leaving it put back the other
+                 # computer's mode and Tuning profile.
+                 "workload_mode", "maintenance_before",
+                 # A read-only replica's own: which hand-over it serves from
+                 # and how it reaches and wakes the Mac.
+                 "index_file", "replica_from", "replica_primary_url",
+                 "replica_wake_mac")
 
 #: Left out of a scheduled bundle written outside the state folder. There it
 #: may sit on a shared or removable disk (a FAT or exFAT one keeps no

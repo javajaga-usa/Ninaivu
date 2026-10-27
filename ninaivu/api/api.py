@@ -2503,6 +2503,7 @@ class _StagedBytes:
 
     def __init__(self, data: bytes) -> None:
         self._data = data
+        self.content_length = len(data)
 
     def save(self, stream) -> None:
         stream.write(self._data)

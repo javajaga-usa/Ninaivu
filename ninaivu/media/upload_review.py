@@ -56,7 +56,7 @@ def stage(conn, cfg, upload, filename, root, scope, user_id, *,
             upload.link_into(target)
         else:
             with target.open("xb") as output:
-                upload.save(output)
+                _write_keeping_free(upload, output, base)
         if mtime:
             os.utime(target, (mtime, mtime))
         _refuse_oversized(target)
@@ -84,6 +84,40 @@ def stage(conn, cfg, upload, filename, root, scope, user_id, *,
         target.unlink(missing_ok=True)
         folder.rmdir()
         raise
+
+
+#: How much of an upload is written between two looks at the free space.
+SPACE_CHECK_EVERY = 16 * 1024 * 1024
+
+
+def _write_keeping_free(upload, output, base) -> None:
+    """Write *upload* to *output*, stopping with ValueError before the disk
+    *base* is on falls under the free space kept (phone_backup.KEEP_FREE_BYTES).
+
+    The look before writing goes by the size the upload says it is, and a
+    browser's multipart part as a rule says nothing (Werkzeug gives 0): the
+    whole file was written into the space kept for the index. So the space is
+    looked at again as it is written, which also stops one of several uploads
+    arriving at once when together they would cross the line.
+    """
+    from .phone_backup import KEEP_FREE_BYTES                 # noqa: PLC0415
+    stream = getattr(upload, "stream", None)
+    if not hasattr(stream, "read"):
+        # Bytes already in hand (an edit saved back, a scanned print), whose
+        # size the look before writing had.
+        upload.save(output)
+        return
+    since_check = SPACE_CHECK_EVERY                           # look before the first piece
+    while True:
+        if since_check >= SPACE_CHECK_EVERY:
+            if shutil.disk_usage(base).free - SPACE_CHECK_EVERY < KEEP_FREE_BYTES:
+                raise ValueError("There is not enough free space on the server for this file.")
+            since_check = 0
+        piece = stream.read(1024 * 1024)
+        if not piece:
+            return
+        output.write(piece)
+        since_check += len(piece)
 
 
 def waiting_bytes(conn, user_id) -> int:
