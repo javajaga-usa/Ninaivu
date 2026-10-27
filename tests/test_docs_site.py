@@ -77,3 +77,12 @@ def test_the_household_guide_points_to_the_installers_only(page):
     assert all("/releases/latest" in link for link in links), f"{page}: {links}"
     for technical in ("git clone", "start.cmd", "launcher/start.sh", "python -m ninaivu", "docker compose"):
         assert technical not in text, f"{page}: {technical}"
+
+
+def test_search_engines_are_asked_not_to_list_the_site():
+    """The household does not want the project found (27 October 2026)."""
+    config = (ROOT / "mkdocs.yml").read_text(encoding="utf-8")
+    assert "custom_dir: tools/docs-theme" in config
+    theme = (ROOT / "tools" / "docs-theme" / "main.html").read_text(encoding="utf-8")
+    assert '<meta name="robots" content="noindex, nofollow">' in theme
+

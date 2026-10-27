@@ -16,7 +16,7 @@ It has three parts, and each has a name:
 
 > **Status: 3.4.0.** Ninaivu is the general edition of a server that has run one household's library for a year. It has over 4,000 tests, and the portable downloads for Windows, Apple-silicon Macs and Linux each carry their own Python. They are not yet signed; see [ROADMAP.md](docs/ROADMAP.md) for what comes next.
 
-[Download](https://github.com/javajaga-usa/Ninaivu-releases/releases) · [Read the guide](https://javajaga-usa.github.io/Ninaivu-releases/) · [What's changed](docs/CHANGELOG.md) · [Report a problem](https://github.com/javajaga-usa/Ninaivu-releases/issues)
+[Download](https://github.com/javajaga-usa/Ninaivu/releases) · [Read the guide](https://javajaga-usa.github.io/Ninaivu/) · [What's changed](docs/CHANGELOG.md) · [Report a problem](https://github.com/javajaga-usa/Ninaivu/issues)
 
 ## A look
 
@@ -29,7 +29,7 @@ Every screen, with what it is for: [a tour of the screens](docs/screens.md).
 
 **The documentation** — Install, The first day, Family and roles, Backup,
 Remote access, AI, Troubleshooting — is at
-<https://javajaga-usa.github.io/Ninaivu-releases/> (built from `docs/site/`).
+<https://javajaga-usa.github.io/Ninaivu/> (built from `docs/site/`).
 
 ## Three roles
 
@@ -38,10 +38,9 @@ One **administrator** runs it. **Family members** see everything marked for the 
 ## Try it
 
 Portable downloads for Windows (x64), Macs with Apple silicon and Linux (x64)
-are on the [releases page](https://github.com/javajaga-usa/Ninaivu-releases/releases):
+are on the [releases page](https://github.com/javajaga-usa/Ninaivu/releases):
 one folder each, nothing installed, each carrying its own Python, opening the
-Ninaivu Control Panel. The source repository is private; from a checkout, for
-the GitHub accounts its owner has added:
+Ninaivu Control Panel. From a checkout:
 
 ```bash
 git clone https://github.com/javajaga-usa/Ninaivu.git

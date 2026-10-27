@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+
+{#- Ninaivu is a household's own project, public on GitHub but not looking
+    for an audience: search engines are asked not to list the guide, and not
+    to follow its links. Remove this block to let them. -#}
+{% block extrahead %}
+  <meta name="robots" content="noindex, nofollow">
+{% endblock %}
