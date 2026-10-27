@@ -88,13 +88,17 @@ concurrency:
 jobs:
   gate:
     name: May this be released?
-    runs-on: ubuntu-latest
+    # Where each job runs: GitHub's runners unless a repository variable
+    # names a runner at home (tests.yml says why). Windows and Linux x64 stay
+    # on GitHub's: the Mac mini can run neither.
+    runs-on: ${{ vars.LINUX_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 100
     permissions:
       contents: read
       actions: read
     outputs:
       version: ${{ steps.check.outputs.version }}
+      publish_to: ${{ steps.check.outputs.publish_to }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: github.event_name != 'pull_request'
@@ -103,6 +107,8 @@ jobs:
         if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASES_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          RELEASES_REPO: ${{ vars.RELEASES_REPO || 'javajaga-usa/Ninaivu-releases' }}
           EVENT: ${{ github.event_name }}
           REF: ${{ github.ref }}
           REF_TYPE: ${{ github.ref_type }}
@@ -140,6 +146,28 @@ jobs:
           code=$(api "releases/tags/$tag")
           [ "$code" = 404 ] || { echo "::error::a release for $tag exists already (HTTP $code); its installers are not replaced"; exit 1; }
 
+          # Where the release goes. The source repository is private, so the
+          # downloads go to a public one (RELEASES_REPO) with a token that may
+          # write there (RELEASES_TOKEN); without the token, as in a fork,
+          # they go to this repository as before.
+          if [ -n "$RELEASES_TOKEN" ]; then
+            publish_to=$RELEASES_REPO
+            pub() { curl -sS -o "$RUNNER_TEMP/pub.json" -w '%{http_code}' \
+                      -H "Authorization: Bearer $RELEASES_TOKEN" -H "Accept: application/vnd.github+json" \
+                      "https://api.github.com/repos/$publish_to/$1"; }
+            code=$(pub "")
+            [ "$code" = 200 ] || { echo "::error::RELEASES_TOKEN cannot read $publish_to (HTTP $code)"; exit 1; }
+            [ "$(jq -r .permissions.push "$RUNNER_TEMP/pub.json")" = true ] || { echo "::error::RELEASES_TOKEN may not write to $publish_to"; exit 1; }
+            [ "$(jq -r .private "$RUNNER_TEMP/pub.json")" = false ] || { echo "::error::$publish_to is private: nobody could download from it"; exit 1; }
+            code=$(pub "releases/tags/$tag")
+            [ "$code" = 404 ] || { echo "::error::a release for $tag exists already in $publish_to (HTTP $code); its installers are not replaced"; exit 1; }
+            code=$(pub "git/ref/tags/$tag")
+            [ "$code" = 404 ] || { echo "::error::the tag $tag exists already in $publish_to (HTTP $code)"; exit 1; }
+          else
+            publish_to=$GITHUB_REPOSITORY
+          fi
+          echo "the release goes to $publish_to"
+
           # The tests, on this commit. Waited for while they run, up to 90 minutes.
           for attempt in $(seq 1 90); do
             code=$(api "actions/workflows/tests.yml/runs?head_sha=$SHA&per_page=100")
@@ -160,6 +188,7 @@ jobs:
           done
           [ "$passed" -gt 0 ] || { echo "::error::Tests & Linting did not finish on $SHA in time"; exit 1; }
           echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "publish_to=$publish_to" >> "$GITHUB_OUTPUT"
           echo "releasing $version"
 
   windows:
@@ -218,7 +247,7 @@ jobs:
   macos:
     name: macOS Apple silicon, portable
     needs: gate
-    runs-on: macos-14
+    runs-on: ${{ vars.MAC_RUNNER || 'macos-14' }}
     timeout-minutes: 100
     env:
       HAS_P12: ${{ secrets.MAC_SIGN_P12_BASE64 != '' && github.event_name != 'pull_request' }}
@@ -297,16 +326,27 @@ jobs:
       - name: Bring a library from the latest release into this build, and back
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASES_REPO: ${{ vars.RELEASES_REPO || 'javajaga-usa/Ninaivu-releases' }}
         run: |
           set -euo pipefail
-          tag=$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" \
-                  "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/latest" | jq -r .tag_name)
+          # The downloads are published in the public releases repository; a
+          # fork, or this one before its first release there, has them here.
+          repo=$RELEASES_REPO
+          tag=$(gh release view --repo "$repo" --json tagName -q .tagName 2>/dev/null || true)
+          if [ -z "$tag" ]; then
+            repo=$GITHUB_REPOSITORY
+            tag=$(gh release view --repo "$repo" --json tagName -q .tagName)
+          fi
+          echo "the latest release: $tag, in $repo"
           asset="Ninaivu-${tag#v}-macos-arm64-portable.zip"
-          base="https://github.com/$GITHUB_REPOSITORY/releases/download/$tag"
           older="$RUNNER_TEMP/older"
           mkdir -p "$older"
-          curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors -o "$older/$asset" "$base/$asset"
-          curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors -o "$older/SHA256SUMS.txt" "$base/SHA256SUMS.txt"
+          for attempt in 1 2 3 4 5; do
+            gh release download "$tag" --repo "$repo" --dir "$older" --clobber \
+               --pattern "$asset" --pattern SHA256SUMS.txt && break
+            [ "$attempt" = 5 ] && exit 1
+            sleep 5
+          done
           (cd "$older" && grep -F "  $asset" SHA256SUMS.txt | shasum -a 256 -c -)
           python tools/check_bring_across.py "$older/$asset" installers/macos/build/Ninaivu-*-macos-arm64-portable.zip --work "$RUNNER_TEMP/bring-across"
 
@@ -347,16 +387,27 @@ jobs:
       - name: Bring a library from the latest release into this build, and back
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASES_REPO: ${{ vars.RELEASES_REPO || 'javajaga-usa/Ninaivu-releases' }}
         run: |
           set -euo pipefail
-          tag=$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" \
-                  "https://api.github.com/repos/$GITHUB_REPOSITORY/releases/latest" | jq -r .tag_name)
+          # The downloads are published in the public releases repository; a
+          # fork, or this one before its first release there, has them here.
+          repo=$RELEASES_REPO
+          tag=$(gh release view --repo "$repo" --json tagName -q .tagName 2>/dev/null || true)
+          if [ -z "$tag" ]; then
+            repo=$GITHUB_REPOSITORY
+            tag=$(gh release view --repo "$repo" --json tagName -q .tagName)
+          fi
+          echo "the latest release: $tag, in $repo"
           asset="Ninaivu-${tag#v}-linux-x64-portable.tar.gz"
-          base="https://github.com/$GITHUB_REPOSITORY/releases/download/$tag"
           older="$RUNNER_TEMP/older"
           mkdir -p "$older"
-          curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors -o "$older/$asset" "$base/$asset"
-          curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors -o "$older/SHA256SUMS.txt" "$base/SHA256SUMS.txt"
+          for attempt in 1 2 3 4 5; do
+            gh release download "$tag" --repo "$repo" --dir "$older" --clobber \
+               --pattern "$asset" --pattern SHA256SUMS.txt && break
+            [ "$attempt" = 5 ] && exit 1
+            sleep 5
+          done
           (cd "$older" && grep -F "  $asset" SHA256SUMS.txt | sha256sum -c -)
           python tools/check_bring_across.py "$older/$asset" installers/linux/build/Ninaivu-*-linux-x64-portable.tar.gz --work "$RUNNER_TEMP/bring-across"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -373,7 +424,7 @@ jobs:
   linux-arm64:
     name: Linux arm64, portable
     needs: gate
-    runs-on: ubuntu-24.04-arm
+    runs-on: ${{ vars.LINUX_ARM64_RUNNER || 'ubuntu-24.04-arm' }}
     timeout-minutes: 80
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -488,6 +539,7 @@ jobs:
       attestations: write
     env:
       VERSION: ${{ needs.gate.outputs.version }}
+      PUBLISH_TO: ${{ needs.gate.outputs.publish_to }}
       HAS_PFX: ${{ secrets.WINDOWS_SIGN_PFX_BASE64 != '' }}
       HAS_P12: ${{ secrets.MAC_SIGN_P12_BASE64 != '' }}
       HAS_NOTARY: ${{ secrets.MAC_SIGN_P12_BASE64 != '' && secrets.MAC_NOTARY_APPLE_ID != '' && secrets.MAC_NOTARY_PASSWORD != '' }}
@@ -537,9 +589,12 @@ jobs:
           cat SHA256SUMS.txt
       # A signed statement that these files were built by this workflow from
       # this commit, kept with the repository: `gh attestation verify <file>
-      # --repo javajaga-usa/Ninaivu` checks a download against it, which a
-      # checksum on the same page as the file cannot.
+      # --owner javajaga-usa` checks a download against it, which a checksum on
+      # the same page as the file cannot. GitHub makes these only for public
+      # repositories on its Free, Pro and Team plans, so while the source is
+      # private there is none and SHA256SUMS.txt is what there is.
       - name: Build provenance
+        if: ${{ !github.event.repository.private }}
         uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: |
@@ -581,10 +636,16 @@ jobs:
       # Made as a draft with every file attached, then published in one step:
       # with immutable releases turned on, nothing can be added to a release
       # once it is out, and a release is never out with half its files.
+      #
+      # In the public releases repository the tag is on that repository's own
+      # main (it has none of this one's commits); the tag here, on the commit
+      # it was built from, is made after it.
       - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
+          repository: ${{ env.PUBLISH_TO }}
+          token: ${{ env.PUBLISH_TO == github.repository && github.token || secrets.RELEASES_TOKEN }}
           tag_name: v${{ env.VERSION }}
-          target_commitish: ${{ github.sha }}
+          target_commitish: ${{ env.PUBLISH_TO == github.repository && github.sha || '' }}
           name: Ninaivu v${{ env.VERSION }}
           body_path: notes.md
           draft: true
@@ -605,8 +666,18 @@ jobs:
 
       - name: Publish the release
         env:
+          GH_TOKEN: ${{ env.PUBLISH_TO == github.repository && github.token || secrets.RELEASES_TOKEN }}
+        run: gh release edit "v$VERSION" --draft=false --repo "$PUBLISH_TO"
+
+      # The tag in this repository, on the commit the release was built from,
+      # when the release went to the public one: "Run workflow" pushes none,
+      # and the gate looks for it so a version is never released twice.
+      - name: Tag this commit
+        if: env.PUBLISH_TO != github.repository && github.ref_type != 'tag'
+        env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release edit "v$VERSION" --draft=false --repo "$GITHUB_REPOSITORY"
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/v$VERSION" -f sha="$GITHUB_SHA"
 
   # The container image for this version, pushed to the GitHub container
   # registry with the version's tags. From here rather than on the tag push in

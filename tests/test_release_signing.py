@@ -85,7 +85,10 @@ def test_linux_and_mac_builds_are_updated_to_from_the_latest_release():
         steps = [step.get("name", "") for step in _jobs()[job]["steps"]]
         check = _step(job, "Bring a library from the latest release")
         assert steps.index(check["name"]) > steps.index("Build"), job
-        assert "releases/latest" in check["run"] and asset in check["run"]
+        # The latest release (gh release view with no tag), from the public
+        # releases repository first, as the source repository is private.
+        assert "gh release view --repo" in check["run"] and asset in check["run"]
+        assert "RELEASES_REPO" in check["run"]
         assert "SHA256SUMS.txt" in check["run"], "the older download is checked first"
         assert "tools/check_bring_across.py" in check["run"]
     paths = yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))[True]["pull_request"]["paths"]

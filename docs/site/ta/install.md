@@ -10,7 +10,7 @@
 ## பதிவிறக்கம்
 
 பதிவிறக்கங்கள் நினைவின் பதிவிறக்கப் பக்கத்தில் உள்ளன:
-[github.com/javajaga-usa/Ninaivu/releases/latest](https://github.com/javajaga-usa/Ninaivu/releases/latest).
+[github.com/javajaga-usa/Ninaivu-releases/releases/latest](https://github.com/javajaga-usa/Ninaivu-releases/releases/latest).
 உங்கள் கணினிக்கான கோப்பைத் தேர்ந்தெடுங்கள்:
 
 | கணினி | கோப்பு |

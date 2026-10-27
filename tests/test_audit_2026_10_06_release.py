@@ -167,6 +167,9 @@ while [ $# -gt 0 ]; do
 done
 echo "$url" >> "$FAKE/asked.log"
 case "$url" in
+    */repos/pub/rel/) code=200; cat "$FAKE/pub" > "$out" ;;
+    */repos/pub/rel/git/ref/tags/*) code=$(cat "$FAKE/pubtag" 2>/dev/null || echo 404) ;;
+    */repos/pub/rel/releases/tags/*) code=$(cat "$FAKE/pubrelease" 2>/dev/null || echo 404) ;;
     */git/ref/tags/*) code=$(cat "$FAKE/tag" 2>/dev/null || echo 404) ;;
     */releases/tags/*) code=$(cat "$FAKE/release" 2>/dev/null || echo 404) ;;
     */compare/main...*)
@@ -215,13 +218,14 @@ def gate(tmp_path):
         (folder / "pyproject.toml").write_text('version = "2.3.4"\n')
     script = _gate_script()
 
-    def run(event="push", ref="refs/tags/v2.3.4", ref_name="v2.3.4", runs=None):
+    def run(event="push", ref="refs/tags/v2.3.4", ref_name="v2.3.4", runs=None, releases_token=""):
         (fake / "runs").write_text(runs or _runs(("completed", "success")))
         output = tmp_path / "output.txt"
         output.write_text("")
         env = {"PATH": f"{fake}:/usr/bin:/bin:{jq_dir}", "FAKE": str(fake), "GH_TOKEN": "t",
                "EVENT": event, "REF": ref, "REF_TYPE": "tag" if ref.startswith("refs/tags/") else "branch",
                "REF_NAME": ref_name, "SHA": "abc123", "GITHUB_REPOSITORY": "o/r",
+               "RELEASES_TOKEN": releases_token, "RELEASES_REPO": "pub/rel",
                "RUNNER_TEMP": str(tmp_path), "GITHUB_OUTPUT": str(output)}
         done = subprocess.run(["bash", "-c", script], cwd=work, env=env,
                               capture_output=True, text=True, timeout=60)
@@ -234,7 +238,7 @@ def gate(tmp_path):
 def test_a_tagged_commit_whose_tests_passed_is_released(gate):
     done, output = gate()
     assert done.returncode == 0, done.stdout + done.stderr
-    assert output.strip() == "version=2.3.4"
+    assert output.split() == ["version=2.3.4", "publish_to=o/r"]
 
 
 @pytest.mark.parametrize("extension", ["gemini", "creative-studio"])
@@ -276,6 +280,33 @@ def test_a_release_that_exists_is_never_replaced(gate):
     assert done.returncode == 1 and "release for v2.3.4 exists" in done.stdout
 
 
+def _public_repo(gate, push=True, private=False):
+    import json
+    (gate.fake / "pub").write_text(json.dumps({"private": private, "permissions": {"push": push}}))
+
+
+def test_with_the_token_the_release_goes_to_the_public_repository(gate):
+    _public_repo(gate)
+    done, output = gate(releases_token="secret")
+    assert done.returncode == 0, done.stdout + done.stderr
+    assert output.split() == ["version=2.3.4", "publish_to=pub/rel"]
+
+
+@pytest.mark.parametrize("problem, message", [
+    ("readonly", "may not write to pub/rel"),
+    ("private", "pub/rel is private"),
+    ("release", "exists already in pub/rel"),
+    ("tag", "the tag v2.3.4 exists already in pub/rel"),
+])
+def test_the_public_repository_is_checked_before_anything_is_built(gate, problem, message):
+    _public_repo(gate, push=problem != "readonly", private=problem == "private")
+    if problem in ("release", "tag"):
+        (gate.fake / f"pub{problem}").write_text("200")
+    done, output = gate(releases_token="secret")
+    assert done.returncode == 1 and message in done.stdout, done.stdout
+    assert output == ""
+
+
 def test_failed_tests_stop_the_release(gate):
     done, _ = gate(runs=_runs(("completed", "failure")))
     assert done.returncode == 1 and "has not passed" in done.stdout
@@ -286,7 +317,7 @@ def test_tests_still_running_are_waited_for(gate):
     (gate.fake / "runs.2").write_text(_runs(("queued", None), ("completed", "failure")))
     done, output = gate(runs=_runs(("completed", "success")))
     assert done.returncode == 0, done.stdout + done.stderr
-    assert done.stdout.count("still running") == 2 and output.strip() == "version=2.3.4"
+    assert done.stdout.count("still running") == 2 and output.split()[0] == "version=2.3.4"
 
 
 def test_only_the_publishing_jobs_may_write():
@@ -460,7 +491,7 @@ def test_the_linux_build_compiles_with_the_python_it_bundles():
 
 def test_the_service_files_point_at_this_project():
     unit = (ROOT / "installers" / "systemd" / "ninaivu.service").read_text(encoding="utf-8")
-    assert "Documentation=https://github.com/javajaga-usa/Ninaivu" in unit
+    assert "Documentation=https://javajaga-usa.github.io/Ninaivu-releases/" in unit
     from ninaivu.desktop import autostart
     with pytest.raises(RuntimeError) as raised:
         autostart.enable(root=ROOT, platform="linux")
@@ -504,3 +535,38 @@ def test_releases_run_one_at_a_time_and_are_never_cancelled():
     group = _workflow("release.yml")["concurrency"]
     assert group["cancel-in-progress"] is False
     assert "'release'" in group["group"]
+
+
+# -- Going private (27 October 2026) -------------------------------------------------------
+
+def test_with_no_variables_set_every_job_runs_where_it_always_did():
+    """The runners at home are chosen by repository variables; unset, GitHub's runners."""
+    import re
+    hosted = {"ubuntu-latest", "windows-latest", "windows-2022", "macos-14", "ubuntu-24.04-arm"}
+    for path in (ROOT / ".github" / "workflows").glob("*.yml"):
+        for name, job in _workflow(path.name)["jobs"].items():
+            runs_on = job.get("runs-on")
+            if runs_on is None or runs_on == "${{ matrix.os }}":
+                continue
+            if "vars." in runs_on:
+                # Every name quoted in the expression is a fallback or a matrix value.
+                assert set(re.findall(r"'([\w.-]+)'", runs_on)) <= hosted, (path.name, name, runs_on)
+            else:
+                assert runs_on in hosted, (path.name, name, runs_on)
+    flow = _workflow("tests.yml")
+    assert "vars.WINDOWS_TESTS != 'weekly'" in flow["jobs"]["test"]["strategy"]["matrix"]["os"]
+
+
+def test_the_downloads_and_the_guide_point_at_the_public_repository():
+    public = "https://github.com/javajaga-usa/Ninaivu-releases"
+    for page in ("README.md", "docs/site/install.md", "docs/site/ta/install.md", "docs/admin-guide.md"):
+        text = (ROOT / page).read_text(encoding="utf-8")
+        assert public + "/releases" in text, page
+        assert "github.com/javajaga-usa/Ninaivu/releases" not in text, page
+        assert "javajaga-usa.github.io/Ninaivu/" not in text, page
+    assert "site_url: https://javajaga-usa.github.io/Ninaivu-releases/" in (ROOT / "mkdocs.yml").read_text()
+    release = _workflow("release.yml")
+    publish = next(s for s in release["jobs"]["release"]["steps"]
+                   if "softprops/action-gh-release" in s.get("uses", ""))
+    assert publish["with"]["repository"] == "${{ env.PUBLISH_TO }}"
+
