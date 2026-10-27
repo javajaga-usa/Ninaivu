@@ -170,3 +170,22 @@ def test_the_console_routes(app, people):
     family.environ_base["HTTP_SEC_FETCH_SITE"] = "same-origin"
     for path in ("/api/faces/clusters/hide", "/api/faces/clusters/show"):
         assert family.post(path, json={"all": True}).status_code in (401, 403, 404)
+
+
+def test_only_faces_seen_often_are_waiting_for_a_name(scanned):
+    """The console's count: a stranger in a few photographs is listed on the
+    Faces page but not counted as waiting; somebody in many photographs is."""
+    cfg, conn, _ = scanned
+    ids = [r["id"] for r in conn.execute("SELECT id FROM assets WHERE root=? ORDER BY id",
+                                         (cfg.active_root,)).fetchall()]
+    assert len(ids) >= 3
+    asset_id = ids[0]
+    for n in range(5):                          # five faces, one photograph
+        _face(conn, asset_id, key="stranger", n=n * 50)
+    for i, aid in enumerate(ids[:3]):           # in three photographs
+        _face(conn, aid, key="aunt", n=i * 50 + 1000)
+    assert set(_keys(conn, cfg)) == {"stranger", "aunt"}
+    root = [cfg.active_root]
+    assert db.count_unnamed_clusters(conn, root) == 2
+    assert db.count_unnamed_clusters(conn, root, min_photos=3) == 1
+    assert db.count_unnamed_clusters(conn, root, min_photos=4) == 0
