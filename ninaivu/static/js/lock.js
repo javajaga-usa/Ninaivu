@@ -171,8 +171,13 @@ export class ScreenLock {
   watchFetch() {
     if (window.__ninaivuLockFetch) return;
     window.__ninaivuLockFetch = true;
+    // Wrap whatever is there now, not the browser's own: the downtime notice
+    // (downtime.js) watches fetch too, and replacing its wrapper with the
+    // bare one left a family member with an empty, broken gallery during
+    // maintenance instead of the notice.
+    const previous = window.fetch;
     window.fetch = async (...args) => {
-      const response = await nativeFetch(...args);
+      const response = await previous(...args);
       if (response.status === 423 && this.running) this.show();
       return response;
     };
