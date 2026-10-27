@@ -93,7 +93,12 @@ const finished = frames.filter((f) => !f.working && !f.hidden && /files,/.test(f
 // fast disk walks in a few milliseconds is over before any frame can catch it,
 // whatever its size in this fixture, and there is nothing to watch: say so, and
 // check only what can still be checked, rather than failing for being quick.
-const tooFast = counting.length === 0 && finished.length > 0;
+// A slow runner can also spend the first seconds starting the walk and then
+// do all of it between two polls of its progress: every counting frame says
+// "0 files so far" and the next says it is done (CI, 27 October 2026). That
+// walk was quick too, not stuck, and has no moving count to watch.
+const neverMoved = counting.every((f) => /\b0 files so far/.test(f.text));
+const tooFast = (counting.length === 0 || neverMoved) && finished.length > 0;
 const whileItWorks = (label, condition, detail) => (tooFast
   ? console.log(`SKIP  ${label} — the folder was walked faster than it can be watched here`)
   : ok(label, condition, detail));
@@ -154,7 +159,9 @@ await p.waitForTimeout(1800);
 // Only a walk that is still going can be called off: when it had already
 // finished by the time the source was removed, there was nothing to cancel.
 const walkOutlasted = midWalk.working;
-if (!walkOutlasted && tooFast) {
+// Decided by this walk alone: the one above may have been held up where this
+// one was not.
+if (!walkOutlasted) {
   console.log('SKIP  the walk was still running when the source was removed — it had already finished');
   console.log('SKIP  removing the source calls off the walk it started — there was no walk to call off');
 } else {
