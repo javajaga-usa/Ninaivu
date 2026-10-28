@@ -1,8 +1,8 @@
 # Optional local generative editing. Install separately from normal Ninaivu.
 # Tested together: diffusers 0.40.0, transformers 5.17.0, accelerate 1.15.0 (MagicBrush on CPU).
 # transformers 5 fixes the advisories reported against 4.x (docs/audits/2026-09-12.md).
-diffusers>=0.41.0,<0.42
-transformers>=5.20.1,<6
+diffusers>=0.42.0,<0.43
+transformers>=5.20.2,<6
 accelerate>=1.15,<2
 safetensors>=0.4,<1
 torch>=2.14.1,<3
