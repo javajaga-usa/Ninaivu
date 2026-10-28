@@ -43,7 +43,7 @@ httpx==0.28.1
 huggingface_hub==2.2.0
 idna==3.20
 ifaddr==0.2.0
-importlib_metadata==9.0.1
+importlib_metadata==10.1.0
 iniconfig==2.3.1
 itsdangerous==2.2.0
 Jinja2==3.1.6
