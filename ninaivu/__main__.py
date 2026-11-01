@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import errno
 import json
 import os
@@ -318,20 +319,29 @@ def main(argv: list[str] | None = None) -> int:
         from .desktop.portable import settle_quietly  # noqa: PLC0415
         settle_quietly()
     cfg = Config.load()
-    # Whoever started this waits on the run file; until it is written, this
-    # says how far the start has got (server/starting.py).
-    starting.begin(cfg.state_dir)
     try:
-        if not args.replica_of:
-            # An import asked for from the console replaces the state folder, so
-            # it is done here, before the server takes the folder's lock and
-            # opens anything in it (storage/full_export.py).
-            from .storage import full_export                  # noqa: PLC0415
-            if full_export.pending(cfg.state_dir):
-                starting.step("bringing in the index from the other computer")
-            if full_export.apply_pending(cfg.state_dir) is not None:
-                cfg = Config.load()
-        with runfile.server_lock(cfg.state_dir):
+        with contextlib.ExitStack() as held:
+            # One start at a time, from its first moment until it holds the
+            # server lock: an import is done before that lock can be taken, and
+            # a second start in the meantime opened the old folder
+            # (runfile.starting_lock).
+            with runfile.starting_lock(cfg.state_dir):
+                # Whoever started this waits on the run file; until it is
+                # written, this says how far the start has got
+                # (server/starting.py). Inside the lock, so a start that is
+                # turned away does not overwrite the note of the one at work.
+                starting.begin(cfg.state_dir)
+                if not args.replica_of:
+                    # An import asked for from the console replaces the state
+                    # folder, so it is done here, before the server takes the
+                    # folder's lock and opens anything in it
+                    # (storage/full_export.py).
+                    from .storage import full_export          # noqa: PLC0415
+                    if full_export.pending(cfg.state_dir):
+                        starting.step("bringing in the index from the other computer")
+                    if full_export.apply_pending(cfg.state_dir) is not None:
+                        cfg = Config.load()
+                held.enter_context(runfile.server_lock(cfg.state_dir))
             if args.replica_of:
                 # The Pi: its index is the Mac's hand-over, not index.db.
                 if not take_up_replica(cfg, args):
@@ -341,6 +351,13 @@ def main(argv: list[str] | None = None) -> int:
             if not before_opening_the_index(cfg.state_dir):
                 return 1
             return _run(cfg, args)
+    except runfile.AlreadyStarting:
+        note = starting.read(cfg.state_dir) or {}
+        doing = note.get("step") or "starting"
+        print(f"Ninaivu is already starting in another window ({doing}). It opens by "
+              f"itself when that is done: there is no need to start it again.",
+              file=sys.stderr)
+        return 1
     except runfile.AlreadyRunning as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

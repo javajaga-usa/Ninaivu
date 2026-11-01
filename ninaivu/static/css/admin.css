@@ -1701,6 +1701,9 @@ body.admin .admin-bar .brand span:not(.console-tag) { display: inline; }
 .fd-choice input { margin-top: 3px; }
 .fd-choice > span { display: flex; flex-direction: column; gap: 2px; }
 .fd-manual, .fd-waiting { display: flex; flex-direction: column; gap: 8px; }
+.fd-how { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 10px; font-size: 14px; }
+.fd-how li > * + * { margin-top: 6px; }
+.fd-how .btn { align-self: flex-start; }
 .fd-manual code { font-family: var(--mono, ui-monospace, monospace); font-size: 12.5px; word-break: break-all; }
 .fd-body .hint.error { color: var(--danger, #c0392b); }
 .fd-addresses a { display: block; font-family: var(--mono, ui-monospace, monospace); font-size: 14px; }

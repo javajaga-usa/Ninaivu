@@ -26,8 +26,8 @@ function el(tag, cls, text) {
 }
 
 const STEPS = {
-  single: ['computers', 'library', 'people', 'ai', 'backup', 'phones'],
-  primary: ['computers', 'library', 'partner', 'people', 'ai', 'backup', 'phones'],
+  single: ['computers', 'start', 'library', 'people', 'ai', 'backup', 'phones'],
+  primary: ['computers', 'start', 'library', 'partner', 'people', 'ai', 'backup', 'phones'],
   secondary: ['computers', 'originals', 'copying', 'primary'],
 };
 
@@ -40,6 +40,7 @@ const TWO_COMPUTER_STEPS = {
 
 const STEP_LABEL = {
   computers: () => i18n.t('Computers'),
+  start: () => i18n.t('New or imported'),
   library: () => i18n.t('Library'),
   partner: () => i18n.t('Secondary'),
   people: () => i18n.t('Household'),
@@ -76,6 +77,10 @@ export class FirstDay {
     this.wired = false;
     this.mugil = null;                     // /api/admin/mugil: the two computers
     this.onlyComputers = false;            // opened from the Mugil page
+    // A new index built here, or one brought from another computer
+    // (render_start). Asked before the library folder, because choosing the
+    // folder starts the indexing.
+    this.beginning = 'new';
     this.poll = null;
     i18n.onChange(() => {
       const box = $('#first-day');
@@ -153,6 +158,10 @@ export class FirstDay {
   }
 
   async next() {
+    if (this.steps()[this.step] === 'start' && this.beginning === 'import') {
+      this.goImport();
+      return;
+    }
     if (this.step >= this.steps().length - 1) { await this.finish(false); return; }
     this.step += 1;
     await this.reload();
@@ -190,11 +199,88 @@ export class FirstDay {
     $('#fd-back').hidden = this.step === 0;
     $('#fd-skip-all').hidden = this.onlyComputers;
     $('#fd-next').textContent = this.step === steps.length - 1
-      ? (this.onlyComputers ? i18n.t('Done') : i18n.t('Open the console')) : i18n.t('Next');
+      ? (this.onlyComputers ? i18n.t('Done') : i18n.t('Open the console'))
+      : (name === 'start' && this.beginning === 'import' ? i18n.t('Go to Import') : i18n.t('Next'));
     $('#fd-note').textContent = '';
     const body = $('#fd-body');
     body.replaceChildren();
     this[`render_${name}`](body);
+  }
+
+  /* -- 0b. a new index, or the one from another computer --------------- */
+
+  /* Asked before the library folder, because choosing the folder starts
+     indexing it. An index brought from another computer has the faces,
+     names, albums and thumbnails already; indexing first only to replace it
+     is hours of work thrown away, and an import done while that indexing
+     runs is the mix-up the import is most likely to meet. */
+  render_start(body) {
+    $('#fd-title').textContent = i18n.t('Start a new library, or bring one from another computer?');
+    body.append(el('p', 'lede',
+      i18n.t('Ninaivu keeps an index of your photographs: the faces, names, albums and thumbnails. Choose how this computer gets it.')));
+    const choices = [
+      ['new', i18n.t('Start a new library'),
+        i18n.t('Ninaivu reads your photographs and builds the index on this computer. On a large library that takes hours.')],
+      ['import', i18n.t('Bring the index from another computer'),
+        i18n.t('Ninaivu already runs on another computer. Its faces, names, albums and thumbnails come across, and nothing is read again.')],
+    ];
+    const group = el('div', 'fd-choices');
+    group.setAttribute('role', 'radiogroup');
+    for (const [value, label, hint] of choices) {
+      const row = el('label', 'fd-choice');
+      const box = el('input'); box.type = 'radio'; box.name = 'fd-beginning'; box.value = value;
+      box.checked = this.beginning === value;
+      box.onchange = () => { this.beginning = value; this.render(); };
+      const words = el('span');
+      words.append(el('strong', null, label), el('span', 'hint', hint));
+      row.append(box, words);
+      group.append(row);
+    }
+    body.append(group);
+    if (this.beginning !== 'import') return;
+
+    const how = el('ol', 'fd-how');
+    how.append(el('li', null, i18n.t('On the other computer: Move to another computer → Export the whole index. Copy the file it writes to this computer, or to a drive plugged into it.')));
+    const here = el('li');
+    here.append(el('span', null, i18n.t('Here: choose where the photographs are on this computer. Nothing is indexed; the index you bring is pointed at them.')));
+    here.append(el('div', 'fd-chosen', this.state.library.chosen
+      ? this.state.library.root : i18n.t('No folder chosen yet')));
+    const pick = el('button', 'btn', this.state.library.chosen
+      ? i18n.t('Choose a different folder') : i18n.t('Choose the photographs folder'));
+    pick.type = 'button';
+    pick.onclick = () => this.pickFolder({
+      title: i18n.t('Choose the folder that holds the photographs'),
+      cta: i18n.t('Use this folder'),
+      pick: async (path) => {
+        try {
+          // scan: false — the imported index is about to describe it.
+          await this.json('/api/library/root', { method: 'POST', body: { path, scan: false } });
+          await this.reload();
+          this.render();
+        } catch (exc) {
+          this.toast(exc.message, true);
+        }
+      },
+    });
+    here.append(pick);
+    how.append(here);
+    how.append(el('li', null, i18n.t('Import the file. Ninaivu checks every file in it, restarts and puts it in place. A large library takes a while: leave it, and do not start Ninaivu again meanwhile; it opens by itself.')));
+    body.append(how);
+    $('#fd-note').textContent = i18n.t('Go to Import opens the page where the export is checked and imported.');
+  }
+
+  /* The import itself is the Move to another computer page's: the check
+     of every file, the restart and the wait are all there. The first day is
+     not marked done, so it is offered again if no import happens. */
+  goImport() {
+    this.stopPolling();
+    $('#first-day').hidden = true;
+    this.openPage?.('migration');
+    setTimeout(() => {
+      const block = document.getElementById('ix-block');
+      block?.scrollIntoView({ block: 'start' });
+      document.getElementById('ix-path')?.focus();
+    }, 50);
   }
 
   /* -- 1. the library folder -------------------------------------------- */

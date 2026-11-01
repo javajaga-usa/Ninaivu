@@ -217,11 +217,32 @@ def _split_mount(old_root: str) -> tuple[list[str], str]:
     return [], ""
 
 
+def _local_mount_parents() -> list[str]:
+    """Where this computer puts the disks it mounts."""
+    if os.name == "nt":
+        return []                       # its drives come from windows_drives
+    if sys.platform == "darwin":
+        return ["/Volumes"]
+    try:
+        import getpass                                             # noqa: PLC0415
+        user = getpass.getuser()
+    except Exception:                                              # noqa: BLE001
+        user = ""
+    places = [f"/media/{user}", f"/run/media/{user}"] if user else []
+    return places + ["/media", "/mnt"]
+
+
 def candidates(old_root: str, drives: Callable[[], Iterable[Path]] | None = None
                ) -> list[Path]:
     """Folders a library that was at *old_root* may be at now: the same path
     below every other mounted disk, and the top of each disk."""
     parents, tail = _split_mount(old_root)
+    # And where this computer mounts its own disks: a library brought from a
+    # Mac (/Volumes/…) to Linux (/media/<user>/…) was looked for only under
+    # /Volumes, which Linux does not have, so it was never found.
+    for place in _local_mount_parents():
+        if place not in parents:
+            parents.append(place)
     disks: list[Path] = []
     if os.name == "nt":
         if drives is None:
@@ -266,20 +287,27 @@ def relocate(cfg, *, look: Callable[[str], list[Path]] = candidates,
     table = None
     for root in list(cfg.roots):
         wanted = known.get(root)
+        entry = waiting.get(root) or {}
+        # Chosen when an index was brought in from another computer
+        # (adopt_for_import): the person asked for that, on this computer.
+        imported = entry.get("by") == "import" and entry.get("confirmed")
         # Present means its own marker is there, not merely the folder: an
         # unplugged drive under a ``nofail`` mount leaves an empty folder.
-        if not wanted or roots_kit.root_present(root, state_dir=state):
+        if (not wanted and not imported) or roots_kit.root_present(root, state_dir=state):
             waiting.pop(root, None)
             continue
         if table is None:
             table = mounts()
         try:
             hits = [p for p in look(root)
-                    if read_id(p) == wanted and not _is_network(p, table)]
+                    if wanted and read_id(p) == wanted and not _is_network(p, table)]
         except OSError:
             hits = []
         found = [str(p) for p in hits if str(p) not in cfg.roots]
-        chosen = (waiting.get(root) or {}).get("confirmed")
+        if (imported and imported not in found and imported not in cfg.roots
+                and Path(imported).is_dir() and not _is_network(Path(imported), table)):
+            found.append(imported)
+        chosen = entry.get("confirmed")
         if not found:
             waiting.pop(root, None)
             continue
@@ -327,6 +355,119 @@ def relocate(cfg, *, look: Callable[[str], list[Path]] = candidates,
         _save_pending(state, waiting)
     roots_kit.forget()
     return moved
+
+
+#: How many of an imported index's files are looked for in a folder, and how
+#: many of them must be there, before the folder is taken for that library
+#: when it carries no id to go by.
+SAMPLE = 200
+SAMPLE_FOUND = 0.9
+
+
+def holds_library(index_db: Path | str, old_root: str, folder: str | Path,
+                  sample: int = SAMPLE) -> bool:
+    """Whether *folder* holds the files the index has under *old_root*.
+
+    A sample of them, by their path inside the library: nine in ten there is
+    the same library; a folder that merely has the same name is not.
+    """
+    import sqlite3                                                  # noqa: PLC0415
+    from contextlib import closing                                  # noqa: PLC0415
+    try:
+        with closing(sqlite3.connect(Path(index_db).as_uri() + "?mode=ro", uri=True)) as conn:
+            rows = [r[0] for r in conn.execute(
+                "SELECT rel_path FROM assets WHERE root=? ORDER BY random() LIMIT ?",
+                (old_root, sample))]
+    except sqlite3.Error:
+        return False
+    if len(rows) < min(20, sample):
+        return False
+    base = Path(folder)
+    present = sum(1 for rel in rows if (base / rel).exists())
+    return present >= SAMPLE_FOUND * len(rows)
+
+
+def adopt_for_import(state_dir: str | Path, here: Iterable[str], *,
+                     look: Callable[[str], list[Path]] = candidates,
+                     mounts: Callable[[], list[tuple[str, str]]] = _mounts) -> dict[str, str]:
+    """After an index is brought in from another computer, say which folder
+    on this computer each of its library folders is. Returns ``{old: new}``.
+
+    The imported settings name the other computer's folders
+    (``/Volumes/Photos/Library`` on the Mac it came from), which are not here,
+    and on its own :func:`relocate` only records a find for a person to
+    confirm on a page they may never open. Here a person has just asked for
+    this index on this computer, so the find is confirmed when it is not in
+    doubt:
+
+    * a folder chosen as the library on this computer before the import
+      (*here*), carrying the library's id — or holding the index's own files
+      (a copy made without its dot file, or given an id of its own by a start
+      on this computer before the import);
+    * otherwise the one folder on this computer's local disks carrying the
+      library's id. Two such folders are a library and a copy of it, and are
+      left for a person, as at any start.
+
+    The move itself is made by :func:`relocate`, at this same start, before
+    anything opens the index. Never raises.
+    """
+    state = Path(state_dir)
+    try:
+        settings = json.loads((state / "config.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    roots = [str(r) for r in (settings.get("roots") or []) if isinstance(r, str)]
+    here = [str(h) for h in here if h]
+    known = _load_known(state)
+    waiting = pending_relocations(state)
+    table = None
+    chosen: dict[str, str] = {}
+    for root in roots:
+        try:
+            if roots_kit.root_present(root, state_dir=state):
+                continue                  # the same path on this computer too
+        except Exception:                                          # noqa: BLE001
+            pass
+        if table is None:
+            table = mounts()
+        wanted = known.get(root)
+        options: list[Path] = []
+        try:
+            places = [Path(h) for h in here] + list(look(root))
+        except OSError:
+            places = [Path(h) for h in here]
+        for place in places:
+            try:
+                usable = place.is_dir() and not _is_network(place, table)
+            except OSError:
+                usable = False
+            if usable and place not in options and str(place) not in roots \
+                    and str(place) not in chosen.values():
+                options.append(place)
+        by_id = [p for p in options if wanted and read_id(p) == wanted]
+        mine = [p for p in by_id if str(p) in here]
+        pick = None
+        if len(mine) == 1:
+            pick = mine[0]
+        else:
+            # Chosen here and holding the index's own files: whatever id it
+            # carries. A start on this computer before the import may have
+            # given it one of its own, and the files say more than the id.
+            same = [p for p in options if str(p) in here
+                    and holds_library(state / "index.db", root, p)]
+            if len(same) == 1:
+                pick = same[0]
+            elif len(by_id) == 1:
+                pick = by_id[0]
+        if pick is None:
+            continue
+        waiting[root] = {"found": [str(pick)], "noticed_at": time.time(),
+                         "confirmed": str(pick), "by": "import"}
+        chosen[root] = str(pick)
+        log.warning("the imported library %s is %s on this computer", root, pick)
+    if chosen:
+        _save_pending(state, waiting)
+    return chosen
 
 
 def notice_moves(cfg, *, look: Callable[[str], list[Path]] = candidates,

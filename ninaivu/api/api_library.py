@@ -388,11 +388,17 @@ def set_root():
     cfg.active_root = str(target)
     taken_in = take_in_nested(cfg, _conn(), str(target))
     cfg.save()
-    _scanner().start(target, full=bool(data.get("full")))
+    # Not when an index is about to be brought in from another computer
+    # (the first day's "Bring the index from another computer"): the folder
+    # is named so the import can be pointed at it, and indexing it first is
+    # hours of work the import then replaces.
+    scanning = data.get("scan", True) is not False
+    if scanning:
+        _scanner().start(target, full=bool(data.get("full")))
     auth.audit(_conn(), current_user().id,
                "add_library" if added else "set_library", str(target))
     return jsonify({
-        "ok": True, "root": cfg.active_root, "added": added,
+        "ok": True, "root": cfg.active_root, "added": added, "scanning": scanning,
         "folders": cfg.libraries,
         # The library folders now part of this one, for the screen to name.
         "taken_in": taken_in,

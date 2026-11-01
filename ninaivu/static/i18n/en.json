@@ -5003,5 +5003,22 @@
   "Thing": "Thing",
   "Tag": "Tag",
   "What it is for": "What it is for",
-  "Workflow file": "Workflow file"
+  "Workflow file": "Workflow file",
+  "New or imported": "New or imported",
+  "Go to Import": "Go to Import",
+  "Start a new library, or bring one from another computer?": "Start a new library, or bring one from another computer?",
+  "Ninaivu keeps an index of your photographs: the faces, names, albums and thumbnails. Choose how this computer gets it.": "Ninaivu keeps an index of your photographs: the faces, names, albums and thumbnails. Choose how this computer gets it.",
+  "Start a new library": "Start a new library",
+  "Ninaivu reads your photographs and builds the index on this computer. On a large library that takes hours.": "Ninaivu reads your photographs and builds the index on this computer. On a large library that takes hours.",
+  "Bring the index from another computer": "Bring the index from another computer",
+  "Ninaivu already runs on another computer. Its faces, names, albums and thumbnails come across, and nothing is read again.": "Ninaivu already runs on another computer. Its faces, names, albums and thumbnails come across, and nothing is read again.",
+  "On the other computer: Move to another computer → Export the whole index. Copy the file it writes to this computer, or to a drive plugged into it.": "On the other computer: Move to another computer → Export the whole index. Copy the file it writes to this computer, or to a drive plugged into it.",
+  "Here: choose where the photographs are on this computer. Nothing is indexed; the index you bring is pointed at them.": "Here: choose where the photographs are on this computer. Nothing is indexed; the index you bring is pointed at them.",
+  "Choose the photographs folder": "Choose the photographs folder",
+  "Import the file. Ninaivu checks every file in it, restarts and puts it in place. A large library takes a while: leave it, and do not start Ninaivu again meanwhile; it opens by itself.": "Import the file. Ninaivu checks every file in it, restarts and puts it in place. A large library takes a while: leave it, and do not start Ninaivu again meanwhile; it opens by itself.",
+  "Go to Import opens the page where the export is checked and imported.": "Go to Import opens the page where the export is checked and imported.",
+  "You need not wait for the check: Import checks every file again as it puts them in place, and keeps the index that is here if one is not right.": "You need not wait for the check: Import checks every file again as it puts them in place, and keeps the index that is here if one is not right.",
+  "Running for {time}. Nothing is changed while it is checked.": "Running for {time}. Nothing is changed while it is checked.",
+  "The archive contains unsafe or unexpected entries (outside the restore directory, or not a plain file)": "The archive contains unsafe or unexpected entries (outside the restore directory, or not a plain file)",
+  "The archive has no manifest": "The archive has no manifest"
 }

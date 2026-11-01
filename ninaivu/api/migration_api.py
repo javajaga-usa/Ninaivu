@@ -387,9 +387,12 @@ def import_ask():
     cfg = _cfg()
     if _the_exporter().running:
         return jsonify({"error": "An export is being made. Wait for it to finish first."}), 409
+    # Not waited for: the import checks every file against the export's list
+    # as it unpacks it (backup.extract_verified), and leaves the index that is
+    # here as it was if one does not match. Waiting for the check first read
+    # the whole export one more time before the import read it again. A check
+    # that has already found a problem still refuses, below.
     checker = _the_checker()
-    if checker.running:
-        return jsonify({"error": "The export is still being checked. Wait for the check to finish."}), 409
     user = current_user()
     try:
         found = full_export.look(Path(path), cfg.state_dir)

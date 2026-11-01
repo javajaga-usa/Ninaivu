@@ -1027,6 +1027,29 @@ WATCH_FRESH_SECONDS = 600.0
 #: How many unreadable files one scan names in the log before only counting.
 FAILED_FILES_NAMED = 50
 
+
+def is_denied(why: object) -> bool:
+    """Whether a file could not be read because this user may not read it."""
+    return isinstance(why, PermissionError) or "Permission denied" in str(why) \
+        or "[Errno 13]" in str(why) or "[WinError 5]" in str(why)
+
+
+def permission_advice(root: Path | str, count: int) -> str:
+    """What to do about files this computer's user may not read.
+
+    Named per file, they read as damaged photographs; they are not. A library
+    copied from a Mac keeps the Mac's owner and, for some files (Photos
+    exports among them), a mode only that owner may read.
+    """
+    if os.name == "nt":
+        fix = ("give your account Read access to the folder (Properties → Security), "
+               "with Replace all child object permission entries ticked")
+    else:
+        fix = f'run: sudo chmod -R a+rX "{root}"'
+    return (f"{count:,} files in {root} could not be opened because this computer's "
+            f"user is not allowed to read them (Permission denied). They are not "
+            f"damaged. To have them indexed, {fix} — the next scan reads them.")
+
 #: How long starting a scan waits for the previous one to notice its stop.
 STOP_WAIT_SECONDS = 10.0
 #: A scan asked for while the running one is in these phases waits for it to
@@ -1295,6 +1318,8 @@ class Scanner:
     def __init__(self, cfg: Config, ai: Any | None = None) -> None:
         self.cfg = cfg
         self.ai = ai
+        # Files this scan could not read for want of permission (is_denied).
+        self._denied = 0
         # Worker processes the scan's engine runs hold between them: one
         # budget for the scanner, not one per run (audit C-16).
         self._processes_lock = threading.Lock()
@@ -2464,6 +2489,9 @@ class Scanner:
             log.warning("%s more files in %s could not be fully read; the first "
                         "%d are named above", f"{failed - FAILED_FILES_NAMED:,}",
                         root, FAILED_FILES_NAMED)
+        denied, self._denied = self._denied, 0
+        if denied:
+            log.warning("%s", permission_advice(root, denied))
 
         # The rate, not just the count: "slow" is only answerable against a
         # number, and this is the phase people mean when they say indexing.
@@ -2528,8 +2556,7 @@ class Scanner:
                          "changed now follow its new setting", moved)
         return now
 
-    @staticmethod
-    def _failed_file(root: Path, rel: str, why: object, failed: int) -> int:
+    def _failed_file(self, root: Path, rel: str, why: object, failed: int) -> int:
         """Name a file indexing could not read, up to a point. Returns the count.
 
         These went to ``print``, which a server started by the control panel
@@ -2540,6 +2567,8 @@ class Scanner:
         """
         if failed < FAILED_FILES_NAMED:
             log.warning("could not fully read %s in %s: %s", rel, root, why)
+        if is_denied(why):
+            self._denied = getattr(self, "_denied", 0) + 1
         return failed + 1
 
     def _held_now(self, job: str) -> bool:

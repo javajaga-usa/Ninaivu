@@ -26,8 +26,10 @@ import sys
 import tarfile
 import tempfile
 import uuid
+import zlib
 from datetime import datetime
 from pathlib import Path
+from typing import Callable
 
 
 from ..storage import backup as backup_lib
@@ -51,20 +53,57 @@ def paint(text: str, code: str) -> str:
     return f"\033[{code}m{text}\033[0m" if sys.stdout.isatty() else text
 
 
+# Flushed, each one: a restore run at a server's start writes into the
+# server's log, where a line left in the buffer is a restore that seems to
+# have said nothing for an hour (and says nothing at all if it is stopped).
 def say(msg: str) -> None:
-    print(f"  {paint('•', '36')} {msg}")
+    print(f"  {paint('•', '36')} {msg}", flush=True)
 
 
 def ok(msg: str) -> None:
-    print(f"  {paint('✓', '32')} {msg}")
+    print(f"  {paint('✓', '32')} {msg}", flush=True)
 
 
 def warn(msg: str) -> None:
-    print(f"  {paint('!', '33')} {msg}")
+    print(f"  {paint('!', '33')} {msg}", flush=True)
 
 
 def fail(msg: str) -> None:
-    print(f"  {paint('✗', '31')} {msg}", file=sys.stderr)
+    print(f"  {paint('✗', '31')} {msg}", file=sys.stderr, flush=True)
+
+
+#: Told how far a restore has got: (stage, done, total), the stage being
+#: "unpacking" or "checking". Wired to the start note when an index is brought
+#: in at start (storage/full_export.py), so the window waiting on it shows it.
+Progress = Callable[[str, int, int], None]
+
+
+class _Telling:
+    """Counts a stage through, and says how far it is in whole percents: one
+    line in the log every ten, and every one to *progress*."""
+
+    def __init__(self, stage: str, total: int, progress: Progress | None) -> None:
+        self.stage, self.total, self.progress = stage, max(0, int(total)), progress
+        self.done = 0
+        self.said_percent = -1
+        self.logged_tenth = 0
+
+    def step(self, count: int = 1) -> None:
+        self.done += count
+        if not self.total:
+            return
+        percent = min(100, self.done * 100 // self.total)
+        if percent == self.said_percent:
+            return
+        self.said_percent = percent
+        if self.progress is not None:
+            try:
+                self.progress(self.stage, self.done, self.total)
+            except Exception:                                 # noqa: BLE001
+                pass
+        if percent // 10 > self.logged_tenth and percent < 100:
+            self.logged_tenth = percent // 10
+            say(f"{self.stage.capitalize()}: {self.done:,} of {self.total:,} files ({percent}%)")
 
 
 def create_backup(out_dir: Path, *, without_secrets: bool = False,
@@ -192,7 +231,11 @@ def _prepare_replacement(existing: Path, extracted: Path, candidate: Path) -> No
                 continue
             target = candidate / child.name
             if child.is_dir() and not child.is_symlink():
-                shutil.copytree(child, target, symlinks=True)
+                # Linked where the disk allows, not copied: what this computer
+                # keeps of its own can be gigabytes (its AI models), and the
+                # folder they are linked from stays beside the new one.
+                shutil.copytree(child, target, symlinks=True,
+                                copy_function=backup_lib._link_or_copy)
             else:
                 shutil.copy2(child, target, follow_symlinks=False)
     # Moved, not copied: *extracted* is this restore's own unpacking, beside
@@ -282,8 +325,10 @@ def _keep_local_secrets(local: Path, copied: Path, target: Path) -> None:
                       encoding="utf-8")
 
 
-def restore_backup(archive_path: Path) -> bool:
-    """Prepare verified state, then swap directories with rollback on failure."""
+def restore_backup(archive_path: Path, progress: Progress | None = None) -> bool:
+    """Prepare verified state, then swap directories with rollback on failure.
+
+    *progress* hears how far the unpacking and the checking have got."""
     if not archive_path.is_file():
         fail(f"Backup archive not found: {archive_path}")
         return False
@@ -312,27 +357,30 @@ def restore_backup(archive_path: Path) -> bool:
                                      dir=state_dir.parent) as tmp_dir_str:
         tmp_dir = Path(tmp_dir_str)
 
-        # 1. Extract archive
-        say("Extracting and verifying archive...")
+        # 1. Unpack and check, in one pass over the archive
+        # (backup.extract_verified): every file against the manifest's size
+        # and checksum as it is written, then the databases.
+        say("Unpacking and checking the archive in one pass. A full export of a large "
+            "library takes a while; Ninaivu opens by itself when it is done.")
+        telling: list[_Telling] = []
+
+        def unpacked(done: int, total: int) -> None:
+            if not telling:
+                if not total:
+                    return
+                say(f"Unpacking and checking {total:,} files...")
+                telling.append(_Telling("unpacking", total, progress))
+            telling[0].done = done - 1
+            telling[0].step()
+
         try:
-            with tarfile.open(archive_path, "r:gz") as tar:
-                members, rejected = _safe_members(tar, tmp_dir)
-                if rejected:
-                    fail(f"Backup archive contains {len(rejected)} unsafe or "
-                         f"unexpected entries (outside the restore directory, "
-                         f"or not a plain file) -- refusing to extract it.")
-                    return False
-                if hasattr(tarfile, "data_filter"):
-                    tar.extractall(tmp_dir, members=members, filter="data")
-                else:
-                    tar.extractall(tmp_dir, members=members)
-        except Exception as exc:
+            extracted_state = backup_lib.extract_verified(archive_path, tmp_dir, unpacked)
+        except (OSError, ValueError, sqlite3.Error, tarfile.TarError, EOFError,
+                zlib.error) as exc:
             fail(f"Failed to extract tar archive: {exc}")
             return False
 
-        extracted_state = tmp_dir / "state"
         try:
-            _verify_state(extracted_state)
             ok("All archived files and databases verified.")
             state_dir.parent.mkdir(parents=True, exist_ok=True)
             # Staging is on the same filesystem as the destination. A failed
@@ -366,7 +414,10 @@ def restore_backup(archive_path: Path) -> bool:
             fail(f"Restore failed: {exc}")
             return False
 
-    ok("Restore completed successfully! Please restart Ninaivu to load restored state.")
+    if progress is None:
+        ok("Restore completed successfully! Please restart Ninaivu to load restored state.")
+    else:
+        ok("Restore completed: the restored state is in place.")
     return True
 
 
