@@ -29,6 +29,7 @@ import sqlite3
 import ssl
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import quote, urlencode, urlsplit
@@ -41,6 +42,10 @@ log = logging.getLogger(__name__)
 
 #: Files asked about at a time.
 GROUP = 200
+#: Files sent at once (Courier._send_many). The Secondary writes and syncs
+#: each to its disk before it answers; a few under way keep the network busy
+#: while it does, without crowding a home network or a small computer.
+SEND_AT_ONCE = 4
 
 #: How long one request may take to start answering, in seconds.
 TIMEOUT = 60
@@ -65,6 +70,9 @@ NEARLY_FULL = 0.05
 #: While the Secondary is away: the first wait before asking again, and the
 #: longest, in seconds. It doubles in between.
 AWAY_FIRST, AWAY_LONGEST = 30.0, 10 * 60.0
+#: While it is away, how often the Primary looks for it at another address
+#: (Courier._find_again), in seconds.
+FIND_EVERY = 5 * 60.0
 
 #: Answers that mean the Secondary is away (switched off, asleep, restarting,
 #: off the network) rather than that it refused: the run waits for it.
@@ -100,9 +108,17 @@ CREATE TABLE IF NOT EXISTS libraries (
 class PartnerError(Exception):
     """The Secondary could not be reached, or said no."""
 
-    def __init__(self, message: str, status: int = 0) -> None:
+    def __init__(self, message: str, status: int = 0,
+                 answer: dict[str, Any] | None = None) -> None:
         super().__init__(message)
         self.status = status
+        self.answer = answer or {}
+
+    @property
+    def replaced(self) -> bool:
+        """The Secondary follows another Primary now: the index moved to it
+        (pairing.py, "Moving the Primary")."""
+        return self.status == 409 and bool(self.answer.get("replaced"))
 
 
 class Partner:
@@ -164,8 +180,16 @@ class Partner:
         if response.status >= 400:
             said = (answer or {}).get("refused") or (answer or {}).get("error")
             raise PartnerError(str(said or f"HTTP {response.status}"),
-                               response.status)
+                               response.status, answer if isinstance(answer, dict) else None)
         return answer if isinstance(answer, dict) else {"answer": answer}
+
+    def move_to(self, url: str) -> None:
+        """Speak to the Secondary at *url* from now on (Courier._find_again)."""
+        parts = urlsplit(str(url or "").strip().rstrip("/"))
+        if parts.scheme not in ("http", "https") or not parts.hostname:
+            raise PartnerError("Not an address.")
+        self.url = f"{parts.scheme}://{parts.netloc}"
+        self._parts = parts
 
     def download(self, path: str, *, query: dict[str, Any], write: Callable[[bytes], Any]) -> int:
         """GET *path* and hand its body to *write* a piece at a time; the bytes."""
@@ -404,8 +428,10 @@ class Courier:
                 hello = self.partner(self.cfg.mugil_partner_url, pair.get("key")).request(
                     "GET", "/api/mugil/hello")
                 machines.remember_hello(self.cfg.state_dir, hello)
-            except PartnerError:
-                pass
+            except PartnerError as exc:
+                if exc.replaced:
+                    self.step_down()
+                    return ["replaced"]
         seen = machines.remembered(self.cfg.state_dir) or {}
         name = (seen.get("machine") or {}).get("name") or pair.get("partner_name") or "The Secondary"
         told = []
@@ -441,6 +467,9 @@ class Courier:
             result.update(self.run(totals))
         except PartnerError as exc:
             result.update(totals, complete=False, error=str(exc))
+            if exc.replaced:
+                self.step_down()
+                result["stepped_down"] = True
         except Exception as exc:                          # noqa: BLE001 - said, not raised
             log.exception("Sending the originals stopped")
             result.update(totals, complete=False, error=str(exc))
@@ -456,6 +485,10 @@ class Courier:
                           partner)
         if hello is None:
             return {"complete": False, "stopped": True}
+        if pair.get("moved_in_at"):
+            # The index was brought to this computer: it takes over as the
+            # Primary before it sends anything (pairing.py, "Moving the Primary").
+            partner = self.take_over(partner)
         from . import machines, wake                             # noqa: PLC0415
         machines.remember_hello(self.cfg.state_dir, hello)
         # What this computer keeps, told first: a Secondary being copied to
@@ -574,6 +607,12 @@ class Courier:
                 except PartnerError as exc:
                     if exc.status not in (*AWAY, NOT_YET):
                         raise
+                    # Not at its address: perhaps at another one now (a new
+                    # address from the router, or the Secondary moved to
+                    # another computer). Found and proven by the pairing's
+                    # own key, it is spoken to there from now on.
+                    if exc.status in AWAY and self._find_again(partner):
+                        continue
                     pause = min(pause * 2, AWAY_LONGEST)
                     continue
                 break
@@ -643,8 +682,11 @@ class Courier:
             elsewhere = list(answer.get("elsewhere") or [])
             elsewhere += [False] * (len(items) - len(elsewhere))
             confirmed_now = []
+            to_send = []
+            stopped = False
             for index, (item, has) in enumerate(zip(items, held + [False] * (len(items) - len(held)))):
                 if self._stop.is_set():
+                    stopped = True
                     break
                 if has:
                     totals["already"] += 1
@@ -662,24 +704,160 @@ class Courier:
                         confirmed_now.append(item)
                         continue
                     if outcome is None:
+                        stopped = True
                         break
-                outcome = self._ask(
-                    lambda item=item: self._send_file(partner, root, library, name, item),
-                    partner)
-                if outcome is None:
-                    break
-                if outcome == "kept":
-                    totals["sent"] += 1
-                    totals["bytes"] += item["size"]
-                    confirmed_now.append(item)
-                elif outcome == "changed":
-                    totals["changed"] += 1
-                else:
-                    totals["failed"] += 1
+                to_send.append(item)
+            failure = None
+            if not stopped and to_send:
+                sent, failure = self._send_many(partner, root, library, name, to_send)
+                for item, outcome in sent:
+                    if outcome == "kept":
+                        totals["sent"] += 1
+                        totals["bytes"] += item["size"]
+                        confirmed_now.append(item)
+                    elif outcome == "changed":
+                        totals["changed"] += 1
+                    elif outcome is not None:
+                        totals["failed"] += 1
             self._record(root, confirmed_now)
+            if failure is not None:
+                raise failure
             with self._lock:
                 self._progress["done"] = min(len(rows), start + len(group))
                 self._progress.update({k: totals[k] for k in ("sent", "bytes", "already")})
+
+    def _find_again(self, partner: Partner, now: float | None = None) -> bool:
+        """Look for the Secondary on the house network and the tailnet, when it
+        does not answer at its address; True when it was found elsewhere and
+        *partner* now speaks to it there. At most every :data:`FIND_EVERY`.
+
+        A Secondary that answers the question is taken only when it answers a
+        request signed with this pairing's key: another Ninaivu, or a stranger
+        answering on the port, cannot."""
+        from . import meeting                                    # noqa: PLC0415
+        now = time.monotonic() if now is None else now
+        if now - getattr(self, "_found_at", -FIND_EVERY) < FIND_EVERY:
+            return False
+        self._found_at = now
+        pair = pairing.load(self.cfg.state_dir) or {}
+        key = pair.get("key")
+        if not key:
+            return False
+        try:
+            found = meeting.discover()
+        except OSError:
+            return False
+        scheme = partner._parts.scheme or "http"
+        for other in found:
+            if other.get("waiting"):
+                continue                          # not paired: not this one
+            address, port = str(other.get("address") or ""), int(other.get("port") or 0)
+            if not address or not port:
+                continue
+            host = f"[{address}]" if ":" in address else address
+            url = f"{scheme}://{host}:{port}"
+            if url == partner.url:
+                continue
+            try:
+                _paired_secondary(self.partner(url, key).request("GET", "/api/mugil/hello"))
+            except PartnerError:
+                continue
+            log.warning("The Secondary was not at %s; found it at %s, and it is spoken to "
+                        "there from now on", partner.url, url)
+            partner.move_to(url)
+            self.cfg.mugil_partner_url = url
+            try:
+                self.cfg.save()
+                pairing.save(self.cfg.state_dir, {**pair, "partner_url": url})
+            except OSError as exc:
+                log.warning("Could not save the Secondary's new address: %s", exc)
+            return True
+        return False
+
+    def step_down(self) -> None:
+        """Another computer is the Primary now: the index moved to it, and the
+        Secondary follows it. This one becomes a single computer again, its
+        library as it was, instead of saying it is refused at every run until
+        somebody unpairs it."""
+        from . import SINGLE                                     # noqa: PLC0415
+        name = (pairing.load(self.cfg.state_dir) or {}).get("partner_name") or "the Secondary"
+        pairing.forget(self.cfg.state_dir)
+        self.cfg.mugil_role = SINGLE
+        self.cfg.mugil_partner_url = ""
+        try:
+            self.cfg.save()
+        except OSError as exc:
+            log.warning("Could not save this computer as a single computer: %s", exc)
+        log.warning("Another computer has taken over as the Primary; this one is a single "
+                    "computer again")
+        self.notify("primary_replaced", "Another computer is the Primary now",
+                    f"Its index was moved to another computer, and {name} keeps the originals "
+                    "for that one now. This computer is a single computer again: its library "
+                    "is as it was, and it sends nothing more.")
+        self._stop.set()
+
+    def take_over(self, partner: Partner) -> Partner:
+        """Agree a new key with the Secondary over the one the index brought,
+        so the computer the index came from no longer acts as the Primary.
+        Returns the Secondary spoken to with the new key."""
+        from . import display_name                               # noqa: PLC0415
+        private, hello = pairing.move_hello()
+        answer = self._ask(lambda: partner.request("POST", "/api/mugil/move", body={
+            **hello, "name": display_name(self.cfg),
+            "port": int(getattr(self.cfg, "port", 0) or 0)}), partner)
+        if answer is None:
+            raise PartnerError("Stopped before taking over as the Primary.", 0)
+        pair = pairing.load(self.cfg.state_dir) or {}
+        key = pairing.primary_move_key(private, pair.get("key") or "", answer)
+        if key is None:
+            raise PartnerError("The Secondary did not prove it holds the pairing.", 403)
+        pair.pop("moved_in_at", None)
+        pairing.save(self.cfg.state_dir, {**pair, "key": key, "took_over_at": time.time()})
+        log.warning("Took over as the Primary: the computer this index came from no longer "
+                    "sends to the Secondary")
+        return self.partner(self.cfg.mugil_partner_url, key)
+
+    def _send_many(self, partner: Partner, root: str, library: str, name: str,
+                   items: list[dict[str, Any]]
+                   ) -> tuple[list[tuple[dict[str, Any], str | None]], BaseException | None]:
+        """Send *items*, :data:`SEND_AT_ONCE` at a time: each with its outcome,
+        None for one not sent because the run was stopped.
+
+        One at a time, every file waited for the Secondary to write it, sync
+        it to its disk and answer before the next began: on a hard disk that
+        sync is most of a photograph's time, and the network sat idle while
+        it ran. A refusal that ends the run (no longer paired, the disk
+        full) is raised once every file under way has finished."""
+        def one(item: dict[str, Any]) -> str | None:
+            if self._stop.is_set():
+                return None
+            return self._ask(lambda: self._send_file(partner, root, library, name, item), partner)
+
+        workers = max(1, min(SEND_AT_ONCE, len(items)))
+        if workers == 1:
+            out: list[tuple[dict[str, Any], str | None]] = []
+            for item in items:
+                outcome = one(item)
+                out.append((item, outcome))
+                if outcome is None:
+                    break
+            return out, None
+        results: list[tuple[dict[str, Any], str | None]] = []
+        failure: BaseException | None = None
+        with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="mugil-send") as pool:
+            futures = [(item, pool.submit(one, item)) for item in items]
+            for item, future in futures:
+                try:
+                    results.append((item, future.result()))
+                except BaseException as exc:                   # noqa: BLE001
+                    if failure is None:
+                        failure = exc
+                        # Those not begun need not be: the run is ending.
+                        for _, waiting in futures:
+                            waiting.cancel()
+                    results.append((item, None))
+        # What was kept before the refusal is recorded by the caller first.
+        return results, failure
 
     def _copy_there(self, partner: Partner, root: str, library: str, name: str,
                     item: dict[str, Any]) -> str:

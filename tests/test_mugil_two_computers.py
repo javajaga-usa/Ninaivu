@@ -1392,7 +1392,12 @@ def test_the_secondary_wakes_the_primary_before_its_catch_up(two_apps, tmp_path,
 
     sent = []
     waker = wake.Waker(other, sender=lambda packet, to: sent.append((packet, to)))
-    night = dt.datetime.now().replace(hour=1, minute=56, second=0, microsecond=0).timestamp()
+    # 01:56 on the Primary's clock, by the offset it sent: built from this
+    # computer's local time instead, the test failed on the night clocks go
+    # back, when 01:56 comes twice and the first one is not the one sent.
+    offset = dt.timezone(dt.timedelta(seconds=wake.load(other.state_dir)["utc_offset"]))
+    night = dt.datetime.now(offset).replace(hour=1, minute=56, second=0,
+                                           microsecond=0).timestamp()
     waker.clock = lambda: night - 120
     assert waker.look() is False and not sent
     waker.clock = lambda: night
@@ -1438,3 +1443,307 @@ def test_the_always_on_secondary_can_be_the_one_that_sends_the_off_site_copy(two
     assert there["offsite"]["status"] == "done"
     status = second.get("/api/offsite").get_json()
     assert status["from_the_originals"] is True and status["files"] > 0
+
+
+# --- sending faster -------------------------------------------------------------
+
+def test_several_originals_are_sent_at_once(primary, secondary, scanned, monkeypatch):
+    """One at a time, the network sat idle while the Secondary synced each
+    file to its disk; a few are under way together now."""
+    from ninaivu.mugil import courier as courier_module
+
+    mine, courier = primary
+    cfg, conn, _ = scanned
+    files = conn.execute("SELECT COUNT(*) FROM assets WHERE root=? AND trashed=0",
+                         (cfg.roots[0],)).fetchone()[0]
+    real = Courier._send_file
+    lock = threading.Lock()
+    now = {"at_once": 0, "most": 0}
+
+    def slow(self, *args):
+        with lock:
+            now["at_once"] += 1
+            now["most"] = max(now["most"], now["at_once"])
+        try:
+            time.sleep(0.05)
+            return real(self, *args)
+        finally:
+            with lock:
+                now["at_once"] -= 1
+
+    monkeypatch.setattr(Courier, "_send_file", slow)
+    result = run(courier)
+    assert result["complete"] is True and result["sent"] == files
+    assert 1 < now["most"] <= courier_module.SEND_AT_ONCE
+
+
+def test_a_refusal_part_way_keeps_what_was_kept(primary, secondary, scanned, monkeypatch):
+    mine, courier = primary
+    real = Courier._send_file
+    calls = {"n": 0}
+    lock = threading.Lock()
+
+    def full_after_three(self, *args):
+        with lock:
+            calls["n"] += 1
+            n = calls["n"]
+        if n > 3:
+            raise PartnerError("The Secondary's disk is full.", 507)
+        return real(self, *args)
+
+    monkeypatch.setattr(Courier, "_send_file", full_after_three)
+    with pytest.raises(PartnerError, match="full"):
+        run(courier)
+    with sent_record(mine.state_dir) as record:
+        kept = record.execute("SELECT COUNT(*) FROM sent").fetchone()[0]
+    assert kept == 3
+
+
+def test_files_on_their_way_in_share_the_reserve(tmp_path, monkeypatch):
+    from ninaivu.mugil import hold
+
+    monkeypatch.setattr(hold.shutil, "disk_usage",
+                        lambda folder: SimpleNamespace(free=hold.RESERVE + 100))
+    with hold._room_for(tmp_path, 80):
+        with pytest.raises(Refused):
+            with hold._room_for(tmp_path, 80):
+                pass
+        with hold._room_for(tmp_path, 20):
+            pass
+    with hold._room_for(tmp_path, 80):           # let go once it is in
+        pass
+
+
+# --- moving the Primary to another computer ---------------------------------
+
+def test_the_primary_takes_over_when_its_index_moves(primary, secondary, scanned):
+    """The index, pairing and all, brought to a new computer: the first time
+    it reaches the Secondary it agrees a new key, and the computer it came
+    from is told it has been replaced instead of going on as the Primary."""
+    mine, courier = primary
+    cfg, _ = secondary
+    old_key = pairing.load(mine.state_dir)["key"]
+    assert pairing.mark_moved(mine.state_dir) is True
+
+    result = run(courier)
+    assert result["complete"] is True
+
+    now_primary = pairing.load(mine.state_dir)
+    now_secondary = pairing.load(cfg.state_dir)
+    assert "moved_in_at" not in now_primary
+    assert now_primary["key"] == now_secondary["key"] != old_key
+    assert now_secondary["replaced_key"] == old_key
+    assert "replaced_key" not in pairing.public(now_secondary)
+
+    # The computer the index came from, still holding the old key.
+    client_partner = courier.partner("http://linux-pc:3000", old_key)
+    with pytest.raises(PartnerError) as refused:
+        client_partner.request("GET", "/api/mugil/hello")
+    assert refused.value.status == 409 and "taken over" in str(refused.value)
+    # And the new one goes on as before.
+    assert run(courier)["complete"] is True
+
+
+def test_a_move_answer_without_the_old_key_is_not_taken():
+    private, hello = pairing.move_hello()
+    found = pairing.secondary_move_answer("11" * 32, hello)
+    assert found is not None
+    _, answer = found
+    assert pairing.primary_move_key(private, "22" * 32, answer) is None
+    assert pairing.primary_move_key(private, "11" * 32, answer) == found[0]
+
+
+def test_a_full_export_carries_the_pairing_and_a_backup_away_does_not(tmp_path):
+    import tarfile
+    from ninaivu.storage import backup
+
+    state = tmp_path / "state"
+    state.mkdir()
+    import sqlite3
+    from contextlib import closing
+    with closing(sqlite3.connect(state / "index.db")) as conn, conn:
+        conn.execute("CREATE TABLE assets (id INTEGER PRIMARY KEY)")
+    (state / "config.json").write_text("{}")
+    pairing.save(state, {"key": "ab" * 32, "role": "primary"})
+    with sent_record(state) as record:
+        record.execute("INSERT INTO libraries (root, library, name) VALUES ('/p', 'lib-1', 'p')")
+
+    def names(bundle):
+        with tarfile.open(bundle) as tar:
+            return {m.name for m in tar.getmembers()}
+
+    full = backup.snapshot(state, tmp_path / "out", full=True)
+    away = backup.snapshot(state, tmp_path / "away", leave_out=backup.KEPT_HOME)
+    assert {"state/mugil-pair.json", "state/mugil-sent.db"} <= names(full)
+    assert "state/mugil-pair.json" not in names(away)
+
+
+def test_an_index_is_not_brought_to_the_secondary(tmp_path):
+    import json
+    from ninaivu.storage import full_export
+
+    state = tmp_path / "state"
+    state.mkdir()
+    (state / "config.json").write_text(json.dumps({"mugil_role": "secondary"}))
+    with pytest.raises(full_export.Refused) as refused:
+        full_export.look(tmp_path / "anything.tar.gz", state)
+    assert "Secondary" in str(refused.value.said)
+
+
+def test_the_originals_folder_is_found_again_on_another_system(tmp_path):
+    """The N300 moved from a Mac (/Volumes/…) to Linux (/media/<user>/…):
+    found by its disk's id, not left saying the originals cannot be reached."""
+    import json
+    from ninaivu.mugil import hold
+
+    state = tmp_path / "state"
+    state.mkdir()
+    old = "/Volumes/N300/Originals"
+    new = tmp_path / "media" / "jaga" / "N300" / "Originals"
+    new.mkdir(parents=True)
+    (new / hold.DISK_ID).write_text("disk-1\n")
+    (state / hold.KNOWN_DISKS).write_text(json.dumps({old: "disk-1"}))
+    saved = []
+    cfg = SimpleNamespace(state_dir=state, mugil_originals_dir=old,
+                          save=lambda: saved.append(True))
+    assert hold.find_moved(cfg, look=lambda folder: [new]) == str(new)
+    assert cfg.mugil_originals_dir == str(new) and saved
+    # A copy of the disk beside it: two with the id, nothing is taken.
+    copy = tmp_path / "media" / "jaga" / "Copy" / "Originals"
+    copy.mkdir(parents=True)
+    (copy / hold.DISK_ID).write_text("disk-1\n")
+    cfg.mugil_originals_dir = old
+    assert hold.find_moved(cfg, look=lambda folder: [new, copy]) is None
+    assert cfg.mugil_originals_dir == old
+
+
+def test_a_rebuild_writes_each_name_as_the_index_spells_it(tmp_path):
+    """A library from a Mac's older disk: names in the decomposed form. The
+    Secondary keeps them composed; written that way on Linux they were new
+    files to the index, and the photographs it knew went missing."""
+    import sqlite3
+    import unicodedata
+    from contextlib import closing
+    from ninaivu.mugil import rebuild
+
+    base = tmp_path / "Library"
+    base.mkdir()
+    decomposed = unicodedata.normalize("NFD", "தொகுப்பு/கொண்டாட்டம்.jpg")
+    assert decomposed != unicodedata.normalize("NFC", decomposed)
+    index = tmp_path / "index.db"
+    with closing(sqlite3.connect(index)) as conn, conn:
+        conn.execute("CREATE TABLE assets (root TEXT, rel_path TEXT)")
+        conn.executemany("INSERT INTO assets VALUES (?, ?)",
+                         [(str(base), decomposed), (str(base), "plain/IMG_1.HEIC")])
+    spelled = rebuild.index_spellings(SimpleNamespace(db_path=index), base)
+    assert spelled == {unicodedata.normalize("NFC", decomposed): decomposed}
+    assert rebuild.index_spellings(SimpleNamespace(db_path=tmp_path / "none.db"), base) == {}
+
+
+# --- seamless: nobody re-pairs, unpairs or types an address -------------------
+
+def test_a_replaced_primary_steps_down_by_itself(primary, secondary, scanned, app):
+    """The index moved to another computer, which took over: the one it left
+    becomes a single computer again, its library as it was, instead of being
+    refused at every run until somebody unpairs it."""
+    mine, courier = primary
+    old_key = pairing.load(mine.state_dir)["key"]
+    # The new computer: the same index and pairing, and it takes over.
+    moved = copy.copy(mine)
+    moved.state_dir = mine.state_dir.parent / "moved-state"
+    moved.state_dir.mkdir()
+    pairing.save(moved.state_dir, {"key": old_key, "role": "primary", "moved_in_at": time.time()})
+    newcomer = Courier(moved, courier.connect_db, partner=courier.partner)
+    assert run(newcomer)["complete"] is True
+
+    told = []
+    courier.notify = lambda event, summary, detail: told.append(event)
+    courier.cfg.save = lambda: None
+    courier._run_logged()
+    assert courier.last.get("stepped_down") is True
+    assert mine.mugil_role == "single" and mine.mugil_partner_url == ""
+    assert pairing.load(mine.state_dir) is None
+    assert told == ["primary_replaced"]
+
+
+def test_the_primary_finds_its_secondary_at_a_new_address(primary, secondary, scanned,
+                                                          monkeypatch):
+    """The router gave the Secondary another address: found on the network,
+    proven by the pairing's key, and spoken to there from now on."""
+    from ninaivu.mugil import courier as courier_module, meeting
+
+    mine, courier = primary
+    through = courier.partner
+
+    class Moved(through):
+        def request(self, method, path, **kwargs):
+            if self.url == "http://linux-pc:3000":
+                raise PartnerError("The other computer did not answer: refused", 0)
+            return super().request(method, path, **kwargs)
+
+    courier.partner = Moved
+    mine.save = lambda: None
+    monkeypatch.setattr(courier_module, "AWAY_FIRST", 0.01)
+    monkeypatch.setattr(meeting, "discover", lambda **_: [
+        {"id": "x", "address": "192.168.1.77", "port": 8080, "name": "Linux PC", "waiting": False}])
+    result = run(courier)
+    assert result["complete"] is True
+    assert mine.mugil_partner_url == "http://192.168.1.77:8080"
+    assert pairing.load(mine.state_dir)["partner_url"] == "http://192.168.1.77:8080"
+
+
+def test_a_stranger_on_the_network_is_not_taken_for_the_secondary(primary, secondary,
+                                                                  monkeypatch):
+    from ninaivu.mugil import meeting
+
+    mine, courier = primary
+    through = courier.partner
+
+    class Nobody(through):
+        def request(self, method, path, **kwargs):
+            if self.url != "http://linux-pc:3000":
+                raise PartnerError("This request is not signed by the computer this one "
+                                   "is paired with.", 401)
+            raise PartnerError("The other computer did not answer: refused", 0)
+
+    courier.partner = Nobody
+    monkeypatch.setattr(meeting, "discover", lambda **_: [
+        {"id": "y", "address": "192.168.1.66", "port": 8080, "name": "Other", "waiting": False}])
+    partner = Nobody("http://linux-pc:3000", "ab" * 32)
+    assert courier._find_again(partner, now=10_000.0) is False
+    assert partner.url == "http://linux-pc:3000" and mine.mugil_partner_url == "http://linux-pc:3000"
+    # And it does not look again at once.
+    assert courier._find_again(partner, now=10_001.0) is False
+
+
+def test_the_secondary_follows_the_primary_to_a_new_address(app, secondary):
+    from ninaivu.api import mugil_api
+
+    cfg, _ = secondary
+    pairing.save(cfg.state_dir, {"key": "ab" * 32, "role": "secondary",
+                                 "partner_address": "192.168.1.10",
+                                 "partner_url": "http://192.168.1.10:8080"})
+    with app.test_request_context("/api/mugil/hello", environ_base={"REMOTE_ADDR": "100.64.0.9"}):
+        mugil_api._follow_the_primary(pairing.load(cfg.state_dir), str(cfg.state_dir))
+    now = pairing.load(cfg.state_dir)
+    assert now["partner_address"] == "100.64.0.9"
+    assert now["partner_url"] == "http://100.64.0.9:8080"
+
+
+def test_the_move_answers_only_the_paired_primary(app, secondary, client):
+    """/api/mugil/move agrees a new key: unsigned, or on a computer that is
+    not the Secondary, it is refused before anything is read."""
+    cfg, _ = secondary
+    private, hello = pairing.move_hello()
+    # Not paired yet.
+    assert client.post("/api/mugil/move", json=hello).status_code == 401
+    pairing.save(cfg.state_dir, {"key": "ab" * 32, "role": "secondary"})
+    # Paired, but not signed, or signed with another key.
+    assert client.post("/api/mugil/move", json=hello).status_code == 401
+    headers = pairing.signed_headers("cd" * 32, "POST", "/api/mugil/move",
+                                     pairing.body_digest(__import__("json").dumps(hello).encode()))
+    assert client.post("/api/mugil/move", json=hello, headers=headers).status_code == 401
+    assert pairing.load(cfg.state_dir)["key"] == "ab" * 32
+    # On a computer that is not the Secondary.
+    cfg.mugil_role = "single"
+    assert client.post("/api/mugil/move", json=hello).status_code == 404

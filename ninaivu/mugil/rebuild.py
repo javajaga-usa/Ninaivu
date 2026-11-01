@@ -166,6 +166,7 @@ class Rebuild:
             raise PartnerError("The folder could not be given the library's id.", 409)
         pair = pairing.load(self.cfg.state_dir) or {}
         partner = self.partner(self.cfg.mugil_partner_url, pair.get("key"), timeout=TIMEOUT)
+        self._spelled = index_spellings(self.cfg, base)
         after = ""
         while not self._stop.is_set():
             page = self._ask(lambda after=after: partner.request(
@@ -218,7 +219,9 @@ class Rebuild:
         rel = clean_path(str(item.get("path", "")))
         if rel is None:
             return
-        target = base / rel
+        # Written as the index spells it, when it does (index_spellings); the
+        # Secondary is still asked for it by its own spelling.
+        target = base / getattr(self, "_spelled", {}).get(rel, rel)
         self.live["current"] = rel
         size, algo, digest = int(item.get("size") or 0), str(item.get("algo", "")), \
             str(item.get("digest", ""))
@@ -288,6 +291,46 @@ class Rebuild:
             partial.unlink(missing_ok=True)
         self.live["copied"] += 1
         self.live["copied_bytes"] += size
+
+
+def index_spellings(cfg, base: Path) -> dict[str, str]:
+    """How the index spells the paths of the library at *base*, where that is
+    not how the Secondary does: ``{the Secondary's: the index's}``.
+
+    The Secondary keeps every path in one Unicode form (NFC, hold.clean_path).
+    A library from a Mac's older disk has its names in the other (NFD): an
+    accented letter, or a Tamil vowel sign such as ொ, is two characters there.
+    Linux takes the two spellings for two names, so a rebuild into the folder
+    an imported index points at wrote each such photograph where the index
+    did not look; the next scan took it for a new file and the old one for
+    gone, with its names, faces and albums. Empty when there is no index for
+    *base*, or nothing is spelled differently.
+    """
+    import sqlite3                                                  # noqa: PLC0415
+    import unicodedata                                              # noqa: PLC0415
+    from contextlib import closing                                  # noqa: PLC0415
+    roots = {str(base)}
+    try:
+        roots.add(str(base.resolve()))
+    except OSError:
+        pass
+    path = Path(getattr(cfg, "db_path", "") or "")
+    if not path.is_file():
+        return {}
+    spelled: dict[str, str] = {}
+    try:
+        with closing(sqlite3.connect(path.as_uri() + "?mode=ro", uri=True)) as conn:
+            # Only the number of placeholders is written in; the paths are bound.
+            marks = ",".join("?" * len(roots))
+            for (rel,) in conn.execute(
+                    f"SELECT rel_path FROM assets WHERE root IN ({marks})",  # nosec B608
+                    tuple(roots)):
+                same = unicodedata.normalize("NFC", rel)
+                if same != rel:
+                    spelled[same] = rel
+    except sqlite3.Error:
+        return {}
+    return spelled
 
 
 def _fingerprint(path: Path, algo: str) -> str | None:

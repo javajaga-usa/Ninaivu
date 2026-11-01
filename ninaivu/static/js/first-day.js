@@ -668,7 +668,33 @@ export class FirstDay {
       body.append(el('p', 'lede', i18n.t('Choose the originals folder first.')));
       return;
     }
-    body.append(el('p', 'lede',
+    // Nothing to type first: the Primary finds this computer and is tapped
+    // there. The address and a code are the way round when it cannot.
+    const welcome = m.welcome || {};
+    const waiting = el('div', 'fd-waiting');
+    if (welcome.waiting) {
+      waiting.append(el('p', 'lede', i18n.t('Nothing to type: on the Primary, open Mugil → Two computers and tap this computer when both screens show the same number.')));
+      const found = el('ul', 'tc-found');
+      for (const met of welcome.introduced || []) {
+        const li = el('li');
+        li.append(el('span', 'tc-name', met.name || met.address), el('span', 'tc-number', met.number));
+        found.append(li);
+      }
+      waiting.append(found);
+    } else {
+      const again = el('button', 'btn ghost', i18n.t('Wait for the Primary again'));
+      again.type = 'button';
+      again.onclick = async () => {
+        try { this.mugil = await this.json('/api/admin/mugil/welcome', { method: 'POST' }); } catch (exc) { this.toast(exc.message, true); }
+        this.render();
+      };
+      waiting.append(el('p', 'hint', i18n.t('The Primary can also find this computer, while it waits.')), again);
+    }
+    body.append(waiting);
+
+    const byCode = el('details', 'fd-by-code');
+    byCode.append(el('summary', null, i18n.t('Pair with a code instead')));
+    byCode.append(el('p', 'hint',
       i18n.t('On the Primary, open Mugil → Two computers and press Show a code for the Secondary. Then type its address and the code here.')));
     const form = el('form', 'row');
     const url = el('input', 'input'); url.placeholder = i18n.t('mac-mini or 100.64.1.2'); url.required = true;
@@ -693,32 +719,14 @@ export class FirstDay {
         await this.reloadMugil();
       }
     };
-    body.append(form);
-    // Or the Primary finds this one by itself and is tapped there.
-    const welcome = m.welcome || {};
-    const waiting = el('div', 'fd-waiting');
-    if (welcome.waiting) {
-      waiting.append(el('p', 'hint', i18n.t('Or let the Primary find this computer: it is waiting now. On the Primary, open Mugil → Two computers and tap the computer showing the same number.')));
-      const found = el('ul', 'tc-found');
-      for (const met of welcome.introduced || []) {
-        const li = el('li');
-        li.append(el('span', 'tc-name', met.name || met.address), el('span', 'tc-number', met.number));
-        found.append(li);
-      }
-      waiting.append(found);
-    } else {
-      const again = el('button', 'btn ghost', i18n.t('Wait for the Primary again'));
-      again.type = 'button';
-      again.onclick = async () => {
-        try { this.mugil = await this.json('/api/admin/mugil/welcome', { method: 'POST' }); } catch (exc) { this.toast(exc.message, true); }
-        this.render();
-      };
-      waiting.append(el('p', 'hint', i18n.t('The Primary can also find this computer, while it waits.')), again);
-    }
+    byCode.append(form);
+    // Typing in it: not folded away again by the next look.
+    byCode.open = Boolean(this.codeOpen);
+    byCode.ontoggle = () => { this.codeOpen = byCode.open; };
+    body.append(byCode);
     if (m.on_the_network === false) {
-      waiting.append(el('p', 'hint error', i18n.t('The family app answers this computer only, so the other computer cannot reach it. Turn on network access on the Server page.')));
+      body.append(el('p', 'hint error', i18n.t('The family app answers this computer only, so the other computer cannot reach it. Turn on network access on the Server page.')));
     }
-    body.append(waiting);
     $('#fd-note').textContent = i18n.t('No Primary yet? Skip: this computer keeps waiting, and the two pair later.');
     this.pollWhile('primary');
   }

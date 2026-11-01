@@ -1701,6 +1701,8 @@ body.admin .admin-bar .brand span:not(.console-tag) { display: inline; }
 .fd-choice input { margin-top: 3px; }
 .fd-choice > span { display: flex; flex-direction: column; gap: 2px; }
 .fd-manual, .fd-waiting { display: flex; flex-direction: column; gap: 8px; }
+.fd-by-code summary { cursor: pointer; font-size: 14px; color: var(--text-2); }
+.fd-by-code[open] > * + * { margin-top: 8px; }
 .fd-how { margin: 0; padding-left: 22px; display: flex; flex-direction: column; gap: 10px; font-size: 14px; }
 .fd-how li > * + * { margin-top: 6px; }
 .fd-how .btn { align-self: flex-start; }

@@ -185,7 +185,11 @@ def test_only_events_a_person_would_act_on_exist():
         "cloud_approval",
         # With two computers: the one keeping the originals away a day, or
         # its disk failing or nearly full.
-        "secondary_away", "secondary_disk"}
+        "secondary_away", "secondary_disk",
+        # And a Primary that another computer took over from (its index was
+        # moved): it stopped sending, and somebody who did not move it
+        # should know at once.
+        "primary_replaced"}
 
 
 def test_a_scrubber_report_says_what_happened_without_naming_files(monkeypatch):

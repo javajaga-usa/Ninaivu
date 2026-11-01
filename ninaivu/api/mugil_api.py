@@ -22,7 +22,7 @@ import logging
 import time
 from pathlib import Path
 
-from flask import Blueprint, current_app, jsonify, request, send_file
+from flask import Blueprint, current_app, g, jsonify, request, send_file
 
 from .. import __version__
 from ..mugil import PRIMARY, ROLES, SECONDARY, SINGLE, display_name, machines, meeting, pairing, role
@@ -547,10 +547,22 @@ def _signed(digest_of_body: str | None = None):
     if pair is None:
         return None
     vouched = pairing.verify(pair["key"], request.method, _target(), request.headers, _seen)
+    if vouched is None:
+        _note_replaced(pair)
     if vouched is None or (digest_of_body is not None and vouched != digest_of_body):
         return None
     _primary_seen(pair)
     return vouched
+
+
+def _note_replaced(pair: dict) -> None:
+    """A request signed with the key a move replaced comes from the computer
+    that was the Primary before the index moved: it is told so (_unsigned)."""
+    old = pair.get("replaced_key")
+    if not old or time.time() - float(pair.get("replaced_at") or 0) > pairing.REPLACED_KEPT_FOR:
+        return
+    if pairing.verify(old, request.method, _target(), request.headers, pairing.Seen()):
+        g.mugil_replaced = float(pair.get("replaced_at") or 0)
 
 
 #: When the Primary last spoke to this Secondary, by state folder; written
@@ -564,6 +576,8 @@ def _primary_seen(pair: dict) -> None:
     if now - _last_written.get(state, 0.0) < 60:
         return
     _last_written[state] = now
+    if pair.get("role") == SECONDARY:
+        _follow_the_primary(pair, state)
     machines.remember(state, {
         "machine": {"name": pair.get("partner_name") or "", "role": PRIMARY,
                     "version": str(request.headers.get("X-Ninaivu-Version", ""))[:40]},
@@ -571,9 +585,84 @@ def _primary_seen(pair: dict) -> None:
         "version": str(request.headers.get("X-Ninaivu-Version", ""))[:40] or None})
 
 
+def _follow_the_primary(pair: dict, state: str) -> None:
+    """Where the Primary is now, from where its signed requests come: a new
+    address from the router, or the index moved to another computer. What
+    this computer asks of the Primary goes there, without anybody typing it."""
+    address = request.remote_addr or ""
+    if not address or address == pair.get("partner_address"):
+        return
+    moved = {**pair, "partner_address": address}
+    url = str(pair.get("partner_url") or "")
+    if url:
+        from urllib.parse import urlsplit                        # noqa: PLC0415
+        try:
+            port = urlsplit(url).port
+        except ValueError:
+            port = None
+        if port:
+            moved["partner_url"] = f"{urlsplit(url).scheme or 'http'}://{_host(address)}:{port}"
+    try:
+        pairing.save(state, moved)
+    except OSError as exc:
+        log.warning("Could not note the Primary's new address: %s", exc)
+
+
 def _unsigned():
+    if g.get("mugil_replaced"):
+        # 409, not 401: not a stranger, a Primary that has been replaced.
+        return jsonify({"refused": "Another computer has taken over as the Primary: the index "
+                                   "was moved to it. This computer no longer sends to the "
+                                   "Secondary; unpair it on its Two computers page.",
+                        "replaced": True, "status": 409}), 409
     return jsonify({"refused": "This request is not signed by the computer this one is paired with.",
                     "status": 401}), 401
+
+
+@mugil_peer_bp.post("/api/mugil/move")
+def mugil_move_answer():
+    """On the Secondary: the Primary has moved to another computer (its index
+    was imported there, pairing and all), and agrees a new key, over the old
+    one, so the computer it left can no longer act as the Primary
+    (pairing.py, "Moving the Primary")."""
+    cfg = _cfg()
+    if role(cfg) != SECONDARY:
+        return _not_here()
+    raw = read_at_most(JSON_MAX_BYTES)
+    pair = pairing.load(cfg.state_dir)
+    if pair is None or _signed(pairing.body_digest(raw)) is None:
+        return _unsigned()
+    try:
+        hello = json.loads(raw)
+    except ValueError:
+        hello = None
+    if not isinstance(hello, dict):
+        return jsonify({"refused": "Send it as JSON.", "status": 400}), 400
+    found = pairing.secondary_move_answer(pair["key"], hello)
+    if found is None:
+        return jsonify({"refused": "Send the new half of the key.", "status": 400}), 400
+    key, answer = found
+    name = str(hello.get("name") or pair.get("partner_name") or "")[:200]
+    moved = {**pair, "key": key, "replaced_key": pair["key"], "replaced_at": time.time(),
+             "partner_name": name, "partner_address": request.remote_addr or "",
+             "moved_at": time.time()}
+    try:
+        port = int(hello.get("port") or 0)
+    except (TypeError, ValueError):
+        port = 0
+    if 0 < port < 65536 and request.remote_addr:
+        # Where the Primary is now, for what this computer asks of it.
+        moved["partner_url"] = f"http://{_host(request.remote_addr)}:{port}"
+    pairing.save(cfg.state_dir, moved)
+    machines.remember(cfg.state_dir, {
+        "machine": {"name": name, "role": PRIMARY},
+        "address": request.remote_addr or "",
+        "version": str(request.headers.get("X-Ninaivu-Version", ""))[:40] or None})
+    auth.audit(db.connect(cfg.db_path), None, "two_computers",
+               f"the Primary moved to {name or request.remote_addr}")
+    log.warning("The Primary moved to %s (%s); the computer it left no longer acts as one",
+                name or "another computer", request.remote_addr)
+    return jsonify({**answer, "name": _name(cfg)})
 
 
 @mugil_peer_bp.post("/api/mugil/pair")
@@ -814,6 +903,10 @@ def mugil_hello():
         return _not_here()
     if _signed(pairing.body_digest(b"")) is None:
         return _unsigned()
+    # The originals disk mounted at another path, or moved to a computer with
+    # another system: found again by its id before saying it is away.
+    from ..mugil.hold import find_moved                          # noqa: PLC0415
+    find_moved(cfg)
     holding = _holding(cfg)
     problem = (folder_problem(str(holding.folder), list(cfg.roots), cfg.state_dir)
                if holding is not None else "no folder")

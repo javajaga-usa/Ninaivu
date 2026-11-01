@@ -1,14 +1,29 @@
 # Changelog
 
-## Unreleased
+## 3.5.0 — 1 November 2026
 
-### Quieter
+### Bringing the index to another computer
 
-- **The guide site asks search engines not to list it.** Every page carries `noindex, nofollow` (tools/docs-theme/main.html), so the site drops out of Google and the like as they next visit it. The repository stays public.
+- **One start at a time.** Bringing in an index is done as Ninaivu starts, and on a large library it takes a while. Opening Ninaivu again meanwhile started a second one, which opened the old, empty folder and began indexing the whole library from nothing while the first went on unpacking. A second start now waits: the Control Panel follows the start already at work, and a second window says what it is doing and stops.
+- **Faster.** The export is unpacked and checked in one pass, every file against its checksum as it is written, instead of reading it three times over. Import no longer waits for the separate check first; it checks everything itself and keeps the index that was there if anything is not right. Export works out its checksums several files at a time, and once instead of twice.
+- **It says how far it has got,** unpacking and checking in percent, and every import ends with a line saying the index is in place, or why it is not.
+- **The library is found on this computer.** An index from a Mac names its library at `/Volumes/…`, which a Linux or Windows computer does not have; it is now looked for where this computer mounts its disks, and the folder chosen here is used when it carries the library's id or holds the index's own photographs.
+- **The first day asks first:** start a new library, or bring the index from another computer. Bringing one in chooses the photographs folder without indexing it and goes on to Import, in three numbered steps.
 
-### Ready for a private source repository, if it is ever made private
+### Two computers
 
-- **Nothing changes while the repository is public.** The release workflow can publish to a separate public releases repository (`RELEASES_REPO`, with a `RELEASES_TOKEN` secret), the docs site can go to that repository's Pages when this one is private, and provenance is skipped for a private repository (GitHub Free makes none there). Repository variables can send the checks to runners at home (`MAC_RUNNER`, `LINUX_RUNNER`, `LINUX_ARM64_RUNNER`, `BASIC_TIER_RUNNER`, `WINDOWS_TESTS`; `installers/ci-runner/`, docs/development/self-hosted-runners.md). With none of them set, everything runs and publishes where it always did.
+- **Originals are sent four at a time.** Each one used to wait for the Secondary to write it to its disk before the next began.
+- **The Primary can move with its index.** Bring the Primary's index to a new computer and it carries on as the Primary, sending to the same Secondary with no pairing again; the computer it left is told that another has taken over and becomes a single computer again, its library as it was. An index cannot be brought onto a Secondary.
+- **Addresses that change are followed.** A Secondary that is no longer at its address is looked for on the house network and Tailscale, and taken only when it answers with the pairing's own key; the Secondary follows the Primary's address the same way.
+- **Mac and Linux.** The Secondary finds its originals disk again when it is mounted at another path or moved to another system. Names with accents or Tamil vowel signs, which a Mac's older disks write differently, are no longer lost in a rebuild or sent twice after a copy made by hand.
+- **Pairing on the Secondary starts with nothing to type:** tap it on the Primary when both show the same number. The address and a code are still there, folded away.
+
+### Smaller things
+
+- **AI models finish downloading when the connection drops for a moment,** carrying on where they stopped; a model cut short is no longer called damaged.
+- **Files this computer's user may not read are said to be that,** once, with how to let Ninaivu read them, instead of being named one by one as files that could not be read.
+- **A stop no longer names every part as stuck** when the scan took all of its time.
+- The guide site asks search engines not to list it, and the release workflow can publish to a separate public releases repository.
 
 ## 3.4.0 — 27 October 2026
 

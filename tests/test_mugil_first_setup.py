@@ -310,3 +310,39 @@ def test_a_disk_too_small_is_said_before_sending(primary, secondary, monkeypatch
     result = run(courier)
     assert result["short_of_room"]["needed"] > 10
     assert "secondary_disk" in told
+
+
+def test_a_copy_by_hand_from_a_mac_is_found_under_its_other_spelling(
+        primary, secondary, as_admin, scanned):
+    """A Mac's older disk names files decomposed (NFD), and a copy made there
+    keeps them so; the Secondary spells every path composed. Each such file
+    was not found, sent again, and kept twice under two names."""
+    import unicodedata
+    from PIL import Image
+
+    _, courier = primary
+    cfg, folder = secondary
+    library_cfg, conn, scanner = scanned
+    root = Path(library_cfg.roots[0])
+    decomposed = unicodedata.normalize("NFD", "கொண்டாட்டம்")
+    assert decomposed != unicodedata.normalize("NFC", decomposed)
+    (root / decomposed).mkdir()
+    Image.new("RGB", (64, 64), (10, 120, 200)).save(root / decomposed / "விழா.png")
+    scanner._run(root, full=True)
+    root, target = _copy_by_hand(cfg, folder)
+    assert (target / decomposed).is_dir()
+    as_admin.post("/api/admin/mugil/role", json={"role": "secondary", "copy_mode": "manual"})
+    services = as_admin.application.config["MV_SERVICES"]
+    _check(services)
+
+    result = run(courier)
+    assert result["complete"] is True, result
+    assert result["sent"] == 0, result
+    composed = target / unicodedata.normalize("NFC", decomposed) / unicodedata.normalize("NFC", "விழா.png")
+    assert composed.is_file()
+    # Kept once, not twice.
+    pngs = [p for p in target.rglob("*.png") if unicodedata.normalize("NFC", p.parent.name)
+            == unicodedata.normalize("NFC", decomposed)]
+    assert len(pngs) == 1
+    # And the folder under the other spelling is gone, not left empty.
+    assert not (target / decomposed).exists()

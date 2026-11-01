@@ -59,6 +59,7 @@ EVENTS: dict[str, str] = {
     "cloud_approval": said("Large files are waiting for approval before the cloud backup"),
     "secondary_away": said("The always-on computer has not answered for a day"),
     "secondary_disk": said("The always-on computer's originals disk is failing or nearly full"),
+    "primary_replaced": said("Another computer took over as the Primary, and this one is a single computer again"),
 }
 
 #: Never send the same thing twice within this window. A drive left unplugged

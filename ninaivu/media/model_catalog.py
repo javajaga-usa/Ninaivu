@@ -754,6 +754,22 @@ class CutShort(Exception):
     the file."""
 
 
+def _dropped(exc: BaseException) -> bool:
+    """Whether a download failed because the connection did (dropped, reset,
+    timed out, cut short, or the server busy for a moment), which carrying on
+    can mend; not a file that is not there, a refusal, or the disk."""
+    import http.client                                              # noqa: PLC0415
+    import socket                                                   # noqa: PLC0415
+    if isinstance(exc, CutShort):
+        return True
+    if isinstance(exc, urllib.error.HTTPError):
+        return exc.code >= 500 or exc.code in (408, 429)
+    if isinstance(exc, urllib.error.URLError):
+        return isinstance(exc.reason, (ConnectionError, TimeoutError, socket.timeout))
+    return isinstance(exc, (ConnectionError, TimeoutError, socket.timeout,
+                            http.client.IncompleteRead))
+
+
 #: How many times a download that is cut short is carried on before it is
 #: given up. Six models fetched at once over a home connection that dropped
 #: for a moment all failed together ("Broken pipe"), and three more were
@@ -878,9 +894,8 @@ def download_file(entry: dict[str, Any], on_bytes: Callable[[int], None] | None 
                         raise CutShort(f"{written:,} of {expected:,} bytes")
                     break
                 except (OSError, CutShort) as exc:
-                    if (isinstance(exc, urllib.error.HTTPError)
-                            and exc.code < 500 and exc.code not in (408, 429)):
-                        raise
+                    if not _dropped(exc):
+                        raise                    # missing, refused, the disk: not the line
                     tries += 1
                     if tries >= DOWNLOAD_TRIES:
                         raise OSError(f"the download of {Path(entry['name']).name} kept being "

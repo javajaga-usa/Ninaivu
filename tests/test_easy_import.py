@@ -333,13 +333,38 @@ def test_files_this_user_may_not_read_are_said_to_be_that():
 
 
 def test_a_stop_does_not_name_parts_that_stopped_after_the_budget():
-    import ninaivu
+    """The scan used the whole budget; every part asked after it was named as
+    "still stopping after 20 seconds" the instant it was asked, though each
+    stops in a moment. Only the scan is named now, and the stop keeps close
+    to its budget."""
+    import gc
+    import threading
+    import types
+    from ninaivu import Services
 
-    source = Path(ninaivu.__file__).read_text(encoding="utf-8")
-    stop = source[source.index("    def stop(self, timeout"):source.index("    def _pause_archive")]
-    # Late parts are waited for together, after every part has been asked.
-    assert "late.append" in stop and "settle_late()" in stop
-    assert 'problems.append(f"{what}: still stopping after {timeout:g} seconds")' not in stop
+    hold = threading.Event()
+    quick = types.SimpleNamespace(stop=lambda *a, **k: time.sleep(0.01),
+                                  pause=lambda: time.sleep(0.01),
+                                  restore_stop=lambda: None)
+    services = object.__new__(Services)
+    services.scanner = types.SimpleNamespace(stop=lambda join=False: hold.wait(3), running=False)
+    for name in ("straightener", "cloud", "guardian", "backups", "updates", "digest",
+                 "disks", "restore_tests", "index_copy", "mirror", "offsite", "repairer",
+                 "xmp", "importer", "power", "library_drives"):
+        setattr(services, name, quick)
+    services._pause_archive = lambda: None
+    gc.collect()
+    gc.disable()
+    try:
+        began = time.monotonic()
+        problems = services.stop(timeout=0.3)
+        elapsed = time.monotonic() - began
+    finally:
+        gc.enable()
+        hold.set()
+    assert [p for p in problems if not p.startswith("the library scan")] == [], problems
+    assert any(p.startswith("the library scan") for p in problems)
+    assert elapsed < 0.3 + 1.5
 
 
 # --- faster: one pass over the archive -------------------------------------------

@@ -52,7 +52,7 @@ from flask import Flask, Response, g, jsonify, request
 from .server.config import Config
 from . import extensions
 
-__version__ = "3.4.0"
+__version__ = "3.5.0"
 APP_NAME = "Ninaivu"
 TAGLINE = "Your family's media, at home."
 #: Who holds the copyright, shown in About and the console. The licence stays
@@ -72,8 +72,10 @@ FACE_HOME = "home"
 FACE_ADMIN = "admin"
 
 #: How long the parts of a stop asked after its budget was spent are waited
-#: for, together, before any is named as not having stopped.
-LATE_STOP_GRACE = 5.0
+#: for, together, before any is named as not having stopped. Short: they are
+#: the ones that stop in a moment; a part still busy after its own share of
+#: the budget is named at once, and the stop keeps to its budget.
+LATE_STOP_GRACE = 1.0
 
 __all__ = [
     "create_app", "create_home_app", "create_admin_app", "build_services",
@@ -585,7 +587,13 @@ class Services:
         was replaced), it waits only when somebody opens the wait on its
         console."""
         from .mugil import SECONDARY, pairing, role             # noqa: PLC0415
-        from .mugil.hold import Holding                         # noqa: PLC0415
+        from .mugil.hold import Holding, find_moved             # noqa: PLC0415
+        if role(self.cfg) == SECONDARY:
+            try:
+                find_moved(self.cfg)
+            except Exception:                                   # noqa: BLE001 - looked for, not needed
+                logging.getLogger(__name__).warning("could not look for the originals folder",
+                                                    exc_info=True)
         if role(self.cfg) == SECONDARY and pairing.load(self.cfg.state_dir) is None:
             folder = str(getattr(self.cfg, "mugil_originals_dir", "") or "")
             try:
@@ -1437,8 +1445,7 @@ class Services:
         # Each part is still asked in turn; once the budget is spent, the rest
         # are asked without being waited for, and whatever had not finished is
         # named rather than reported as stopped.
-        began = time.monotonic()
-        deadline = began + max(0.0, float(timeout))
+        deadline = time.monotonic() + max(0.0, float(timeout))
         # Parts asked once the budget was spent. Joined for no time at all,
         # each was named as "still stopping" a moment after it was asked:
         # a scan that took the whole budget had every part after it reported
@@ -1457,19 +1464,23 @@ class Services:
 
             worker = threading.Thread(target=run, name="ninaivu-stop-part", daemon=True)
             worker.start()
-            worker.join(max(0.0, deadline - time.monotonic()))
+            left = deadline - time.monotonic()
+            worker.join(max(0.0, left))
             if worker.is_alive():
-                late.append((what, worker, failed))
+                if left > 0:
+                    # It had its share of the budget, and is still going.
+                    problems.append(f"{what}: still stopping after {timeout:g} seconds")
+                else:
+                    late.append((what, worker, failed))
             elif failed:
                 problems.append(f"{what}: {failed[0]}")
 
         def settle_late() -> None:
-            last = max(deadline, time.monotonic()) + LATE_STOP_GRACE
+            last = time.monotonic() + LATE_STOP_GRACE
             for what, worker, failed in late:
                 worker.join(max(0.0, last - time.monotonic()))
                 if worker.is_alive():
-                    problems.append(f"{what}: still stopping after "
-                                    f"{time.monotonic() - began:.0f} seconds")
+                    problems.append(f"{what}: still stopping after {timeout:g} seconds")
                 elif failed:
                     problems.append(f"{what}: {failed[0]}")
             late.clear()
