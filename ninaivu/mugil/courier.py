@@ -29,6 +29,7 @@ import sqlite3
 import ssl
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import quote, urlencode, urlsplit
@@ -41,6 +42,10 @@ log = logging.getLogger(__name__)
 
 #: Files asked about at a time.
 GROUP = 200
+#: Files sent at once (Courier._send_many). The Secondary writes and syncs
+#: each to its disk before it answers; a few under way keep the network busy
+#: while it does, without crowding a home network or a small computer.
+SEND_AT_ONCE = 4
 
 #: How long one request may take to start answering, in seconds.
 TIMEOUT = 60
@@ -456,6 +461,10 @@ class Courier:
                           partner)
         if hello is None:
             return {"complete": False, "stopped": True}
+        if pair.get("moved_in_at"):
+            # The index was brought to this computer: it takes over as the
+            # Primary before it sends anything (pairing.py, "Moving the Primary").
+            partner = self.take_over(partner)
         from . import machines, wake                             # noqa: PLC0415
         machines.remember_hello(self.cfg.state_dir, hello)
         # What this computer keeps, told first: a Secondary being copied to
@@ -643,8 +652,11 @@ class Courier:
             elsewhere = list(answer.get("elsewhere") or [])
             elsewhere += [False] * (len(items) - len(elsewhere))
             confirmed_now = []
+            to_send = []
+            stopped = False
             for index, (item, has) in enumerate(zip(items, held + [False] * (len(items) - len(held)))):
                 if self._stop.is_set():
+                    stopped = True
                     break
                 if has:
                     totals["already"] += 1
@@ -662,24 +674,90 @@ class Courier:
                         confirmed_now.append(item)
                         continue
                     if outcome is None:
+                        stopped = True
                         break
-                outcome = self._ask(
-                    lambda item=item: self._send_file(partner, root, library, name, item),
-                    partner)
-                if outcome is None:
-                    break
-                if outcome == "kept":
-                    totals["sent"] += 1
-                    totals["bytes"] += item["size"]
-                    confirmed_now.append(item)
-                elif outcome == "changed":
-                    totals["changed"] += 1
-                else:
-                    totals["failed"] += 1
+                to_send.append(item)
+            failure = None
+            if not stopped and to_send:
+                sent, failure = self._send_many(partner, root, library, name, to_send)
+                for item, outcome in sent:
+                    if outcome == "kept":
+                        totals["sent"] += 1
+                        totals["bytes"] += item["size"]
+                        confirmed_now.append(item)
+                    elif outcome == "changed":
+                        totals["changed"] += 1
+                    elif outcome is not None:
+                        totals["failed"] += 1
             self._record(root, confirmed_now)
+            if failure is not None:
+                raise failure
             with self._lock:
                 self._progress["done"] = min(len(rows), start + len(group))
                 self._progress.update({k: totals[k] for k in ("sent", "bytes", "already")})
+
+    def take_over(self, partner: Partner) -> Partner:
+        """Agree a new key with the Secondary over the one the index brought,
+        so the computer the index came from no longer acts as the Primary.
+        Returns the Secondary spoken to with the new key."""
+        from . import display_name                               # noqa: PLC0415
+        private, hello = pairing.move_hello()
+        answer = self._ask(lambda: partner.request("POST", "/api/mugil/move", body={
+            **hello, "name": display_name(self.cfg),
+            "port": int(getattr(self.cfg, "port", 0) or 0)}), partner)
+        if answer is None:
+            raise PartnerError("Stopped before taking over as the Primary.", 0)
+        pair = pairing.load(self.cfg.state_dir) or {}
+        key = pairing.primary_move_key(private, pair.get("key") or "", answer)
+        if key is None:
+            raise PartnerError("The Secondary did not prove it holds the pairing.", 403)
+        pair.pop("moved_in_at", None)
+        pairing.save(self.cfg.state_dir, {**pair, "key": key, "took_over_at": time.time()})
+        log.warning("Took over as the Primary: the computer this index came from no longer "
+                    "sends to the Secondary")
+        return self.partner(self.cfg.mugil_partner_url, key)
+
+    def _send_many(self, partner: Partner, root: str, library: str, name: str,
+                   items: list[dict[str, Any]]
+                   ) -> tuple[list[tuple[dict[str, Any], str | None]], BaseException | None]:
+        """Send *items*, :data:`SEND_AT_ONCE` at a time: each with its outcome,
+        None for one not sent because the run was stopped.
+
+        One at a time, every file waited for the Secondary to write it, sync
+        it to its disk and answer before the next began: on a hard disk that
+        sync is most of a photograph's time, and the network sat idle while
+        it ran. A refusal that ends the run (no longer paired, the disk
+        full) is raised once every file under way has finished."""
+        def one(item: dict[str, Any]) -> str | None:
+            if self._stop.is_set():
+                return None
+            return self._ask(lambda: self._send_file(partner, root, library, name, item), partner)
+
+        workers = max(1, min(SEND_AT_ONCE, len(items)))
+        if workers == 1:
+            out: list[tuple[dict[str, Any], str | None]] = []
+            for item in items:
+                outcome = one(item)
+                out.append((item, outcome))
+                if outcome is None:
+                    break
+            return out, None
+        results: list[tuple[dict[str, Any], str | None]] = []
+        failure: BaseException | None = None
+        with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="mugil-send") as pool:
+            futures = [(item, pool.submit(one, item)) for item in items]
+            for item, future in futures:
+                try:
+                    results.append((item, future.result()))
+                except BaseException as exc:                   # noqa: BLE001
+                    if failure is None:
+                        failure = exc
+                        # Those not begun need not be: the run is ending.
+                        for _, waiting in futures:
+                            waiting.cancel()
+                    results.append((item, None))
+        # What was kept before the refusal is recorded by the caller first.
+        return results, failure
 
     def _copy_there(self, partner: Partner, root: str, library: str, name: str,
                     item: dict[str, Any]) -> str:

@@ -5020,5 +5020,8 @@
   "You need not wait for the check: Import checks every file again as it puts them in place, and keeps the index that is here if one is not right.": "You need not wait for the check: Import checks every file again as it puts them in place, and keeps the index that is here if one is not right.",
   "Running for {time}. Nothing is changed while it is checked.": "Running for {time}. Nothing is changed while it is checked.",
   "The archive contains unsafe or unexpected entries (outside the restore directory, or not a plain file)": "The archive contains unsafe or unexpected entries (outside the restore directory, or not a plain file)",
-  "The archive has no manifest": "The archive has no manifest"
+  "The archive has no manifest": "The archive has no manifest",
+  "This computer is the Secondary: it keeps the originals for the Primary. Bring the index to the computer that is to be the Primary, or make this one a single computer first on its Two computers page.": "This computer is the Secondary: it keeps the originals for the Primary. Bring the index to the computer that is to be the Primary, or make this one a single computer first on its Two computers page.",
+  "Nothing to type: on the Primary, open Mugil → Two computers and tap this computer when both screens show the same number.": "Nothing to type: on the Primary, open Mugil → Two computers and tap this computer when both screens show the same number.",
+  "Pair with a code instead": "Pair with a code instead"
 }

@@ -221,6 +221,66 @@ def disk_problem(folder: Path, state_dir: Path | str) -> str | None:
     return None
 
 
+def find_moved(cfg, look=None) -> str | None:
+    """The originals folder found again by its disk's id, when it is not at
+    the path the settings give: the disk mounted under another name, or moved
+    to a computer with another system (``/Volumes/N300/Originals`` on a Mac,
+    ``/media/jaga/N300/Originals`` on Linux). Until somebody typed the new
+    path, the Secondary said its originals could not be reached and the
+    Primary waited. Taken only when exactly one folder carries the id; the
+    new path is saved and returned. None when nothing moved or nothing fits.
+    """
+    folder = str(getattr(cfg, "mugil_originals_dir", "") or "")
+    if not folder:
+        return None
+    if (Path(folder) / DISK_ID).is_file():
+        return None                                   # where it was
+    try:
+        known = json.loads((Path(cfg.state_dir) / KNOWN_DISKS).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(known, dict):
+        return None
+    wanted = str(known.get(folder) or "")
+    if not wanted:
+        try:
+            wanted = str(known.get(str(Path(folder).resolve())) or "")
+        except OSError:
+            wanted = ""
+    if not wanted:
+        return None
+    if look is None:
+        from ..storage.library_id import candidates             # noqa: PLC0415
+        look = candidates
+    hits = []
+    try:
+        places = list(look(folder))
+    except OSError:
+        places = []
+    for place in places:
+        try:
+            if place.is_dir() and (place / DISK_ID).read_text(encoding="utf-8").strip() == wanted:
+                if place not in hits:
+                    hits.append(place)
+        except OSError:
+            continue
+    if len(hits) != 1:
+        return None
+    new = str(hits[0])
+    known[new] = wanted
+    try:
+        from ..utils.files import atomic_write                  # noqa: PLC0415
+        atomic_write(Path(cfg.state_dir) / KNOWN_DISKS, json.dumps(known, indent=2))
+        cfg.mugil_originals_dir = new
+        cfg.save()
+    except OSError:
+        return None
+    import logging                                              # noqa: PLC0415
+    logging.getLogger(__name__).warning(
+        "the originals folder %s was not there; found it by its disk's id at %s", folder, new)
+    return new
+
+
 def clean_path(rel: str) -> str | None:
     """*rel* as a relative path with ``/`` between its parts, or None when it
     is not one: absolute, empty, with ``..`` or a Ninaivu name in it."""
@@ -248,6 +308,36 @@ def lock_for(what: str, folder: str | Path) -> threading.Lock:
         key = f"{what}:{Path(folder).expanduser()}"
     with _LOCKS_GUARD:
         return _LOCKS.setdefault(key, threading.Lock())
+
+
+#: Bytes being written into each originals folder right now, by folder: the
+#: Primary sends several files at once (courier.SEND_AT_ONCE), and each one
+#: checking the free space alone let them all take the same last gigabytes.
+_INCOMING: dict[str, int] = {}
+
+
+@contextlib.contextmanager
+def _room_for(folder: Path, size: int):
+    """Hold *size* bytes of *folder*'s disk for a file on its way in;
+    :class:`Refused` ("full") when the disk would go below :data:`RESERVE`."""
+    key = str(folder)
+    with _LOCKS_GUARD:
+        try:
+            free = shutil.disk_usage(folder).free
+        except OSError:
+            raise Refused("away") from None
+        if free - _INCOMING.get(key, 0) - size < RESERVE:
+            raise Refused("full")
+        _INCOMING[key] = _INCOMING.get(key, 0) + size
+    try:
+        yield
+    finally:
+        with _LOCKS_GUARD:
+            left = _INCOMING.get(key, 0) - size
+            if left > 0:
+                _INCOMING[key] = left
+            else:
+                _INCOMING.pop(key, None)
 
 
 class Holding:
@@ -333,8 +423,17 @@ class Holding:
         """Keep the file found at *rel* by hand, if it is the one *item*
         describes and has not changed since it was fingerprinted."""
         path = f"{folder}/{rel}"
-        found = conn.execute("SELECT size, mtime, algo, digest FROM found WHERE path=?",
+        found = conn.execute("SELECT path, size, mtime, algo, digest FROM found WHERE path=?",
                              (path,)).fetchone()
+        if found is None:
+            # A copy made on a Mac's older disk names files decomposed (NFD:
+            # accented letters, Tamil vowel signs such as ொ), and the walk
+            # records them so; every path here is composed (clean_path). The
+            # file was not found, sent again, and kept twice under two names.
+            other = unicodedata.normalize("NFD", path)
+            if other != path:
+                found = conn.execute("SELECT path, size, mtime, algo, digest FROM found "
+                                     "WHERE path=?", (other,)).fetchone()
         try:
             size = int(item.get("size") or -1)
         except (TypeError, ValueError):
@@ -345,6 +444,32 @@ class Holding:
         target = self.folder / folder / rel
         if not stays_inside(self.folder, target) or target.is_symlink():
             return False
+        if found["path"] != path:
+            # Named as the record names it, so it is read again where it is
+            # looked for. On a disk that takes the two spellings for one name
+            # (a Mac's) it is that file already.
+            spelled = self.folder / found["path"]
+            if not stays_inside(self.folder, spelled) or spelled.is_symlink():
+                return False
+            try:
+                if not (target.exists() and os.path.samefile(spelled, target)):
+                    if target.exists():
+                        return False            # a different file is there: sent instead
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    if not stays_inside(self.folder, target.parent):
+                        return False
+                    os.rename(spelled, target)
+                    # The folders it was in, under the other spelling, go
+                    # once the last file has moved out of them.
+                    emptied = spelled.parent
+                    while emptied != self.folder and stays_inside(self.folder, emptied):
+                        try:
+                            emptied.rmdir()
+                        except OSError:
+                            break
+                        emptied = emptied.parent
+            except OSError:
+                return False
         try:
             now = target.stat()
         except OSError:
@@ -366,7 +491,7 @@ class Holding:
             "INSERT OR REPLACE INTO kept (library, rel_path, size, algo, digest, mtime, kept_at) "
             "VALUES (?,?,?,?,?,?,?)",
             (library, rel, size, found["algo"], found["digest"], float(mtime), time.time()))
-        conn.execute("DELETE FROM found WHERE path=?", (path,))
+        conn.execute("DELETE FROM found WHERE path=?", (found["path"],))
         return True
 
     # -- what was copied here by hand ----------------------------------------
@@ -563,12 +688,12 @@ class Holding:
             raise Refused("algo")
         if size < 0:
             raise Refused("size")
-        try:
-            free = shutil.disk_usage(self.folder).free
-        except OSError:
-            raise Refused("away") from None
-        if free - size < RESERVE:
-            raise Refused("full")
+        with _room_for(self.folder, size):
+            return self._receive(library, name, clean, size=size, algo=algo,
+                                 digest=digest, mtime=mtime, body=body, fresh=fresh)
+
+    def _receive(self, library: str, name: str, clean: str, *, size: int, algo: str,
+                 digest: str, mtime: float, body: BinaryIO, fresh) -> dict[str, Any]:
         with self._lock, self._ledger() as conn:
             base = self._library_folder(conn, library, name)
         target = base / clean
@@ -654,5 +779,6 @@ def _same_bytes(a: Path, b: Path) -> bool:
                 return True
 
 
-__all__ = ["Holding", "Refused", "REASONS", "folder_problem", "clean_path", "hasher", "lock_for",
+__all__ = ["Holding", "Refused", "REASONS", "folder_problem", "find_moved", "clean_path",
+           "hasher", "lock_for",
            "LEDGER", "SET_ASIDE"]

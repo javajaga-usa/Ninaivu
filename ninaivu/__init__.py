@@ -585,7 +585,13 @@ class Services:
         was replaced), it waits only when somebody opens the wait on its
         console."""
         from .mugil import SECONDARY, pairing, role             # noqa: PLC0415
-        from .mugil.hold import Holding                         # noqa: PLC0415
+        from .mugil.hold import Holding, find_moved             # noqa: PLC0415
+        if role(self.cfg) == SECONDARY:
+            try:
+                find_moved(self.cfg)
+            except Exception:                                   # noqa: BLE001 - looked for, not needed
+                logging.getLogger(__name__).warning("could not look for the originals folder",
+                                                    exc_info=True)
         if role(self.cfg) == SECONDARY and pairing.load(self.cfg.state_dir) is None:
             folder = str(getattr(self.cfg, "mugil_originals_dir", "") or "")
             try:

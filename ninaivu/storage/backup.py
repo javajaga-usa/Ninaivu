@@ -69,7 +69,12 @@ EXPORT_PREFIX = "ninaivu_export_"
 EXTRAS = ("config.json", "library-path", "ninaivu-ca.crt", "ninaivu-ca.key",
           "ninaivu.crt", "ninaivu.key", "tls", "cloud-encryption.json",
           "google.json", "gemini.json", "avatars", "archive-logs",
-          "pending-uploads", "library-ids.json", "stories", "thumb-keys.json")
+          "pending-uploads", "library-ids.json", "stories", "thumb-keys.json",
+          # Two computers: the pairing with the other one (mugil/pairing.py).
+          # Carried, so the index brought to a new computer is the Primary
+          # there and goes on sending to the same Secondary, which follows
+          # it (mugil/pairing.py, "Moving the Primary").
+          "mugil-pair.json")
 
 #: Extras a restore replaces only when the bundle actually carries them. An
 #: older bundle made before these were collected must not wipe the ones this
@@ -81,7 +86,7 @@ EXTRAS = ("config.json", "library-path", "ninaivu-ca.crt", "ninaivu-ca.key",
 #: ones the thumbnails on this machine are named by.
 REPLACED_ONLY_IF_PRESENT = ("tls", "cloud-encryption.json", "google.json",
                             "gemini.json", "library-ids.json", "stories",
-                            "thumb-keys.json")
+                            "thumb-keys.json", "mugil-pair.json", "mugil-sent.db")
 
 #: What a full export carries beyond a backup (storage/full_export.py): what
 #: the machine worked out or the household made that a backup leaves to be
@@ -140,7 +145,8 @@ THIS_COMPUTER = ("host", "network_access", "https", "port", "admin_port",
 #: is told to trust it once more; the same computer keeps the one it has.
 #: The settings' secrets are blanked as well (:data:`BLANKED_HOME`).
 TLS_MATERIAL = ("tls", "ninaivu-ca.crt", "ninaivu-ca.key", "ninaivu.crt", "ninaivu.key")
-KEPT_HOME = ("cloud-encryption.json", "google.json", "gemini.json", *TLS_MATERIAL)
+KEPT_HOME = ("cloud-encryption.json", "google.json", "gemini.json", "mugil-pair.json",
+             *TLS_MATERIAL)
 
 #: What a bundle away from the state folder says it blanked in ``config.json``:
 #: the mail password and the notification webhook, by the same rule as the
@@ -152,7 +158,12 @@ BLANKED_HOME = "secrets_blanked"
 #: Entries that are folders, and may hold files of their own.
 _FOLDERS = ("avatars", "archive-logs", "pending-uploads", "tls", "stories", *FULL_EXTRAS)
 
-DATABASES = ("index.db", "archive.db")
+DATABASES = ("index.db", "archive.db",
+             # Two computers: what the Secondary confirmed it keeps
+             # (mugil/courier.py). Without it, a Primary moved to a new
+             # computer could not send for an original it had let go until its
+             # first run had asked the Secondary about every file again.
+             "mugil-sent.db")
 
 
 def hot_copy(source: Path, target: Path) -> bool:
