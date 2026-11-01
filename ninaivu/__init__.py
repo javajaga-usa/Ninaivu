@@ -76,6 +76,11 @@ FACE_ADMIN = "admin"
 #: the ones that stop in a moment; a part still busy after its own share of
 #: the budget is named at once, and the stop keeps to its budget.
 LATE_STOP_GRACE = 1.0
+# A part given less of the stop's budget than this, and still stopping, waits
+# with the late ones instead of being named at once: on Windows a join can
+# return a few milliseconds early, and the next part was left a sliver of
+# budget no part could stop in.
+FAIR_STOP_SHARE = 0.2
 
 __all__ = [
     "create_app", "create_home_app", "create_admin_app", "build_services",
@@ -1467,7 +1472,7 @@ class Services:
             left = deadline - time.monotonic()
             worker.join(max(0.0, left))
             if worker.is_alive():
-                if left > 0:
+                if left >= FAIR_STOP_SHARE:
                     # It had its share of the budget, and is still going.
                     problems.append(f"{what}: still stopping after {timeout:g} seconds")
                 else:

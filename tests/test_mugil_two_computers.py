@@ -1477,6 +1477,35 @@ def test_several_originals_are_sent_at_once(primary, secondary, scanned, monkeyp
     assert 1 < now["most"] <= courier_module.SEND_AT_ONCE
 
 
+def test_originals_sent_at_once_are_kept_when_windows_answers_the_long_form(
+        primary, secondary, scanned, monkeypatch):
+    r"""On Windows, ``realpath`` of a path not there yet answers ``\\?\C:\...``
+    when another thread makes its folder between its two looks; with four
+    originals arriving into the same new folder, one each run was refused as
+    "not one a library holds". Here realpath answers that way for every path
+    that does not exist yet, and every original is still kept."""
+    from ninaivu.utils import files
+
+    real = os.path.realpath
+
+    def windows(path, *args, **kwargs):
+        answer = real(path, *args, **kwargs)
+        if answer.startswith("\\\\?\\") or os.path.exists(answer):
+            return answer                 # on Windows the race itself may answer so
+        return "\\\\?\\" + answer
+
+    monkeypatch.setattr(files.os.path, "realpath", windows)
+    assert files.real_path("/no/such/place") == real("/no/such/place")
+    assert files.stays_inside("/no/such", "/no/such/place/photo.jpg")
+    assert not files.stays_inside("/no/such", "/elsewhere/photo.jpg")
+    mine, courier = primary
+    cfg, conn, _ = scanned
+    files_there = conn.execute("SELECT COUNT(*) FROM assets WHERE root=? AND trashed=0",
+                               (cfg.roots[0],)).fetchone()[0]
+    result = run(courier)
+    assert result["complete"] is True and result["sent"] == files_there, result
+
+
 def test_a_refusal_part_way_keeps_what_was_kept(primary, secondary, scanned, monkeypatch):
     mine, courier = primary
     real = Courier._send_file

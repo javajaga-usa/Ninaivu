@@ -71,6 +71,7 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 from typing import Any, Callable
 
+from ..utils.files import stays_inside
 from .mirror import folder_problem
 
 log = logging.getLogger(__name__)
@@ -648,7 +649,7 @@ def _is_file(path: Path) -> bool:
 
 
 def _inside(path: Path, top: Path) -> bool:
-    return Path(os.path.realpath(path)).is_relative_to(os.path.realpath(top))
+    return stays_inside(top, path)
 
 
 def _own_folders(folder: Path, base: Path) -> None:

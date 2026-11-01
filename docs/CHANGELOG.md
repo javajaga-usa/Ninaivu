@@ -16,6 +16,7 @@
 - **The Primary can move with its index.** Bring the Primary's index to a new computer and it carries on as the Primary, sending to the same Secondary with no pairing again; the computer it left is told that another has taken over and becomes a single computer again, its library as it was. An index cannot be brought onto a Secondary.
 - **Addresses that change are followed.** A Secondary that is no longer at its address is looked for on the house network and Tailscale, and taken only when it answers with the pairing's own key; the Secondary follows the Primary's address the same way.
 - **Mac and Linux.** The Secondary finds its originals disk again when it is mounted at another path or moved to another system. Names with accents or Tamil vowel signs, which a Mac's older disks write differently, are no longer lost in a rebuild or sent twice after a copy made by hand.
+- **On Windows, originals arriving together into a new folder are all kept.** Windows sometimes answers a path that does not exist yet in its long form (`\\?\C:\…`), and one original in each run was refused as a path no library holds; the same check in the second copy and the recycle bin is fixed with it.
 - **Pairing on the Secondary starts with nothing to type:** tap it on the Primary when both show the same number. The address and a code are still there, folded away.
 
 ### Smaller things
@@ -23,6 +24,7 @@
 - **AI models finish downloading when the connection drops for a moment,** carrying on where they stopped; a model cut short is no longer called damaged.
 - **Files this computer's user may not read are said to be that,** once, with how to let Ninaivu read them, instead of being named one by one as files that could not be read.
 - **A stop no longer names every part as stuck** when the scan took all of its time.
+- Voice stories and letters read aloud use sherpa-onnx 2.
 - The guide site asks search engines not to list it, and the release workflow can publish to a separate public releases repository.
 
 ## 3.4.0 — 27 October 2026
