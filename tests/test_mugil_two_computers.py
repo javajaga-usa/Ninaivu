@@ -1608,3 +1608,26 @@ def test_the_originals_folder_is_found_again_on_another_system(tmp_path):
     cfg.mugil_originals_dir = old
     assert hold.find_moved(cfg, look=lambda folder: [new, copy]) is None
     assert cfg.mugil_originals_dir == old
+
+
+def test_a_rebuild_writes_each_name_as_the_index_spells_it(tmp_path):
+    """A library from a Mac's older disk: names in the decomposed form. The
+    Secondary keeps them composed; written that way on Linux they were new
+    files to the index, and the photographs it knew went missing."""
+    import sqlite3
+    import unicodedata
+    from contextlib import closing
+    from ninaivu.mugil import rebuild
+
+    base = tmp_path / "Library"
+    base.mkdir()
+    decomposed = unicodedata.normalize("NFD", "தொகுப்பு/கொண்டாட்டம்.jpg")
+    assert decomposed != unicodedata.normalize("NFC", decomposed)
+    index = tmp_path / "index.db"
+    with closing(sqlite3.connect(index)) as conn, conn:
+        conn.execute("CREATE TABLE assets (root TEXT, rel_path TEXT)")
+        conn.executemany("INSERT INTO assets VALUES (?, ?)",
+                         [(str(base), decomposed), (str(base), "plain/IMG_1.HEIC")])
+    spelled = rebuild.index_spellings(SimpleNamespace(db_path=index), base)
+    assert spelled == {unicodedata.normalize("NFC", decomposed): decomposed}
+    assert rebuild.index_spellings(SimpleNamespace(db_path=tmp_path / "none.db"), base) == {}
