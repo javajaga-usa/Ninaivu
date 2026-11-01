@@ -1728,3 +1728,22 @@ def test_the_secondary_follows_the_primary_to_a_new_address(app, secondary):
     now = pairing.load(cfg.state_dir)
     assert now["partner_address"] == "100.64.0.9"
     assert now["partner_url"] == "http://100.64.0.9:8080"
+
+
+def test_the_move_answers_only_the_paired_primary(app, secondary, client):
+    """/api/mugil/move agrees a new key: unsigned, or on a computer that is
+    not the Secondary, it is refused before anything is read."""
+    cfg, _ = secondary
+    private, hello = pairing.move_hello()
+    # Not paired yet.
+    assert client.post("/api/mugil/move", json=hello).status_code == 401
+    pairing.save(cfg.state_dir, {"key": "ab" * 32, "role": "secondary"})
+    # Paired, but not signed, or signed with another key.
+    assert client.post("/api/mugil/move", json=hello).status_code == 401
+    headers = pairing.signed_headers("cd" * 32, "POST", "/api/mugil/move",
+                                     pairing.body_digest(__import__("json").dumps(hello).encode()))
+    assert client.post("/api/mugil/move", json=hello, headers=headers).status_code == 401
+    assert pairing.load(cfg.state_dir)["key"] == "ab" * 32
+    # On a computer that is not the Secondary.
+    cfg.mugil_role = "single"
+    assert client.post("/api/mugil/move", json=hello).status_code == 404

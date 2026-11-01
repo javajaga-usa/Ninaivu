@@ -320,8 +320,10 @@ def index_spellings(cfg, base: Path) -> dict[str, str]:
     spelled: dict[str, str] = {}
     try:
         with closing(sqlite3.connect(path.as_uri() + "?mode=ro", uri=True)) as conn:
+            # Only the number of placeholders is written in; the paths are bound.
+            marks = ",".join("?" * len(roots))
             for (rel,) in conn.execute(
-                    f"SELECT rel_path FROM assets WHERE root IN ({','.join('?' * len(roots))})",
+                    f"SELECT rel_path FROM assets WHERE root IN ({marks})",  # nosec B608
                     tuple(roots)):
                 same = unicodedata.normalize("NFC", rel)
                 if same != rel:
