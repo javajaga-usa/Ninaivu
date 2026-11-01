@@ -322,6 +322,13 @@ def look(path: Path, state_dir: Path | str | None = None) -> dict[str, Any]:
     Everything is checked again when it is imported, before anything is
     replaced; this is so the console can say what is about to come in.
     """
+    if state_dir is not None:
+        # A Secondary keeps the originals, and its index is not the library.
+        # Bringing the Primary's index to it made it a second Primary over
+        # the disk it was keeping the originals on.
+        here = _read_json(Path(state_dir) / "config.json") or {}
+        if str(here.get("mugil_role") or "") == "secondary":
+            raise Refused(said("This computer is the Secondary: it keeps the originals for the Primary. Bring the index to the computer that is to be the Primary, or make this one a single computer first on its Two computers page."))  # noqa: E501
     archive = find_bundle(path)
     if archive.name.startswith(backup.PARTIAL_PREFIX):
         raise Refused(Said("{name} is an export that was never finished: only part of it "
@@ -627,6 +634,14 @@ def apply_pending(state_dir: Path | str) -> bool | None:
         done, error = False, "The import failed part-way; Ninaivu's log says why."
     mapped: dict[str, str] = {}
     if done:
+        from ..mugil import pairing                         # noqa: PLC0415
+        try:
+            if pairing.mark_moved(state_dir):
+                print("  • This computer is the Primary of two computers now: it takes "
+                      "over from the one the index came from when it first reaches the "
+                      "Secondary.", flush=True)
+        except OSError:
+            log.exception("could not mark the pairing as moved")
         starting.step("bringing in the index from the other computer: finding the library")
         from . import library_id                           # noqa: PLC0415
         try:

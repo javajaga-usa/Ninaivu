@@ -461,6 +461,10 @@ class Courier:
                           partner)
         if hello is None:
             return {"complete": False, "stopped": True}
+        if pair.get("moved_in_at"):
+            # The index was brought to this computer: it takes over as the
+            # Primary before it sends anything (pairing.py, "Moving the Primary").
+            partner = self.take_over(partner)
         from . import machines, wake                             # noqa: PLC0415
         machines.remember_hello(self.cfg.state_dir, hello)
         # What this computer keeps, told first: a Secondary being copied to
@@ -691,6 +695,27 @@ class Courier:
             with self._lock:
                 self._progress["done"] = min(len(rows), start + len(group))
                 self._progress.update({k: totals[k] for k in ("sent", "bytes", "already")})
+
+    def take_over(self, partner: Partner) -> Partner:
+        """Agree a new key with the Secondary over the one the index brought,
+        so the computer the index came from no longer acts as the Primary.
+        Returns the Secondary spoken to with the new key."""
+        from . import display_name                               # noqa: PLC0415
+        private, hello = pairing.move_hello()
+        answer = self._ask(lambda: partner.request("POST", "/api/mugil/move", body={
+            **hello, "name": display_name(self.cfg),
+            "port": int(getattr(self.cfg, "port", 0) or 0)}), partner)
+        if answer is None:
+            raise PartnerError("Stopped before taking over as the Primary.", 0)
+        pair = pairing.load(self.cfg.state_dir) or {}
+        key = pairing.primary_move_key(private, pair.get("key") or "", answer)
+        if key is None:
+            raise PartnerError("The Secondary did not prove it holds the pairing.", 403)
+        pair.pop("moved_in_at", None)
+        pairing.save(self.cfg.state_dir, {**pair, "key": key, "took_over_at": time.time()})
+        log.warning("Took over as the Primary: the computer this index came from no longer "
+                    "sends to the Secondary")
+        return self.partner(self.cfg.mugil_partner_url, key)
 
     def _send_many(self, partner: Partner, root: str, library: str, name: str,
                    items: list[dict[str, Any]]

@@ -1507,3 +1507,77 @@ def test_files_on_their_way_in_share_the_reserve(tmp_path, monkeypatch):
             pass
     with hold._room_for(tmp_path, 80):           # let go once it is in
         pass
+
+
+# --- moving the Primary to another computer ---------------------------------
+
+def test_the_primary_takes_over_when_its_index_moves(primary, secondary, scanned):
+    """The index, pairing and all, brought to a new computer: the first time
+    it reaches the Secondary it agrees a new key, and the computer it came
+    from is told it has been replaced instead of going on as the Primary."""
+    mine, courier = primary
+    cfg, _ = secondary
+    old_key = pairing.load(mine.state_dir)["key"]
+    assert pairing.mark_moved(mine.state_dir) is True
+
+    result = run(courier)
+    assert result["complete"] is True
+
+    now_primary = pairing.load(mine.state_dir)
+    now_secondary = pairing.load(cfg.state_dir)
+    assert "moved_in_at" not in now_primary
+    assert now_primary["key"] == now_secondary["key"] != old_key
+    assert now_secondary["replaced_key"] == old_key
+    assert "replaced_key" not in pairing.public(now_secondary)
+
+    # The computer the index came from, still holding the old key.
+    client_partner = courier.partner("http://linux-pc:3000", old_key)
+    with pytest.raises(PartnerError) as refused:
+        client_partner.request("GET", "/api/mugil/hello")
+    assert refused.value.status == 409 and "taken over" in str(refused.value)
+    # And the new one goes on as before.
+    assert run(courier)["complete"] is True
+
+
+def test_a_move_answer_without_the_old_key_is_not_taken():
+    private, hello = pairing.move_hello()
+    found = pairing.secondary_move_answer("11" * 32, hello)
+    assert found is not None
+    _, answer = found
+    assert pairing.primary_move_key(private, "22" * 32, answer) is None
+    assert pairing.primary_move_key(private, "11" * 32, answer) == found[0]
+
+
+def test_a_full_export_carries_the_pairing_and_a_backup_away_does_not(tmp_path):
+    import tarfile
+    from ninaivu.storage import backup
+
+    state = tmp_path / "state"
+    state.mkdir()
+    import sqlite3
+    from contextlib import closing
+    with closing(sqlite3.connect(state / "index.db")) as conn, conn:
+        conn.execute("CREATE TABLE assets (id INTEGER PRIMARY KEY)")
+    (state / "config.json").write_text("{}")
+    pairing.save(state, {"key": "ab" * 32, "role": "primary"})
+
+    def names(bundle):
+        with tarfile.open(bundle) as tar:
+            return {m.name for m in tar.getmembers()}
+
+    full = backup.snapshot(state, tmp_path / "out", full=True)
+    away = backup.snapshot(state, tmp_path / "away", leave_out=backup.KEPT_HOME)
+    assert "state/mugil-pair.json" in names(full)
+    assert "state/mugil-pair.json" not in names(away)
+
+
+def test_an_index_is_not_brought_to_the_secondary(tmp_path):
+    import json
+    from ninaivu.storage import full_export
+
+    state = tmp_path / "state"
+    state.mkdir()
+    (state / "config.json").write_text(json.dumps({"mugil_role": "secondary"}))
+    with pytest.raises(full_export.Refused) as refused:
+        full_export.look(tmp_path / "anything.tar.gz", state)
+    assert "Secondary" in str(refused.value.said)

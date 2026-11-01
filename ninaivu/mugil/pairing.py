@@ -199,6 +199,68 @@ def primary_key(private: X25519PrivateKey, code: str, answer: dict[str, Any]) ->
     return _derive(private, theirs, code, mine, theirs)
 
 
+# -- moving the Primary to another computer -----------------------------------
+#
+# The whole index can be taken to a new computer (storage/full_export.py), and
+# the pairing goes with it. The new computer is then the Primary, but the old
+# one still holds the same key and would go on sending, or freeing space, as
+# if it were. So the first time the new one reaches the Secondary it agrees a
+# new key with it, over the old one: its half is in a request signed with the
+# old key, and the Secondary's half comes back with a proof made with the old
+# key, so nothing between the two can put its own half in. From then on the
+# old key opens nothing, and the Secondary tells a computer still using it
+# that another has taken over, rather than only that it is not paired.
+
+#: What a key agreed in a move is derived for: never the same as a pairing's.
+MOVE_INFO = b"ninaivu-mugil-move-1"
+
+#: How long the Secondary remembers the key a move replaced, to tell the
+#: computer still using it what happened, in seconds.
+REPLACED_KEPT_FOR = 90 * 24 * 3600
+
+
+def _move_proof(old_key: str, *parts: bytes) -> str:
+    return hmac.new(bytes.fromhex(old_key), b"\0".join((b"move", *parts)),
+                    hashlib.sha256).hexdigest()
+
+
+def move_hello() -> tuple[X25519PrivateKey, dict[str, str]]:
+    """On the Primary that has moved: its new half, sent signed with the old key."""
+    private = X25519PrivateKey.generate()
+    return private, {"public": _raw(private.public_key()).hex()}
+
+
+def secondary_move_answer(old_key: str, hello: dict[str, Any]
+                          ) -> tuple[str, dict[str, str]] | None:
+    """On the Secondary, for a move request signed with *old_key*: the new key
+    and the answer to send back, or None when the half is not one."""
+    try:
+        theirs = bytes.fromhex(str(hello.get("public", "")))
+    except ValueError:
+        return None
+    if len(theirs) != 32:
+        return None
+    private = X25519PrivateKey.generate()
+    half = _raw(private.public_key())
+    key = _derive(private, theirs, "", theirs, half, MOVE_INFO)
+    return key, {"public": half.hex(), "proof": _move_proof(old_key, half, theirs)}
+
+
+def primary_move_key(private: X25519PrivateKey, old_key: str,
+                     answer: dict[str, Any]) -> str | None:
+    """On the Primary: the new key, or None when the answer was not made by a
+    computer that holds the old one."""
+    mine = _raw(private.public_key())
+    try:
+        theirs = bytes.fromhex(str(answer.get("public", "")))
+    except ValueError:
+        return None
+    if len(theirs) != 32 or not hmac.compare_digest(
+            _move_proof(old_key, theirs, mine), str(answer.get("proof", ""))):
+        return None
+    return _derive(private, theirs, "", mine, theirs, MOVE_INFO)
+
+
 # -- keeping the pairing -----------------------------------------------------
 
 def load(state_dir: str | Path) -> dict[str, Any] | None:
@@ -224,8 +286,20 @@ def forget(state_dir: str | Path) -> None:
 
 
 def public(data: dict[str, Any] | None) -> dict[str, Any]:
-    """What the console may show of a pairing: everything but the key."""
-    return {k: v for k, v in (data or {}).items() if k != "key"}
+    """What the console may show of a pairing: everything but the keys."""
+    return {k: v for k, v in (data or {}).items() if k not in ("key", "replaced_key")}
+
+
+def mark_moved(state_dir: str | Path) -> bool:
+    """After an index was brought to this computer: when it is the Primary
+    of a pairing, take over from the computer it came from at the next
+    chance (Courier.take_over). True when there was such a pairing."""
+    data = load(state_dir)
+    if not data or data.get("role") != "primary":
+        return False
+    data["moved_in_at"] = time.time()
+    save(state_dir, data)
+    return True
 
 
 # -- signing -----------------------------------------------------------------

@@ -5272,5 +5272,6 @@
   "You need not wait for the check: Import checks every file again as it puts them in place, and keeps the index that is here if one is not right.": "சரிபார்ப்புக்காகக் காத்திருக்க வேண்டியதில்லை: இறக்குமதி ஒவ்வொரு கோப்பையும் இடத்தில் வைக்கும்போதே மீண்டும் சரிபார்க்கும்; ஏதேனும் சரியில்லை என்றால் இங்குள்ள அட்டவணையையே வைத்திருக்கும்.",
   "Running for {time}. Nothing is changed while it is checked.": "{time} ஆக நடக்கிறது. சரிபார்க்கும்போது எதுவும் மாற்றப்படாது.",
   "The archive contains unsafe or unexpected entries (outside the restore directory, or not a plain file)": "காப்பகத்தில் பாதுகாப்பற்ற அல்லது எதிர்பாராத உள்ளீடுகள் உள்ளன (மீட்டெடுப்புக் கோப்புறைக்கு வெளியே, அல்லது சாதாரணக் கோப்பு அல்ல)",
-  "The archive has no manifest": "காப்பகத்தில் உள்ளடக்கப் பட்டியல் இல்லை"
+  "The archive has no manifest": "காப்பகத்தில் உள்ளடக்கப் பட்டியல் இல்லை",
+  "This computer is the Secondary: it keeps the originals for the Primary. Bring the index to the computer that is to be the Primary, or make this one a single computer first on its Two computers page.": "இந்தக் கணினி இரண்டாம் கணினி: முதன்மைக் கணினிக்கான மூலக் கோப்புகளை இது வைத்திருக்கிறது. முதன்மைக் கணினியாக இருக்கப்போகும் கணினிக்கு அட்டவணையைக் கொண்டுசெல்லுங்கள், அல்லது முதலில் இதன் இரண்டு கணினிகள் பக்கத்தில் இதைத் தனிக் கணினியாக்குங்கள்."
 }
