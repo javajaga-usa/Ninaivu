@@ -367,6 +367,27 @@ def test_a_stop_does_not_name_parts_that_stopped_after_the_budget():
     assert elapsed < 0.3 + 1.5
 
 
+def test_a_part_left_a_sliver_of_the_budget_is_not_named():
+    """On Windows the scan's wait can end a few milliseconds before the
+    budget does; the part asked next had that sliver to stop in, and was
+    named as stuck though it stopped a moment later."""
+    import types
+    from ninaivu import Services
+
+    quick = types.SimpleNamespace(stop=lambda *a, **k: time.sleep(0.05),
+                                  pause=lambda: time.sleep(0.05),
+                                  restore_stop=lambda: None)
+    services = object.__new__(Services)
+    services.scanner = types.SimpleNamespace(stop=lambda join=False: time.sleep(0.28),
+                                             running=False)
+    for name in ("straightener", "cloud", "guardian", "backups", "updates", "digest",
+                 "disks", "restore_tests", "index_copy", "mirror", "offsite", "repairer",
+                 "xmp", "importer", "power", "library_drives"):
+        setattr(services, name, quick)
+    services._pause_archive = lambda: None
+    assert services.stop(timeout=0.3) == []
+
+
 # --- faster: one pass over the archive -------------------------------------------
 
 def _bundle_with(tmp_path, change=None):
