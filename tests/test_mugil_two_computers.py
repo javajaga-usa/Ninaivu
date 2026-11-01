@@ -1438,3 +1438,72 @@ def test_the_always_on_secondary_can_be_the_one_that_sends_the_off_site_copy(two
     assert there["offsite"]["status"] == "done"
     status = second.get("/api/offsite").get_json()
     assert status["from_the_originals"] is True and status["files"] > 0
+
+
+# --- sending faster -------------------------------------------------------------
+
+def test_several_originals_are_sent_at_once(primary, secondary, scanned, monkeypatch):
+    """One at a time, the network sat idle while the Secondary synced each
+    file to its disk; a few are under way together now."""
+    from ninaivu.mugil import courier as courier_module
+
+    mine, courier = primary
+    cfg, conn, _ = scanned
+    files = conn.execute("SELECT COUNT(*) FROM assets WHERE root=? AND trashed=0",
+                         (cfg.roots[0],)).fetchone()[0]
+    real = Courier._send_file
+    lock = threading.Lock()
+    now = {"at_once": 0, "most": 0}
+
+    def slow(self, *args):
+        with lock:
+            now["at_once"] += 1
+            now["most"] = max(now["most"], now["at_once"])
+        try:
+            time.sleep(0.05)
+            return real(self, *args)
+        finally:
+            with lock:
+                now["at_once"] -= 1
+
+    monkeypatch.setattr(Courier, "_send_file", slow)
+    result = run(courier)
+    assert result["complete"] is True and result["sent"] == files
+    assert 1 < now["most"] <= courier_module.SEND_AT_ONCE
+
+
+def test_a_refusal_part_way_keeps_what_was_kept(primary, secondary, scanned, monkeypatch):
+    mine, courier = primary
+    real = Courier._send_file
+    calls = {"n": 0}
+    lock = threading.Lock()
+
+    def full_after_three(self, *args):
+        with lock:
+            calls["n"] += 1
+            n = calls["n"]
+        if n > 3:
+            raise PartnerError("The Secondary's disk is full.", 507)
+        return real(self, *args)
+
+    monkeypatch.setattr(Courier, "_send_file", full_after_three)
+    with pytest.raises(PartnerError, match="full"):
+        run(courier)
+    with sent_record(mine.state_dir) as record:
+        kept = record.execute("SELECT COUNT(*) FROM sent").fetchone()[0]
+    assert kept == 3
+
+
+def test_files_on_their_way_in_share_the_reserve(tmp_path, monkeypatch):
+    from ninaivu.mugil import hold
+
+    monkeypatch.setattr(hold.shutil, "disk_usage",
+                        lambda folder: SimpleNamespace(free=hold.RESERVE + 100))
+    with hold._room_for(tmp_path, 80):
+        with pytest.raises(Refused):
+            with hold._room_for(tmp_path, 80):
+                pass
+        with hold._room_for(tmp_path, 20):
+            pass
+    with hold._room_for(tmp_path, 80):           # let go once it is in
+        pass

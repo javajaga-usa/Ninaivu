@@ -250,6 +250,36 @@ def lock_for(what: str, folder: str | Path) -> threading.Lock:
         return _LOCKS.setdefault(key, threading.Lock())
 
 
+#: Bytes being written into each originals folder right now, by folder: the
+#: Primary sends several files at once (courier.SEND_AT_ONCE), and each one
+#: checking the free space alone let them all take the same last gigabytes.
+_INCOMING: dict[str, int] = {}
+
+
+@contextlib.contextmanager
+def _room_for(folder: Path, size: int):
+    """Hold *size* bytes of *folder*'s disk for a file on its way in;
+    :class:`Refused` ("full") when the disk would go below :data:`RESERVE`."""
+    key = str(folder)
+    with _LOCKS_GUARD:
+        try:
+            free = shutil.disk_usage(folder).free
+        except OSError:
+            raise Refused("away") from None
+        if free - _INCOMING.get(key, 0) - size < RESERVE:
+            raise Refused("full")
+        _INCOMING[key] = _INCOMING.get(key, 0) + size
+    try:
+        yield
+    finally:
+        with _LOCKS_GUARD:
+            left = _INCOMING.get(key, 0) - size
+            if left > 0:
+                _INCOMING[key] = left
+            else:
+                _INCOMING.pop(key, None)
+
+
 class Holding:
     """The originals folder on this computer, and its record."""
 
@@ -563,12 +593,12 @@ class Holding:
             raise Refused("algo")
         if size < 0:
             raise Refused("size")
-        try:
-            free = shutil.disk_usage(self.folder).free
-        except OSError:
-            raise Refused("away") from None
-        if free - size < RESERVE:
-            raise Refused("full")
+        with _room_for(self.folder, size):
+            return self._receive(library, name, clean, size=size, algo=algo,
+                                 digest=digest, mtime=mtime, body=body, fresh=fresh)
+
+    def _receive(self, library: str, name: str, clean: str, *, size: int, algo: str,
+                 digest: str, mtime: float, body: BinaryIO, fresh) -> dict[str, Any]:
         with self._lock, self._ledger() as conn:
             base = self._library_folder(conn, library, name)
         target = base / clean
