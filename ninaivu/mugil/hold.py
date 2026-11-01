@@ -423,8 +423,17 @@ class Holding:
         """Keep the file found at *rel* by hand, if it is the one *item*
         describes and has not changed since it was fingerprinted."""
         path = f"{folder}/{rel}"
-        found = conn.execute("SELECT size, mtime, algo, digest FROM found WHERE path=?",
+        found = conn.execute("SELECT path, size, mtime, algo, digest FROM found WHERE path=?",
                              (path,)).fetchone()
+        if found is None:
+            # A copy made on a Mac's older disk names files decomposed (NFD:
+            # accented letters, Tamil vowel signs such as ொ), and the walk
+            # records them so; every path here is composed (clean_path). The
+            # file was not found, sent again, and kept twice under two names.
+            other = unicodedata.normalize("NFD", path)
+            if other != path:
+                found = conn.execute("SELECT path, size, mtime, algo, digest FROM found "
+                                     "WHERE path=?", (other,)).fetchone()
         try:
             size = int(item.get("size") or -1)
         except (TypeError, ValueError):
@@ -435,6 +444,32 @@ class Holding:
         target = self.folder / folder / rel
         if not stays_inside(self.folder, target) or target.is_symlink():
             return False
+        if found["path"] != path:
+            # Named as the record names it, so it is read again where it is
+            # looked for. On a disk that takes the two spellings for one name
+            # (a Mac's) it is that file already.
+            spelled = self.folder / found["path"]
+            if not stays_inside(self.folder, spelled) or spelled.is_symlink():
+                return False
+            try:
+                if not (target.exists() and os.path.samefile(spelled, target)):
+                    if target.exists():
+                        return False            # a different file is there: sent instead
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    if not stays_inside(self.folder, target.parent):
+                        return False
+                    os.rename(spelled, target)
+                    # The folders it was in, under the other spelling, go
+                    # once the last file has moved out of them.
+                    emptied = spelled.parent
+                    while emptied != self.folder and stays_inside(self.folder, emptied):
+                        try:
+                            emptied.rmdir()
+                        except OSError:
+                            break
+                        emptied = emptied.parent
+            except OSError:
+                return False
         try:
             now = target.stat()
         except OSError:
@@ -456,7 +491,7 @@ class Holding:
             "INSERT OR REPLACE INTO kept (library, rel_path, size, algo, digest, mtime, kept_at) "
             "VALUES (?,?,?,?,?,?,?)",
             (library, rel, size, found["algo"], found["digest"], float(mtime), time.time()))
-        conn.execute("DELETE FROM found WHERE path=?", (path,))
+        conn.execute("DELETE FROM found WHERE path=?", (found["path"],))
         return True
 
     # -- what was copied here by hand ----------------------------------------
