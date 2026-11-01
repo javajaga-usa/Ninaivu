@@ -1493,7 +1493,7 @@ def test_originals_sent_at_once_are_kept_when_windows_answers_the_long_form(
         return answer if os.path.exists(answer) else "\\\\?\\" + answer
 
     monkeypatch.setattr(files.os.path, "realpath", windows)
-    assert files.real_path("/no/such/place") == "/no/such/place"
+    assert files.real_path("/no/such/place") == real("/no/such/place")
     assert files.stays_inside("/no/such", "/no/such/place/photo.jpg")
     assert not files.stays_inside("/no/such", "/elsewhere/photo.jpg")
     mine, courier = primary
