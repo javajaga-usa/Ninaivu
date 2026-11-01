@@ -33,9 +33,10 @@ import sys
 import time
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
-__all__ = ["RUN_FILE", "write", "read", "clear", "is_running", "new_token", "in_container"]
+__all__ = ["RUN_FILE", "write", "read", "clear", "is_running", "new_token", "in_container",
+           "server_lock", "starting_lock", "AlreadyRunning", "AlreadyStarting"]
 
 #: The name of the file, inside the state directory.
 RUN_FILE = "ninaivu.run"
@@ -114,10 +115,14 @@ class AlreadyRunning(RuntimeError):
     """The state directory belongs to an active server."""
 
 
+class AlreadyStarting(AlreadyRunning):
+    """Another start is under way for the state directory (an index being
+    brought in from another computer, as a rule): it opens by itself."""
+
+
 @contextmanager
-def server_lock(state_dir):
-    """OS-owned lock, automatically released even if the server crashes."""
-    path = Path(state_dir) / 'ninaivu-server.lock'
+def _os_lock(path: Path, refused: Callable[[], BaseException]):
+    """Hold an OS-owned lock on *path*; released however the process ends."""
     path.parent.mkdir(parents=True, exist_ok=True)
     handle = path.open('a+b')
     locked = False
@@ -134,7 +139,7 @@ def server_lock(state_dir):
                 fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
             locked = True
         except OSError as exc:
-            raise AlreadyRunning('Another Ninaivu server is already using this state directory.') from exc
+            raise refused() from exc
         yield
     finally:
         if locked:
@@ -150,6 +155,47 @@ def server_lock(state_dir):
                 pass
         handle.close()
 
+
+@contextmanager
+def server_lock(state_dir):
+    """OS-owned lock, automatically released even if the server crashes."""
+    with _os_lock(Path(state_dir) / 'ninaivu-server.lock', lambda: AlreadyRunning(
+            'Another Ninaivu server is already using this state directory.')):
+        yield
+
+
+def starting_lock_path(state_dir) -> Path:
+    """Beside the state folder, not in it: an import renames the state folder,
+    which Windows refuses while a file inside it is held open."""
+    folder = Path(state_dir).expanduser().absolute()
+    return folder.parent / f'.{folder.name}.starting.lock'
+
+
+@contextmanager
+def starting_lock(state_dir):
+    """Held from the first moment of a start until the server lock is held.
+
+    An index brought in from another computer is put in place at start,
+    before the server lock is taken (the import replaces the folder that lock
+    lives in). Nothing stopped a second start in that time: on a large
+    library the import is the better part of an hour, somebody opened
+    Ninaivu again because it seemed stuck, and the second start found the
+    import already taken, opened the old, empty folder and began indexing the
+    library from nothing, while the first went on unpacking. This lock is
+    what the second start now meets instead.
+    """
+    path = starting_lock_path(state_dir)
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.open('a+b').close()
+    except OSError:
+        # The folder holding the state folder cannot be written (a container
+        # mounting it at /data): the lock goes inside, which serves everywhere
+        # but Windows, where it is never needed.
+        path = Path(state_dir) / 'ninaivu-starting.lock'
+    with _os_lock(path, lambda: AlreadyStarting(
+            'Ninaivu is already starting with this state directory.')):
+        yield
 
 
 def in_container(environ=None, exists=os.path.exists) -> bool:

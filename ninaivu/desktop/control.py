@@ -280,6 +280,15 @@ GIVE_UP_AFTER = 2
 #: In the Control Panel's own folder: those starts, for this version.
 FAILED_STARTS = 'failed-starts.json'
 
+
+def _pid_alive(pid) -> bool:
+    """Whether the process a start note names is still there."""
+    try:
+        return runfile.is_running(int(pid))
+    except (TypeError, ValueError, OverflowError):
+        return False
+
+
 #: How a start is waited on. Not a fixed minute any more: the first start
 #: after an update copies the whole index first, a minute on its own for a
 #: 2.7 GB index, and the panel called a healthy server late. The server says
@@ -292,6 +301,9 @@ FIRST_WORD_SECONDS = 180
 QUIET_SECONDS = 90
 #: However busy it says it is, a start this long is told to the person.
 START_CEILING_SECONDS = 60 * 60
+#: How the server's start note begins while it brings in an index from
+#: another computer (__main__.py, storage/full_export.py).
+IMPORT_STEP = 'bringing in the index'
 #: How long a stop is waited on. The server finishes the files in hand and
 #: checkpoints the index first; the console's restart helper waits as long.
 STOP_SECONDS = 20 * 60
@@ -461,6 +473,15 @@ class Controller:
         if self.record(): return 'Ninaivu is already running.'
         self.refresh_network_access()
         if self.started and self.started.poll() is None: return 'Ninaivu is still starting.'
+        # A start this panel did not make — the console's Restart, or another
+        # window — may be at work: bringing in an index from another computer
+        # takes the better part of an hour on a large library, with no run
+        # file until it is done. Starting another then opened the old folder
+        # and indexed the library from nothing. Wait for that one instead.
+        other = starting.read(self.cfg.state_dir)
+        if other and _pid_alive(other.get('pid')):
+            self.started = None
+            return self._wait_for_start(float(other.get('since') or time.time()))
         self.save_mode(self.mode)
         env = with_tool_folders(dict(os.environ, **environment(self.mode)))
         env['NINAIVU_STATE_DIR'] = str(self.cfg.state_dir)
@@ -503,7 +524,7 @@ class Controller:
                 self.save_mode(self.mode)
                 (self.runtime / FAILED_STARTS).unlink(missing_ok=True)
                 return 'Ninaivu is running.'
-            if self.started.poll() is not None:
+            if self.started is not None and self.started.poll() is not None:
                 went_back = self.failed_start()
                 if went_back:
                     return went_back
@@ -523,7 +544,11 @@ class Controller:
                 raise RuntimeError(f'Ninaivu stopped saying how its start is going while '
                                    f'{step}, {describe_wait(now - heard)} ago. It may still '
                                    f'finish: watch the status, or use View logs.')
-            if waited > START_CEILING_SECONDS:
+            # Not while an index is being brought in: that says how far it has
+            # got as it goes (storage/full_export.py), and on a large library
+            # it rightly takes longer than any ceiling; a stall still shows as
+            # the note going quiet, above.
+            if waited > START_CEILING_SECONDS and not str(step or '').startswith(IMPORT_STEP):
                 raise RuntimeError(f'Ninaivu has been starting for {describe_wait(waited)}, '
                                    f'still {step or "starting"}. It carries on: watch the '
                                    f'status, or use View logs.')
