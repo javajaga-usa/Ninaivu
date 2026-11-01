@@ -1490,7 +1490,9 @@ def test_originals_sent_at_once_are_kept_when_windows_answers_the_long_form(
 
     def windows(path, *args, **kwargs):
         answer = real(path, *args, **kwargs)
-        return answer if os.path.exists(answer) else "\\\\?\\" + answer
+        if answer.startswith("\\\\?\\") or os.path.exists(answer):
+            return answer                 # on Windows the race itself may answer so
+        return "\\\\?\\" + answer
 
     monkeypatch.setattr(files.os.path, "realpath", windows)
     assert files.real_path("/no/such/place") == real("/no/such/place")
