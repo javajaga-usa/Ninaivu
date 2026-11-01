@@ -24,6 +24,7 @@ from __future__ import annotations
 from .. import __version__
 from ..utils.files import sha256_file
 
+import hashlib
 import json
 import logging
 import os
@@ -35,6 +36,7 @@ import threading
 import time
 import uuid
 import zlib
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 from datetime import datetime
 from pathlib import Path, PurePosixPath
@@ -350,6 +352,9 @@ def _full_sizes(state_dir: Path) -> tuple[int, int]:
     return files, total
 
 
+#: How many files are summed at once while an export is checked.
+HASH_WORKERS = max(2, min(8, os.cpu_count() or 2))
+
 #: How many files go by between two reports of how far a step is.
 REPORT_EVERY = 200
 
@@ -515,15 +520,21 @@ def _snapshot(state_dir: Path | str, out_dir: Path | str,
         files_total, bytes_total = len(everything), sum(sizes.values())
         tally = _Tally(say, files_total, bytes_total)
         tally.start("checking")
-        for path in everything:
-            manifest["files"][path.relative_to(staged).as_posix()] = {
-                "size": sizes[path], "sha256": sha256_file(path)}
-            tally.add(sizes[path])
+        # Several at a time: a full export is hundreds of thousands of small
+        # thumbnails, where the time goes in opening each one, not in the sum.
+        with ThreadPoolExecutor(max_workers=HASH_WORKERS) as pool:
+            for path, digest in zip(everything, pool.map(sha256_file, everything)):
+                manifest["files"][path.relative_to(staged).as_posix()] = {
+                    "size": sizes[path], "sha256": digest}
+                tally.add(sizes[path])
         (staged / "backup_manifest.json").write_text(
             json.dumps(manifest, indent=2), encoding="utf-8")
         try:
+            # Every file, every size, the databases sound — but not every sum
+            # again: they were worked out from these same files a moment ago,
+            # and summing them twice was a third of an export's time.
             tally.start("verifying")
-            verify_state(staged, checked=tally.add)
+            verify_state(staged, checked=tally.add, hashes=False)
         except (ValueError, OSError, sqlite3.Error) as exc:
             log.error("backup abandoned: staged state is incomplete: %s", exc)
             return None
@@ -626,9 +637,15 @@ def _unique_object(pairs):
     return result
 
 
-def verify_state(state: Path, checked: Callable[[int], None] | None = None) -> None:
+def verify_state(state: Path, checked: Callable[[int], None] | None = None,
+                 *, hashes: bool = True) -> None:
     """ValueError unless *state* is exactly what its manifest says, and sound.
-    *checked* is told the size of each file once its checksum matched."""
+    *checked* is told the size of each file once its checksum matched.
+
+    *hashes* False when every checksum was matched already as the files were
+    written (:func:`extract_verified`, and an export, which has just worked
+    them out from the same files): reading every file again only to come to
+    the same sums doubled the time of both."""
     manifest = json.loads((state / "backup_manifest.json").read_text(encoding="utf-8"),
                           object_pairs_hook=_unique_object)
     if not isinstance(manifest, dict) or not isinstance(manifest.get("files"), dict):
@@ -646,7 +663,8 @@ def verify_state(state: Path, checked: Callable[[int], None] | None = None) -> N
         if not isinstance(meta, dict) or type(meta.get("size")) is not int:
             raise ValueError(f"Invalid file metadata: {name}")
         path = state / name
-        if path.stat().st_size != meta["size"] or sha256_file(path) != meta.get("sha256"):
+        if path.stat().st_size != meta["size"] or (
+                hashes and sha256_file(path) != meta.get("sha256")):
             raise ValueError(f"Checksum or size mismatch: {name}")
         if checked is not None:
             checked(meta["size"])
@@ -677,6 +695,93 @@ def extract(archive: Path, dest: Path) -> Path:
         else:
             tar.extractall(dest, members=members)
     return dest / "state"
+
+
+#: How much of a member is read at a time while it is unpacked and summed.
+CHUNK = 1 << 20
+
+
+def extract_verified(archive: Path | str, dest: Path,
+                     unpacked: Callable[[int, int], None] | None = None) -> Path:
+    """Unpack *archive* into *dest* and check every file against its manifest
+    in the same pass; returns the extracted state folder.
+
+    The same checks as :func:`safe_members`, :func:`extract` and
+    :func:`verify_state` together, reading the archive once. Those read it
+    three times over — every name first, then every byte to unpack it (a
+    gzip stream cannot go back, so from the start again), then every unpacked
+    file to sum it — and an import of a large library spent most of an hour
+    doing so. *unpacked* is told ``(files done, files in the manifest)``.
+    ValueError on anything that does not match; nothing is left that a
+    restore would take for whole, since *dest* is the caller's to throw away.
+    """
+    root = Path(dest).resolve()
+    root.mkdir(parents=True, exist_ok=True)
+    base = str(root)
+    manifest: dict[str, Any] | None = None
+    summed: dict[str, tuple[int, str]] = {}
+    seen: set[str] = set()
+    made: set[str] = {base}
+    total = 0
+    # Per file, as little as possible: on 200,000 thumbnails the time goes in
+    # what is done for each one, not in the bytes. No resolve() — a name
+    # valid_state_path accepts has no "..", no root and no drive, and *dest*
+    # is a new, empty folder this writes nothing but plain files and folders
+    # into, so the name joined on is inside it — and each folder made once.
+    with tarfile.open(archive, "r|gz") as tar:
+        for member in tar:
+            is_dir = member.isdir()
+            name = member.name.rstrip("/") if is_dir else member.name
+            key = name.casefold()
+            portable = (name == "state" and is_dir) or (
+                name.startswith("state/") and valid_state_path(name[6:]))
+            if not portable or key in seen or not (member.isfile() or is_dir):
+                raise ValueError("The archive contains unsafe or unexpected entries "
+                                 "(outside the restore directory, or not a plain file)")
+            seen.add(key)
+            target = os.path.join(base, *name.split("/"))
+            if is_dir:
+                if target not in made:
+                    os.makedirs(target, exist_ok=True)
+                    made.add(target)
+                continue
+            folder = os.path.dirname(target)
+            if folder not in made:
+                os.makedirs(folder, exist_ok=True)
+                made.add(folder)
+            source = tar.extractfile(member)
+            digest = hashlib.sha256()
+            size = 0
+            with open(target, "xb") as out:
+                while source is not None and (chunk := source.read(CHUNK)):
+                    out.write(chunk)
+                    digest.update(chunk)
+                    size += len(chunk)
+            relative = name[6:]
+            if relative == "backup_manifest.json":
+                with open(target, encoding="utf-8") as handle:
+                    manifest = json.load(handle, object_pairs_hook=_unique_object)
+                if not isinstance(manifest, dict) or not isinstance(manifest.get("files"), dict):
+                    raise ValueError("Manifest must contain a files object")
+                total = len(manifest["files"])
+                continue
+            summed[relative] = (size, digest.hexdigest())
+            if unpacked is not None:
+                unpacked(len(summed), total)
+    if manifest is None:
+        raise ValueError("The archive has no manifest")
+    files = manifest["files"]
+    if set(files) != set(summed):
+        raise ValueError("Manifest does not exactly match the archived files")
+    for relative, (size, sha) in summed.items():
+        meta = files[relative]
+        if not isinstance(meta, dict) or meta.get("size") != size or meta.get("sha256") != sha:
+            raise ValueError(f"Checksum or size mismatch: {relative}")
+    state = root / "state"
+    # The rest of the checks: the databases open and are sound, and what
+    # waits to be uploaded is there. The sums were matched just now.
+    verify_state(state, hashes=False)
+    return state
 
 
 def verify_bundle(archive: Path | str) -> dict[str, Any]:

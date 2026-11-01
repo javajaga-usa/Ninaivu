@@ -30,6 +30,7 @@ import sys
 import tarfile
 import threading
 import time
+import traceback
 import zlib
 from pathlib import Path
 from typing import Any
@@ -556,6 +557,26 @@ class _Both(io.TextIOBase):
                 pass
 
 
+def _library_folders(state_dir: Path | str) -> list[str]:
+    """The library folders this computer's settings name, before an import
+    replaces them with the other computer's."""
+    data = _read_json(Path(state_dir) / "config.json") or {}
+    folders = [str(r) for r in (data.get("roots") or []) if isinstance(r, str) and r]
+    active = data.get("active_root")
+    if isinstance(active, str) and active and active not in folders:
+        folders.insert(0, active)
+    return folders
+
+
+def _took(seconds: float) -> str:
+    minutes = int(seconds // 60)
+    if minutes < 1:
+        return f"{int(seconds)} seconds"
+    if minutes < 60:
+        return f"{minutes} minute{'s' if minutes != 1 else ''}"
+    return f"{minutes // 60} h {minutes % 60:02d} min"
+
+
 def apply_pending(state_dir: Path | str) -> bool | None:
     """Do the import the console asked for, before Ninaivu opens anything.
 
@@ -580,18 +601,45 @@ def apply_pending(state_dir: Path | str) -> bool | None:
     except (Refused, OSError):
         found = {}
     print(f"Importing the index from {bundle} before starting.", flush=True)
+    print("  Do not start Ninaivu again while this runs: it opens by itself when "
+          "the index is in place.", flush=True)
     from ..cli import backup_restore                       # noqa: PLC0415
+    from ..server import starting                          # noqa: PLC0415
+    # This computer's own library folders, chosen here before the import: the
+    # imported settings name the other computer's, which are not here.
+    here = _library_folders(state_dir)
+
+    def progress(stage: str, done_files: int, total: int) -> None:
+        percent = done_files * 100 // total if total else 0
+        starting.step(f"bringing in the index from the other computer: {stage}, {percent}%")
+
     said = io.StringIO()
     try:
         # What the restore says went wrong is what the console shows; it
         # still reaches the server's log as well.
         with contextlib.redirect_stderr(_Both(said, sys.stderr)):
-            done = bool(str(bundle)) and backup_restore.restore_backup(bundle)
+            done = bool(str(bundle)) and backup_restore.restore_backup(bundle, progress)
         lines = [line.strip(" ✗") for line in said.getvalue().splitlines() if line.strip()]
         error = None if done else (lines[-1] if lines else "The import was refused.")
     except Exception:                                     # noqa: BLE001
         log.exception("the import failed")
+        traceback.print_exc()             # before logging is set up, the log is stderr
         done, error = False, "The import failed part-way; Ninaivu's log says why."
+    mapped: dict[str, str] = {}
+    if done:
+        starting.step("bringing in the index from the other computer: finding the library")
+        from . import library_id                           # noqa: PLC0415
+        try:
+            mapped = library_id.adopt_for_import(state_dir, here)
+        except Exception:                                 # noqa: BLE001
+            log.exception("could not match the imported library to this computer's")
+        for old, new in mapped.items():
+            print(f"  • The library at {old} on the other computer is {new} here; the "
+                  f"index is moved to it now.", flush=True)
+        print(f"  ✓ The index from {bundle.name} is in place, in "
+              f"{_took(time.time() - started)}.", flush=True)
+    else:
+        print(f"  ✗ The index was not imported: {error}", file=sys.stderr, flush=True)
     try:
         _write_json(Path(state_dir) / RESULT, {
             "ok": done, "at": time.time(), "started": started,
@@ -599,7 +647,8 @@ def apply_pending(state_dir: Path | str) -> bool | None:
             "asked_at": (asked or {}).get("asked_at"), "error": error,
             "files": found.get("files"), "bytes": found.get("bytes"),
             "thumbnails": found.get("thumbnails"), "counts": found.get("counts") or {},
-            "made_by": found.get("version"), "full": found.get("full")})
+            "made_by": found.get("version"), "full": found.get("full"),
+            "library_here": mapped})
     except OSError:
         pass
     return done

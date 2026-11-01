@@ -381,9 +381,17 @@ export class IndexExport {
     if (found.left_out?.length) {
       report.append(el('div', 'hint subtle', i18n.t('The keys and certificates were left out of it; this computer keeps its own.')));
     }
-    const ok = this.showCheck(report, found);
-    if (ok) report.append(el('div', 'mg-alert', i18n.t('Importing replaces everything this computer’s Ninaivu knows. The index that is here now is kept beside it, in case.')));
-    $('#ix-import').disabled = !ok;
+    // Import need not wait for the check: it checks every file again as it
+    // unpacks, and keeps the index that is here if one does not match. Only
+    // a check that has found a problem holds it back.
+    const passed = this.showCheck(report, found);
+    const check = this.state?.check;
+    const failed = Boolean(check && check.bundle === found.bundle && !check.running && !check.ok);
+    if (!failed) {
+      if (!passed) report.append(el('div', 'hint', i18n.t('You need not wait for the check: Import checks every file again as it puts them in place, and keeps the index that is here if one is not right.')));
+      report.append(el('div', 'mg-alert', i18n.t('Importing replaces everything this computer’s Ninaivu knows. The index that is here now is kept beside it, in case.')));
+    }
+    $('#ix-import').disabled = failed;
   }
 
   /** How the reading-through of *found* is going; true once it passed. */
@@ -406,7 +414,7 @@ export class IndexExport {
           done: count(check.files_done), total: count(check.files_total),
           size_done: bytes(check.bytes_done), size_total: bytes(check.bytes_total), percent })));
       }
-      report.append(el('div', 'hint subtle', i18n.t('Running for {time}. Nothing is changed while it is checked; Import is offered when it has passed.',
+      report.append(el('div', 'hint subtle', i18n.t('Running for {time}. Nothing is changed while it is checked.',
         { time: took(check.seconds) })));
       return false;
     }
