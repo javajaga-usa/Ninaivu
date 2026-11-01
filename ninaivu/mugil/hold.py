@@ -221,6 +221,66 @@ def disk_problem(folder: Path, state_dir: Path | str) -> str | None:
     return None
 
 
+def find_moved(cfg, look=None) -> str | None:
+    """The originals folder found again by its disk's id, when it is not at
+    the path the settings give: the disk mounted under another name, or moved
+    to a computer with another system (``/Volumes/N300/Originals`` on a Mac,
+    ``/media/jaga/N300/Originals`` on Linux). Until somebody typed the new
+    path, the Secondary said its originals could not be reached and the
+    Primary waited. Taken only when exactly one folder carries the id; the
+    new path is saved and returned. None when nothing moved or nothing fits.
+    """
+    folder = str(getattr(cfg, "mugil_originals_dir", "") or "")
+    if not folder:
+        return None
+    if (Path(folder) / DISK_ID).is_file():
+        return None                                   # where it was
+    try:
+        known = json.loads((Path(cfg.state_dir) / KNOWN_DISKS).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(known, dict):
+        return None
+    wanted = str(known.get(folder) or "")
+    if not wanted:
+        try:
+            wanted = str(known.get(str(Path(folder).resolve())) or "")
+        except OSError:
+            wanted = ""
+    if not wanted:
+        return None
+    if look is None:
+        from ..storage.library_id import candidates             # noqa: PLC0415
+        look = candidates
+    hits = []
+    try:
+        places = list(look(folder))
+    except OSError:
+        places = []
+    for place in places:
+        try:
+            if place.is_dir() and (place / DISK_ID).read_text(encoding="utf-8").strip() == wanted:
+                if place not in hits:
+                    hits.append(place)
+        except OSError:
+            continue
+    if len(hits) != 1:
+        return None
+    new = str(hits[0])
+    known[new] = wanted
+    try:
+        from ..utils.files import atomic_write                  # noqa: PLC0415
+        atomic_write(Path(cfg.state_dir) / KNOWN_DISKS, json.dumps(known, indent=2))
+        cfg.mugil_originals_dir = new
+        cfg.save()
+    except OSError:
+        return None
+    import logging                                              # noqa: PLC0415
+    logging.getLogger(__name__).warning(
+        "the originals folder %s was not there; found it by its disk's id at %s", folder, new)
+    return new
+
+
 def clean_path(rel: str) -> str | None:
     """*rel* as a relative path with ``/`` between its parts, or None when it
     is not one: absolute, empty, with ``..`` or a Ninaivu name in it."""
@@ -684,5 +744,6 @@ def _same_bytes(a: Path, b: Path) -> bool:
                 return True
 
 
-__all__ = ["Holding", "Refused", "REASONS", "folder_problem", "clean_path", "hasher", "lock_for",
+__all__ = ["Holding", "Refused", "REASONS", "folder_problem", "find_moved", "clean_path",
+           "hasher", "lock_for",
            "LEDGER", "SET_ASIDE"]

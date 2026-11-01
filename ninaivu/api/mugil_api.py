@@ -878,6 +878,10 @@ def mugil_hello():
         return _not_here()
     if _signed(pairing.body_digest(b"")) is None:
         return _unsigned()
+    # The originals disk mounted at another path, or moved to a computer with
+    # another system: found again by its id before saying it is away.
+    from ..mugil.hold import find_moved                          # noqa: PLC0415
+    find_moved(cfg)
     holding = _holding(cfg)
     problem = (folder_problem(str(holding.folder), list(cfg.roots), cfg.state_dir)
                if holding is not None else "no folder")

@@ -1581,3 +1581,30 @@ def test_an_index_is_not_brought_to_the_secondary(tmp_path):
     with pytest.raises(full_export.Refused) as refused:
         full_export.look(tmp_path / "anything.tar.gz", state)
     assert "Secondary" in str(refused.value.said)
+
+
+def test_the_originals_folder_is_found_again_on_another_system(tmp_path):
+    """The N300 moved from a Mac (/Volumes/…) to Linux (/media/<user>/…):
+    found by its disk's id, not left saying the originals cannot be reached."""
+    import json
+    from ninaivu.mugil import hold
+
+    state = tmp_path / "state"
+    state.mkdir()
+    old = "/Volumes/N300/Originals"
+    new = tmp_path / "media" / "jaga" / "N300" / "Originals"
+    new.mkdir(parents=True)
+    (new / hold.DISK_ID).write_text("disk-1\n")
+    (state / hold.KNOWN_DISKS).write_text(json.dumps({old: "disk-1"}))
+    saved = []
+    cfg = SimpleNamespace(state_dir=state, mugil_originals_dir=old,
+                          save=lambda: saved.append(True))
+    assert hold.find_moved(cfg, look=lambda folder: [new]) == str(new)
+    assert cfg.mugil_originals_dir == str(new) and saved
+    # A copy of the disk beside it: two with the id, nothing is taken.
+    copy = tmp_path / "media" / "jaga" / "Copy" / "Originals"
+    copy.mkdir(parents=True)
+    (copy / hold.DISK_ID).write_text("disk-1\n")
+    cfg.mugil_originals_dir = old
+    assert hold.find_moved(cfg, look=lambda folder: [new, copy]) is None
+    assert cfg.mugil_originals_dir == old
