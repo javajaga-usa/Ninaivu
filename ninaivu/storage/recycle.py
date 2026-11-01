@@ -35,7 +35,7 @@ from pathlib import Path
 from typing import Any, Iterable, Sequence
 
 
-from ..utils.files import stays_inside, sync_folder
+from ..utils.files import real_path, stays_inside, sync_folder
 from . import db, new_files
 
 log = logging.getLogger(__name__)
@@ -94,8 +94,8 @@ def in_its_bin(root: str | Path, path: str | Path) -> bool:
     """
     if stays_inside(bin_path(root), path):
         return True
-    real = Path(os.path.realpath(path))
-    home = Path(os.path.realpath(root))
+    real = Path(real_path(path))
+    home = Path(real_path(root))
     for parent in real.parents:
         if parent.name == BIN_NAME:
             library = parent.parent

@@ -14,8 +14,8 @@ import shutil
 import stat
 from pathlib import Path
 
-__all__ = ["CHUNK", "LOCK_FLAGS", "copystat_unlocked", "create_new", "file_flags", "remove_own",
-           "same_bytes", "sha256_file", "stays_inside", "sync_folder", "unlock",
+__all__ = ["CHUNK", "LOCK_FLAGS", "copystat_unlocked", "create_new", "file_flags", "real_path",
+           "remove_own", "same_bytes", "sha256_file", "stays_inside", "sync_folder", "unlock",
            "atomic_write"]
 
 #: Bytes read at a time when a whole file is hashed or copied. Large enough
@@ -50,6 +50,25 @@ def same_bytes(a: Path | str, b: Path | str, chunk: int = CHUNK) -> bool:
         return False
 
 
+def real_path(path: Path | str) -> str:
+    r"""*path* with every link along it followed, as ``os.path.realpath``
+    gives it, but never in the ``\\?\`` long-path form.
+
+    On Windows ``realpath`` of a path that does not exist yet looks twice,
+    and when another thread makes one of its folders in between (four
+    originals arriving at once into the same new day's folder), the answer
+    comes back as ``\\?\C:\...``. That is not "inside" ``C:\...``, and the
+    original was refused as a path no library holds. No real path begins
+    with ``\\?\``, so taking it off is safe on every system.
+    """
+    real = os.path.realpath(path)
+    if real.startswith("\\\\?\\UNC\\"):
+        return "\\\\" + real[8:]
+    if real.startswith("\\\\?\\"):
+        return real[4:]
+    return real
+
+
 def stays_inside(base: Path | str, path: Path | str) -> bool:
     """Whether *path* is inside *base* once links are followed.
 
@@ -59,7 +78,7 @@ def stays_inside(base: Path | str, path: Path | str) -> bool:
     follows every link that already exists along the way; the parts that do
     not exist yet are kept as written, and those are made as real folders.
     """
-    return Path(os.path.realpath(path)).is_relative_to(os.path.realpath(base))
+    return Path(real_path(path)).is_relative_to(real_path(base))
 
 
 def create_new(path: Path | str):
