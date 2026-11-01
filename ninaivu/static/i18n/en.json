@@ -5023,5 +5023,6 @@
   "The archive has no manifest": "The archive has no manifest",
   "This computer is the Secondary: it keeps the originals for the Primary. Bring the index to the computer that is to be the Primary, or make this one a single computer first on its Two computers page.": "This computer is the Secondary: it keeps the originals for the Primary. Bring the index to the computer that is to be the Primary, or make this one a single computer first on its Two computers page.",
   "Nothing to type: on the Primary, open Mugil → Two computers and tap this computer when both screens show the same number.": "Nothing to type: on the Primary, open Mugil → Two computers and tap this computer when both screens show the same number.",
-  "Pair with a code instead": "Pair with a code instead"
+  "Pair with a code instead": "Pair with a code instead",
+  "Another computer took over as the Primary, and this one is a single computer again": "Another computer took over as the Primary, and this one is a single computer again"
 }

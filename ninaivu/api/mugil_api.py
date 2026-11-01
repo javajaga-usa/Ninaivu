@@ -576,11 +576,36 @@ def _primary_seen(pair: dict) -> None:
     if now - _last_written.get(state, 0.0) < 60:
         return
     _last_written[state] = now
+    if pair.get("role") == SECONDARY:
+        _follow_the_primary(pair, state)
     machines.remember(state, {
         "machine": {"name": pair.get("partner_name") or "", "role": PRIMARY,
                     "version": str(request.headers.get("X-Ninaivu-Version", ""))[:40]},
         "address": request.remote_addr or "",
         "version": str(request.headers.get("X-Ninaivu-Version", ""))[:40] or None})
+
+
+def _follow_the_primary(pair: dict, state: str) -> None:
+    """Where the Primary is now, from where its signed requests come: a new
+    address from the router, or the index moved to another computer. What
+    this computer asks of the Primary goes there, without anybody typing it."""
+    address = request.remote_addr or ""
+    if not address or address == pair.get("partner_address"):
+        return
+    moved = {**pair, "partner_address": address}
+    url = str(pair.get("partner_url") or "")
+    if url:
+        from urllib.parse import urlsplit                        # noqa: PLC0415
+        try:
+            port = urlsplit(url).port
+        except ValueError:
+            port = None
+        if port:
+            moved["partner_url"] = f"{urlsplit(url).scheme or 'http'}://{_host(address)}:{port}"
+    try:
+        pairing.save(state, moved)
+    except OSError as exc:
+        log.warning("Could not note the Primary's new address: %s", exc)
 
 
 def _unsigned():

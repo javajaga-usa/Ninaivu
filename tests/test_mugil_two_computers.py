@@ -1638,3 +1638,93 @@ def test_a_rebuild_writes_each_name_as_the_index_spells_it(tmp_path):
     spelled = rebuild.index_spellings(SimpleNamespace(db_path=index), base)
     assert spelled == {unicodedata.normalize("NFC", decomposed): decomposed}
     assert rebuild.index_spellings(SimpleNamespace(db_path=tmp_path / "none.db"), base) == {}
+
+
+# --- seamless: nobody re-pairs, unpairs or types an address -------------------
+
+def test_a_replaced_primary_steps_down_by_itself(primary, secondary, scanned, app):
+    """The index moved to another computer, which took over: the one it left
+    becomes a single computer again, its library as it was, instead of being
+    refused at every run until somebody unpairs it."""
+    mine, courier = primary
+    old_key = pairing.load(mine.state_dir)["key"]
+    # The new computer: the same index and pairing, and it takes over.
+    moved = copy.copy(mine)
+    moved.state_dir = mine.state_dir.parent / "moved-state"
+    moved.state_dir.mkdir()
+    pairing.save(moved.state_dir, {"key": old_key, "role": "primary", "moved_in_at": time.time()})
+    newcomer = Courier(moved, courier.connect_db, partner=courier.partner)
+    assert run(newcomer)["complete"] is True
+
+    told = []
+    courier.notify = lambda event, summary, detail: told.append(event)
+    courier.cfg.save = lambda: None
+    courier._run_logged()
+    assert courier.last.get("stepped_down") is True
+    assert mine.mugil_role == "single" and mine.mugil_partner_url == ""
+    assert pairing.load(mine.state_dir) is None
+    assert told == ["primary_replaced"]
+
+
+def test_the_primary_finds_its_secondary_at_a_new_address(primary, secondary, scanned,
+                                                          monkeypatch):
+    """The router gave the Secondary another address: found on the network,
+    proven by the pairing's key, and spoken to there from now on."""
+    from ninaivu.mugil import courier as courier_module, meeting
+
+    mine, courier = primary
+    through = courier.partner
+
+    class Moved(through):
+        def request(self, method, path, **kwargs):
+            if self.url == "http://linux-pc:3000":
+                raise PartnerError("The other computer did not answer: refused", 0)
+            return super().request(method, path, **kwargs)
+
+    courier.partner = Moved
+    mine.save = lambda: None
+    monkeypatch.setattr(courier_module, "AWAY_FIRST", 0.01)
+    monkeypatch.setattr(meeting, "discover", lambda **_: [
+        {"id": "x", "address": "192.168.1.77", "port": 8080, "name": "Linux PC", "waiting": False}])
+    result = run(courier)
+    assert result["complete"] is True
+    assert mine.mugil_partner_url == "http://192.168.1.77:8080"
+    assert pairing.load(mine.state_dir)["partner_url"] == "http://192.168.1.77:8080"
+
+
+def test_a_stranger_on_the_network_is_not_taken_for_the_secondary(primary, secondary,
+                                                                  monkeypatch):
+    from ninaivu.mugil import meeting
+
+    mine, courier = primary
+    through = courier.partner
+
+    class Nobody(through):
+        def request(self, method, path, **kwargs):
+            if self.url != "http://linux-pc:3000":
+                raise PartnerError("This request is not signed by the computer this one "
+                                   "is paired with.", 401)
+            raise PartnerError("The other computer did not answer: refused", 0)
+
+    courier.partner = Nobody
+    monkeypatch.setattr(meeting, "discover", lambda **_: [
+        {"id": "y", "address": "192.168.1.66", "port": 8080, "name": "Other", "waiting": False}])
+    partner = Nobody("http://linux-pc:3000", "ab" * 32)
+    assert courier._find_again(partner, now=10_000.0) is False
+    assert partner.url == "http://linux-pc:3000" and mine.mugil_partner_url == "http://linux-pc:3000"
+    # And it does not look again at once.
+    assert courier._find_again(partner, now=10_001.0) is False
+
+
+def test_the_secondary_follows_the_primary_to_a_new_address(app, secondary):
+    from ninaivu.api import mugil_api
+
+    cfg, _ = secondary
+    pairing.save(cfg.state_dir, {"key": "ab" * 32, "role": "secondary",
+                                 "partner_address": "192.168.1.10",
+                                 "partner_url": "http://192.168.1.10:8080"})
+    with app.test_request_context("/api/mugil/hello", environ_base={"REMOTE_ADDR": "100.64.0.9"}):
+        mugil_api._follow_the_primary(pairing.load(cfg.state_dir), str(cfg.state_dir))
+    now = pairing.load(cfg.state_dir)
+    assert now["partner_address"] == "100.64.0.9"
+    assert now["partner_url"] == "http://100.64.0.9:8080"
