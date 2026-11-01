@@ -1392,7 +1392,12 @@ def test_the_secondary_wakes_the_primary_before_its_catch_up(two_apps, tmp_path,
 
     sent = []
     waker = wake.Waker(other, sender=lambda packet, to: sent.append((packet, to)))
-    night = dt.datetime.now().replace(hour=1, minute=56, second=0, microsecond=0).timestamp()
+    # 01:56 on the Primary's clock, by the offset it sent: built from this
+    # computer's local time instead, the test failed on the night clocks go
+    # back, when 01:56 comes twice and the first one is not the one sent.
+    offset = dt.timezone(dt.timedelta(seconds=wake.load(other.state_dir)["utc_offset"]))
+    night = dt.datetime.now(offset).replace(hour=1, minute=56, second=0,
+                                           microsecond=0).timestamp()
     waker.clock = lambda: night - 120
     assert waker.look() is False and not sent
     waker.clock = lambda: night
@@ -1560,6 +1565,8 @@ def test_a_full_export_carries_the_pairing_and_a_backup_away_does_not(tmp_path):
         conn.execute("CREATE TABLE assets (id INTEGER PRIMARY KEY)")
     (state / "config.json").write_text("{}")
     pairing.save(state, {"key": "ab" * 32, "role": "primary"})
+    with sent_record(state) as record:
+        record.execute("INSERT INTO libraries (root, library, name) VALUES ('/p', 'lib-1', 'p')")
 
     def names(bundle):
         with tarfile.open(bundle) as tar:
@@ -1567,7 +1574,7 @@ def test_a_full_export_carries_the_pairing_and_a_backup_away_does_not(tmp_path):
 
     full = backup.snapshot(state, tmp_path / "out", full=True)
     away = backup.snapshot(state, tmp_path / "away", leave_out=backup.KEPT_HOME)
-    assert "state/mugil-pair.json" in names(full)
+    assert {"state/mugil-pair.json", "state/mugil-sent.db"} <= names(full)
     assert "state/mugil-pair.json" not in names(away)
 
 

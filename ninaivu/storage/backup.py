@@ -86,7 +86,7 @@ EXTRAS = ("config.json", "library-path", "ninaivu-ca.crt", "ninaivu-ca.key",
 #: ones the thumbnails on this machine are named by.
 REPLACED_ONLY_IF_PRESENT = ("tls", "cloud-encryption.json", "google.json",
                             "gemini.json", "library-ids.json", "stories",
-                            "thumb-keys.json", "mugil-pair.json")
+                            "thumb-keys.json", "mugil-pair.json", "mugil-sent.db")
 
 #: What a full export carries beyond a backup (storage/full_export.py): what
 #: the machine worked out or the household made that a backup leaves to be
@@ -158,7 +158,12 @@ BLANKED_HOME = "secrets_blanked"
 #: Entries that are folders, and may hold files of their own.
 _FOLDERS = ("avatars", "archive-logs", "pending-uploads", "tls", "stories", *FULL_EXTRAS)
 
-DATABASES = ("index.db", "archive.db")
+DATABASES = ("index.db", "archive.db",
+             # Two computers: what the Secondary confirmed it keeps
+             # (mugil/courier.py). Without it, a Primary moved to a new
+             # computer could not send for an original it had let go until its
+             # first run had asked the Secondary about every file again.
+             "mugil-sent.db")
 
 
 def hot_copy(source: Path, target: Path) -> bool:
