@@ -5154,7 +5154,6 @@
   "No Secondary yet? Skip: pair later on Mugil → Two computers.": "இன்னும் இரண்டாம் கணினி இல்லையா? தவிர்க்கவும்: பின்னர் முகில் → இரண்டு கணினிகள் பக்கத்தில் இணைக்கலாம்.",
   "On the Primary, open Mugil → Two computers and press Show a code for the Secondary. Then type its address and the code here.": "முதன்மைக் கணினியில் முகில் → இரண்டு கணினிகள் திறந்து, இரண்டாம் கணினிக்கான குறியீட்டைக் காட்டு என்பதை அழுத்துங்கள். பிறகு அதன் முகவரியையும் குறியீட்டையும் இங்கே தட்டச்சு செய்யுங்கள்.",
   "Once the two are paired, the Primary’s library folders and their sizes are listed here.": "இரண்டும் இணைந்ததும், முதன்மைக் கணினியின் நூலகக் கோப்புறைகளும் அவற்றின் அளவுகளும் இங்கே பட்டியலிடப்படும்.",
-  "Or let the Primary find this computer: it is waiting now. On the Primary, open Mugil → Two computers and tap the computer showing the same number.": "அல்லது முதன்மைக் கணினி இதைக் கண்டுபிடிக்கட்டும்: இது இப்போது காத்திருக்கிறது. முதன்மைக் கணினியில் முகில் → இரண்டு கணினிகள் திறந்து, அதே எண்ணைக் காட்டும் கணினியைத் தட்டுங்கள்.",
   "Originals": "மூலப் படங்கள்",
   "Pair with the Primary": "முதன்மைக் கணினியுடன் இணை",
   "Pair with the Secondary": "இரண்டாம் கணினியுடன் இணை",
@@ -5273,5 +5272,7 @@
   "Running for {time}. Nothing is changed while it is checked.": "{time} ஆக நடக்கிறது. சரிபார்க்கும்போது எதுவும் மாற்றப்படாது.",
   "The archive contains unsafe or unexpected entries (outside the restore directory, or not a plain file)": "காப்பகத்தில் பாதுகாப்பற்ற அல்லது எதிர்பாராத உள்ளீடுகள் உள்ளன (மீட்டெடுப்புக் கோப்புறைக்கு வெளியே, அல்லது சாதாரணக் கோப்பு அல்ல)",
   "The archive has no manifest": "காப்பகத்தில் உள்ளடக்கப் பட்டியல் இல்லை",
-  "This computer is the Secondary: it keeps the originals for the Primary. Bring the index to the computer that is to be the Primary, or make this one a single computer first on its Two computers page.": "இந்தக் கணினி இரண்டாம் கணினி: முதன்மைக் கணினிக்கான மூலக் கோப்புகளை இது வைத்திருக்கிறது. முதன்மைக் கணினியாக இருக்கப்போகும் கணினிக்கு அட்டவணையைக் கொண்டுசெல்லுங்கள், அல்லது முதலில் இதன் இரண்டு கணினிகள் பக்கத்தில் இதைத் தனிக் கணினியாக்குங்கள்."
+  "This computer is the Secondary: it keeps the originals for the Primary. Bring the index to the computer that is to be the Primary, or make this one a single computer first on its Two computers page.": "இந்தக் கணினி இரண்டாம் கணினி: முதன்மைக் கணினிக்கான மூலக் கோப்புகளை இது வைத்திருக்கிறது. முதன்மைக் கணினியாக இருக்கப்போகும் கணினிக்கு அட்டவணையைக் கொண்டுசெல்லுங்கள், அல்லது முதலில் இதன் இரண்டு கணினிகள் பக்கத்தில் இதைத் தனிக் கணினியாக்குங்கள்.",
+  "Nothing to type: on the Primary, open Mugil → Two computers and tap this computer when both screens show the same number.": "எதையும் தட்டச்சு செய்ய வேண்டாம்: முதன்மைக் கணினியில் முகில் → இரண்டு கணினிகள் திறந்து, இரண்டு திரைகளிலும் ஒரே எண் தெரியும்போது இந்தக் கணினியைத் தட்டுங்கள்.",
+  "Pair with a code instead": "பதிலாகக் குறியீட்டுடன் இணை"
 }

@@ -96,9 +96,12 @@ ok('Manual: checked, and the Primary is let in', (await status(page)).manual.sta
 
 await page.click('#fd-next');
 await page.waitForFunction(() => /Pair with the Primary/.test(document.querySelector('#fd-title').textContent));
+ok('Secondary: being found comes first, with nothing to type',
+  /Nothing to type/.test(await page.textContent('#fd-body .fd-waiting')));
+ok('Secondary: the code is folded away', !(await page.isVisible('#fd-body form')));
+await page.click('#fd-body details.fd-by-code summary');
 ok('Secondary: the address and code are asked',
-  (await page.$$('#fd-body form input')).length === 2);
-ok('Secondary: it says it is waiting to be found', /waiting now/.test(await page.textContent('#fd-body')));
+  (await page.$$('#fd-body form input')).length === 2 && await page.isVisible('#fd-body form'));
 await shot(page, '3-pair-with-primary');
 await page.fill('#fd-body form input >> nth=0', '127.0.0.1:9');
 await page.fill('#fd-body form input >> nth=1', 'AAAA-BBBB');
