@@ -23,6 +23,7 @@ import sys
 import tempfile
 import threading
 import time
+import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Any, Callable
@@ -748,6 +749,18 @@ class ChecksumMismatch(ValueError):
     pass
 
 
+class CutShort(Exception):
+    """A download ended before the file's pinned size: the connection, not
+    the file."""
+
+
+#: How many times a download that is cut short is carried on before it is
+#: given up. Six models fetched at once over a home connection that dropped
+#: for a moment all failed together ("Broken pipe"), and three more were
+#: reported as not matching their checksum, when they were only short.
+DOWNLOAD_TRIES = 5
+
+
 def _hasher(entry: dict[str, Any]) -> tuple[Any, str]:
     """The hash a download is checked with, and the value it must come to.
 
@@ -827,20 +840,55 @@ def download_file(entry: dict[str, Any], on_bytes: Callable[[int], None] | None 
                                          prefix=f".{Path(entry['name']).name}.",
                                          suffix=".part", delete=False) as output:
             pending = Path(output.name)
-            request = urllib.request.Request(url, headers={"User-Agent": "Ninaivu model setup"})
-            with opener(request, timeout=60) as response:
-                written = 0
-                while chunk := response.read(1 << 20):
-                    written += len(chunk)
-                    if expected and written > expected:
-                        # More than the pinned size can never match: stop
-                        # now rather than fill the disk first (audit C-34).
-                        raise ChecksumMismatch(f"{entry['name']} was larger than its pinned "
-                                               f"size; it was discarded")
-                    output.write(chunk)
-                    digest.update(chunk)
-                    if on_bytes:
-                        on_bytes(len(chunk))
+            written = 0
+            tries = 0
+            while True:
+                headers = {"User-Agent": "Ninaivu model setup"}
+                if written:
+                    # Carry on from where the connection dropped, rather than
+                    # fetch gigabytes again.
+                    headers["Range"] = f"bytes={written}-"
+                request = urllib.request.Request(url, headers=headers)
+                try:
+                    with opener(request, timeout=60) as response:
+                        if written and getattr(response, "status", 206) != 206:
+                            # The server sent the whole file again: start over.
+                            output.seek(0)
+                            output.truncate()
+                            digest, pinned = _hasher(entry)
+                            if on_bytes:
+                                on_bytes(-written)
+                            written = 0
+                        while chunk := response.read(1 << 20):
+                            written += len(chunk)
+                            if expected and written > expected:
+                                # More than the pinned size can never match:
+                                # stop now rather than fill the disk first
+                                # (audit C-34).
+                                raise ChecksumMismatch(f"{entry['name']} was larger than "
+                                                       f"its pinned size; it was discarded")
+                            output.write(chunk)
+                            digest.update(chunk)
+                            if on_bytes:
+                                on_bytes(len(chunk))
+                    if expected and written < expected:
+                        # A connection closed early ends the read quietly. It
+                        # was reported as a checksum mismatch, as though the
+                        # file were wrong, when it was only short.
+                        raise CutShort(f"{written:,} of {expected:,} bytes")
+                    break
+                except (OSError, CutShort) as exc:
+                    if (isinstance(exc, urllib.error.HTTPError)
+                            and exc.code < 500 and exc.code not in (408, 429)):
+                        raise
+                    tries += 1
+                    if tries >= DOWNLOAD_TRIES:
+                        raise OSError(f"the download of {Path(entry['name']).name} kept being "
+                                      f"cut short ({exc}); check the connection and try "
+                                      f"again") from exc
+                    log.info("download of %s cut short (%s); carrying on in %ds",
+                             entry["name"], exc, min(30, 2 ** tries))
+                    time.sleep(min(30, 2 ** tries))
         if digest.hexdigest() != pinned:
             raise ChecksumMismatch(f"{entry['name']} did not match its pinned checksum; it was discarded")
         if "take" in entry:

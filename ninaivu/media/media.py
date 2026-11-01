@@ -627,7 +627,9 @@ def probe_video(path: str | Path) -> dict[str, Any]:
                 if rotation in (90, -90, 270, -270):
                     info["width"], info["height"] = info["height"], info["width"]
                 break
-    elif cv2 is not None and not timed_out:
+    elif cv2 is not None and not timed_out and os.access(path, os.R_OK):
+        # Not a file this user may not read: OpenCV, failing to open it as a
+        # video, tries it as an image sequence and prints a warning per file.
         # Not after ffprobe ran out of time: OpenCV would read the same file
         # inside this process, where nothing can time it out or stop it.
         cap = None
@@ -978,7 +980,7 @@ def extract_video_frame(path: str | Path, offset: float = 1.0, *,
             return None
         except (subprocess.SubprocessError, OSError, ValueError):
             pass
-    if cv2 is not None:
+    if cv2 is not None and os.access(path, os.R_OK):
         cap = None
         try:
             cap = cv2.VideoCapture(str(path))

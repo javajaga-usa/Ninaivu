@@ -71,6 +71,10 @@ def about() -> dict[str, str]:
 FACE_HOME = "home"
 FACE_ADMIN = "admin"
 
+#: How long the parts of a stop asked after its budget was spent are waited
+#: for, together, before any is named as not having stopped.
+LATE_STOP_GRACE = 5.0
+
 __all__ = [
     "create_app", "create_home_app", "create_admin_app", "build_services",
     "Config", "APP_NAME", "TAGLINE", "FACE_HOME", "FACE_ADMIN", "__version__",
@@ -1433,7 +1437,14 @@ class Services:
         # Each part is still asked in turn; once the budget is spent, the rest
         # are asked without being waited for, and whatever had not finished is
         # named rather than reported as stopped.
-        deadline = time.monotonic() + max(0.0, float(timeout))
+        began = time.monotonic()
+        deadline = began + max(0.0, float(timeout))
+        # Parts asked once the budget was spent. Joined for no time at all,
+        # each was named as "still stopping" a moment after it was asked:
+        # a scan that took the whole budget had every part after it reported
+        # stuck, twenty lines of it, though they stop in milliseconds. They
+        # are given a short wait together at the end instead.
+        late: list[tuple[str, threading.Thread, list[BaseException]]] = []
 
         def attempt(what: str, action) -> None:
             failed: list[BaseException] = []
@@ -1448,9 +1459,20 @@ class Services:
             worker.start()
             worker.join(max(0.0, deadline - time.monotonic()))
             if worker.is_alive():
-                problems.append(f"{what}: still stopping after {timeout:g} seconds")
+                late.append((what, worker, failed))
             elif failed:
                 problems.append(f"{what}: {failed[0]}")
+
+        def settle_late() -> None:
+            last = max(deadline, time.monotonic()) + LATE_STOP_GRACE
+            for what, worker, failed in late:
+                worker.join(max(0.0, last - time.monotonic()))
+                if worker.is_alive():
+                    problems.append(f"{what}: still stopping after "
+                                    f"{time.monotonic() - began:.0f} seconds")
+                elif failed:
+                    problems.append(f"{what}: {failed[0]}")
+            late.clear()
 
         # The scan first, and joined: it is the one holding the database open
         # for writing, so letting it finish the file it is on is what makes
@@ -1526,6 +1548,7 @@ class Services:
         if getattr(self, "_bin_stop", None) is not None:
             self._bin_stop.set()
         attempt("the power policy", self.power.stop)
+        settle_late()
         # Its stop waits only so long for the file in hand; a scan still
         # running after that has not stopped, whatever the call returned.
         if (getattr(self.scanner, "running", False)
