@@ -94,7 +94,7 @@ def test_the_release_workflow_builds_four_portable_downloads_and_signs_only_with
                                                 "pair-across"]
     # GitHub's runners unless a repository variable names one at home (the
     # Mac mini, Apple silicon too; its Linux runners are arm64 as well).
-    assert flow["jobs"]["macos"]["runs-on"] == "${{ vars.MAC_RUNNER || 'macos-14' }}", "Apple silicon"
+    assert flow["jobs"]["macos"]["runs-on"] == "${{ vars.MAC_RUNNER || 'macos-15' }}", "Apple silicon"
     assert flow["jobs"]["linux-arm64"]["runs-on"] == "${{ vars.LINUX_ARM64_RUNNER || 'ubuntu-24.04-arm' }}", \
         "built natively, not emulated"
     for job in ("windows", "macos", "linux", "linux-arm64"):
@@ -216,9 +216,9 @@ def test_every_download_is_used_as_a_household_would_before_a_release():
         assert "tools/check_portable.py pair" in runs, job
     across = flow["jobs"]["pair-across"]
     pairs = {(e["pair"], e["role"]): e["os"] for e in across["strategy"]["matrix"]["include"]}
-    assert pairs == {("mac-linux", "primary"): "macos-14", ("mac-linux", "secondary"): "ubuntu-latest",
+    assert pairs == {("mac-linux", "primary"): "macos-15", ("mac-linux", "secondary"): "ubuntu-latest",
                      ("windows-linux", "primary"): "windows-2022",
                      ("windows-linux", "secondary"): "ubuntu-latest",
-                     ("mac-windows", "primary"): "macos-14", ("mac-windows", "secondary"): "windows-2022"}
+                     ("mac-windows", "primary"): "macos-15", ("mac-windows", "secondary"): "windows-2022"}
     assert across["strategy"]["fail-fast"] is False, "both halves of a pair run to the end"
 

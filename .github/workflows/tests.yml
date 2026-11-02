@@ -218,9 +218,9 @@ jobs:
 
   full-tier:
     name: Full tier · Apple silicon, model stack
-    # macos-14 runners are Apple silicon (M1): the image model runs on MPS,
+    # macos-15 runners are Apple silicon (M1): the image model runs on MPS,
     # as it does on the household's Mac mini when that runs it.
-    runs-on: ${{ vars.MAC_RUNNER || 'macos-14' }}
+    runs-on: ${{ vars.MAC_RUNNER || 'macos-15' }}
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

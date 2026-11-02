@@ -25,6 +25,7 @@
 - **Files this computer's user may not read are said to be that,** once, with how to let Ninaivu read them, instead of being named one by one as files that could not be read.
 - **A stop no longer names every part as stuck** when the scan took all of its time.
 - Voice stories and letters read aloud use sherpa-onnx 2.
+- **The Mac download says macOS 14 (Sonoma) or newer,** which its packages already needed (it said 12). It is built on macOS 15 now, since GitHub retires its macOS 14 machines, and a package that would need a newer macOS than 14 stops the build.
 - The guide site asks search engines not to list it, and the release workflow can publish to a separate public releases repository.
 
 ## 3.4.0 — 27 October 2026

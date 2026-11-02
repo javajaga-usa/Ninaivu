@@ -247,12 +247,20 @@ jobs:
   macos:
     name: macOS Apple silicon, portable
     needs: gate
-    runs-on: ${{ vars.MAC_RUNNER || 'macos-14' }}
+    runs-on: ${{ vars.MAC_RUNNER || 'macos-15' }}
     timeout-minutes: 100
     env:
       HAS_P12: ${{ secrets.MAC_SIGN_P12_BASE64 != '' && github.event_name != 'pull_request' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # The macOS 15 runners cannot resolve their own host name: every
+      # getaddrinfo(gethostname()) waits out an mDNS timeout (tests.yml).
+      - name: Let the runner resolve its own name
+        if: runner.os == 'macOS' && runner.environment == 'github-hosted'
+        run: |
+          name=$(hostname)
+          echo "127.0.0.1 ${name} ${name%%.*} ${name%%.*}.local" | sudo tee -a /etc/hosts
+          sudo dscacheutil -flushcache || true
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
@@ -466,11 +474,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { pair: mac-linux, role: primary, os: macos-14, build: macos, download: "Ninaivu-*-macos-arm64-portable.zip" }
+          - { pair: mac-linux, role: primary, os: macos-15, build: macos, download: "Ninaivu-*-macos-arm64-portable.zip" }
           - { pair: mac-linux, role: secondary, os: ubuntu-latest, build: linux, download: "Ninaivu-*-linux-x64-portable.tar.gz" }
           - { pair: windows-linux, role: primary, os: windows-2022, build: windows, download: "Ninaivu-*-windows-x64-portable.zip" }
           - { pair: windows-linux, role: secondary, os: ubuntu-latest, build: linux, download: "Ninaivu-*-linux-x64-portable.tar.gz" }
-          - { pair: mac-windows, role: primary, os: macos-14, build: macos, download: "Ninaivu-*-macos-arm64-portable.zip" }
+          - { pair: mac-windows, role: primary, os: macos-15, build: macos, download: "Ninaivu-*-macos-arm64-portable.zip" }
           - { pair: mac-windows, role: secondary, os: windows-2022, build: windows, download: "Ninaivu-*-windows-x64-portable.zip" }
     env:
       HAS_TAILNET: ${{ secrets.TS_OAUTH_CLIENT_ID != '' && secrets.TS_OAUTH_SECRET != '' }}
@@ -484,6 +492,14 @@ jobs:
         run: echo "::notice::TS_OAUTH_CLIENT_ID and TS_OAUTH_SECRET are not set, so ${{ matrix.pair }} is not checked across two computers (docs/development/portable-checks.md)"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         if: env.HAS_TAILNET == 'true'
+      # The macOS 15 runners cannot resolve their own host name: every
+      # getaddrinfo(gethostname()) waits out an mDNS timeout (tests.yml).
+      - name: Let the runner resolve its own name
+        if: env.HAS_TAILNET == 'true' && runner.os == 'macOS' && runner.environment == 'github-hosted'
+        run: |
+          name=$(hostname)
+          echo "127.0.0.1 ${name} ${name%%.*} ${name%%.*}.local" | sudo tee -a /etc/hosts
+          sudo dscacheutil -flushcache || true
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         if: env.HAS_TAILNET == 'true'
         with:

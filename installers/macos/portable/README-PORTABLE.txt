@@ -4,7 +4,7 @@ Ninaivu, portable, for the Mac
 Ninaivu.app and this folder are all there is. Nothing is installed: the app
 carries its own Python and every package, so the Mac needs none, and
 deleting the folder removes everything it made. For a Mac with Apple
-silicon (M1 or later) on macOS 12 or newer.
+silicon (M1 or later) on macOS 14 (Sonoma) or newer.
 
 To start
   1. Double-click the zip. Move the Ninaivu folder it makes somewhere you
