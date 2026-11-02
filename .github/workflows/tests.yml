@@ -221,7 +221,9 @@ jobs:
     # macos-15 runners are Apple silicon (M1): the image model runs on MPS,
     # as it does on the household's Mac mini when that runs it.
     runs-on: ${{ vars.MAC_RUNNER || 'macos-15' }}
-    timeout-minutes: 60
+    # About 40 minutes on macos-14; the macos-15 runners took 57 to reach
+    # 94% on their first run.
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # The macOS 15 runners cannot resolve their own host name: every
