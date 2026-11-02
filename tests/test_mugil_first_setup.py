@@ -344,5 +344,9 @@ def test_a_copy_by_hand_from_a_mac_is_found_under_its_other_spelling(
     pngs = [p for p in target.rglob("*.png") if unicodedata.normalize("NFC", p.parent.name)
             == unicodedata.normalize("NFC", decomposed)]
     assert len(pngs) == 1
-    # And the folder under the other spelling is gone, not left empty.
-    assert not (target / decomposed).exists()
+    # And one folder for it, not an empty one left under the other spelling.
+    # A Mac's disk takes both spellings for one name, so it is counted by
+    # what the folder holds, not asked for by either spelling.
+    same = [name for name in os.listdir(target)
+            if unicodedata.normalize("NFC", name) == unicodedata.normalize("NFC", decomposed)]
+    assert len(same) == 1, same

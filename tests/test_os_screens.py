@@ -250,7 +250,10 @@ def test_a_line_that_comes_later_is_not_cut_off_the_bottom(tmp_path, monkeypatch
         assert dashboard._wanted_height() >= root.winfo_reqheight()
         dashboard._grow_to_fit()
         root.update()
-        if upper.winfo_reqheight() + 120 < root.winfo_screenheight():
+        # Only where the window may grow that tall: it keeps to the room the
+        # screen leaves (_room), and the macOS 15 runner's screen is smaller
+        # than "screen height less 120" took it to be.
+        if dashboard._wanted_height() <= dashboard._room()[1]:
             assert upper.winfo_height() >= upper.winfo_reqheight()
     finally:
         stop_panel(dashboard)
