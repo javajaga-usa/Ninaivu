@@ -7,6 +7,7 @@ described overnight left nothing on screen to say they were done.
 from __future__ import annotations
 
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 
@@ -68,11 +69,29 @@ def test_a_finished_job_says_complete_with_how_many_were_done(as_admin, scanned)
     assert tags["left"] == 0 and tags["done"] == tags["total"] == owed
 
 
-def test_an_answer_is_kept_a_while_and_counted_again_when_asked(as_admin, scanned):
-    cfg, conn, _ = scanned
-    first = as_admin.get("/api/admin/jobs").get_json()["counted_at"]
-    assert as_admin.get("/api/admin/jobs").get_json()["counted_at"] == first
-    assert as_admin.get("/api/admin/jobs?fresh=1").get_json()["counted_at"] > first
+def test_an_answer_is_kept_a_while_and_counted_again_when_asked(as_admin, monkeypatch):
+    # Two requests can finish within one Windows clock tick. Recounting is
+    # what matters, not whether the wall clock happened to advance.
+    clock = SimpleNamespace(now=1000.0)
+    monkeypatch.setattr(job_status, "time", SimpleNamespace(time=lambda: clock.now))
+    gather = Mock(wraps=job_status._gather)
+    monkeypatch.setattr(job_status, "_gather", gather)
+
+    first = as_admin.get("/api/admin/jobs").get_json()
+    assert first["counted_at"] == clock.now
+    assert gather.call_count == 1
+    assert as_admin.get("/api/admin/jobs").get_json() == first
+    assert gather.call_count == 1
+
+    refreshed = as_admin.get("/api/admin/jobs?fresh=1").get_json()
+    assert refreshed["counted_at"] == clock.now
+    assert gather.call_count == 2
+    assert as_admin.get("/api/admin/jobs").get_json() == refreshed
+    assert gather.call_count == 2
+
+    clock.now += job_status.KEEP + 1
+    assert as_admin.get("/api/admin/jobs").get_json()["counted_at"] == clock.now
+    assert gather.call_count == 3
 
 
 # -- describing photographs ---------------------------------------------------
