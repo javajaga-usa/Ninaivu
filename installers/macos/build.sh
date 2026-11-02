@@ -94,7 +94,9 @@ oldest_macos=14
 too_new=""
 for wheel in "$deps"/*.whl; do
     name=$(basename "$wheel")
-    needs=$(printf '%s\n' "$name" | grep -oE 'macosx_[0-9]+' | cut -d_ -f2 | sort -n | head -n 1)
+    # A pure-Python wheel names no macOS: grep finds nothing, and under
+    # pipefail that would end the build.
+    needs=$(printf '%s\n' "$name" | { grep -oE 'macosx_[0-9]+' || true; } | cut -d_ -f2 | sort -n | head -n 1)
     if [ -n "$needs" ] && [ "$needs" -gt "$oldest_macos" ]; then
         too_new="$too_new $name"
     fi
