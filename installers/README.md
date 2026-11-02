@@ -7,7 +7,7 @@ deleting the folder removes everything it made:
 | Download | For |
 | --- | --- |
 | `Ninaivu-<version>-windows-x64-portable.zip` | Windows 10 and 11, 64-bit |
-| `Ninaivu-<version>-macos-arm64-portable.zip` | Macs with Apple silicon, macOS 12 or newer |
+| `Ninaivu-<version>-macos-arm64-portable.zip` | Macs with Apple silicon, macOS 14 (Sonoma) or newer |
 | `Ninaivu-<version>-linux-x64-portable.tar.gz` | 64-bit Linux PCs: Ubuntu, Debian and the like |
 
 | Folder | What it holds |

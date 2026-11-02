@@ -85,6 +85,24 @@ mkdir -p "$deps"
 "$py" -m pip wheel --quiet --wheel-dir "$deps" \
     -r "$root/requirements/requirements.txt" -r "$root/requirements/requirements-desktop.txt" \
     -c "$root/requirements/constraints-tested.txt"
+# The oldest macOS the zip says it runs on (README-PORTABLE.txt). pip takes
+# the newest wheel the build machine can load, so a newer runner could put
+# in one that will not load on an older Mac, and nothing would say so: 3.4.0
+# already said "macOS 12" with a numpy that needs 14. A wheel for a newer
+# macOS than this stops the build.
+oldest_macos=14
+too_new=""
+for wheel in "$deps"/*.whl; do
+    name=$(basename "$wheel")
+    needs=$(printf '%s\n' "$name" | grep -oE 'macosx_[0-9]+' | cut -d_ -f2 | sort -n | head -n 1)
+    if [ -n "$needs" ] && [ "$needs" -gt "$oldest_macos" ]; then
+        too_new="$too_new $name"
+    fi
+done
+if [ -n "$too_new" ]; then
+    echo "these wheels need a macOS newer than $oldest_macos, which the zip says it runs on:$too_new" >&2
+    exit 1
+fi
 "$py" -m pip install --quiet --no-index --find-links "$deps" \
     -r "$root/requirements/requirements.txt" -r "$root/requirements/requirements-desktop.txt" \
     -c "$root/requirements/constraints-tested.txt"

@@ -542,7 +542,7 @@ def test_releases_run_one_at_a_time_and_are_never_cancelled():
 def test_with_no_variables_set_every_job_runs_where_it_always_did():
     """The runners at home are chosen by repository variables; unset, GitHub's runners."""
     import re
-    hosted = {"ubuntu-latest", "windows-latest", "windows-2022", "macos-14", "ubuntu-24.04-arm"}
+    hosted = {"ubuntu-latest", "windows-latest", "windows-2022", "macos-15", "ubuntu-24.04-arm"}
     for path in (ROOT / ".github" / "workflows").glob("*.yml"):
         for name, job in _workflow(path.name)["jobs"].items():
             runs_on = job.get("runs-on")
