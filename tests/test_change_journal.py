@@ -186,7 +186,10 @@ def test_hundreds_gone_at_once_is_a_burst_and_a_few_are_not(keeping):
 
 def test_the_summary_is_a_line_per_day_kind_and_folder(keeping):
     _, conn = keeping
-    now = time.time()
+    # Noon today: at a minute past midnight, "a minute ago" was yesterday and
+    # the two bursts were two days' lines.
+    day = time.localtime()
+    now = time.mktime((day.tm_year, day.tm_mon, day.tm_mday, 12, 0, 0, 0, 0, -1))
     _burst(conn, 3, now - 60, folder="2026/10/19", kind="added")
     _burst(conn, 2, now - 30, folder="2026/10/18", kind="added")
     lines = journal.summary(conn, now=now)
