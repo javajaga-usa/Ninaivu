@@ -1,6 +1,18 @@
 # Changelog
 
-## 3.5.0 — 1 November 2026
+## 3.5.1 — 2 November 2026
+
+This release includes the changes prepared for 3.5.0 below. The 3.5.0 tag
+was created before the macOS build and test fixes; its release gate stopped
+publication, so 3.5.1 uses a new tag without moving the old one.
+
+- Fixed the macOS build check for pure-Python wheels and allowed 90 minutes
+  for the Apple-silicon test suite.
+- Corrected macOS test expectations for equivalent Unicode filenames and
+  the Control Panel’s available screen height.
+- Updated the guide build dependency pypdf to 6.21.4.
+
+## 3.5.0 — 1 November 2026 (not published)
 
 ### Bringing the index to another computer
 
