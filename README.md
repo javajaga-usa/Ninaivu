@@ -68,7 +68,9 @@ without a terminal (installing Python 3.12 first if the Mac has none) and
 puts **Ninaivu** and the **Ninaivu Control Panel** in Applications. On
 Windows, **Start - Ninaivu Control Panel.vbs** opens the Control Panel, a
 window that starts and stops Ninaivu and shows its readings and log, beside
-the tray. [More on both.](docs/desktop-control.md)
+the tray; on Linux, **Start - Ninaivu Control Panel.sh** does (double-click
+and choose Run, or `sh launcher/start.sh --add-to-menu` for a menu entry).
+[More on both.](docs/desktop-control.md)
 
 Docker:
 
@@ -98,8 +100,9 @@ The core AI features run on your computer. Optional [extensions](extensions/READ
 ## Where things are
 
 The root holds the double-click starters (`start.cmd` for Windows, `Ninaivu.command` and
-`Setup Ninaivu.command` for macOS, `Start - Ninaivu Control Panel.vbs` and
-`ninaivu_control.pyw` for the Windows control panel) and the files Git, GitHub, pip and
+`Setup Ninaivu.command` for macOS, `Start - Ninaivu Control Panel.vbs`,
+`Start - Ninaivu Control Panel.sh` and `ninaivu_control.pyw` for the Windows and
+Linux control panel) and the files Git, GitHub, pip and
 mkdocs look for by name (`README.md`, `LICENSE`, `pyproject.toml`, `mkdocs.yml`, the
 dotfiles and `.github/`).
 Everything else is in a folder for what it is:

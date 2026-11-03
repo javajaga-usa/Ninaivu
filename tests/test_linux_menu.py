@@ -57,9 +57,45 @@ def test_a_checkout_gets_ninaivu_and_its_control_panel(tmp_path, monkeypatch):
     assert set(made) == {linux_menu.CHECKOUT_ID, linux_menu.PANEL_ID}
     assert "Terminal=true" in made[linux_menu.CHECKOUT_ID]
     assert "launcher/start.sh" in made[linux_menu.CHECKOUT_ID]
-    assert ".venv/bin/python" in made[linux_menu.PANEL_ID] and "ninaivu_control.pyw" in made[linux_menu.PANEL_ID]
+    assert "Start - Ninaivu Control Panel.sh" in made[linux_menu.PANEL_ID]
     start = (ROOT / "launcher" / "start.sh").read_text()
     assert "--add-to-menu) exec python3 ninaivu/desktop/linux_menu.py --add" in start
+
+
+PANEL = ROOT / linux_menu.PANEL_SCRIPT
+
+
+def _checkout(folder: Path) -> Path:
+    """A checkout's top: the Control Panel script, and nothing set up yet."""
+    folder.mkdir(parents=True)
+    shutil.copyfile(PANEL, folder / PANEL.name)
+    return folder
+
+
+def test_the_control_panel_script_runs_the_venv_from_anywhere(tmp_path):
+    """Double-clicked, the file manager starts it from somewhere else."""
+    marker = tmp_path / "marker"
+    folder = _checkout(tmp_path / "My Photos 'x' $HOME")
+    venv = folder / ".venv" / "bin"
+    venv.mkdir(parents=True)
+    (venv / "python").write_text(f'#!/bin/sh\nprintf "%s|%s" "$1" "$PWD" > "{marker}"\n')
+    (venv / "python").chmod(0o755)
+    subprocess.run(["sh", str(folder / PANEL.name)], check=True, cwd="/", timeout=30)
+    assert marker.read_text() == f"{folder / 'ninaivu_control.pyw'}|{folder}"
+
+
+def test_the_control_panel_script_says_to_set_up_first(tmp_path):
+    folder = _checkout(tmp_path / "Ninaivu")
+    done = subprocess.run(["sh", str(folder / PANEL.name)], cwd="/", capture_output=True, text=True,
+                          timeout=30, env={"PATH": "/usr/bin:/bin", "NINAIVU_NO_DIALOG": "1"})
+    assert done.returncode == 1
+    assert "not set up in this folder yet" in done.stderr and "sh launcher/start.sh" in done.stderr
+
+
+def test_the_control_panel_script_sits_beside_the_windows_one():
+    assert (ROOT / "Start - Ninaivu Control Panel.vbs").is_file()
+    assert PANEL.read_bytes().startswith(b"#!/bin/sh\n"), "LF line endings, or sh cannot run it"
+    assert "ninaivu_control.pyw" in PANEL.read_text()
 
 
 def test_removing_takes_out_only_its_own(tmp_path, monkeypatch):

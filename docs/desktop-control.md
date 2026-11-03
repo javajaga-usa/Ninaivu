@@ -50,6 +50,15 @@ before the Control Panel existed, or after moving the Ninaivu folder,
 reinstalling anything. They are built on the Mac rather than shipped because
 macOS will not open an unsigned app that arrived as a download.
 
+**Linux:** double-click **Start - Ninaivu Control Panel.sh** in the Ninaivu
+folder and choose **Run** (Linux Mint asks; Xfce may ask once to mark it
+executable). Like the Windows one, it uses the folder's `.venv`, so run
+`sh launcher/start.sh` once first; if the `.venv` is missing it says so. GNOME
+Files opens scripts as text rather than running them: there, run
+`sh launcher/start.sh --add-to-menu` once, and **Ninaivu Control Panel** is in
+the application menu and on the Desktop. If the panel says the Python has no
+Tk, install it with `sudo apt install python3-tk`.
+
 From a terminal, on any system: `python -m ninaivu.desktop.app` with the
 `.venv`'s Python.
 
