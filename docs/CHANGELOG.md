@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.6.0 — 3 November 2026
+
+- Move the index from the browser administration console. Moves verify the copy, restart the server, and keep the old folder as a recovery copy with a forwarding note.
+- Review and clean up verified recovery files from the console. Added or changed files stay, and the forwarding note keeps old launchers working.
+- Linux opens as an application with a Control Panel, application-menu entries, and optional sign-in startup. New installations keep the index in `~/.ninaivu` in the user’s home folder; existing libraries and explicit locations are preserved.
+- Portable upgrades and **Go back** follow a relocated index and preserve shared library locations. Startup locks and ownership checks prevent inactive program copies from opening the same library.
+- Improved Control Panel mode switching, unavailable-drive messages, and stop helpers after index relocation.
+- Fixed HEVC compression on computers with many CPU cores and updated build dependencies.
+- Added browser relocation coverage and Linux lifecycle, recovery cleanup, and portable rollback regression tests.
+
 ## 3.5.1 — 2 November 2026
 
 This release includes the changes prepared for 3.5.0 below. The 3.5.0 tag
