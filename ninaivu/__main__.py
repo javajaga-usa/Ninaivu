@@ -303,6 +303,10 @@ def run_command(argv: list[str]) -> int:
 def main(argv: list[str] | None = None) -> int:
     # Before anything is printed, including argparse's own errors.
     use_utf8_output()
+    # Before an import asked for from the console is done below: a Mac gives
+    # an app 256 open files, which a large index runs out of (utils/files.py).
+    from .utils.files import open_file_limit                     # noqa: PLC0415
+    open_file_limit()
     words = list(sys.argv[1:] if argv is None else argv)
     if words and words[0] in COMMANDS:
         return run_command(words)

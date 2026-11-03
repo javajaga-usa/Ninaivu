@@ -145,6 +145,12 @@ class Services:
         cfg.ensure_dirs()
         # Before anything else that might have something to say.
         logs.configure(cfg.state_dir, debug=cfg.debug)
+        from .utils.files import open_file_limit                    # noqa: PLC0415
+        limit = open_file_limit()
+        if limit is not None:
+            logging.getLogger(__name__).info(
+                "open files: up to %s%s", f"{limit[1]:,}",
+                f" (raised from {limit[0]:,})" if limit[1] != limit[0] else "")
         from .utils import redact                                   # noqa: PLC0415
         redact.hide_settings(cfg)
         self.cfg = cfg

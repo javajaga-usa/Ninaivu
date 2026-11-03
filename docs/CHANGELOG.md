@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- **Exporting the index from the Mac app no longer runs out of open files.**
+  A Mac lets an app opened from Finder hold only 256 files open at once.
+  Ninaivu's own threads keep the index open, and a full export of a large
+  library (961,507 files) failed with "Too many open files" about 700,000
+  files in, while the console's own pages failed alongside it. Ninaivu now
+  asks for up to 10,240 when it starts, and says in its log how many it may
+  hold.
+
 ## 3.5.1 — 2 November 2026
 
 This release includes the changes prepared for 3.5.0 below. The 3.5.0 tag
