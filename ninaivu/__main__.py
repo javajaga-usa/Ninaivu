@@ -325,22 +325,30 @@ def main(argv: list[str] | None = None) -> int:
             # server lock: an import is done before that lock can be taken, and
             # a second start in the meantime opened the old folder
             # (runfile.starting_lock).
-            with runfile.starting_lock(cfg.state_dir):
+            with contextlib.ExitStack() as starts:
+                # Reload under each gate: a concurrent move may have changed
+                # the location while this process was acquiring the old gate.
+                while True:
+                    locked_state = cfg.state_dir
+                    starts.enter_context(runfile.starting_lock(locked_state))
+                    cfg = Config.load()
+                    if cfg.state_dir == locked_state:
+                        break
                 # Whoever started this waits on the run file; until it is
                 # written, this says how far the start has got
                 # (server/starting.py). Inside the lock, so a start that is
                 # turned away does not overwrite the note of the one at work.
                 from .storage import relocate
-                cfg = Config.load()
                 starting.begin(cfg.state_dir)
                 if (cfg.state_dir / relocate.PENDING).exists() and not args.replica_of:
                     starting.step("moving and verifying the index in its new folder")
-                    relocated = relocate.apply_pending(cfg.state_dir)
+                    relocated = relocate.apply_pending(cfg.state_dir, starts=starts)
                 else:
                     relocated = None
                 if relocated is not None:
+                    starting.move_to(relocated)
                     cfg = Config.load()
-                starting.begin(cfg.state_dir)
+                starting.step("starting")
                 if not args.replica_of:
                     # An import asked for from the console replaces the state
                     # folder, so it is done here, before the server takes the

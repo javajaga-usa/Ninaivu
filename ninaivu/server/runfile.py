@@ -91,8 +91,9 @@ def write(state_dir: str | Path, *, port: int, admin_port: int,
 
 def read(state_dir: str | Path) -> dict[str, Any] | None:
     """What the file says, or ``None`` if there is not a usable one."""
+    from ..storage.relocate import resolve
     try:
-        data = json.loads(path_for(state_dir).read_text(encoding="utf-8"))
+        data = json.loads(path_for(resolve(Path(state_dir))).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
     if not isinstance(data, dict) or not data.get("pid"):

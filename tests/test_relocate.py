@@ -99,3 +99,83 @@ class RelocationTests(unittest.TestCase):
         self.assertEqual(status, 400)
         self.assertIn('error', response.get_json())
         restart.assert_not_called()
+
+    def test_original_launcher_follows_two_moves_after_recovery_cleanup(self):
+        relocate.request(self.source, self.target)
+        relocate.apply_pending(self.source)
+        final = self.base / 'final'
+        relocate.request(self.target, final)
+        relocate.apply_pending(self.target)
+        (self.target / 'index.db').unlink()
+        self.assertEqual(relocate.resolve(self.source), final)
+
+    def test_run_record_reader_follows_relocation(self):
+        relocate.request(self.source, self.target)
+        relocate.apply_pending(self.source)
+        runfile.write(self.target, port=5000, admin_port=3000, token='new-server')
+        self.assertEqual(runfile.read(self.source)['token'], 'new-server')
+
+    def test_running_panel_refreshes_its_state_folder(self):
+        from ninaivu.desktop.control import Controller
+        from types import SimpleNamespace
+        controller = Controller.__new__(Controller)
+        controller.cfg = SimpleNamespace(state_dir=self.source)
+        relocate.request(self.source, self.target)
+        relocate.apply_pending(self.source)
+        controller.record()
+        self.assertEqual(controller.cfg.state_dir, self.target)
+
+    def test_progress_moves_with_index_and_keeps_original_start_time(self):
+        from ninaivu.server import starting
+        starting.end()
+        self.addCleanup(starting.end)
+        starting.begin(self.source)
+        since = starting.read(self.source)['since']
+        relocate.request(self.source, self.target)
+        relocate.apply_pending(self.source)
+        starting.move_to(self.target)
+        self.assertEqual(starting.read(self.source)['since'], since)
+        self.assertEqual(starting.read(self.target)['since'], since)
+        self.assertFalse((self.source / starting.STARTING_FILE).exists())
+        starting.end()
+        self.assertFalse((self.target / starting.STARTING_FILE).exists())
+
+    def test_malformed_pending_note_keeps_library_usable(self):
+        for record in [[], {'destination': 42}, {'destination': None}]:
+            with self.subTest(record=record):
+                relocate.write(self.source / relocate.PENDING, record)
+                self.assertIsNone(relocate.apply_pending(self.source))
+                self.assertTrue((self.source / 'index.db').exists())
+                self.assertFalse((self.source / relocate.PENDING).exists())
+                self.assertFalse(json.loads((self.source / relocate.RESULT).read_text())['ok'])
+
+    def test_stale_run_record_is_not_copied_to_destination(self):
+        runfile.write(self.source, port=5000, admin_port=3000, token='old-server')
+        relocate.request(self.source, self.target)
+        relocate.apply_pending(self.source)
+        self.assertIsNone(runfile.read(self.target))
+
+    def test_cycle_is_refused_even_when_recovery_indexes_are_gone(self):
+        self.target.mkdir()
+        relocate.write(self.source / relocate.REDIRECT, {'destination': str(self.target)})
+        relocate.write(self.target / relocate.REDIRECT, {'destination': str(self.source)})
+        with self.assertRaisesRegex(ValueError, 'loop'):
+            relocate.resolve(self.source)
+
+    def test_invalid_config_does_not_publish_destination(self):
+        (self.source / 'config.json').write_text('[]')
+        relocate.request(self.source, self.target)
+        self.assertIsNone(relocate.apply_pending(self.source))
+        self.assertFalse(self.target.exists())
+        self.assertFalse((self.source / relocate.REDIRECT).exists())
+
+    def test_destination_start_lock_is_held_until_caller_opens_index(self):
+        from contextlib import ExitStack
+        relocate.request(self.source, self.target)
+        with ExitStack() as starts:
+            starts.enter_context(runfile.starting_lock(self.source))
+            self.assertEqual(relocate.apply_pending(self.source, starts=starts), self.target)
+            with self.assertRaises(runfile.AlreadyStarting), runfile.starting_lock(self.target):
+                self.fail('A competing start acquired the destination during handover')
+        with runfile.starting_lock(self.target):
+            pass

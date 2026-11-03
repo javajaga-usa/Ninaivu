@@ -337,6 +337,8 @@ class Controller:
         self.capture_running_settings()
 
     def record(self):
+        from ..storage.relocate import resolve
+        self.cfg.state_dir = resolve(Path(self.cfg.state_dir))
         record = runfile.read(self.cfg.state_dir)
         if not record or psutil is None:
             return None

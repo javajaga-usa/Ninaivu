@@ -5,11 +5,19 @@ import hashlib
 import json
 import os
 import shutil
+from contextlib import ExitStack
 from pathlib import Path
 
 REDIRECT = 'index-location.json'
 PENDING = 'index-move-pending.json'
 RESULT = 'index-move-result.json'
+
+
+def _destination(record: object) -> Path:
+    destination = record.get('destination') if isinstance(record, dict) else None
+    if not isinstance(destination, str) or not destination or not Path(destination).is_absolute():
+        raise ValueError('The saved index location must name an absolute folder path.')
+    return Path(destination)
 
 
 def resolve(folder: Path) -> Path:
@@ -19,10 +27,13 @@ def resolve(folder: Path) -> Path:
         if folder in seen:
             raise ValueError('The saved index locations contain a loop.')
         seen.add(folder)
-        folder = Path(json.loads((folder / REDIRECT).read_text())['destination'])
-        if not folder.is_absolute() or not (folder / 'index.db').is_file():
-            raise ValueError('The relocated index is unavailable. '
-                             'Reconnect its drive before starting Ninaivu.')
+        record = json.loads((folder / REDIRECT).read_text(encoding='utf-8'))
+        folder = _destination(record).resolve()
+    # Intermediate folders may contain only their forwarding note after the
+    # recovery data has been removed. Only the final destination needs an index.
+    if seen and not (folder / 'index.db').is_file():
+        raise ValueError('The relocated index is unavailable. '
+                         'Reconnect its drive before starting Ninaivu.')
     return folder
 
 
@@ -64,8 +75,13 @@ def _digest(path: Path) -> bytes:
         return hashlib.file_digest(stream, 'sha256').digest()
 
 
-def apply_pending(source: Path) -> Path | None:
-    """Called with the starting lock held, before opening any database."""
+def apply_pending(source: Path, *, starts: ExitStack | None = None) -> Path | None:
+    """Called before opening any database, with the source starting lock held.
+
+    A server passes its startup stack so the destination stays locked until
+    it acquires the server lock. Otherwise a second start could open the new
+    folder between publication and the original start's handover.
+    """
     marker = source / PENDING
     if not marker.exists():
         return None
@@ -74,12 +90,15 @@ def apply_pending(source: Path) -> Path | None:
     created = False
     published = False
     try:
-        destination = validate(source, Path(json.loads(marker.read_text())['destination']))
-        with runfile.server_lock(source), runfile.starting_lock(destination):
+        destination = validate(source, _destination(json.loads(marker.read_text(encoding='utf-8'))))
+        with runfile.server_lock(source), ExitStack() as copying:
+            (starts if starts is not None else copying).enter_context(
+                runfile.starting_lock(destination))
             # mkdir is exclusive: never copy over somebody else's files.
             destination.mkdir(mode=0o700)
             created = True
             excluded = {PENDING, REDIRECT, 'ninaivu-server.lock', 'ninaivu-starting.lock',
+                        runfile.RUN_FILE, runfile.RUN_FILE + '.part',
                         'ninaivu.starting', f'ninaivu.starting.{os.getpid()}.tmp'}
             for item in source.rglob('*'):
                 if item.is_symlink():
@@ -105,6 +124,8 @@ def apply_pending(source: Path) -> Path | None:
             config = destination / 'config.json'
             if config.exists():
                 data = json.loads(config.read_text(encoding='utf-8'))
+                if not isinstance(data, dict):
+                    raise ValueError('The index settings must contain a JSON object.')
                 data['state_dir'] = str(destination)
                 write(config, data)
             write(destination / RESULT, {'ok': True, 'source': str(source),
