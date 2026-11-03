@@ -674,3 +674,17 @@ def test_a_date_ffmpeg_writes_twice_is_still_the_copy_compress_made(monkeypatch,
     assert not vc.made_as_now(source, copy)
     answers[copy.name] = probe("2016-01-01T00:00:00.000000Z")
     assert not vc.made_as_now(source, copy)
+
+
+def test_high_core_hevc_uses_bounded_frame_threads_and_the_selected_pool(tmp_path):
+    cmd = vc.command(tmp_path / 'in.mp4', tmp_path / 'out.mp4', 'libx265', threads=64)
+    assert int(cmd[cmd.index('-threads') + 1]) < 16
+    options = cmd[cmd.index('-x265-params') + 1]
+    assert 'frame-threads=8' in options and 'pools=64' in options
+
+
+def test_compress_respects_the_control_panels_compute_budget(monkeypatch):
+    from ninaivu.utils import resources
+    monkeypatch.setattr(resources, 'compute_threads', lambda: 2)
+    monkeypatch.setattr(vc.os, 'cpu_count', lambda: 64)
+    assert vc._threads() == 2

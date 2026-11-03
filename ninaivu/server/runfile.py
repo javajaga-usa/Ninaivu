@@ -35,7 +35,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Callable
 
-__all__ = ["RUN_FILE", "write", "read", "clear", "is_running", "new_token", "in_container",
+__all__ = ["RUN_FILE", "write", "read", "resolve_state", "clear", "is_running", "new_token", "in_container",
            "server_lock", "starting_lock", "AlreadyRunning", "AlreadyStarting"]
 
 #: The name of the file, inside the state directory.
@@ -91,14 +91,29 @@ def write(state_dir: str | Path, *, port: int, admin_port: int,
 
 def read(state_dir: str | Path) -> dict[str, Any] | None:
     """What the file says, or ``None`` if there is not a usable one."""
-    from ..storage.relocate import resolve
     try:
-        data = json.loads(path_for(resolve(Path(state_dir))).read_text(encoding="utf-8"))
+        data = json.loads(path_for(resolve_state(state_dir)).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
     if not isinstance(data, dict) or not data.get("pid"):
         return None
     return data
+
+
+def resolve_state(state_dir: str | Path) -> Path:
+    """Find the live folder even when tools/stop.py loads us without Flask."""
+    if __package__:
+        from ..storage.relocate import resolve
+    else:
+        import importlib.util
+        source = Path(__file__).resolve().parents[1] / 'storage' / 'relocate.py'
+        spec = importlib.util.spec_from_file_location('_ninaivu_relocate', source)
+        if spec is None or spec.loader is None:
+            raise ImportError('The index location resolver could not be loaded.')
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        resolve = module.resolve
+    return resolve(Path(state_dir))
 
 
 def clear(state_dir: str | Path, *, pid: int | None = None) -> None:

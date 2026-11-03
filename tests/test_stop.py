@@ -355,7 +355,8 @@ def test_the_root_holds_the_launcher_and_only_what_tooling_needs_there():
                ".gitattributes", ".editorconfig", ".pre-commit-config.yaml", ".dockerignore",
                # The double-click launchers and the Control Panel they open.
                "Ninaivu.command", "Setup Ninaivu.command",
-               "Start - Ninaivu Control Panel.vbs", "ninaivu_control.pyw"}
+               "Start - Ninaivu Control Panel.vbs", "Start - Ninaivu Control Panel.sh",
+               "Setup Ninaivu.sh", "ninaivu_control.pyw"}
     # What the repository holds there, not whatever else is lying in this
     # checkout (a zip the person put there, a picture made from it): those
     # are theirs, and never reach anybody else. Read from disk where there is
@@ -379,3 +380,22 @@ def test_start_cmd_runs_the_launcher_with_windows_line_endings():
     assert b"launcher\\start.py" in raw
     assert (root / "launcher" / "start.py").is_file()
     assert b"launcher/start.py" in (root / "launcher" / "start.sh").read_bytes()
+
+
+def test_bare_stop_follows_forwarding_and_clears_the_live_stale_record(tmp_path):
+    import os
+    import sys
+    source, live = tmp_path / 'old', tmp_path / 'live'
+    source.mkdir(); live.mkdir()
+    (live / 'index.db').touch()
+    (source / 'index-location.json').write_text(json.dumps({'destination': str(live)}))
+    (live / 'ninaivu.run').write_text(json.dumps({'pid': 999_999, 'admin_port': 3000, 'token': 'x'}))
+    blocked = tmp_path / 'blocked'
+    blocked.mkdir()
+    (blocked / 'flask.py').write_text("raise ImportError('no flask here')\n")
+    root = Path(__file__).resolve().parents[1]
+    done = subprocess.run([sys.executable, str(root / 'tools/stop.py'), '--state-dir', str(source)],
+        env={**os.environ, 'PYTHONPATH': str(blocked)}, capture_output=True, text=True, timeout=60)
+    assert done.returncode == 0, done.stderr
+    assert not (live / 'ninaivu.run').exists()
+    assert (source / 'index-location.json').exists()

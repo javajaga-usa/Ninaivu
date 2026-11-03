@@ -11,6 +11,7 @@ from pathlib import Path
 REDIRECT = 'index-location.json'
 PENDING = 'index-move-pending.json'
 RESULT = 'index-move-result.json'
+MANIFEST = 'index-recovery-manifest.json'
 
 
 def _destination(record: object) -> Path:
@@ -97,7 +98,7 @@ def apply_pending(source: Path, *, starts: ExitStack | None = None) -> Path | No
             # mkdir is exclusive: never copy over somebody else's files.
             destination.mkdir(mode=0o700)
             created = True
-            excluded = {PENDING, REDIRECT, 'ninaivu-server.lock', 'ninaivu-starting.lock',
+            excluded = {PENDING, REDIRECT, MANIFEST, 'ninaivu-server.lock', 'ninaivu-starting.lock',
                         runfile.RUN_FILE, runfile.RUN_FILE + '.part',
                         'ninaivu.starting', f'ninaivu.starting.{os.getpid()}.tmp'}
             for item in source.rglob('*'):
@@ -115,11 +116,15 @@ def apply_pending(source: Path, *, starts: ExitStack | None = None) -> Path | No
                     shutil.copytree(item, target)
                 else:
                     shutil.copy2(item, target)
+            recovery_files = {}
             for item in source.rglob('*'):
                 relative = item.relative_to(source)
                 if relative.parts[0] not in excluded and item.is_file():
-                    if _digest(item) != _digest(destination / relative):
+                    digest = _digest(item)
+                    if digest != _digest(destination / relative):
                         raise ValueError(f'The copied file could not be verified: {relative}')
+                    recovery_files[relative.as_posix()] = {'sha256': digest.hex(),
+                                                         'size': item.stat().st_size}
             # Config may contain the old state_dir. Rewrite it before publishing.
             config = destination / 'config.json'
             if config.exists():
@@ -128,8 +133,12 @@ def apply_pending(source: Path, *, starts: ExitStack | None = None) -> Path | No
                     raise ValueError('The index settings must contain a JSON object.')
                 data['state_dir'] = str(destination)
                 write(config, data)
+            write(destination / MANIFEST, {'source': str(source), 'destination': str(destination),
+                                           'files': recovery_files})
             write(destination / RESULT, {'ok': True, 'source': str(source),
-                                         'destination': str(destination)})
+                                         'destination': str(destination),
+                                         'recovery_files': len(recovery_files),
+                                         'recovery_bytes': sum(f['size'] for f in recovery_files.values())})
             write(source / REDIRECT, {'destination': str(destination)})
             published = True
             marker.unlink(missing_ok=True)

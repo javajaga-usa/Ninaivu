@@ -41,6 +41,9 @@ log = logging.getLogger(__name__)
 
 migration_bp = Blueprint("migration", __name__)
 
+from ..storage.recovery_cleanup import Cleaner
+_recovery_cleaner = Cleaner()
+
 #: The name this job holds the indexer down by, so the strip can say what has
 #: the disk. See ninaivu/media/scanner.py.
 CLAIM_REROOT = "moving the library to its new folder"
@@ -317,6 +320,7 @@ def _export_state(cfg) -> dict[str, Any]:
         "index_folder": str(cfg.state_dir),
         "index_move": move_record(relocate.RESULT),
         "index_move_pending": move_record(relocate.PENDING),
+        "recovery_cleanup": _recovery_cleaner.status(cfg.state_dir),
         "export": _the_exporter().status(cfg.state_dir),
         # The reading-through of the export last checked for an import.
         "check": _the_checker().status(),
@@ -486,3 +490,25 @@ def move_index():
             problem = reply.get('error')
     return jsonify({'restarting': restarting, 'restart_problem': problem,
                     'destination': destination}), 202
+
+
+@migration_bp.get('/api/admin/migration/recovery-cleanup')
+@require_admin
+def recovery_preview():
+    from ..storage import recovery_cleanup
+    try:
+        return jsonify(recovery_cleanup.preview(_cfg().state_dir))
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        return jsonify({'error': str(error)}), 400
+
+
+@migration_bp.post('/api/admin/migration/recovery-cleanup')
+@require_admin
+def recovery_start():
+    if json_object().get('confirm') is not True:
+        return jsonify({'error': 'Confirm recovery-copy cleanup first.'}), 400
+    try:
+        _recovery_cleaner.start(_cfg().state_dir)
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        return jsonify({'error': str(error)}), 400
+    return jsonify(_export_state(_cfg())), 202

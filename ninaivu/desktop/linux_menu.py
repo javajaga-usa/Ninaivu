@@ -18,9 +18,8 @@ marked as trusted so it opens with one click, with Ninaivu's icon:
     python3 ninaivu/desktop/linux_menu.py --remove
 
 From a portable folder there is one entry, *Ninaivu*, which opens the
-Control Panel. From a checkout there are two, as "Setup Ninaivu.command" makes
-on a Mac: *Ninaivu*, which sets the checkout up the first time and starts the
-library in a terminal (launcher/start.sh), and *Ninaivu Control Panel*, which
+Control Panel. From a checkout there are two: *Ninaivu* and *Ninaivu Control Panel*. Both open
+the app without a terminal after "Setup Ninaivu.sh" has prepared its Python. Each
 runs "Start - Ninaivu Control Panel.sh" at the top of the checkout (the .venv
 that made, or a message saying to run start.sh first). Moving the folder
 needs ``--add-to-menu`` again.
@@ -106,6 +105,7 @@ def entry(name: str, comment: str, argv: list[str], *, workdir: Path,
         f"Terminal={'true' if terminal else 'false'}",
         "Categories=Graphics;Photography;",
         "StartupNotify=true",
+        "StartupWMClass=Ninaivu",
         "",
     ])
 
@@ -132,8 +132,8 @@ def launchers(root: Path) -> list[tuple[str, str]]:
     if (root / "launcher" / "start.sh").is_file():
         return [
             (CHECKOUT_ID, entry(
-                "Ninaivu", "Your family's photographs: set up and start the library",
-                ["sh", str(root / "launcher" / "start.sh")], workdir=root, terminal=True)),
+                "Ninaivu", "Your family's photographs: the Ninaivu Control Panel",
+                ["sh", str(root / PANEL_SCRIPT)], workdir=root)),
             # The same script a double-click at the top of the checkout runs,
             # so a menu click before the .venv exists says what to do rather
             # than doing nothing.

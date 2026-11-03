@@ -52,7 +52,19 @@ def ninaivu_root() -> Path:
 
 
 def supported(platform: str | None = None) -> bool:
-    return (platform or sys.platform) in ("darwin", "win32")
+    return (platform or sys.platform) in ("darwin", "win32", "linux")
+
+
+def desktop_path(home: Path | None = None) -> Path:
+    base = Path(os.environ.get('XDG_CONFIG_HOME') or Path(home or Path.home()) / '.config')
+    suffix = '-portable' if os.environ.get('NINAIVU_PORTABLE') else ''
+    return base / 'autostart' / f'{LABEL}{suffix}.desktop'
+
+
+def _desktop_entry(root: Path) -> str:
+    from .linux_menu import entry
+    return entry('Ninaivu', 'Start Ninaivu when you sign in', command(root, 'linux'),
+                 workdir=root).replace('StartupNotify=true', 'StartupNotify=false')
 
 
 def agent_path(home: Path | None = None) -> Path:
@@ -82,6 +94,15 @@ def command(root: Path, platform: str | None = None) -> list[str]:
         raise RuntimeError("Ninaivu.exe was not found beside this copy of Ninaivu, "
                            "so it cannot be started when you sign in. Open "
                            "Ninaivu from its own Ninaivu.exe and try again.")
+    if platform == 'linux':
+        told = os.environ.get('NINAIVU_LAUNCHER')
+        launcher = Path(told) if told else root / 'Start - Ninaivu Control Panel.sh'
+        if not launcher.is_file():
+            raise RuntimeError('Ninaivu’s launcher is missing. Run Setup Ninaivu.sh again.')
+        carried = [f'{name}={os.environ[name]}' for name in (
+            'NINAIVU_STATE_DIR', 'NINAIVU_HOME', 'NINAIVU_PYTHON',
+            'NINAIVU_AI_MODELS_DIR', 'NINAIVU_LOG_DIR') if os.environ.get(name)]
+        return ['env', *carried, 'sh', str(launcher), '--autostart']
     # pythonw on Windows: python.exe would open a console window at sign-in.
     from .control import python_for_server
     python = python_for_server(root, platform)
@@ -126,6 +147,16 @@ def _run_key(write: bool = False):
 
 def enabled(home: Path | None = None, platform: str | None = None) -> bool:
     platform = platform or sys.platform
+    if platform == 'linux':
+        try:
+            from .linux_menu import quote_exec
+            stored = desktop_path(home).read_text(encoding='utf-8')
+            # State paths can resolve to a new location after a move; ownership
+            # belongs to the program launcher, not those carried environment values.
+            expected = ' '.join(quote_exec(arg) for arg in command(ninaivu_root(), 'linux')[-3:])
+            return next(line for line in stored.splitlines() if line.startswith('Exec=')).endswith(expected)
+        except (OSError, RuntimeError, StopIteration):
+            return False
     if platform == "darwin":
         return agent_path(home).is_file()
     if platform == "win32":
@@ -164,6 +195,13 @@ def enable(root: Path | None = None, home: Path | None = None,
            platform: str | None = None) -> str:
     root = Path(root or ninaivu_root())
     platform = platform or sys.platform
+    if platform == 'linux':
+        path = desktop_path(home)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_suffix('.tmp')
+        temporary.write_text(_desktop_entry(root), encoding='utf-8')
+        temporary.replace(path)
+        return 'Ninaivu will start when you sign in to Linux.'
     if platform == "darwin":
         path = agent_path(home)
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -179,14 +217,15 @@ def enable(root: Path | None = None, home: Path | None = None,
             winreg.SetValueEx(key, run_value(), 0, winreg.REG_SZ,
                               subprocess.list2cmdline(command(root, platform)))
         return "Ninaivu will start when you sign in to Windows."
-    raise RuntimeError("Starting at sign-in is set up here on macOS and Windows. "
-                       "On Linux, use a systemd service: installers/systemd/ninaivu.service, "
-                       "as the technical administrator guide describes.")
+    raise RuntimeError('Starting at sign-in is supported on Linux, macOS and Windows.')
 
 
 def disable(home: Path | None = None, platform: str | None = None) -> str:
     platform = platform or sys.platform
-    if platform == "darwin":
+    if platform == 'linux':
+        if enabled(home, platform):
+            desktop_path(home).unlink(missing_ok=True)
+    elif platform == "darwin":
         agent_path(home).unlink(missing_ok=True)
     elif platform == "win32":
         import winreg                                 # noqa: PLC0415

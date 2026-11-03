@@ -10,6 +10,8 @@
 # so, in a window when there is no terminal to say it in.
 cd "$(dirname "$0")" || exit 1
 
+[ ! -f launcher/linux-env.sh ] || . ./launcher/linux-env.sh
+
 TITLE="Ninaivu Control Panel"
 
 tell() {
@@ -41,4 +43,8 @@ then open the Control Panel again."
     exit 1
 fi
 
+if [ "${1:-}" = --autostart ]; then
+    shift
+    exec "$PYTHON" -m ninaivu.desktop.autostart --start "$@"
+fi
 exec "$PYTHON" "$PWD/ninaivu_control.pyw" "$@"

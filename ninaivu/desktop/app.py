@@ -1416,6 +1416,7 @@ def offer_the_older_library(root, ask=None, tell=None, warn=None):
     """
     try:
         portable.settle()
+        portable.activate_environment()
         older = portable.older_beside()
     except Exception:                                      # noqa: BLE001 - the panel still opens
         import logging
@@ -1428,11 +1429,14 @@ def offer_the_older_library(root, ask=None, tell=None, warn=None):
     tell = tell or (lambda title, text: messagebox.showinfo(title, text, parent=root))
     warn = warn or (lambda title, text: messagebox.showerror(title, text, parent=root))
     said_version = f'Ninaivu {older.version}' if older.version else 'An older Ninaivu'
+    relocated = not older.state.is_relative_to(older.path)
+    transport = (f'Your index stays in {older.state}. The newer program takes over this library. '
+                 if relocated else 'They are moved, not copied, so it takes a moment. ')
     if not ask('Bring your library across',
                f'{said_version} is in the folder beside this one:\n\n{older.path}\n\n'
                f'Bring its library, settings and AI models into Ninaivu {__version__}? '
-               'They are moved, not copied, so it takes a moment, and the older Ninaivu is '
-               'stopped first if it is running. The older folder keeps its program, and '
+               + transport + 'The older Ninaivu is stopped first if it is running. '
+               'The older folder keeps its program, and '
                '"Go back" in this window can return everything to it later. '
                'Your photographs are not touched.'):
         return False
@@ -1488,7 +1492,7 @@ def main():
         return tray_main()
     if os.name == 'nt':
         windows_dpi_aware()
-    root = tk.Tk()
+    root = tk.Tk(className='Ninaivu')
     # The web app's mark instead of Tk's feather, and on a Mac instead of
     # Python's rocket in the Dock, where the panel otherwise looks like any
     # other script.
@@ -1506,7 +1510,13 @@ def main():
     root.withdraw()
     offer_the_older_library(root)
     root.deiconify()
-    Dashboard(root)
+    try:
+        Dashboard(root)
+    except (OSError, ValueError, portable.PortableError) as exc:
+        root.withdraw()
+        messagebox.showerror('Ninaivu Control Panel', str(exc), parent=root)
+        root.destroy()
+        return 1
     root.mainloop()
     return 0
 

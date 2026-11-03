@@ -1,10 +1,10 @@
 Ninaivu, portable, for Linux
 ============================
 
-Open Ninaivu, the ninaivu script, the app folder, the data folder and the
-logs folder are all there is. Nothing is installed: the folder carries its own Python and
-every package, so the computer needs none, and deleting the folder removes
-everything it made. For a 64-bit PC (x86-64, the linux-x64 download) or an
+Open Ninaivu, the ninaivu script and app/ carry the program and its own
+Python and packages, so the computer needs none. The default library data
+lives in ~/.ninaivu in your home folder and stays when the program is deleted
+or replaced. For a 64-bit PC (x86-64, the linux-x64 download) or an
 arm64 computer (a Raspberry Pi 4 or 5 with a 64-bit system, the linux-arm64
 download) running Ubuntu, Debian or another current distribution.
 
@@ -30,10 +30,10 @@ Where things are
   ninaivu         opens the Control Panel (--tray for the tray menu,
                   --server for the server alone, --where to see the folders).
   app/            the program and its private Python.
-  data/           what Ninaivu keeps, made the first time it opens: the
+  ~/.ninaivu/     what Ninaivu keeps, made the first time it opens: the
                   index of your library, settings, people, thumbnails;
-                  data/ai-models (the AI models, once you download them);
-                  data/control (the Control Panel's own settings).
+                  ~/.ninaivu/ai-models (the AI models, once you download them);
+                  ~/.ninaivu/control (the Control Panel's own settings).
                   Do not edit what is in here.
   logs/           ninaivu.log and server.log: what Ninaivu did, for when
                   somebody asks what went wrong. Look one over before you
@@ -43,30 +43,37 @@ Where things are
 Your photographs are not copied into this folder. You choose which folders
 Ninaivu reads in the Control Panel or the console, and they stay where they are.
 
+Starting at sign-in
+  Turn on "Start Ninaivu when I sign in" in the Control Panel. The Linux
+  desktop starts this portable launcher with the same index and settings.
+  Stop stays stopped; this does not continuously restart a stopped server.
+
 Starting it at boot
   The portable build does not set itself up as a service. To have systemd
   start it, see "The Linux system service" in the technical administrator
   guide, and point ExecStart at this folder's ninaivu --server.
 
 On a USB stick
-  data/ holds the index, the settings, the accounts and the keys that sign
-  sessions and share links. On a stick formatted FAT32 or exFAT nothing can
+  The default index stays in this computer's ~/.ninaivu even when the
+  program is carried on a USB stick. A relocated or older app-local data
+  folder holds the accounts and keys too. On FAT32 or exFAT nothing can
   restrict who reads a file: whoever has the stick has all of it. Keep the
   folder on an ext4 disk (your home folder) or an encrypted one if the
   library is private.
 
 Moving it
   Stop Ninaivu first (press Stop in the Control Panel and wait until it says
-  Stopped), then move or copy the whole folder. The index, settings and models
-  go with it. A library on another disk must be reachable at the same path, or
+  Stopped), then move or copy the program folder. The default index, settings and
+  models stay in ~/.ninaivu; move those separately when changing computers. A library on another disk must be reachable at the same path, or
   chosen again.
 
 Updating
   Extract the newer archive beside this folder, on the same drive (for
   example ~/Ninaivu-3.5.1 next to ~/Ninaivu-3.4.0), and run its ./ninaivu.
-  Its Control Panel finds this folder and offers to bring the library across: it stops this Ninaivu if it is running and moves data/
-  (with the models and the Control Panel's settings) into the new folder, in
-  a moment, since nothing is copied. This folder keeps its program and a note,
+  Its Control Panel finds the active program and offers to take over the
+  library. It stops the older Ninaivu first. The home-folder or relocated
+  index stays in place; an existing app-local library is moved into the new
+  program folder. The older folder keeps its program and a note,
   LIBRARY-MOVED.txt, saying where the library went.
 
   The first start of the newer version copies the index before it changes
@@ -81,3 +88,12 @@ Updating
 
 Running two
   Two copies use the same ports. Run one at a time.
+
+Relocated indexes and updates
+  An index moved through the console stays in its chosen folder during an
+  update. The new portable program follows that location instead of using
+  the recovery copy left in the old folder. Go back restores the older
+  index there, keeps a backup of the newer work, and makes the newer
+  program inactive until you bring the library across again. Keep the
+  older program and the forwarding files until you no longer need Go back.
+  Earlier portable libraries in data/ or app/data are still found.

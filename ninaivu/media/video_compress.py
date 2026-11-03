@@ -311,8 +311,14 @@ def command(source: Path, target: Path, enc: str, threads: int | None = None,
         # hvc1, not hev1: the tag Apple's players and Safari need to play it.
         video += ["-tag:v", "hvc1"]
         if enc == "libx265":
+            options = 'log-level=error'
+            if threads:
+                # ffmpeg maps -threads to x265 frame threads, whose fixed
+                # maximum is much smaller than a modern machine's CPU count.
+                # Keep frame parallelism modest; use the budget for its pool.
+                options += f':frame-threads={min(threads, 8)}:pools={threads}'
             video += ["-preset", PRESET["speed"], "-crf", str(X265_CRF),
-                      "-x265-params", "log-level=error"]
+                      "-x265-params", options]
         else:
             video += ["-q:v", str(VIDEOTOOLBOX_QUALITY)]
             decode = ["-hwaccel", "videotoolbox"]
@@ -344,15 +350,16 @@ def command(source: Path, target: Path, enc: str, threads: int | None = None,
            "-movflags", "+faststart+use_metadata_tags",
            "-progress", "pipe:1", "-nostats"]
     if threads:
-        cmd += ["-threads", str(threads)]
+        cmd += ["-threads", str(min(threads, 8) if enc == 'libx265' else threads)]
     cmd += ["-f", "mp4", str(target)]
     return cmd
 
 
 def _threads() -> int | None:
-    """Leave one core for the people using Ninaivu meanwhile."""
+    """Respect the selected resource budget and leave a core for the family."""
+    from ..utils.resources import compute_threads
     count = os.cpu_count() or 1
-    return max(1, count - 1) if count > 2 else None
+    return max(1, min(compute_threads(), count - 1))
 
 
 def encode(source: Path, target: Path, duration: float,

@@ -283,3 +283,23 @@ settings use that file to find the new location. Keep the destination drive
 connected. Ninaivu refuses to start if that relocated index is unavailable,
 rather than creating an empty library. This operation moves the data folder;
 AI models or backups configured outside it retain their existing locations.
+
+
+## Reclaiming a relocation recovery copy
+
+After checking the relocated library, open **Migration → Review recovery-copy
+cleanup**. The confirmation names the original folder and the maximum number
+and size of files to check. Cleanup runs in the background and reports how
+many files it removed or preserved. It removes only files recorded and verified
+by the move whose size and SHA-256 still match. Added files, changed files,
+symlinks, and the forwarding file stay. Repeating cleanup after an interruption
+is safe. Relocations made before recovery manifests were introduced retain
+their manual cleanup instructions above.
+
+A portable upgrade follows the live relocated index and keeps it at the chosen
+location. **Go back** restores the pre-update index there, keeps the newer work
+under `backups/before-go-back`, and returns control to the older program. The
+inactive newer program refuses to start that shared index until you explicitly
+bring the library across again. These shared-location operations require both
+portable programs to support index-location forwarding; versions predating
+that feature require a conventional backup/restore to their expected folder.

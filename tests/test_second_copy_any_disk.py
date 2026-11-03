@@ -36,20 +36,27 @@ def house(scanned, tmp_path: Path):
     (library / "trips" / "Diwali day 2.jpg").write_bytes(b"the other one")
     scanner._run(library, full=True)
     services = build_services(cfg)
-    services.scanner.stop()
+    services.scanner.stop(join=True)
+    # These exercise filesystem names, not whether this test machine is idle.
+    services.mirror._hold = lambda: None
     disk = tmp_path / "pendrive"
     disk.mkdir()
     cfg.mirror_dir, cfg.mirror_enabled = str(disk), True
     client = login(create_admin_app(services).test_client(), *ADMIN)
-    return {"cfg": cfg, "conn": conn, "mirror": services.mirror, "disk": disk,
-            "client": client, "library": library}
+    try:
+        yield {"cfg": cfg, "conn": conn, "mirror": services.mirror, "disk": disk,
+               "client": client, "library": library}
+    finally:
+        services.stop(timeout=5.0)
 
 
 def _run(house, fstype):
     house["mirror"].fstype = fstype
     assert house["mirror"].start() == {"started": True}
     house["mirror"].join(30)
-    return house["mirror"].status()
+    status = house["mirror"].status()
+    assert not house["mirror"].running, status
+    return status
 
 
 def _indexed(house, rel):

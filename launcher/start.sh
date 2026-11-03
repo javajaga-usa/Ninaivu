@@ -15,6 +15,7 @@ case "${1:-}" in
     --add-to-menu) exec python3 ninaivu/desktop/linux_menu.py --add --root "$PWD" ;;
     --remove-from-menu) exec python3 ninaivu/desktop/linux_menu.py --remove ;;
 esac
+[ "$(uname -s)" != Linux ] || . ./launcher/linux-env.sh
 PYTHON="$(sh launcher/install-python-mac.sh --find)"
 if [ -z "$PYTHON" ] && [ "$(uname -s)" = Darwin ]; then
     sh launcher/install-python-mac.sh && PYTHON="$(sh launcher/install-python-mac.sh --find)"

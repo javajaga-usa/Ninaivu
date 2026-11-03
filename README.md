@@ -68,8 +68,9 @@ without a terminal (installing Python 3.12 first if the Mac has none) and
 puts **Ninaivu** and the **Ninaivu Control Panel** in Applications. On
 Windows, **Start - Ninaivu Control Panel.vbs** opens the Control Panel, a
 window that starts and stops Ninaivu and shows its readings and log, beside
-the tray; on Linux, **Start - Ninaivu Control Panel.sh** does (double-click
-and choose Run, or `sh launcher/start.sh --add-to-menu` for a menu entry).
+the tray. On Linux, run `sh "Setup Ninaivu.sh"` once, then open **Ninaivu**
+from the application menu or double-click **Open Ninaivu**. New Linux apps keep
+the index in `~/.ninaivu/` in your home folder; existing libraries are preserved.
 [More on both.](docs/desktop-control.md)
 
 Docker:

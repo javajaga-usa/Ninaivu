@@ -417,3 +417,164 @@ def test_a_record_from_before_counts_as_having_served(tmp_path):
     assert not upgrade.has_served(tmp_path, "3.0.0")
     upgrade.note_good_start(tmp_path)                    # leaves an old record alone
     assert "good_at" not in json.loads((tmp_path / upgrade.VERSION_FILE).read_text())
+
+
+def _relocate(state, target):
+    from ninaivu.storage import relocate
+    relocate.request(state, target)
+    assert relocate.apply_pending(state) == target
+    return target
+
+
+def test_upgrade_uses_live_relocated_index_and_keeps_its_location(here, tmp_path):
+    older_path = _folder(tmp_path, 'Ninaivu-old', version='1.11.0', words='recovery copy')
+    external = _relocate(older_path / 'data', tmp_path / 'chosen data')
+    _index(external / 'index.db', 'current family library')
+    older = portable.older_beside(version='1.12.0')
+    assert older.state == external
+    stopped = []
+    portable.bring_here(older, version='1.12.0', stop_older=stopped.append)
+    assert stopped == [external]
+    assert portable.this_folder().state == external
+    assert _words(external / 'index.db') == 'current family library'
+    assert portable.this_folder().models == external / 'ai-models'
+    assert portable.can_go_back() == '1.11.0'
+
+
+@pytest.mark.parametrize('when', ['before-upgrade', 'after-upgrade'])
+def test_go_back_after_relocation_restores_older_index_at_chosen_location(here, tmp_path, when):
+    from ninaivu.server.config import Config
+    older_path = _folder(tmp_path, 'Ninaivu-old', version='1.11.0', words='older version')
+    external = tmp_path / 'chosen data'
+    if when == 'before-upgrade':
+        _relocate(older_path / 'data', external)
+    portable.bring_here(portable.older_beside(version='1.12.0'), version='1.12.0',
+                        stop_older=_no_stop)
+    state = portable.this_folder().state
+    assert upgrade.prepare(state, version='1.12.0', environ={})['backup']
+    _index(state / 'index.db', 'newer version changes')
+    if when == 'after-upgrade':
+        _relocate(state, external)
+    done = portable.go_back(version='1.12.0', stop_this=_no_stop)
+    assert _words(external / 'index.db') == 'older version'
+    assert Path(done['kept']).is_file()
+    assert portable._layout(older_path).state == external
+    assert not (older_path / portable.MOVED_RECORD).exists()
+    assert portable.this_folder().moved_to == older_path
+    assert Config.load().state_dir == external
+    assert portable.can_go_back() is None
+
+
+def test_unavailable_relocated_drive_is_not_replaced_with_recovery_copy(here, tmp_path):
+    older_path = _folder(tmp_path, 'Ninaivu-old', version='1.11.0', words='recovery')
+    external = _relocate(older_path / 'data', tmp_path / 'disconnected')
+    (external / 'index.db').unlink()
+    with pytest.raises(portable.PortableError, match='unavailable'):
+        portable.older_beside(version='1.12.0')
+    assert not (here / 'data' / 'index.db').exists()
+
+
+def test_rolled_back_program_cannot_reopen_shared_index_until_reactivated(here, tmp_path):
+    older_path = _folder(tmp_path, 'Ninaivu-old', version='1.11.0', words='family')
+    external = _relocate(older_path / 'data', tmp_path / 'chosen data')
+    portable.bring_here(portable.older_beside(version='1.12.0'), version='1.12.0',
+                        stop_older=_no_stop)
+    portable.go_back(version='1.12.0', stop_this=_no_stop)
+    with pytest.raises(portable.PortableError, match='inactive'):
+        portable.require_active()
+    portable.bring_here(portable.older_beside(version='1.12.0'), version='1.12.0',
+                        stop_older=_no_stop)
+    portable.require_active()
+    assert portable.this_folder().state == external
+    assert _words(external / 'index.db') == 'family'
+
+
+def test_live_environment_keeps_models_and_panel_settings_with_the_index(here, tmp_path, monkeypatch):
+    from ninaivu.media import model_catalog
+    state = here / 'data'
+    _index(state / 'index.db', 'family')
+    external = _relocate(state, tmp_path / 'chosen data')
+    portable.activate_environment()
+    assert portable.this_folder().state == external
+    assert Path(portable.os.environ['NINAIVU_HOME']) == external / 'control'
+    assert Path(portable.os.environ['NINAIVU_AI_MODELS_DIR']) == external / 'ai-models'
+    monkeypatch.setattr(model_catalog, '_root', None)
+    assert model_catalog.models_root() == external / 'ai-models'
+
+
+def test_live_environment_keeps_explicit_external_model_directory(here, tmp_path, monkeypatch):
+    state = here / 'data'
+    _index(state / 'index.db', 'family')
+    external_models = tmp_path / 'separate models'
+    monkeypatch.setenv('NINAIVU_AI_MODELS_DIR', str(external_models))
+    _relocate(state, tmp_path / 'chosen data')
+    portable.activate_environment()
+    assert portable.os.environ['NINAIVU_AI_MODELS_DIR'] == str(external_models)
+
+
+def test_shared_home_index_can_be_taken_over_and_returned_between_programs(tmp_path, monkeypatch):
+    monkeypatch.setenv('HOME', str(tmp_path / 'home'))
+    old = _folder(tmp_path, 'old program')
+    new = _folder(tmp_path, 'new program')
+    home_state = tmp_path / 'home/.ninaivu'
+    _index(home_state / 'index.db', 'family')
+    (home_state / upgrade.VERSION_FILE).write_text(json.dumps({'version': '1.11.0'}))
+    portable.note_active(home_state, old)
+    assert portable._layout(old).state == home_state
+    assert portable.older_beside(portable._layout(new), version='1.12.0').path == old
+    portable.bring_here(portable._layout(old), portable._layout(new), version='1.12.0',
+                        stop_older=_no_stop)
+    assert portable._owner(home_state) == new
+    portable.go_back(portable._layout(new), version='1.12.0', stop_this=_no_stop)
+    assert portable._owner(home_state) == old
+    assert _words(home_state / 'index.db') == 'family'
+
+
+def test_relative_portable_path_is_saved_as_an_absolute_location(tmp_path, monkeypatch):
+    old = _folder(tmp_path, 'relative old', version='1.11.0', words='family')
+    monkeypatch.chdir(tmp_path)
+    assert portable._layout(Path('relative old')).path == old
+
+
+def test_home_index_ownership_survives_relocation_recovery_cleanup(tmp_path, monkeypatch):
+    from ninaivu.storage import recovery_cleanup
+    monkeypatch.setenv('HOME', str(tmp_path / 'home'))
+    old = _folder(tmp_path, 'older program')
+    new = _folder(tmp_path, 'newer program')
+    state = tmp_path / 'home/.ninaivu'
+    _index(state / 'index.db', 'family')
+    (state / upgrade.VERSION_FILE).write_text(json.dumps({'version': '1.11.0'}))
+    portable.note_active(state, old)
+    live = _relocate(state, tmp_path / 'chosen data')
+    recovery_cleanup.clean(live)
+    assert not (state / portable.OWNER).exists()
+    assert portable._layout(old).state == live
+    portable.bring_here(portable._layout(old), portable._layout(new), version='1.12.0',
+                        stop_older=_no_stop)
+    assert portable._owner(state) == new
+    assert portable._layout(new).state == live
+
+
+@pytest.mark.parametrize('operation', ['bring', 'go-back'])
+def test_portable_handover_holds_both_starting_gates(here, tmp_path, monkeypatch, operation):
+    from ninaivu.server import runfile
+    old_path = _folder(tmp_path, 'older program', layout='1.11', version='1.11.0', words='family')
+    old = portable._layout(old_path)
+    if operation == 'go-back':
+        portable.bring_here(old, version='1.12.0', stop_older=_no_stop)
+    source = old.state if operation == 'bring' else here / 'data'
+    target = here / 'data' if operation == 'bring' else old.state
+    real_move = portable._move
+    checked = []
+    def checked_move(src, dst, skipped):
+        for state in (source, target):
+            with pytest.raises(runfile.AlreadyStarting), runfile.starting_lock(state):
+                pytest.fail('A competing server acquired the state folder during handover')
+        checked.append(src)
+        return real_move(src, dst, skipped)
+    monkeypatch.setattr(portable, '_move', checked_move)
+    if operation == 'bring':
+        portable.bring_here(old, version='1.12.0', stop_older=_no_stop)
+    else:
+        portable.go_back(version='1.12.0', stop_this=_no_stop)
+    assert checked

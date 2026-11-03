@@ -11,15 +11,11 @@
 #                                offers, for a machine with no desktop)
 #   ./ninaivu --go-back          gives it back to that older Ninaivu
 #
-# The program (its own Python and every package) is in app/. What Ninaivu
-# keeps is apart from it, in data/: the index of the library, settings,
-# accounts, data/ai-models and data/control (the Control Panel's own files),
-# so a newer version can take the library over without anybody moving
-# folders by hand (ninaivu/desktop/portable.py). What it writes about itself
-# is in logs/.
-# Nothing is installed and nothing outside this folder is written, so the
-# folder can be moved, or carried on a USB drive, as one thing. The machine
-# needs no Python of its own.
+# The program and its own Python are in app/. New Linux installations keep
+# their index, settings, models and panel files in ~/.ninaivu. Existing
+# app-local .ninaivu/ or data/ libraries retain their location. An explicit
+# NINAIVU_STATE_DIR takes precedence. Logs stay beside the program in logs/.
+# Replacing the program folder does not remove a home-folder library.
 set -e
 
 # The folder this script is in, wherever it was started from, through a
@@ -49,7 +45,16 @@ if [ ! -x "$python" ]; then
     say "Ninaivu's program files were not found next to this script ($app). Extract the whole archive and run ninaivu from the folder it makes."
     exit 1
 fi
-data="$root/data"
+data="${NINAIVU_STATE_DIR:-$HOME/.ninaivu}"
+# Keep an existing app-local library when no explicit location was supplied.
+if [ -z "${NINAIVU_STATE_DIR:-}" ]; then
+    for previous in "$root/.ninaivu" "$root/data"; do
+        if [ -f "$previous/index.db" ] || [ -f "$previous/index-location.json" ]; then
+            data="$previous"
+            break
+        fi
+    done
+fi
 if ! mkdir -p "$root/logs" "$data/control" "$data/ai-models" 2>/dev/null || [ ! -w "$data" ]; then
     say "Ninaivu cannot write to the folder it is in ($root). Move the whole folder somewhere you can write to, such as your home folder, and run it there."
     exit 1
@@ -78,6 +83,7 @@ case "${1:-}" in
         printf 'NINAIVU_HOME=%s\nNINAIVU_STATE_DIR=%s\nNINAIVU_AI_MODELS_DIR=%s\nNINAIVU_LOG_DIR=%s\nNINAIVU_PYTHON=%s\n' \
             "$NINAIVU_HOME" "$NINAIVU_STATE_DIR" "$NINAIVU_AI_MODELS_DIR" "$NINAIVU_LOG_DIR" "$NINAIVU_PYTHON"
         exit 0 ;;
+    --autostart) shift; exec "$python" -m ninaivu.desktop.autostart --start "$@" ;;
     --tray) shift; exec "$python" -m ninaivu.desktop.tray "$@" ;;
     --server) shift; exec "$python" -m ninaivu "$@" ;;
     --bring|--go-back) exec "$python" -m ninaivu.desktop.portable "$@" ;;

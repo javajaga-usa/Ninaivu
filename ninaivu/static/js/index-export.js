@@ -110,6 +110,7 @@ export class IndexExport {
     if (this.wired) return;
     this.wired = true;
     $('#index-move-start')?.addEventListener('click', () => this.moveIndex());
+    $('#index-recovery-cleanup')?.addEventListener('click', () => this.cleanRecovery());
     $('#ix-export')?.addEventListener('click', () => this.exportNow());
     $('#ix-look')?.addEventListener('click', () => this.look());
     $('#ix-import')?.addEventListener('click', () => this.importNow());
@@ -171,7 +172,7 @@ export class IndexExport {
     }
     this.render();
     if (!$('#ix-block')?.isConnected) return;
-    if (this.state.export?.running || this.state.check?.running) this.timer = setTimeout(() => this.refresh(), POLL_MS);
+    if (this.state.export?.running || this.state.check?.running || this.state.recovery_cleanup?.running) this.timer = setTimeout(() => this.refresh(), POLL_MS);
     else if (this.importing) this.timer = setTimeout(() => this.refresh(), RESTART_POLL_MS);
   }
 
@@ -233,6 +234,19 @@ export class IndexExport {
         : i18n.t('The index move failed. The original index is still in use.') + ' ' + (s.index_move.error || '');
     }
     if ($('#index-move-start')) $('#index-move-start').disabled = Boolean(s.index_move_pending);
+    const cleanup = s.recovery_cleanup || {};
+    const cleanupButton = $('#index-recovery-cleanup');
+    if (cleanupButton) {
+      cleanupButton.hidden = !s.index_move?.ok || !s.index_move?.recovery_files;
+      cleanupButton.disabled = Boolean(cleanup.running || s.index_move_pending);
+    }
+    const cleanupReport = $('#index-recovery-report');
+    if (cleanupReport && (cleanup.running || cleanup.removed != null || cleanup.error)) {
+      cleanupReport.textContent = cleanup.error || (cleanup.running
+        ? i18n.t('Cleaning the recovery copy…')
+        : i18n.t('Recovery cleanup finished. Removed {count} files ({bytes}); preserved {kept} changed or linked files. The forwarding file is kept.',
+          { count: cleanup.removed || 0, bytes: bytes(cleanup.bytes), kept: cleanup.preserved || 0 }));
+    }
     const ex = s.export || {};
     $('#ix-export').disabled = Boolean(ex.running);
     const report = $('#ix-export-report');
@@ -322,6 +336,25 @@ export class IndexExport {
       }
       imported.hidden = !imported.children.length;
     }
+  }
+
+  async cleanRecovery() {
+    const button = $('#index-recovery-cleanup');
+    const report = $('#index-recovery-report');
+    button.disabled = true;
+    report.textContent = i18n.t('Checking the recovery copy…');
+    try {
+      const preview = await json('/api/admin/migration/recovery-cleanup');
+      if (!window.confirm(i18n.t('Remove unchanged recovery files from {path}? Up to {count} files ({bytes}) will be checked. Added or changed files and the forwarding file will stay. Check that your relocated library works before continuing.',
+        { path: preview.source, count: preview.files, bytes: bytes(preview.bytes) }))) {
+        report.textContent = '';
+        return;
+      }
+      this.state = await json('/api/admin/migration/recovery-cleanup', { confirm: true });
+      this.render();
+      this.timer = setTimeout(() => this.refresh(), POLL_MS);
+    } catch (error) { report.textContent = error.message; }
+    finally { button.disabled = Boolean(this.state?.recovery_cleanup?.running); }
   }
 
   async moveIndex() {

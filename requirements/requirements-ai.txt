@@ -2,7 +2,7 @@
 # CPU-only install. Torch comes from PyTorch's index, the rest from PyPI --
 # that index carries torch and little else, so pointing the whole file at it
 # leaves open_clip_torch unresolvable:
-#   pip install "torch>=2.0" --index-url https://download.pytorch.org/whl/cpu
+#   pip install "torch>=2.14.1" torchvision --index-url https://download.pytorch.org/whl/cpu
 #   pip install -r requirements-ai.txt
 torch>=2.14.1,<3
 open_clip_torch>=2.24,<4

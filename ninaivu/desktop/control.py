@@ -313,6 +313,8 @@ PROGRESS_EVERY = 5
 
 class Controller:
     def __init__(self, root=None, cfg=None):
+        from .portable import activate_environment
+        activate_environment()
         self.root = Path(root or ninaivu_root())
         self.cfg = cfg or Config.load()
         self.runtime = control_dir(self.root)
@@ -338,7 +340,16 @@ class Controller:
 
     def record(self):
         from ..storage.relocate import resolve
-        self.cfg.state_dir = resolve(Path(self.cfg.state_dir))
+        previous = Path(self.cfg.state_dir)
+        self.cfg.state_dir = resolve(previous)
+        if self.cfg.state_dir != previous and hasattr(self, 'root'):
+            from .portable import activate_environment
+            activate_environment()
+            if self.root.is_relative_to(previous):
+                self.root = self.cfg.state_dir / self.root.relative_to(previous)
+                self.runtime = control_dir(self.root)
+                self.logs = log_dir(self.root)
+                self.settings_path = self.runtime / 'settings.json'
         record = runfile.read(self.cfg.state_dir)
         if not record or psutil is None:
             return None
@@ -472,6 +483,8 @@ class Controller:
             pass
 
     def start(self):
+        from .portable import require_active
+        require_active()
         if self.record(): return 'Ninaivu is already running.'
         self.refresh_network_access()
         if self.started and self.started.poll() is None: return 'Ninaivu is still starting.'
@@ -657,10 +670,15 @@ class Controller:
         raise RuntimeError('Ninaivu is still finishing active work. Leave it time to checkpoint; no process was forced closed.')
 
     def apply_mode(self, mode):
+        if mode not in ('standard', 'performance', 'power-saving'):
+            raise ValueError('Unknown resource mode.')
         running=bool(self.record())
+        if running:
+            # Stop captures the old process's mode. Save the requested mode
+            # after that capture so Start uses the new selection.
+            self.stop()
         self.save_mode(mode)
         if running:
-            self.stop()
             return self.start()
         return 'Mode saved for the next start.'
 
