@@ -69,13 +69,14 @@ def _jsonable(value: Any) -> Any:
 
 
 def _default_state_dir() -> Path:
+    from ..storage.relocate import resolve
     env = os.environ.get("NINAIVU_STATE_DIR")
     if env:
-        return Path(env).expanduser().resolve()
+        return resolve(Path(env))
     base = os.environ.get("XDG_DATA_HOME")
     if base:
-        return Path(base).expanduser().resolve() / "ninaivu"
-    return Path.home() / ".ninaivu"
+        return resolve(Path(base).expanduser().resolve() / "ninaivu")
+    return resolve(Path.home() / ".ninaivu")
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -1602,7 +1603,8 @@ class Config:
             if value is not None and key in names:
                 setattr(cfg, key, value)
 
-        cfg.state_dir = Path(cfg.state_dir).expanduser()
+        from ..storage.relocate import resolve
+        cfg.state_dir = resolve(Path(cfg.state_dir))
         cfg.ignore_dirs = set(cfg.ignore_dirs)
         cfg.thumb_sizes = tuple(cfg.thumb_sizes)
         cfg.roots = [str(Path(r).expanduser()) for r in cfg.roots]

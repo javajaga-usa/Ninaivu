@@ -330,6 +330,16 @@ def main(argv: list[str] | None = None) -> int:
                 # written, this says how far the start has got
                 # (server/starting.py). Inside the lock, so a start that is
                 # turned away does not overwrite the note of the one at work.
+                from .storage import relocate
+                cfg = Config.load()
+                starting.begin(cfg.state_dir)
+                if (cfg.state_dir / relocate.PENDING).exists() and not args.replica_of:
+                    starting.step("moving and verifying the index in its new folder")
+                    relocated = relocate.apply_pending(cfg.state_dir)
+                else:
+                    relocated = None
+                if relocated is not None:
+                    cfg = Config.load()
                 starting.begin(cfg.state_dir)
                 if not args.replica_of:
                     # An import asked for from the console replaces the state

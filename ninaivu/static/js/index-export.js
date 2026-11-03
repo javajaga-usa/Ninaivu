@@ -109,6 +109,7 @@ export class IndexExport {
   wire() {
     if (this.wired) return;
     this.wired = true;
+    $('#index-move-start')?.addEventListener('click', () => this.moveIndex());
     $('#ix-export')?.addEventListener('click', () => this.exportNow());
     $('#ix-look')?.addEventListener('click', () => this.look());
     $('#ix-import')?.addEventListener('click', () => this.importNow());
@@ -221,6 +222,17 @@ export class IndexExport {
   render() {
     const s = this.state;
     if (!s) return;
+    const location = $('#index-move-current');
+    if (location) location.textContent = i18n.t('Current index folder: {path}', { path: s.index_folder || '' });
+    const moveReport = $('#index-move-report');
+    if (moveReport && s.index_move_pending) {
+      moveReport.textContent = i18n.t('The move is scheduled. Restart Ninaivu to complete it.');
+    } else if (moveReport && s.index_move) {
+      moveReport.textContent = s.index_move.ok
+        ? i18n.t('The index was moved and verified. The original folder is kept as a recovery copy.')
+        : i18n.t('The index move failed. The original index is still in use.') + ' ' + (s.index_move.error || '');
+    }
+    if ($('#index-move-start')) $('#index-move-start').disabled = Boolean(s.index_move_pending);
     const ex = s.export || {};
     $('#ix-export').disabled = Boolean(ex.running);
     const report = $('#ix-export-report');
@@ -309,6 +321,25 @@ export class IndexExport {
         imported.append(el('div', 'hint subtle', i18n.t('Nothing has been imported on this computer yet.')));
       }
       imported.hidden = !imported.children.length;
+    }
+  }
+
+  async moveIndex() {
+    const folder = $('#index-move-folder').value.trim();
+    if (!folder) { this.toast(i18n.t('Give the new index folder on the Ninaivu computer.'), true); return; }
+    if (!window.confirm(i18n.t('Move the index and restart Ninaivu? Everybody using Ninaivu will be interrupted. The original folder is kept as a recovery copy.'))) return;
+    const button = $('#index-move-start');
+    const report = $('#index-move-report');
+    button.disabled = true;
+    report.textContent = i18n.t('Scheduling the index move…');
+    try {
+      const result = await json('/api/admin/migration/move-index', { folder });
+      report.textContent = result.restarting
+        ? i18n.t('Ninaivu is restarting to move the index. Large libraries can take a while. Refresh this page after Ninaivu returns to check the new location.')
+        : i18n.t('The move is scheduled. Restart Ninaivu to complete it.') + ' ' + (result.restart_problem || '');
+    } catch (error) {
+      report.textContent = error.message;
+      button.disabled = false;
     }
   }
 

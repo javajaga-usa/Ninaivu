@@ -306,7 +306,17 @@ def _the_checker():
 def _export_state(cfg) -> dict[str, Any]:
     from ..storage import full_export                    # noqa: PLC0415
     from . import server_api                             # noqa: PLC0415
+    from ..storage import relocate
+    import json
+    def move_record(name):
+        try:
+            return json.loads((cfg.state_dir / name).read_text(encoding='utf-8'))
+        except (OSError, ValueError):
+            return None
     return {
+        "index_folder": str(cfg.state_dir),
+        "index_move": move_record(relocate.RESULT),
+        "index_move_pending": move_record(relocate.PENDING),
         "export": _the_exporter().status(cfg.state_dir),
         # The reading-through of the export last checked for an import.
         "check": _the_checker().status(),
@@ -385,6 +395,9 @@ def import_ask():
     if not path:
         return jsonify({"error": "Give the export file, or the folder it is in."}), 400
     cfg = _cfg()
+    from ..storage import relocate
+    if (cfg.state_dir / relocate.PENDING).exists():
+        return jsonify({"error": "An index move is waiting. Restart Ninaivu first."}), 409
     if _the_exporter().running:
         return jsonify({"error": "An export is being made. Wait for it to finish first."}), 409
     # Not waited for: the import checks every file against the export's list
@@ -445,3 +458,31 @@ def import_cancel():
     cfg = _cfg()
     full_export.cancel(cfg.state_dir)
     return jsonify(_export_state(cfg))
+
+
+@migration_bp.post('/api/admin/migration/move-index')
+@require_admin
+def move_index():
+    """Schedule a verified relocation while the database is closed at restart."""
+    from ..storage import relocate
+    from . import server_api
+    cfg = _cfg()
+    body = json_object()
+    destination = str(body.get('folder') or '').strip()
+    if not destination:
+        return jsonify({'error': 'Give the new index folder on the Ninaivu computer.'}), 400
+    if _the_exporter().running:
+        return jsonify({'error': 'Wait for the index export to finish first.'}), 409
+    try:
+        relocate.request(cfg.state_dir, Path(destination))
+    except (ValueError, OSError) as error:
+        return jsonify({'error': str(error)}), 400
+    problem = server_api._restart_problem()
+    restarting = False
+    if problem is None:
+        reply, status = server_api._begin_restart(what=' to move the index')
+        restarting = status == 202
+        if not restarting:
+            problem = reply.get('error')
+    return jsonify({'restarting': restarting, 'restart_problem': problem,
+                    'destination': destination}), 202

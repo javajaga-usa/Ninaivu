@@ -106,8 +106,13 @@ def test_removing_takes_out_only_its_own(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.delenv("XDG_DATA_HOME", raising=False)
     linux_menu.add(_portable(tmp_path / "Ninaivu", tmp_path / "m"), out=lambda _: None)
+    # update-desktop-database may create this shared cache during add().
+    # Seed it even on machines without that utility: removal must preserve it.
+    cache = menu / "mimeinfo.cache"
+    cache.write_text("[MIME Cache]\n")
     linux_menu.remove(out=lambda _: None)
-    assert sorted(p.name for p in menu.iterdir()) == ["firefox.desktop"]
+    assert sorted(p.name for p in menu.iterdir()) == ["firefox.desktop", "mimeinfo.cache"]
+    assert cache.read_text() == "[MIME Cache]\n"
 
 
 def test_open_ninaivu_runs_the_script_beside_it_from_anywhere(tmp_path):
