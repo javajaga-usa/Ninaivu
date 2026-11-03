@@ -12,7 +12,7 @@ numpy>=2.5.4,<3
 waitress>=3.0,<4        # a real thread pool instead of a thread per
                      # request; without it Ninaivu falls back to
                      # Werkzeug's development server
-watchdog>=3.0,<7        # live library watching
+watchdog>=7.0.0,<8        # live library watching
 zeroconf>=0.151.5,<1      # answer to a name on the LAN (https://ninaivu.local)
 mutagen>=1.47,<2        # audio tags and durations
 pillow-heif>=1.8.1,<2    # HEIC/HEIF (iPhone photos)
