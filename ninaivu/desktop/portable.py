@@ -564,7 +564,15 @@ def bring_here(older: Folder, folder: Folder | None = None, *, version: str | No
             f"The library in {older.path} was last opened by Ninaivu {older_version}, "
             f"which is newer than this one ({version}). Use Ninaivu {older_version} or later.")
     shared_state = not older.state.is_relative_to(older.path)
-    if not shared_state and not _same_drive(older.state, folder.path):
+    if not shared_state and not _same_drive(older.state, folder.state):
+        # The library is renamed into folder.state, which on Linux is
+        # ~/.ninaivu rather than inside this folder: a rename across drives
+        # fails part-way, so the drive that matters is the one it goes to.
+        if not folder.state.is_relative_to(folder.path):
+            raise PortableError(
+                f"The library in {older.path} is on another drive from {folder.state}, where "
+                f"this Ninaivu keeps it. Start this Ninaivu with NINAIVU_STATE_DIR set to a "
+                f"folder on that drive, or move the older folder to this computer's disk first.")
         raise PortableError(
             f"{older.path} is on another drive. Unpack the newer Ninaivu on the same drive "
             f"as the older one, beside it, and open it from there: the library is then moved "
@@ -712,7 +720,22 @@ def go_back(folder: Folder | None = None, *, version: str | None = None,
     if older is None:
         raise PortableError(f"The older Ninaivu is no longer in {record['folder']}.")
     resuming = (folder.path / GOING_BACK).is_file()
-    shared_state = not folder.state.is_relative_to(folder.path)
+    # Whether the index stayed where it was (relocated, or in a home folder)
+    # is what bring_here recorded, not where it is now: on Linux a library
+    # brought from an older folder's data/ lives in ~/.ninaivu, outside this
+    # folder, and must still be moved back. Taking it for a shared index left
+    # the older folder with only a forwarding note, which a version before
+    # 3.6 cannot follow, so it opened an empty library.
+    # It is shared when bring_here left it in place, or when it has been
+    # relocated from the console since (it is no longer where it was put).
+    recorded_shared = record.get("shared_state")
+    put_at = record.get("state_to")
+    if isinstance(recorded_shared, bool) and isinstance(put_at, str) and put_at:
+        shared_state = recorded_shared or (
+            os.path.normcase(str(folder.state.resolve()))
+            != os.path.normcase(str(Path(put_at).resolve())))
+    else:                                # recorded by 3.5.1 or earlier
+        shared_state = not folder.state.is_relative_to(folder.path)
     same_library = shared_state and older.state == folder.state and older.moved_to == folder.path
     if older.has_library and not same_library and not (resuming and not folder.has_library):
         raise PortableError(f"{older.path} has a library of its own again, so nothing was moved.")
