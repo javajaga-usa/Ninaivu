@@ -170,6 +170,9 @@ case "$url" in
     */repos/pub/rel/) code=200; cat "$FAKE/pub" > "$out" ;;
     */repos/pub/rel/git/ref/tags/*) code=$(cat "$FAKE/pubtag" 2>/dev/null || echo 404) ;;
     */repos/pub/rel/releases/tags/*) code=$(cat "$FAKE/pubrelease" 2>/dev/null || echo 404) ;;
+    */releases/latest)
+        if [ -f "$FAKE/latest" ]; then code=200; cat "$FAKE/latest" > "$out"; else code=404; fi ;;
+    */actions/runs/*/jobs*) code=200; cp "$FAKE/jobs" "$out" ;;
     */git/ref/tags/*) code=$(cat "$FAKE/tag" 2>/dev/null || echo 404) ;;
     */releases/tags/*) code=$(cat "$FAKE/release" 2>/dev/null || echo 404) ;;
     */compare/main...*)
@@ -187,8 +190,21 @@ printf '%s' "$code"
 
 def _runs(*runs, event="push"):
     import json
-    return json.dumps({"workflow_runs": [{"status": s, "conclusion": c, "event": event}
-                                         for s, c in runs]})
+    return json.dumps({"workflow_runs": [{"status": s, "conclusion": c, "event": event,
+                                          "id": 100 + i, "run_number": i}
+                                         for i, (s, c) in enumerate(runs)]})
+
+
+#: The jobs of a Tests & Linting run that tested all three computers.
+EVERY_SYSTEM = ("Lint", "Tests · ubuntu-latest · Python 3.12", "Tests · ubuntu-latest · Python 3.14",
+                "Tests · windows-latest · Python 3.12", "Tests · windows-latest · Python 3.14",
+                "Basic tier · 2 GB, no GPU", "Full tier · Apple silicon, model stack")
+
+
+def _jobs(*names, failed=()):
+    import json
+    return json.dumps({"jobs": [{"name": n, "conclusion": "failure" if n in failed else "success"}
+                                for n in names or EVERY_SYSTEM]})
 
 
 @pytest.fixture()
@@ -216,6 +232,7 @@ def gate(tmp_path):
         folder = work / "extensions" / extension
         folder.mkdir(parents=True)
         (folder / "pyproject.toml").write_text('version = "2.3.4"\n')
+    (fake / "jobs").write_text(_jobs())
     script = _gate_script()
 
     def run(event="push", ref="refs/tags/v2.3.4", ref_name="v2.3.4", runs=None, releases_token=""):
@@ -557,3 +574,53 @@ def test_with_no_variables_set_every_job_runs_where_it_always_did():
     flow = _workflow("tests.yml")
     assert "vars.WINDOWS_TESTS != 'weekly'" in flow["jobs"]["test"]["strategy"]["matrix"]["os"]
 
+
+
+# --- tightened on 4 November 2026 -------------------------------------------
+
+def test_an_unreleased_section_above_the_version_stops_the_release(gate):
+    """The notes are the version's section: what is above it would ship unsaid."""
+    (gate.work / "docs" / "CHANGELOG.md").write_text(
+        "## Unreleased\n\n- a fix\n\n## 2.3.4 — 8 October 2026\n", encoding="utf-8")
+    done, output = gate()
+    assert done.returncode == 1 and "newest section" in done.stdout, done.stdout
+    assert output == ""
+
+
+@pytest.mark.parametrize("latest, ok", [("v2.3.3", True), ("v2.3.4", False), ("v2.10.0", False),
+                                        ("v1.99.9", True)])
+def test_the_version_is_newer_than_the_latest_release(gate, latest, ok):
+    import json
+    (gate.fake / "latest").write_text(json.dumps({"tag_name": latest}))
+    done, output = gate()
+    assert (done.returncode == 0) is ok, done.stdout
+    if not ok:
+        assert "not newer than the latest release" in done.stdout and output == ""
+
+
+def test_a_passing_run_without_windows_stops_the_release(gate):
+    """WINDOWS_TESTS=weekly leaves Windows out of a push's run, which still passes."""
+    names = [n for n in EVERY_SYSTEM if "windows" not in n]
+    (gate.fake / "jobs").write_text(_jobs(*names))
+    done, output = gate()
+    assert done.returncode == 1 and "Tests · windows-latest" in done.stdout, done.stdout
+    assert output == ""
+
+
+def test_a_passing_run_without_the_mac_stops_the_release(gate):
+    names = [n for n in EVERY_SYSTEM if "Apple silicon" not in n]
+    (gate.fake / "jobs").write_text(_jobs(*names))
+    done, _ = gate()
+    assert done.returncode == 1 and "Full tier · Apple silicon" in done.stdout, done.stdout
+
+
+def test_a_failed_job_in_the_run_stops_the_release(gate):
+    (gate.fake / "jobs").write_text(_jobs(*EVERY_SYSTEM, failed=("Tests · windows-latest · Python 3.14",)))
+    done, _ = gate()
+    assert done.returncode == 1 and "did not pass: Tests · windows-latest · Python 3.14" in done.stdout
+
+
+def test_a_run_workflow_run_of_the_commit_counts(gate):
+    """Run workflow on main tests the commit itself, and includes every system."""
+    done, _ = gate(runs=_runs(("completed", "success"), event="workflow_dispatch"))
+    assert done.returncode == 0, done.stdout

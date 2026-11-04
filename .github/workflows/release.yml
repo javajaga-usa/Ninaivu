@@ -127,6 +127,12 @@ jobs:
             grep -qE "^version = \"$version\"$" "$pyproject" || { echo "::error::$pyproject does not match the release version $version"; exit 1; }
           done
           grep -qE "^## ${version} — " docs/CHANGELOG.md || { echo "::error::docs/CHANGELOG.md does not contain a section for $version"; exit 1; }
+          # The newest section is this version's: the release notes are its
+          # section, so anything above it (an "Unreleased" one) would ship
+          # without being said.
+          newest=$(grep -m1 -E '^## ' docs/CHANGELOG.md || true)
+          case "$newest" in "## ${version} — "*) ;; *)
+            echo "::error::the newest section of docs/CHANGELOG.md is '$newest', not $version; fold it into the $version section"; exit 1;; esac
           tag="v$version"
           if [ "$EVENT" = workflow_dispatch ]; then
             [ "$REF" = refs/heads/main ] || { echo "::error::Run workflow only from main, not $REF"; exit 1; }
@@ -168,16 +174,33 @@ jobs:
           fi
           echo "the release goes to $publish_to"
 
+          # Newer than the latest release there: never a version that goes
+          # backwards, which an update would refuse or, worse, take.
+          if [ -n "$RELEASES_TOKEN" ]; then code=$(pub "releases/latest"); file="$RUNNER_TEMP/pub.json"
+          else code=$(api "releases/latest"); file="$RUNNER_TEMP/api.json"; fi
+          if [ "$code" = 200 ]; then
+            latest=$(jq -r '.tag_name' "$file"); latest=${latest#v}
+            highest=$(printf '%s\n%s\n' "$latest" "$version" | sort -V | tail -n 1)
+            if [ "$latest" = "$version" ] || [ "$highest" != "$version" ]; then
+              echo "::error::$version is not newer than the latest release, $latest"; exit 1
+            fi
+            echo "the latest release is $latest"
+          elif [ "$code" != 404 ]; then
+            echo "::error::could not read the latest release of $publish_to (HTTP $code)"; exit 1
+          fi
+
           # The tests, on this commit. Waited for while they run, up to 90 minutes.
           for attempt in $(seq 1 90); do
             code=$(api "actions/workflows/tests.yml/runs?head_sha=$SHA&per_page=100")
             [ "$code" = 200 ] || { echo "::error::could not read the test runs (HTTP $code)"; exit 1; }
-            # Only runs on a push of this commit: a pull request's run tested
-            # the merge of it with its base, which is a different commit.
-            passed=$(jq '[.workflow_runs[] | select(.event == "push" and .status == "completed" and .conclusion == "success")] | length' "$RUNNER_TEMP/api.json")
-            running=$(jq '[.workflow_runs[] | select(.event == "push" and .status != "completed")] | length' "$RUNNER_TEMP/api.json")
+            # Only runs of this very commit (a push, or Run workflow on main):
+            # a pull request's run tested the merge of it with its base,
+            # which is a different commit.
+            passed=$(jq '[.workflow_runs[] | select((.event == "push" or .event == "workflow_dispatch") and .status == "completed" and .conclusion == "success")] | length' "$RUNNER_TEMP/api.json")
+            running=$(jq '[.workflow_runs[] | select((.event == "push" or .event == "workflow_dispatch") and .status != "completed")] | length' "$RUNNER_TEMP/api.json")
             if [ "$passed" -gt 0 ]; then
-              echo "Tests & Linting passed on $SHA"; break
+              run=$(jq '[.workflow_runs[] | select((.event == "push" or .event == "workflow_dispatch") and .status == "completed" and .conclusion == "success")] | max_by(.run_number) | .id' "$RUNNER_TEMP/api.json")
+              echo "Tests & Linting passed on $SHA (run $run)"; break
             fi
             if [ "$running" -eq 0 ]; then
               echo "::error::Tests & Linting has not passed on $SHA; push it to main (or re-run the failed jobs) and try again"
@@ -187,6 +210,20 @@ jobs:
             sleep 60
           done
           [ "$passed" -gt 0 ] || { echo "::error::Tests & Linting did not finish on $SHA in time"; exit 1; }
+
+          # And it tested the three computers the downloads are for. A run can
+          # pass without Windows (WINDOWS_TESTS=weekly leaves it out of pushes),
+          # and a passing run that never ran a system says nothing about it.
+          code=$(api "actions/runs/$run/jobs?per_page=100")
+          [ "$code" = 200 ] || { echo "::error::could not read the jobs of run $run (HTTP $code)"; exit 1; }
+          bad=$(jq -r '[.jobs[] | select(.conclusion != "success" and .conclusion != "skipped") | .name] | join(", ")' "$RUNNER_TEMP/api.json")
+          [ -z "$bad" ] || { echo "::error::in run $run these did not pass: $bad"; exit 1; }
+          for wanted in "Tests · windows-latest · Python 3.12" "Tests · ubuntu-latest · Python 3.12" \
+                        "Tests · ubuntu-latest · Python 3.14" "Full tier · Apple silicon" "Basic tier" "Lint"; do
+            found=$(jq --arg w "$wanted" '[.jobs[] | select((.name | startswith($w)) and .conclusion == "success")] | length' "$RUNNER_TEMP/api.json")
+            [ "$found" -gt 0 ] || { echo "::error::run $run has no passing '$wanted' job; run Tests & Linting on main with Run workflow, which includes every system, and try again"; exit 1; }
+          done
+          echo "Windows, Linux and the Apple-silicon Mac all passed in run $run"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "publish_to=$publish_to" >> "$GITHUB_OUTPUT"
           echo "releasing $version"
