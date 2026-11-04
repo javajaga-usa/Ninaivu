@@ -202,7 +202,7 @@ CATALOGUE: dict[str, dict[str, Any]] = {
         # PyTorch first, from its own index: the processor-only build, which is
         # a fraction of the size of the default one with its graphics-card
         # libraries. The launcher's --ai auto does the same.
-        "also": ["--index-url", "https://download.pytorch.org/whl/cpu", "torch>=2.14.1,<3"],
+        "also": ["--index-url", "https://download.pytorch.org/whl/cpu", "torch>=2.15.0,<3"],
         "restart": True,
     },
     "ocr": {
@@ -273,8 +273,8 @@ CATALOGUE: dict[str, dict[str, Any]] = {
         "label": said("Letters read aloud in Tamil"),
         "used_for": said("Runs the Tamil voice that reads an old letter aloud (Letters read aloud, Advanced settings): transformers on PyTorch, in the engine's own process. About 2 GB installed with PyTorch; the voice itself is on the AI models page."),
         "present": _packages_present("torch", "transformers"),
-        "requirement": "transformers>=5.20.1,<6",
-        "also": ["--index-url", "https://download.pytorch.org/whl/cpu", "torch>=2.14.1,<3"],
+        "requirement": "transformers>=5.22.1,<6",
+        "also": ["--index-url", "https://download.pytorch.org/whl/cpu", "torch>=2.15.0,<3"],
         # Read by the model host, a process of its own, which starts after the
         # install: nothing in the server needs restarting for it.
         "restart": False,
@@ -284,7 +284,7 @@ CATALOGUE: dict[str, dict[str, Any]] = {
         "label": said("Voice stories as words"),
         "used_for": said("The on-device AI engine's speech reader, which writes down what is said in voice stories. It carries its own copy of the ONNX runtime and runs in the engine's own process. About 45 MB installed; the speech models are on the AI models page."),
         "present": _package_present("sherpa_onnx"),
-        "requirement": "sherpa-onnx>=2.0.0,<3",
+        "requirement": "sherpa-onnx>=2.0.1,<3",
         # Read by the model host, a process of its own, which starts after the
         # install: nothing in the server needs restarting for it.
         "restart": False,
