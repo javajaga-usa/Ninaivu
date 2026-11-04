@@ -374,18 +374,23 @@ def test_a_part_left_a_sliver_of_the_budget_is_not_named():
     import types
     from ninaivu import Services
 
-    quick = types.SimpleNamespace(stop=lambda *a, **k: time.sleep(0.05),
-                                  pause=lambda: time.sleep(0.05),
+    # Each other part stops in a moment, but in more than the sliver it is
+    # left, so without the fair share it would be named.
+    quick = types.SimpleNamespace(stop=lambda *a, **k: time.sleep(0.25),
+                                  pause=lambda: time.sleep(0.25),
                                   restore_stop=lambda: None)
     services = object.__new__(Services)
-    services.scanner = types.SimpleNamespace(stop=lambda join=False: time.sleep(0.28),
+    # The scan takes most of the budget and leaves the next part less than
+    # FAIR_STOP_SHARE. 0.15 s spare, not 0.02: a busy Mac runner's sleep ran
+    # past 0.3 s, and the scan itself was named.
+    services.scanner = types.SimpleNamespace(stop=lambda join=False: time.sleep(0.85),
                                              running=False)
     for name in ("straightener", "cloud", "guardian", "backups", "updates", "digest",
                  "disks", "restore_tests", "index_copy", "mirror", "offsite", "repairer",
                  "xmp", "importer", "power", "library_drives"):
         setattr(services, name, quick)
     services._pause_archive = lambda: None
-    assert services.stop(timeout=0.3) == []
+    assert services.stop(timeout=1.0) == []
 
 
 # --- faster: one pass over the archive -------------------------------------------
