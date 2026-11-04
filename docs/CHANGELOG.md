@@ -1,27 +1,35 @@
 # Changelog
 
-## Unreleased
+## 3.6.0 — 4 November 2026
 
-- **Linux: one download, for x64, checked on Debian.** Every release's Linux
-  download is now opened and used on Debian 12 and 13, as well as Ubuntu,
-  before it is published. The arm64 (Raspberry Pi) download is no longer made.
-- **Exporting the index from the Mac app no longer runs out of open files.**
-  A Mac lets an app opened from Finder hold only 256 files open at once.
-  Ninaivu's own threads keep the index open, and a full export of a large
-  library (961,507 files) failed with "Too many open files" about 700,000
-  files in, while the console's own pages failed alongside it. Ninaivu now
-  asks for up to 10,240 when it starts, and says in its log how many it may
-  hold.
-
-## 3.6.0 — 3 November 2026
+### Moving the index
 
 - Move the index from the browser administration console. Moves verify the copy, restart the server, and keep the old folder as a recovery copy with a forwarding note.
 - Review and clean up verified recovery files from the console. Added or changed files stay, and the forwarding note keeps old launchers working.
-- Linux opens as an application with a Control Panel, application-menu entries, and optional sign-in startup. New installations keep the index in `~/.ninaivu` in the user’s home folder; existing libraries and explicit locations are preserved.
 - Portable upgrades and **Go back** follow a relocated index and preserve shared library locations. Startup locks and ownership checks prevent inactive program copies from opening the same library.
+
+### Linux
+
+- Linux opens as an application with a Control Panel, application-menu entries, and optional sign-in startup. New installations keep the index in `~/.ninaivu` in the user’s home folder; existing libraries and explicit locations are preserved.
+- **Go back to an older version gives it its library again.** A library brought from an older portable folder into `~/.ninaivu` is moved back on Go back, so the older version opens it instead of an empty one. An update whose library would have to move to another drive now says so before anything is moved.
+- **One download, for x64, checked on Debian.** Every release's Linux download is opened and used on Debian 12 and 13, as well as Ubuntu, before it is published. The arm64 (Raspberry Pi) download is no longer made.
+- **A low battery is the computer's own.** A consolidation paused for "battery is low (0%)" on a laptop at 94%: the first battery Linux listed was a touchscreen pen's. Only the computer's batteries count now, and "on battery" means no charger is plugged in.
+- Drives and folders whose names have a tab, a newline or a backslash are matched to where they are mounted.
+- **View logs** shows the server started from the menu: the launcher writes where the Control Panel reads, and its log is readable by its owner only.
+
+### Updating
+
+- **The copy before an update says how far it has got**: copying, checking, verifying, packing. On a large index it takes several minutes, and a start that only said "copying" looked hung and was stopped.
+- **A copy left by an interrupted start is cleared at the next backup**, instead of being kept for a day: three stopped starts had left 7.7 GB.
+
+### Mac
+
+- **Exporting the index from the Mac app no longer runs out of open files.** A Mac lets an app opened from Finder hold only 256 files open at once. A full export of a large library (961,507 files) failed with "Too many open files" about 700,000 files in, and the console's own pages failed with it. Ninaivu now asks for up to 10,240 when it starts, and says in its log how many it may hold.
+
+### Smaller things
+
 - Improved Control Panel mode switching, unavailable-drive messages, and stop helpers after index relocation.
-- Fixed HEVC compression on computers with many CPU cores and updated build dependencies.
-- Added browser relocation coverage and Linux lifecycle, recovery cleanup, and portable rollback regression tests.
+- Fixed HEVC compression on computers with many CPU cores and updated build dependencies; the Extras page installs the same versions of torch, transformers and sherpa-onnx as the tests use.
 
 ## 3.5.1 — 2 November 2026
 
