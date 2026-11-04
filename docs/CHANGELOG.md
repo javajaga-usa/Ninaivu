@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **Linux: one download, for x64, checked on Debian.** Every release's Linux
+  download is now opened and used on Debian 12 and 13, as well as Ubuntu,
+  before it is published. The arm64 (Raspberry Pi) download is no longer made.
 - **Exporting the index from the Mac app no longer runs out of open files.**
   A Mac lets an app opened from Finder hold only 256 files open at once.
   Ninaivu's own threads keep the index open, and a full export of a large

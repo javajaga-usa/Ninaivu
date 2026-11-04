@@ -88,21 +88,24 @@ def test_the_mac_app_opens_the_control_panel_and_keeps_its_files_in_its_folder_o
 def test_the_release_workflow_builds_four_portable_downloads_and_signs_only_with_secrets():
     yaml = pytest.importorskip("yaml")
     flow = yaml.safe_load((ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8"))
-    assert set(flow["jobs"]) == {"gate", "windows", "macos", "linux", "linux-arm64", "pair-across",
+    # Three downloads: Windows x64, Apple silicon and Linux x64, the last
+    # also opened on Debian 12 and 13. No arm64 Linux (Raspberry Pi) build.
+    assert set(flow["jobs"]) == {"gate", "windows", "macos", "linux", "debian", "pair-across",
                                  "release", "docker"}
-    assert flow["jobs"]["release"]["needs"] == ["gate", "windows", "macos", "linux", "linux-arm64",
+    assert flow["jobs"]["release"]["needs"] == ["gate", "windows", "macos", "linux", "debian",
                                                 "pair-across"]
     # GitHub's runners unless a repository variable names one at home (the
     # Mac mini, Apple silicon too; its Linux runners are arm64 as well).
     assert flow["jobs"]["macos"]["runs-on"] == "${{ vars.MAC_RUNNER || 'macos-15' }}", "Apple silicon"
-    assert flow["jobs"]["linux-arm64"]["runs-on"] == "${{ vars.LINUX_ARM64_RUNNER || 'ubuntu-24.04-arm' }}", \
-        "built natively, not emulated"
-    for job in ("windows", "macos", "linux", "linux-arm64"):
+    debian = flow["jobs"]["debian"]
+    assert debian["needs"] == "linux" and debian["container"] == "debian:${{ matrix.debian }}"
+    assert debian["strategy"]["matrix"]["debian"] == ["12", "13"]
+    for job in ("windows", "macos", "linux"):
         assert "strategy" not in flow["jobs"][job], f"{job}: one build, no matrix"
     files = next(s for s in flow["jobs"]["release"]["steps"] if s.get("uses", "").startswith("softprops/"))["with"]["files"]
-    for wanted in ("out/windows/*.zip", "out/macos/*.zip", "out/linux/*.tar.gz",
-                   "out/linux-arm64/*.tar.gz"):
+    for wanted in ("out/windows/*.zip", "out/macos/*.zip", "out/linux/*.tar.gz"):
         assert wanted in files
+    assert "arm64-portable.tar" not in files and "linux-arm64" not in files
     for gone in (".exe", ".dmg", ".sh", "ninaivu.rb", "x86_64"):
         assert gone not in files
     signing = [s for job in ("windows", "macos") for s in flow["jobs"][job]["steps"]
@@ -210,7 +213,7 @@ def test_every_download_is_used_as_a_household_would_before_a_release():
     computers across Mac, Windows and Linux."""
     yaml = pytest.importorskip("yaml")
     flow = yaml.safe_load((ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8"))
-    for job in ("windows", "macos", "linux", "linux-arm64"):
+    for job in ("windows", "macos", "linux", "debian"):
         runs = " ".join(s.get("run", "") for s in flow["jobs"][job]["steps"])
         assert "tools/check_portable.py check" in runs, job
         assert "tools/check_portable.py pair" in runs, job

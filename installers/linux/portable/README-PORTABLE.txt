@@ -4,12 +4,9 @@ Ninaivu, portable, for Linux
 Open Ninaivu, the ninaivu script and app/ carry the program and its own
 Python and packages, so the computer needs none. The default library data
 lives in ~/.ninaivu in your home folder and stays when the program is deleted
-or replaced. For a 64-bit PC (x86-64, the linux-x64 download) or an
-arm64 computer (a Raspberry Pi 4 or 5 with a 64-bit system, the linux-arm64
-download) running Ubuntu, Debian or another current distribution.
-
-The arm64 download carries no ffmpeg of its own yet. Install the system's
-(sudo apt install ffmpeg) so videos get their posters and play.
+or replaced. For a 64-bit PC (x86-64) running Debian 12 or 13, Ubuntu or
+another current distribution. There is no download for arm64 computers such
+as a Raspberry Pi.
 
 To start
   1. Extract the archive somewhere you can write to (your home folder, or a

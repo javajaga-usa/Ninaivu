@@ -328,7 +328,7 @@ def test_only_the_publishing_jobs_may_write():
     assert release["jobs"]["release"]["permissions"] == {
         "contents": "write", "id-token": "write", "attestations": "write"}
     assert release["jobs"]["gate"]["permissions"] == {"contents": "read", "actions": "read"}
-    for job in ("windows", "macos", "linux", "linux-arm64"):
+    for job in ("windows", "macos", "linux"):
         assert "permissions" not in release["jobs"][job]
         assert release["jobs"][job]["needs"] == "gate"
     docker = _workflow("docker.yml")
