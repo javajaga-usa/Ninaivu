@@ -42,22 +42,77 @@ def _windows_battery() -> tuple[bool | None, int | None]:
         return None, None
 
 
-def _linux_battery() -> tuple[bool | None, int | None]:
-    supplies = Path('/sys/class/power_supply')
+#: Power supplies that feed the computer itself. A USB-C port shows up as one
+#: of the USB kinds and is online while a charger is plugged into it.
+_LINUX_MAINS = {'mains', 'usb', 'usb_c', 'usb_pd', 'usb_pd_drp', 'usb_dcp', 'usb_cdp', 'usb_aca'}
+
+
+def _sysfs(path: Path) -> str:
     try:
-        batteries = [p for p in supplies.iterdir()
-                     if (p / 'type').read_text(errors='ignore').strip() == 'Battery']
+        return path.read_text(errors='ignore').strip()
+    except OSError:
+        return ''
+
+
+def _linux_battery(supplies: Path = Path('/sys/class/power_supply')
+                   ) -> tuple[bool | None, int | None]:
+    """(on battery, percent) of the computer's own battery.
+
+    ``/sys/class/power_supply`` lists every battery the kernel knows, and that
+    includes a wireless mouse, keyboard, headset or game controller (their
+    ``scope`` is ``Device``). Reading whichever came first could report the
+    mouse: a laptop at 96% read as 0%, and a consolidation paused for a
+    "low battery" while the Control Panel said 96%. So only the computer's
+    own batteries count (``scope`` absent or ``System``), the level is all of
+    them together, and "on battery" means no charger is online, whenever the
+    computer says either way.
+    """
+    try:
+        entries = sorted(supplies.iterdir())
     except OSError:
         return None, None
+    batteries: list[Path] = []
+    mains: list[bool] = []
+    for entry in entries:
+        if _sysfs(entry / 'scope').lower() == 'device':
+            continue                    # a mouse's, a headset's: not this computer's
+        kind = _sysfs(entry / 'type').lower()
+        if kind == 'battery':
+            if _sysfs(entry / 'present') != '0':
+                batteries.append(entry)
+        elif kind in _LINUX_MAINS:
+            online = _sysfs(entry / 'online')
+            if online in {'0', '1'}:
+                mains.append(online == '1')
     if not batteries:
         return False, None
-    battery = batteries[0]
-    try:
-        status = (battery / 'status').read_text(errors='ignore').strip().lower()
-        percent = int((battery / 'capacity').read_text().strip())
-        return status not in {'charging', 'full', 'not charging'}, percent
-    except (OSError, ValueError):
-        return None, None
+    percent = _linux_percent(batteries)
+    if mains:
+        return not any(mains), percent
+    statuses = [_sysfs(b / 'status').lower() for b in batteries]
+    if any(statuses):
+        return any(s == 'discharging' for s in statuses), percent
+    return None, percent
+
+
+def _linux_percent(batteries: list[Path]) -> int | None:
+    """The charge left in *batteries* together: by energy when every one says
+    it (two batteries of different sizes), by their mean level otherwise."""
+    for now_name, full_name in (('energy_now', 'energy_full'), ('charge_now', 'charge_full')):
+        try:
+            now = sum(int(_sysfs(b / now_name)) for b in batteries)
+            full = sum(int(_sysfs(b / full_name)) for b in batteries)
+        except ValueError:
+            continue
+        if full > 0:
+            return max(0, min(100, round(100 * now / full)))
+    levels = []
+    for battery in batteries:
+        try:
+            levels.append(int(_sysfs(battery / 'capacity')))
+        except ValueError:
+            continue
+    return max(0, min(100, round(sum(levels) / len(levels)))) if levels else None
 
 
 def _macos_battery() -> tuple[bool | None, int | None]:

@@ -489,14 +489,15 @@ def test_the_linux_build_compiles_with_the_python_it_bundles():
     assert '"$host_python" != "${pbs_python%.*}"' in build
 
 
-def test_the_service_files_point_at_this_project():
+def test_the_service_files_point_at_this_project(tmp_path, monkeypatch):
     unit = (ROOT / "installers" / "systemd" / "ninaivu.service").read_text(encoding="utf-8")
     assert "Documentation=https://github.com/javajaga-usa/Ninaivu" in unit
     from ninaivu.desktop import autostart
-    with pytest.raises(RuntimeError) as raised:
-        autostart.enable(root=ROOT, platform="linux")
-    assert "deploy/systemd" not in str(raised.value)
-    assert "installers/systemd/ninaivu.service" in str(raised.value)
+    monkeypatch.delenv('XDG_CONFIG_HOME', raising=False)
+    autostart.enable(root=ROOT, home=tmp_path, platform="linux")
+    desktop = autostart.desktop_path(tmp_path).read_text(encoding='utf-8')
+    assert '--autostart' in desktop and 'Terminal=false' in desktop
+    assert 'deploy/systemd' not in desktop
 
 
 # -- A-50: the Windows service's firewall rules ------------------------------------------------

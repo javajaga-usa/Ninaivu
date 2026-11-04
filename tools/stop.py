@@ -203,7 +203,7 @@ def main() -> int:
     args, _ = parser.parse_known_args()
 
     runfile = _runfile()
-    state_dir = _state_dir(args.state_dir)
+    state_dir = runfile.resolve_state(_state_dir(args.state_dir))
     record = runfile.read(state_dir)
     if record is None:
         if args.token and (args.admin_port or args.port):

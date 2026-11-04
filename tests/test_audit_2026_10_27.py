@@ -267,7 +267,9 @@ def test_a_package_installed_after_a_move_says_to_open_ninaivu_again(monkeypatch
     monkeypatch.setattr(components.sys, "executable", str(tmp_path / "gone" / "python3"))
     monkeypatch.setattr(components, "_running_program", lambda: str(moved))
     entry = next(cid for cid, e in components.CATALOGUE.items()
-                 if e["kind"] == "package" and not e.get("restart") and not e["present"]())
+                 if e["kind"] == "package" and not e.get("restart"))
+    # Exercise the missing-package branch even on a fully installed machine.
+    monkeypatch.setitem(components.CATALOGUE[entry], 'present', lambda: False)
     assert components.describe(entry)["needs_restart"] is True
 
 

@@ -109,6 +109,8 @@ export class IndexExport {
   wire() {
     if (this.wired) return;
     this.wired = true;
+    $('#index-move-start')?.addEventListener('click', () => this.moveIndex());
+    $('#index-recovery-cleanup')?.addEventListener('click', () => this.cleanRecovery());
     $('#ix-export')?.addEventListener('click', () => this.exportNow());
     $('#ix-look')?.addEventListener('click', () => this.look());
     $('#ix-import')?.addEventListener('click', () => this.importNow());
@@ -170,7 +172,7 @@ export class IndexExport {
     }
     this.render();
     if (!$('#ix-block')?.isConnected) return;
-    if (this.state.export?.running || this.state.check?.running) this.timer = setTimeout(() => this.refresh(), POLL_MS);
+    if (this.state.export?.running || this.state.check?.running || this.state.recovery_cleanup?.running) this.timer = setTimeout(() => this.refresh(), POLL_MS);
     else if (this.importing) this.timer = setTimeout(() => this.refresh(), RESTART_POLL_MS);
   }
 
@@ -221,6 +223,30 @@ export class IndexExport {
   render() {
     const s = this.state;
     if (!s) return;
+    const location = $('#index-move-current');
+    if (location) location.textContent = i18n.t('Current index folder: {path}', { path: s.index_folder || '' });
+    const moveReport = $('#index-move-report');
+    if (moveReport && s.index_move_pending) {
+      moveReport.textContent = i18n.t('The move is scheduled. Restart Ninaivu to complete it.');
+    } else if (moveReport && s.index_move) {
+      moveReport.textContent = s.index_move.ok
+        ? i18n.t('The index was moved and verified. The original folder is kept as a recovery copy.')
+        : i18n.t('The index move failed. The original index is still in use.') + ' ' + (s.index_move.error || '');
+    }
+    if ($('#index-move-start')) $('#index-move-start').disabled = Boolean(s.index_move_pending);
+    const cleanup = s.recovery_cleanup || {};
+    const cleanupButton = $('#index-recovery-cleanup');
+    if (cleanupButton) {
+      cleanupButton.hidden = !s.index_move?.ok || !s.index_move?.recovery_files;
+      cleanupButton.disabled = Boolean(cleanup.running || s.index_move_pending);
+    }
+    const cleanupReport = $('#index-recovery-report');
+    if (cleanupReport && (cleanup.running || cleanup.removed != null || cleanup.error)) {
+      cleanupReport.textContent = cleanup.error || (cleanup.running
+        ? i18n.t('Cleaning the recovery copy…')
+        : i18n.t('Recovery cleanup finished. Removed {count} files ({bytes}); preserved {kept} changed or linked files. The forwarding file is kept.',
+          { count: cleanup.removed || 0, bytes: bytes(cleanup.bytes), kept: cleanup.preserved || 0 }));
+    }
     const ex = s.export || {};
     $('#ix-export').disabled = Boolean(ex.running);
     const report = $('#ix-export-report');
@@ -309,6 +335,44 @@ export class IndexExport {
         imported.append(el('div', 'hint subtle', i18n.t('Nothing has been imported on this computer yet.')));
       }
       imported.hidden = !imported.children.length;
+    }
+  }
+
+  async cleanRecovery() {
+    const button = $('#index-recovery-cleanup');
+    const report = $('#index-recovery-report');
+    button.disabled = true;
+    report.textContent = i18n.t('Checking the recovery copy…');
+    try {
+      const preview = await json('/api/admin/migration/recovery-cleanup');
+      if (!window.confirm(i18n.t('Remove unchanged recovery files from {path}? Up to {count} files ({bytes}) will be checked. Added or changed files and the forwarding file will stay. Check that your relocated library works before continuing.',
+        { path: preview.source, count: preview.files, bytes: bytes(preview.bytes) }))) {
+        report.textContent = '';
+        return;
+      }
+      this.state = await json('/api/admin/migration/recovery-cleanup', { confirm: true });
+      this.render();
+      this.timer = setTimeout(() => this.refresh(), POLL_MS);
+    } catch (error) { report.textContent = error.message; }
+    finally { button.disabled = Boolean(this.state?.recovery_cleanup?.running); }
+  }
+
+  async moveIndex() {
+    const folder = $('#index-move-folder').value.trim();
+    if (!folder) { this.toast(i18n.t('Give the new index folder on the Ninaivu computer.'), true); return; }
+    if (!window.confirm(i18n.t('Move the index and restart Ninaivu? Everybody using Ninaivu will be interrupted. The original folder is kept as a recovery copy.'))) return;
+    const button = $('#index-move-start');
+    const report = $('#index-move-report');
+    button.disabled = true;
+    report.textContent = i18n.t('Scheduling the index move…');
+    try {
+      const result = await json('/api/admin/migration/move-index', { folder });
+      report.textContent = result.restarting
+        ? i18n.t('Ninaivu is restarting to move the index. Large libraries can take a while. Refresh this page after Ninaivu returns to check the new location.')
+        : i18n.t('The move is scheduled. Restart Ninaivu to complete it.') + ' ' + (result.restart_problem || '');
+    } catch (error) {
+      report.textContent = error.message;
+      button.disabled = false;
     }
   }
 

@@ -159,7 +159,8 @@ def _mounts() -> list[tuple[str, str]]:
                 rows = [line.split() for line in table]
         except OSError:
             return []
-        return [(r[1].replace("\\040", " "), r[2]) for r in rows if len(r) >= 3]
+        from ..utils.mounts import unescape            # noqa: PLC0415
+        return [(unescape(r[1]), r[2]) for r in rows if len(r) >= 3]
     if sys.platform == "darwin":
         try:
             out = subprocess.run(["/sbin/mount"], capture_output=True, text=True,

@@ -259,3 +259,47 @@ stored. Use the spelling the message prints.
 **Every device warns about the certificate.** `tls/` was not copied, so a new
 authority was generated. Restore `tls/` from the old machine, or reinstall
 `ninaivu-ca.crt` on each device.
+
+## Moving the index to another folder on the same computer
+
+In the administrator console, open **Migration → Move the index to another
+folder**. Enter the absolute path of a new folder on the Ninaivu computer.
+Choose a folder that does not exist yet; its parent must already exist.
+Click **Move index and restart** and confirm the interruption.
+
+Ninaivu closes the running library, copies the data folder (including the
+index, thumbnails and settings), and verifies each copied file with SHA-256
+before switching locations. The destination needs room for the entire data
+folder plus 64 MB. Photographs in your library folders stay where they are.
+If the console cannot restart Ninaivu, it schedules the move for the next
+manual restart. Refresh the Migration page when Ninaivu returns to see the
+current folder and the result. If copying or verification fails, Ninaivu
+continues with the original index and reports the failure there.
+
+The original data remains as a recovery copy. After checking the relocated
+library, you can remove the old data files to recover space, but **keep the
+old folder and its `index-location.json` file**: existing launchers and service
+settings use that file to find the new location. Keep the destination drive
+connected. Ninaivu refuses to start if that relocated index is unavailable,
+rather than creating an empty library. This operation moves the data folder;
+AI models or backups configured outside it retain their existing locations.
+
+
+## Reclaiming a relocation recovery copy
+
+After checking the relocated library, open **Migration → Review recovery-copy
+cleanup**. The confirmation names the original folder and the maximum number
+and size of files to check. Cleanup runs in the background and reports how
+many files it removed or preserved. It removes only files recorded and verified
+by the move whose size and SHA-256 still match. Added files, changed files,
+symlinks, and the forwarding file stay. Repeating cleanup after an interruption
+is safe. Relocations made before recovery manifests were introduced retain
+their manual cleanup instructions above.
+
+A portable upgrade follows the live relocated index and keeps it at the chosen
+location. **Go back** restores the pre-update index there, keeps the newer work
+under `backups/before-go-back`, and returns control to the older program. The
+inactive newer program refuses to start that shared index until you explicitly
+bring the library across again. These shared-location operations require both
+portable programs to support index-location forwarding; versions predating
+that feature require a conventional backup/restore to their expected folder.

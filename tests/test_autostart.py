@@ -49,10 +49,27 @@ def test_windows_starts_it_without_a_console_window(tmp_path):
     assert autostart.command(tmp_path, "win32")[0].endswith("pythonw.exe")
 
 
-def test_elsewhere_it_says_what_to_use_instead(tmp_path):
-    assert not autostart.supported("linux")
-    with pytest.raises(RuntimeError, match="systemd"):
-        autostart.enable(tmp_path, tmp_path, "linux")
+def test_linux_sign_in_entry_is_app_specific_and_can_be_disabled(tmp_path, monkeypatch):
+    root = tmp_path / "Ninaivu's app 50%"
+    root.mkdir()
+    (root / 'Start - Ninaivu Control Panel.sh').touch()
+    monkeypatch.delenv('NINAIVU_LAUNCHER', raising=False)
+    monkeypatch.delenv('XDG_CONFIG_HOME', raising=False)
+    monkeypatch.setattr(autostart, 'ninaivu_root', lambda: root)
+    assert autostart.supported('linux')
+    autostart.enable(root, tmp_path, 'linux')
+    assert autostart.enabled(tmp_path, 'linux')
+    text = autostart.desktop_path(tmp_path).read_text()
+    assert '--autostart' in text and 'Terminal=false' in text and '50%%' in text
+    other = tmp_path / 'Other'
+    other.mkdir()
+    (other / 'Start - Ninaivu Control Panel.sh').touch()
+    monkeypatch.setattr(autostart, 'ninaivu_root', lambda: other)
+    autostart.disable(tmp_path, 'linux')
+    assert autostart.desktop_path(tmp_path).exists(), 'another app cannot disable this one'
+    monkeypatch.setattr(autostart, 'ninaivu_root', lambda: root)
+    autostart.disable(tmp_path, 'linux')
+    assert not autostart.enabled(tmp_path, 'linux')
 
 
 def test_waiting_gives_up_after_its_patience():

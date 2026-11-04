@@ -28,7 +28,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-__all__ = ["STARTING_FILE", "BEAT_SECONDS", "FRESH_SECONDS", "begin", "step", "end", "read"]
+__all__ = ["STARTING_FILE", "BEAT_SECONDS", "FRESH_SECONDS", "begin", "move_to", "step", "end", "read"]
 
 #: The name of the file, inside the state folder.
 STARTING_FILE = "ninaivu.starting"
@@ -91,6 +91,21 @@ def begin(state_dir: str | Path, what: str = "starting") -> None:
     threading.Thread(target=_beat, daemon=True, name="ninaivu-starting").start()
 
 
+def move_to(state_dir: str | Path) -> None:
+    """Keep the same start's heartbeat when its index changes location."""
+    with _lock:
+        if _current is None:
+            return
+        old = _path(_current['state_dir'])
+        _current['state_dir'] = str(state_dir)
+        _write(_current)
+        if old != _path(state_dir):
+            try:
+                old.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+
 def step(what: str) -> None:
     """The start has moved on to *what*, in words for the person waiting."""
     with _lock:
@@ -122,8 +137,9 @@ def read(state_dir: str | Path, *, now: float | None = None) -> dict[str, Any] |
     been rewritten for :data:`FRESH_SECONDS` (a start that stopped moving, or
     the leftover of a process that is gone).
     """
+    from ..storage.relocate import resolve
     try:
-        note = json.loads(_path(state_dir).read_text(encoding="utf-8"))
+        note = json.loads(_path(resolve(Path(state_dir))).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
     if not isinstance(note, dict):

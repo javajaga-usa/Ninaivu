@@ -8,8 +8,7 @@ thumbnail cache and the AI models, in folders whose names differed between
 Windows, the Mac and Linux. Moving the wrong one, or opening the new Ninaivu
 before moving anything, started an empty library.
 
-From 1.12 the program and what Ninaivu keeps are apart in every portable
-folder::
+The traditional portable layout separates program and library data::
 
     Ninaivu.exe | ninaivu | Ninaivu.app    opens the Control Panel
     app/          the program: its own Python and packages (not on the Mac,
@@ -18,11 +17,17 @@ folder::
                   the AI models; data/control: the Control Panel's own files)
     logs/         what Ninaivu wrote about itself
 
-and updating is unpacking the newer download beside the folder in use and
+New Linux installations instead keep their library in ``~/.ninaivu``; existing
+app-local libraries keep their location. An index relocated from the console
+also stays in the chosen folder, including state-relative models and panel
+settings. Shared library ownership is recorded so an inactive program cannot
+reopen and upgrade the index after a Go back.
+
+Updating means unpacking the newer download beside the folder in use and
 opening it. Its Control Panel finds the older folder beside it and offers to
 bring the library across (:func:`bring_here`): the older Ninaivu is stopped
-if it is running, and its data is *moved*, not copied, so it takes a moment
-on the same drive. The older folder keeps its program and a note saying where
+if it is running. App-local data is moved on the same drive; a home-folder or
+relocated index stays in place and the new program takes over. The older folder keeps its program and a note saying where
 the library went. The first start of the newer version then copies the index
 before changing it, as every update does (``storage/upgrade.py``), and
 "Go back" in the Control Panel (:func:`go_back`) uses that copy to move the
@@ -50,7 +55,7 @@ import shutil
 import sys
 import tempfile
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Callable
 
@@ -69,11 +74,12 @@ BROUGHT_RECORD = "brought-from.json"
 #: In the newer folder itself, while a go-back is under way: the same record,
 #: kept outside the data that is moving, so a go-back cut short can finish.
 GOING_BACK = ".ninaivu-going-back.json"
+OWNER = "portable-owner.json"
 
 #: The program files that make a folder a portable Ninaivu, per system.
 _LAUNCHERS = {"win32": "Ninaivu.exe", "linux": "ninaivu", "darwin": ".ninaivu-portable"}
 #: Where the index has been kept in a portable folder, newest layout first.
-_STATE_PLACES = ("data", "app/data")
+_STATE_PLACES = (".ninaivu", "data", "app/data")
 #: How long a running older Ninaivu is given to stop when asked.
 STOP_PATIENCE = 90.0
 
@@ -100,6 +106,7 @@ class Folder:
     state: Path
     models: Path
     control: Path
+    state_home: Path | None = None
 
     @property
     def has_library(self) -> bool:
@@ -127,8 +134,29 @@ class Folder:
             return 0.0
 
 
+def _live(folder: Folder) -> Folder:
+    """Resolve a launcher path without treating its recovery copy as live data."""
+    from ..storage import relocate
+    try:
+        state = relocate.resolve(folder.state)
+    except (OSError, ValueError) as exc:
+        raise PortableError(str(exc)) from exc
+    def follow(path):
+        return state / path.relative_to(folder.state) if path.is_relative_to(folder.state) else path
+    return replace(folder, state=state, models=follow(folder.models), control=follow(folder.control),
+                   state_home=folder.state_home or folder.state)
+
+
+def _point_to(home: Path, state: Path) -> None:
+    from ..storage import relocate
+    if home.resolve() != state.resolve():
+        home.mkdir(parents=True, exist_ok=True)
+        relocate.write(home / relocate.REDIRECT, {'destination': str(state)})
+
+
 def _layout(path: Path, platform: str | None = None) -> Folder | None:
     """*path* as a portable Ninaivu folder of this system, or None."""
+    path = path.expanduser().resolve()
     system = _system(platform)
     if not (path / _LAUNCHERS[system]).exists():
         return None
@@ -137,19 +165,25 @@ def _layout(path: Path, platform: str | None = None) -> Folder | None:
             return None
         # The Mac app has always kept everything in data/.
         state = path / "data"
-        return Folder(path, state, state / "ai-models", state / "control" / ".ninaivu-control")
+        return _live(Folder(path, state, state / "ai-models", state / "control" / ".ninaivu-control"))
     if not (path / "app" / "python").is_dir():
         return None
     for place in _STATE_PLACES:
         state = path / place
-        if (state / "index.db").is_file():
+        if (state / "index.db").is_file() or (state / "index-location.json").is_file():
             break
     else:
-        state = path / "data"
+        home_state = Path.home() / '.ninaivu'
+        if system == 'linux' and _owner(home_state) == path.resolve():
+            state = home_state
+        else:
+            # A program whose library was moved away must not accidentally
+            # claim the user's unrelated home-folder index.
+            state = path / 'data'
     if state == path / "app" / "data":
         # 1.11 and earlier on Windows and Linux: everything inside app/.
-        return Folder(path, state, path / "app" / "ai-models", path / "app" / ".ninaivu-control")
-    return Folder(path, state, state / "ai-models", state / "control" / ".ninaivu-control")
+        return _live(Folder(path, state, path / "app" / "ai-models", path / "app" / ".ninaivu-control"))
+    return _live(Folder(path, state, state / "ai-models", state / "control" / ".ninaivu-control"))
 
 
 def root(environ: dict[str, str] | None = None) -> Path | None:
@@ -174,10 +208,65 @@ def this_folder(environ: dict[str, str] | None = None) -> Folder | None:
     path = root(environ)
     if path is None:
         return None
-    state = Path(environ.get("NINAIVU_STATE_DIR") or path / "data")
+    default_state = (Path.home() / '.ninaivu' if sys.platform.startswith('linux')
+                     and not (path / 'data').is_dir() else path / 'data')
+    state = Path(environ.get("NINAIVU_STATE_DIR") or default_state)
     models = Path(environ.get("NINAIVU_AI_MODELS_DIR") or state / "ai-models")
     home = Path(environ.get("NINAIVU_HOME") or state / "control")
-    return Folder(path, state, models, home / ".ninaivu-control")
+    return _live(Folder(path, state, models, home / ".ninaivu-control"))
+
+
+def _owner(state: Path) -> Path | None:
+    try:
+        from ..storage.relocate import resolve
+        state = resolve(state)
+        record = json.loads((state / OWNER).read_text(encoding='utf-8'))
+        path = record.get('folder') if isinstance(record, dict) else None
+        return Path(path) if isinstance(path, str) and Path(path).is_absolute() else None
+    except (OSError, ValueError):
+        return None
+
+
+def note_active(state: Path, path: Path | None = None) -> None:
+    from ..storage.relocate import resolve, write
+    path = path or root()
+    if path is not None:
+        write(resolve(state) / OWNER, {'folder': str(path.resolve())})
+
+
+def require_active() -> None:
+    """An inactive program must not upgrade the shared index after Go back."""
+    path = root()
+    if path is None:
+        return
+    try:
+        record = json.loads((path / MOVED_RECORD).read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        record = {}
+    folder = this_folder()
+    owner = _owner(folder.state) if folder else None
+    if owner is not None and owner != path.resolve():
+        record = {'to': str(owner)}
+    if isinstance(record, dict) and record.get('to'):
+        raise PortableError(f"This portable copy is inactive. Open Ninaivu from {record['to']}. "
+                            "Bring the library across again before using this copy.")
+
+
+def activate_environment() -> None:
+    """Carry state-relative model and panel folders through forwarding notes."""
+    if root() is None or not os.environ.get('NINAIVU_STATE_DIR'):
+        return
+    from ..storage.relocate import resolve
+    configured = Path(os.environ['NINAIVU_STATE_DIR']).expanduser().resolve()
+    live = resolve(configured)
+    if live == configured:
+        return
+    for name in ('NINAIVU_HOME', 'NINAIVU_AI_MODELS_DIR'):
+        if os.environ.get(name):
+            path = Path(os.environ[name]).expanduser().resolve()
+            if path.is_relative_to(configured):
+                os.environ[name] = str(live / path.relative_to(configured))
+    os.environ['NINAIVU_STATE_DIR'] = str(live)
 
 
 # ---------------------------------------------------------------------------
@@ -250,6 +339,8 @@ def _same_drive(one: Path, other: Path) -> bool:
 def _running(state: Path) -> dict[str, Any] | None:
     """The run file of a server using *state*, or None when none is."""
     from ..server import runfile                         # noqa: PLC0415
+    from ..storage.relocate import resolve
+    state = resolve(state)
     if (state / "ninaivu-server.lock").exists():
         try:
             with runfile.server_lock(state):
@@ -328,6 +419,7 @@ def settle_quietly() -> None:
     failure is logged, and the data stays where it was."""
     try:
         settle()
+        activate_environment()
     except Exception:                                    # noqa: BLE001
         log.exception("could not move the data to where Ninaivu 1.12 keeps it")
 
@@ -343,8 +435,16 @@ def older_beside(folder: Folder | None = None, version: str | None = None) -> Fo
     from .. import __version__                           # noqa: PLC0415
 
     folder = folder or this_folder()
-    if folder is None or folder.has_library:
+    if folder is None:
         return None
+    if folder.has_library and not folder.moved_to:
+        owner = _owner(folder.state)
+        if owner is None or owner == folder.path.resolve():
+            return None
+        other = _layout(owner)
+        if other is None or _version_key(other.version) > _version_key(version or __version__):
+            return None
+        return other
     mine = _version_key(version or __version__)
     found = []
     try:
@@ -373,9 +473,9 @@ def _note_moved(older: Folder, newer: Folder, version: str) -> None:
         f"The library this folder kept was moved to Ninaivu {version}, in\n\n"
         f"    {newer.path}\n\n"
         f"on {time.strftime('%Y-%m-%d %H:%M')}. Open Ninaivu from that folder.\n\n"
-        f"Opened from here, this Ninaivu would start with an empty library. To\n"
-        f"use this version again, choose \"Go back\" in the newer Control Panel:\n"
-        f"it brings the library back here as this version left it.\n"
+        f"This program is now inactive. To undo an upgrade, choose \"Go back\"\n"
+        f"in the newer Control Panel. To use an inactive newer copy again,\n"
+        f"bring the library across again from its current folder.\n"
         f"Your photographs were not moved or changed.\n", encoding="utf-8")
 
 
@@ -401,6 +501,11 @@ def _follow_sign_in(older: Folder) -> bool:
             if old not in os.path.normcase(json.dumps(plistlib.loads(agent.read_bytes()),
                                                       default=str)):
                 return False
+        elif platform.startswith('linux'):
+            path = autostart.desktop_path()
+            from .linux_menu import quote_exec
+            if not path.is_file() or quote_exec(str(older.path / 'ninaivu')) not in path.read_text():
+                return False
         else:
             return False
         autostart.enable()
@@ -408,6 +513,26 @@ def _follow_sign_in(older: Folder) -> bool:
     except Exception:                                    # noqa: BLE001
         log.exception("could not move the sign-in start to this folder")
         return False
+
+
+@contextlib.contextmanager
+def _exclusive_libraries(source: Path, target: Path):
+    """Block competing starts without holding a file inside a folder we rename."""
+    from ..server import runfile
+    from ..storage.relocate import resolve
+    try:
+        with contextlib.ExitStack() as held:
+            states = sorted({source.resolve(), target.resolve()}, key=str)
+            for state in states:
+                held.enter_context(runfile.starting_lock(state))
+                if (state / 'ninaivu-server.lock').exists():
+                    with runfile.server_lock(state):
+                        pass
+            if resolve(source) != source:
+                raise PortableError('The index moved during the update. Open Ninaivu again and retry.')
+            yield
+    except runfile.AlreadyRunning as exc:
+        raise PortableError('Ninaivu is still running or starting. Wait until it stops and retry.') from exc
 
 
 def bring_here(older: Folder, folder: Folder | None = None, *, version: str | None = None,
@@ -425,7 +550,10 @@ def bring_here(older: Folder, folder: Folder | None = None, *, version: str | No
     folder = folder or this_folder()
     if folder is None:
         raise PortableError("This Ninaivu is not a portable copy.")
-    if folder.has_library:
+    older, folder = _live(older), _live(folder)
+    reactivating = (folder.moved_to == older.path or _owner(folder.state) == older.path) \
+        and folder.state == older.state
+    if folder.has_library and not reactivating:
         raise PortableError(f"This Ninaivu already has a library, in {folder.state}.")
     if not older.has_library:
         raise PortableError(f"There is no library in {older.path}.")
@@ -435,7 +563,8 @@ def bring_here(older: Folder, folder: Folder | None = None, *, version: str | No
         raise PortableError(
             f"The library in {older.path} was last opened by Ninaivu {older_version}, "
             f"which is newer than this one ({version}). Use Ninaivu {older_version} or later.")
-    if not _same_drive(older.state, folder.path):
+    shared_state = not older.state.is_relative_to(older.path)
+    if not shared_state and not _same_drive(older.state, folder.path):
         raise PortableError(
             f"{older.path} is on another drive. Unpack the newer Ninaivu on the same drive "
             f"as the older one, beside it, and open it from there: the library is then moved "
@@ -443,40 +572,59 @@ def bring_here(older: Folder, folder: Folder | None = None, *, version: str | No
     stop_older(older.state)
     _stop(folder.state)
 
-    skipped: list[str] = []
-    moved = []
-    try:
-        for source, target in ((older.state, folder.state), (older.models, folder.models),
-                               (older.control, folder.control)):
-            if source.exists() and os.path.normcase(str(source)) != os.path.normcase(str(target)):
-                _move(source, target, skipped)
-                moved.append({"from": str(source), "to": str(target)})
-    except OSError as exc:
-        # What was moved goes back, so the older folder is whole again and
-        # this one has no library: "try again" works, and the older Ninaivu
-        # opened meanwhile finds its own library rather than an empty one
-        # (audit C-04). Each move was a rename, so each goes back as one.
-        undone = _undo_moves(moved)
-        where = (f"Everything is back in {older.path}." if undone else
-                 f"Some of it could not be put back: whatever was moved is in {folder.path}, "
-                 f"and the older folder has the rest.")
-        raise PortableError(
-            f"The library could not be moved ({exc}). Close the older Ninaivu's Control Panel "
-            f"and any window showing its folder, then try again. {where}") from exc
+    with _exclusive_libraries(older.state, folder.state):
+        skipped: list[str] = []
+        moved = []
+        state_to = folder.state
+        try:
+            for source, target in ((older.state, folder.state), (older.models, folder.models),
+                                   (older.control, folder.control)):
+                if shared_state and source.is_relative_to(older.state):
+                    continue  # The chosen data folder stays in place, including its models/control.
+                if shared_state and target.is_relative_to(folder.state):
+                    target = older.state / target.relative_to(folder.state)
+                if source.exists() and os.path.normcase(str(source)) != os.path.normcase(str(target)):
+                    _move(source, target, skipped)
+                    moved.append({"from": str(source), "to": str(target)})
+        except OSError as exc:
+            # What was moved goes back, so the older folder is whole again and
+            # this one has no library: "try again" works, and the older Ninaivu
+            # opened meanwhile finds its own library rather than an empty one
+            # (audit C-04). Each move was a rename, so each goes back as one.
+            undone = _undo_moves(moved)
+            where = (f"Everything is back in {older.path}." if undone else
+                     f"Some of it could not be put back: whatever was moved is in {folder.path}, "
+                     f"and the older folder has the rest.")
+            raise PortableError(
+                f"The library could not be moved ({exc}). Close the older Ninaivu's Control Panel "
+                f"and any window showing its folder, then try again. {where}") from exc
 
-    record = {"folder": str(older.path), "version": older_version, "at": time.time(),
-              "moved": moved, "to": version}
-    folder.state.mkdir(parents=True, exist_ok=True)
-    (folder.state / BROUGHT_RECORD).write_text(json.dumps(record, indent=2), encoding="utf-8")
-    try:
-        _note_moved(older, folder, version)
-    except OSError as exc:
-        log.warning("could not leave a note in %s: %s", older.path, exc)
-    record["sign_in"] = _follow_sign_in(older)
-    record["skipped"] = skipped
-    log.info("brought the library from %s (Ninaivu %s) into %s", older.path, older_version,
-             folder.path)
-    return record
+        if shared_state:
+            try:
+                _point_to(folder.state_home, older.state)
+            except OSError as exc:
+                _undo_moves(moved)
+                raise PortableError(f"The new launcher could not be connected to the index ({exc}).") from exc
+            folder = _live(folder)
+        record = {"folder": str(older.path), "version": older_version, "at": time.time(),
+                  "moved": moved, "to": version, "state_to": str(state_to),
+                  "old_state_home": str(older.state_home), "shared_state": shared_state}
+        folder.state.mkdir(parents=True, exist_ok=True)
+        (folder.state / BROUGHT_RECORD).write_text(json.dumps(record, indent=2), encoding="utf-8")
+        note_active(folder.state, folder.path)
+        try:
+            _note_moved(older, folder, version)
+        except OSError as exc:
+            log.warning("could not leave a note in %s: %s", older.path, exc)
+        for name in (MOVED_RECORD, MOVED_NOTE):
+            (folder.path / name).unlink(missing_ok=True)
+        if root() == folder.path:
+            activate_environment()
+        record["sign_in"] = _follow_sign_in(older)
+        record["skipped"] = skipped
+        log.info("brought the library from %s (Ninaivu %s) into %s", older.path, older_version,
+                 folder.path)
+        return record
 
 
 # ---------------------------------------------------------------------------
@@ -556,6 +704,7 @@ def go_back(folder: Folder | None = None, *, version: str | None = None,
 
     version = version or __version__
     folder = folder or this_folder()
+    folder = _live(folder) if folder is not None else None
     record = brought_from(folder)
     if folder is None or record is None:
         raise PortableError("This library was not brought from an older Ninaivu beside this one.")
@@ -563,62 +712,78 @@ def go_back(folder: Folder | None = None, *, version: str | None = None,
     if older is None:
         raise PortableError(f"The older Ninaivu is no longer in {record['folder']}.")
     resuming = (folder.path / GOING_BACK).is_file()
-    if older.has_library and not (resuming and not folder.has_library):
+    shared_state = not folder.state.is_relative_to(folder.path)
+    same_library = shared_state and older.state == folder.state and older.moved_to == folder.path
+    if older.has_library and not same_library and not (resuming and not folder.has_library):
         raise PortableError(f"{older.path} has a library of its own again, so nothing was moved.")
     stop_this(folder.state)
 
-    bundle = kept = None
-    last = upgrade.recorded(folder.state)
-    if last and last.get("version") != record.get("version"):
-        bundle = _copy_before(folder.state, str(last.get("version")))
-        if bundle is None:
-            raise PortableError(
-                "No copy of the index from before this update was found, so the older "
-                "version could not be given the index as it left it. Nothing was moved.")
-        # What was done in this version since the update is about to be
-        # replaced: a copy of it is kept first, as a restore keeps one, so a
-        # go-back pressed months later can be undone (audit C-04). It goes
-        # back with the library, under backups/before-go-back.
-        kept = _copy_now(folder.state, str(last.get("version")))
-        try:
-            _put_back_index(folder.state, bundle)
-        except (OSError, ValueError) as exc:
-            raise PortableError(f"The index could not be put back ({exc}). "
-                                f"Nothing was moved.") from exc
-        (folder.state / upgrade.VERSION_FILE).unlink(missing_ok=True)
+    target_state = Path(record.get('old_state_home') or older.state)
+    with _exclusive_libraries(folder.state, target_state):
+        bundle = kept = None
+        last = upgrade.recorded(folder.state)
+        if last and last.get("version") != record.get("version"):
+            bundle = _copy_before(folder.state, str(last.get("version")))
+            if bundle is None:
+                raise PortableError(
+                    "No copy of the index from before this update was found, so the older "
+                    "version could not be given the index as it left it. Nothing was moved.")
+            # What was done in this version since the update is about to be
+            # replaced: a copy of it is kept first, as a restore keeps one, so a
+            # go-back pressed months later can be undone (audit C-04). It goes
+            # back with the library, under backups/before-go-back.
+            kept = _copy_now(folder.state, str(last.get("version")))
+            try:
+                _put_back_index(folder.state, bundle)
+            except (OSError, ValueError) as exc:
+                raise PortableError(f"The index could not be put back ({exc}). "
+                                    f"Nothing was moved.") from exc
+            (folder.state / upgrade.VERSION_FILE).unlink(missing_ok=True)
 
-    # The record goes last, once everything is back: a move that fails (a
-    # file held open on Windows, antivirus) leaves it, so "Go back" is still
-    # offered and finishes the rest when pressed again. It is written beside
-    # the data too, since the copy inside the data moves with it.
-    (folder.path / GOING_BACK).write_text(json.dumps(record, indent=2), encoding="utf-8")
-    skipped: list[str] = []
-    try:
-        for moved in reversed(record.get("moved") or []):
-            source, target = Path(moved["to"]), Path(moved["from"])
-            if source.exists():
-                _move(source, target, skipped)
-    except OSError as exc:
-        raise PortableError(
-            f"The library could not all be moved back ({exc}). Close any window showing "
-            f"either folder and press Go back again: it carries on from here.") from exc
-    for name in (MOVED_RECORD, MOVED_NOTE):
-        (older.path / name).unlink(missing_ok=True)
-    # The record travelled back inside the data; the older version has no
-    # use for it, and the copy kept now lies where the data went.
-    state_back = next((Path(m["from"]) for m in record.get("moved") or []
-                       if os.path.normcase(str(m.get("to"))) ==
-                       os.path.normcase(str(folder.state))), older.state)
-    (state_back / BROUGHT_RECORD).unlink(missing_ok=True)
-    (folder.state / BROUGHT_RECORD).unlink(missing_ok=True)
-    (folder.path / GOING_BACK).unlink(missing_ok=True)
-    if kept is not None:
-        with contextlib.suppress(ValueError):
-            kept = state_back / kept.relative_to(folder.state)
-    log.info("took the library back to %s (Ninaivu %s)", older.path, record.get("version"))
-    return {"folder": str(older.path), "version": record.get("version"),
-            "index_put_back": str(bundle) if bundle else None,
-            "kept": str(kept) if kept else None, "skipped": skipped}
+        # The record goes last, once everything is back: a move that fails (a
+        # file held open on Windows, antivirus) leaves it, so "Go back" is still
+        # offered and finishes the rest when pressed again. It is written beside
+        # the data too, since the copy inside the data moves with it.
+        (folder.path / GOING_BACK).write_text(json.dumps(record, indent=2), encoding="utf-8")
+        skipped: list[str] = []
+        try:
+            for moved in reversed(record.get("moved") or []):
+                source, target = Path(moved["to"]), Path(moved["from"])
+                if shared_state:
+                    original_state = Path(record.get('state_to') or folder.path / 'data')
+                    if source == original_state:
+                        continue
+                    if source.is_relative_to(original_state):
+                        source = folder.state / source.relative_to(original_state)
+                if source.exists():
+                    _move(source, target, skipped)
+            if shared_state:
+                _point_to(Path(record.get('old_state_home') or older.state_home), folder.state)
+                _note_moved(folder, older, str(record.get('version') or 'the older version'))
+        except OSError as exc:
+            raise PortableError(
+                f"The library could not all be moved back ({exc}). Close any window showing "
+                f"either folder and press Go back again: it carries on from here.") from exc
+        for name in (MOVED_RECORD, MOVED_NOTE):
+            (older.path / name).unlink(missing_ok=True)
+        # The record travelled back inside the data; the older version has no
+        # use for it, and the copy kept now lies where the data went.
+        state_back = next((Path(m["from"]) for m in record.get("moved") or []
+                           if os.path.normcase(str(m.get("to"))) ==
+                           os.path.normcase(str(folder.state))), older.state)
+        if shared_state:
+            state_back = folder.state
+        note_active(state_back, older.path)
+        (state_back / BROUGHT_RECORD).unlink(missing_ok=True)
+        (folder.state / BROUGHT_RECORD).unlink(missing_ok=True)
+        (folder.path / GOING_BACK).unlink(missing_ok=True)
+        if kept is not None:
+            with contextlib.suppress(ValueError):
+                kept = state_back / kept.relative_to(folder.state)
+        log.info("took the library back to %s (Ninaivu %s)", older.path, record.get("version"))
+        return {"folder": str(older.path), "version": record.get("version"),
+                "index_put_back": str(bundle) if bundle else None,
+                "kept": str(kept) if kept else None, "skipped": skipped}
 
 
 def launch(path: Path, platform: str | None = None) -> bool:

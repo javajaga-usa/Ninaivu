@@ -1996,6 +1996,19 @@
         database that will not open on the other side.</p>
     </div>
 
+    <div class="block" id="index-move-block">
+      <div class="block-head"><h2 data-i18n="Move the index to another folder">Move the index to another folder</h2></div>
+      <p class="hint" data-i18n="Move the index, thumbnails and settings together. Ninaivu restarts to copy and verify them. Your photographs stay where they are. The original data folder is kept as a recovery copy; keep its index-location.json file so existing launchers can find the new location.">Move the index, thumbnails and settings together. Ninaivu restarts to copy and verify them. Your photographs stay where they are. The original data folder is kept as a recovery copy; keep its index-location.json file so existing launchers can find the new location.</p>
+      <p class="hint" id="index-move-current"></p>
+      <div class="mg-form"><label><span data-i18n="New index folder">New index folder</span>
+        <input id="index-move-folder" spellcheck="false" placeholder="/path/to/new-ninaivu-data">
+      </label><button type="button" class="btn small primary" id="index-move-start" data-i18n="Move index and restart">Move index and restart</button></div>
+      <p class="hint" data-i18n="Enter a new folder that does not exist yet, on the Ninaivu computer. Its parent folder must already exist and have enough free space.">Enter a new folder that does not exist yet, on the Ninaivu computer. Its parent folder must already exist and have enough free space.</p>
+      <p class="mg-report" id="index-move-report" role="status"></p>
+      <button type="button" class="btn small" id="index-recovery-cleanup" hidden data-i18n="Review recovery-copy cleanup">Review recovery-copy cleanup</button>
+      <p class="hint" id="index-recovery-report" role="status"></p>
+    </div>
+
     <div class="block" id="ix-block">
       <div class="block-head"><h2 data-i18n="Export and import the whole index">Export and import the whole index</h2></div>
       <p class="hint" data-i18n="One file with everything Ninaivu knows and has worked out: the index with names, albums, stories, hidden rules and the AI's descriptions and faces, and the thumbnails, face crops, films, letters and books beside it. Imported on another computer, nothing is worked out again.">One file with everything Ninaivu knows and has worked

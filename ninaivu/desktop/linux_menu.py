@@ -2,10 +2,11 @@
 
 A Mac has Ninaivu.app and Windows has Ninaivu.exe: a double-click. On Linux a
 file manager opens a shell script in a text editor rather than running it, so
-the portable folder and a checkout each carry a ``Ninaivu.desktop`` beside
-the program (installers/linux/portable/Ninaivu.desktop and the one at the
-root of the repository), which opens it from where it is. GNOME asks once to
-*Allow Launching* it and Xfce (MX Linux) to *Mark Executable*.
+the portable folder carries "Open Ninaivu", a small program
+(installers/linux/portable/open-ninaivu.c), and a checkout carries "Start -
+Ninaivu Control Panel.sh", which Linux Mint's Nemo offers to Run. A desktop
+entry cannot do it from inside the folder: GLib leaves ``%k`` (the entry's
+own path) empty, so it cannot find the folder it is in.
 
 This writes the same launcher with the folder's own paths into the
 application menu, ``~/.local/share/applications``, and onto the Desktop,
@@ -17,10 +18,11 @@ marked as trusted so it opens with one click, with Ninaivu's icon:
     python3 ninaivu/desktop/linux_menu.py --remove
 
 From a portable folder there is one entry, *Ninaivu*, which opens the
-Control Panel. From a checkout there are two, as "Setup Ninaivu.command" makes
-on a Mac: *Ninaivu*, which sets the checkout up the first time and starts the
-library in a terminal (launcher/start.sh), and *Ninaivu Control Panel*, with
-the .venv that made. Moving the folder needs ``--add-to-menu`` again.
+Control Panel. From a checkout there are two: *Ninaivu* and *Ninaivu Control Panel*. Both open
+the app without a terminal after "Setup Ninaivu.sh" has prepared its Python. Each
+runs "Start - Ninaivu Control Panel.sh" at the top of the checkout (the .venv
+that made, or a message saying to run start.sh first). Moving the folder
+needs ``--add-to-menu`` again.
 
 Standard library only: a checkout runs it with the system's Python, before
 anything is installed.
@@ -42,6 +44,8 @@ PORTABLE_ID = "local.ninaivu.portable"
 CHECKOUT_ID = "local.ninaivu.checkout"
 PANEL_ID = "local.ninaivu.control-panel"
 ICON_NAME = "ninaivu"
+#: A checkout's double-click for the Control Panel, at its top.
+PANEL_SCRIPT = "Start - Ninaivu Control Panel.sh"
 
 HERE = Path(__file__).resolve().parent
 
@@ -101,6 +105,7 @@ def entry(name: str, comment: str, argv: list[str], *, workdir: Path,
         f"Terminal={'true' if terminal else 'false'}",
         "Categories=Graphics;Photography;",
         "StartupNotify=true",
+        "StartupWMClass=Ninaivu",
         "",
     ])
 
@@ -125,14 +130,16 @@ def launchers(root: Path) -> list[tuple[str, str]]:
             # its name ("Photos 100%") was "not found".
             ["sh", str(root / "ninaivu")], workdir=root))]
     if (root / "launcher" / "start.sh").is_file():
-        venv_python = root / ".venv" / "bin" / "python"
         return [
             (CHECKOUT_ID, entry(
-                "Ninaivu", "Your family's photographs: set up and start the library",
-                ["sh", str(root / "launcher" / "start.sh")], workdir=root, terminal=True)),
+                "Ninaivu", "Your family's photographs: the Ninaivu Control Panel",
+                ["sh", str(root / PANEL_SCRIPT)], workdir=root)),
+            # The same script a double-click at the top of the checkout runs,
+            # so a menu click before the .venv exists says what to do rather
+            # than doing nothing.
             (PANEL_ID, entry(
                 "Ninaivu Control Panel", "Start and stop Ninaivu",
-                [str(venv_python), str(root / "ninaivu_control.pyw")], workdir=root)),
+                ["sh", str(root / PANEL_SCRIPT)], workdir=root)),
         ]
     raise SystemExit(f"{root} is neither a portable Ninaivu folder nor a checkout")
 

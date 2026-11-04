@@ -50,6 +50,27 @@ before the Control Panel existed, or after moving the Ninaivu folder,
 reinstalling anything. They are built on the Mac rather than shipped because
 macOS will not open an unsigned app that arrived as a download.
 
+**Linux:** run `sh "Setup Ninaivu.sh"` once for a checkout. It prepares Python,
+adds **Ninaivu** and **Ninaivu Control Panel** to the application menu and
+Desktop, and builds **Open Ninaivu** when a C compiler is available. Both menu
+entries open the Control Panel without a terminal. After moving the checkout,
+run `sh "Setup Ninaivu.sh" --apps-only` to refresh the app entries.
+
+New Linux installations keep the index and settings in **`~/.ninaivu/` in your
+home folder**. Existing app-local libraries or earlier user data folders
+continue to be used, and `NINAIVU_STATE_DIR` still overrides the default.
+The Control Panel and terminal launcher use the same location. Move an existing
+index from **Migration** in the administrator console when you want to change
+that location. The Linux portable build also defaults to `~/.ninaivu/`, and keeps
+using an existing `data/` library or its forwarding note.
+
+**Start**, **Stop**, **Restart**, resource modes and logs work through the same
+controller as on the Mac. **Start Ninaivu when I sign in** is available on Linux
+through a user XDG autostart entry; stopping Ninaivu leaves it stopped until the
+next sign-in. A different portable copy cannot disable your selected copy's
+sign-in entry. If Python has no Tk, install it on Mint/Ubuntu/Debian with
+`sudo apt install python3-tk`. The portable build includes its own Tk.
+
 From a terminal, on any system: `python -m ninaivu.desktop.app` with the
 `.venv`'s Python.
 

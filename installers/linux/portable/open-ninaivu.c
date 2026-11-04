@@ -15,6 +15,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 int main(int argc, char **argv)
@@ -36,6 +37,14 @@ int main(int argc, char **argv)
     if (snprintf(script, sizeof script, "%s/ninaivu", self) >= (int)sizeof script) {
         fprintf(stderr, "Ninaivu: the folder's path is too long\n");
         return 1;
+    }
+    struct stat info;
+    if (stat(script, &info) != 0 || !S_ISREG(info.st_mode)) {
+        if (snprintf(script, sizeof script, "%s/Start - Ninaivu Control Panel.sh", self)
+                >= (int)sizeof script) {
+            fprintf(stderr, "Ninaivu: the folder's path is too long\n");
+            return 1;
+        }
     }
     if (chdir(self) != 0) {
         perror("Ninaivu: cannot open its folder");

@@ -189,8 +189,8 @@ if [ "$top" != "Open Ninaivu,app,logs,ninaivu," ]; then
     echo "the portable folder holds '$top' at its top, not Open Ninaivu, app, logs and ninaivu" >&2
     exit 1
 fi
-"$stage/ninaivu" --where >/dev/null
-"$stage/Open Ninaivu" --where >/dev/null || { echo "Open Ninaivu did not run the ninaivu script" >&2; exit 1; }
+NINAIVU_STATE_DIR="$payload/launcher-smoke-data" "$stage/ninaivu" --where >/dev/null
+NINAIVU_STATE_DIR="$payload/launcher-smoke-data" "$stage/Open Ninaivu" --where >/dev/null || { echo "Open Ninaivu did not run the ninaivu script" >&2; exit 1; }
 
 out="$build/$name.tar.gz"
 tar -C "$build" -czf "$out" "$name"

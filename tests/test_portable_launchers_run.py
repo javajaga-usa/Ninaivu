@@ -74,7 +74,7 @@ def test_the_linux_folder_keeps_everything_in_itself(linux_folder, tmp_path):
     record = tmp_path / "record"
     seen = _run(linux_folder / "ninaivu", record=record, home=tmp_path / "home")
     app = linux_folder.resolve() / "app"
-    data = linux_folder.resolve() / "data"
+    data = tmp_path / "home/.ninaivu"
     # What it keeps is apart from the program (desktop/portable.py).
     assert seen["NINAIVU_HOME"] == str(data / "control")
     assert seen["NINAIVU_STATE_DIR"] == str(data)
@@ -85,9 +85,9 @@ def test_the_linux_folder_keeps_everything_in_itself(linux_folder, tmp_path):
     assert seen["PYTHONHOME"] == "<unset>" and seen["PYTHONPATH"] == "<unset>"
     assert seen["PYTHONNOUSERSITE"] == "1", "no pip --user packages from the home folder"
     assert seen["ARG"] == ["-m", "ninaivu.desktop.app"], "the Control Panel opens"
-    for made in ("logs", "data/control", "data/ai-models"):
-        assert (linux_folder / made).is_dir(), made
-    assert not (tmp_path / "home").exists(), "nothing written outside the folder"
+    assert (linux_folder / 'logs').is_dir()
+    assert (data / 'control').is_dir() and (data / 'ai-models').is_dir()
+    assert not (linux_folder / "app/data").exists(), "user data stays outside the program"
 
 
 def test_the_linux_server_takes_its_arguments_whole(linux_folder, tmp_path):
@@ -117,7 +117,7 @@ def test_the_linux_folder_works_through_a_link_to_its_script(linux_folder, tmp_p
     bin_dir.mkdir()
     (bin_dir / "ninaivu").symlink_to(linux_folder / "ninaivu")
     seen = _run(bin_dir / "ninaivu", record=tmp_path / "record", home=tmp_path / "home")
-    assert seen["NINAIVU_STATE_DIR"] == str(linux_folder.resolve() / "data")
+    assert seen["NINAIVU_STATE_DIR"] == str(tmp_path / "home/.ninaivu")
 
 
 def test_the_linux_folder_says_so_when_its_program_is_missing(tmp_path):
@@ -217,3 +217,18 @@ def test_the_mac_helper_answers_for_a_folder_that_was_not_translocated(tmp_path)
     folder.mkdir()
     answer = module.original_path(str(folder))
     assert answer is None or Path(answer).resolve() == folder.resolve()
+
+
+def test_linux_sign_in_start_uses_the_same_portable_environment(linux_folder, tmp_path):
+    seen = _run(linux_folder / 'ninaivu', '--autostart', record=tmp_path / 'record',
+                home=tmp_path / 'home')
+    assert seen['ARG'] == ['-m', 'ninaivu.desktop.autostart', '--start']
+    assert seen['NINAIVU_STATE_DIR'] == str(tmp_path / 'home/.ninaivu')
+
+
+@pytest.mark.parametrize('marker', ['index.db', 'index-location.json'])
+def test_linux_preserves_a_previous_data_folder(linux_folder, tmp_path, marker):
+    (linux_folder / 'data').mkdir()
+    (linux_folder / 'data' / marker).touch()
+    seen = _run(linux_folder / 'ninaivu', record=tmp_path / 'record', home=tmp_path / 'home')
+    assert seen['NINAIVU_STATE_DIR'] == str(linux_folder.resolve() / 'data')

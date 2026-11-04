@@ -55,11 +55,47 @@ def test_a_checkout_gets_ninaivu_and_its_control_panel(tmp_path, monkeypatch):
     monkeypatch.delenv("XDG_DATA_HOME", raising=False)
     made = dict(linux_menu.launchers(ROOT))
     assert set(made) == {linux_menu.CHECKOUT_ID, linux_menu.PANEL_ID}
-    assert "Terminal=true" in made[linux_menu.CHECKOUT_ID]
-    assert "launcher/start.sh" in made[linux_menu.CHECKOUT_ID]
-    assert ".venv/bin/python" in made[linux_menu.PANEL_ID] and "ninaivu_control.pyw" in made[linux_menu.PANEL_ID]
+    assert "Terminal=false" in made[linux_menu.CHECKOUT_ID]
+    assert "Start - Ninaivu Control Panel.sh" in made[linux_menu.CHECKOUT_ID]
+    assert "Start - Ninaivu Control Panel.sh" in made[linux_menu.PANEL_ID]
     start = (ROOT / "launcher" / "start.sh").read_text()
     assert "--add-to-menu) exec python3 ninaivu/desktop/linux_menu.py --add" in start
+
+
+PANEL = ROOT / linux_menu.PANEL_SCRIPT
+
+
+def _checkout(folder: Path) -> Path:
+    """A checkout's top: the Control Panel script, and nothing set up yet."""
+    folder.mkdir(parents=True)
+    shutil.copyfile(PANEL, folder / PANEL.name)
+    return folder
+
+
+def test_the_control_panel_script_runs_the_venv_from_anywhere(tmp_path):
+    """Double-clicked, the file manager starts it from somewhere else."""
+    marker = tmp_path / "marker"
+    folder = _checkout(tmp_path / "My Photos 'x' $HOME")
+    venv = folder / ".venv" / "bin"
+    venv.mkdir(parents=True)
+    (venv / "python").write_text(f'#!/bin/sh\nprintf "%s|%s" "$1" "$PWD" > "{marker}"\n')
+    (venv / "python").chmod(0o755)
+    subprocess.run(["sh", str(folder / PANEL.name)], check=True, cwd="/", timeout=30)
+    assert marker.read_text() == f"{folder / 'ninaivu_control.pyw'}|{folder}"
+
+
+def test_the_control_panel_script_says_to_set_up_first(tmp_path):
+    folder = _checkout(tmp_path / "Ninaivu")
+    done = subprocess.run(["sh", str(folder / PANEL.name)], cwd="/", capture_output=True, text=True,
+                          timeout=30, env={"PATH": "/usr/bin:/bin", "NINAIVU_NO_DIALOG": "1"})
+    assert done.returncode == 1
+    assert "not set up in this folder yet" in done.stderr and "sh launcher/start.sh" in done.stderr
+
+
+def test_the_control_panel_script_sits_beside_the_windows_one():
+    assert (ROOT / "Start - Ninaivu Control Panel.vbs").is_file()
+    assert PANEL.read_bytes().startswith(b"#!/bin/sh\n"), "LF line endings, or sh cannot run it"
+    assert "ninaivu_control.pyw" in PANEL.read_text()
 
 
 def test_removing_takes_out_only_its_own(tmp_path, monkeypatch):
@@ -70,8 +106,13 @@ def test_removing_takes_out_only_its_own(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.delenv("XDG_DATA_HOME", raising=False)
     linux_menu.add(_portable(tmp_path / "Ninaivu", tmp_path / "m"), out=lambda _: None)
+    # update-desktop-database may create this shared cache during add().
+    # Seed it even on machines without that utility: removal must preserve it.
+    cache = menu / "mimeinfo.cache"
+    cache.write_text("[MIME Cache]\n")
     linux_menu.remove(out=lambda _: None)
-    assert sorted(p.name for p in menu.iterdir()) == ["firefox.desktop"]
+    assert sorted(p.name for p in menu.iterdir()) == ["firefox.desktop", "mimeinfo.cache"]
+    assert cache.read_text() == "[MIME Cache]\n"
 
 
 def test_open_ninaivu_runs_the_script_beside_it_from_anywhere(tmp_path):
@@ -92,3 +133,43 @@ def test_the_linux_build_makes_and_checks_open_ninaivu():
     assert 'cc -O2 -static -s -o "$stage/Open Ninaivu"' in build
     assert '"$stage/Open Ninaivu" --where' in build
     assert "--add-to-menu) exec \"$python\" -m ninaivu.desktop.linux_menu --add" in script
+
+
+def test_native_checkout_launcher_opens_control_panel_from_another_directory(tmp_path):
+    cc = shutil.which('cc')
+    if not cc or not sys.platform.startswith('linux'):
+        pytest.skip('needs a C compiler on Linux')
+    folder = _checkout(tmp_path / "My App 'x' 50%")
+    (folder / 'ninaivu').mkdir()  # Package directory must not be mistaken for the portable script.
+    venv = folder / '.venv/bin'
+    venv.mkdir(parents=True)
+    marker = tmp_path / 'native-marker'
+    python = venv / 'python'
+    python.write_text(f'#!/bin/sh\nprintf "%s" "$1" > "{marker}"\n')
+    python.chmod(0o755)
+    program = folder / 'Open Ninaivu'
+    subprocess.run([cc, '-O2', '-o', str(program), str(LINUX / 'portable/open-ninaivu.c')], check=True)
+    subprocess.run([str(program)], check=True, cwd='/', timeout=30)
+    assert marker.read_text() == str(folder / 'ninaivu_control.pyw')
+
+
+def test_linux_checkout_default_and_existing_library_locations(tmp_path):
+    folder = tmp_path / "App 'x' $HOME 50%"
+    folder.mkdir()
+    helper = ROOT / 'launcher/linux-env.sh'
+    env = {'PATH': '/usr/bin:/bin', 'HOME': str(tmp_path / 'home')}
+    def chosen(extra=None):
+        done = subprocess.run(['sh', '-c', '. "$1"; printf "%s" "$NINAIVU_STATE_DIR"',
+                               'sh', str(helper)], cwd=folder, env={**env, **(extra or {})},
+                              capture_output=True, text=True, check=True)
+        return done.stdout
+    assert chosen() == str(tmp_path / 'home/.ninaivu')
+    legacy = tmp_path / 'home/.ninaivu'
+    legacy.mkdir(parents=True)
+    (legacy / 'index.db').touch()
+    assert chosen() == str(legacy)
+    current = folder / '.ninaivu'
+    current.mkdir()
+    (current / 'index-location.json').write_text('{}')
+    assert chosen() == str(current)
+    assert chosen({'NINAIVU_STATE_DIR': '/explicit/index'}) == '/explicit/index'

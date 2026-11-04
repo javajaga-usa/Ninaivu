@@ -136,3 +136,60 @@ def test_a_job_made_in_a_test_sees_a_calm_machine(tmp_path):
     assert job.pacer.reader is not pacing.read_system_conditions
     job.pacer.checkpoint(Gate(), 1)
     assert job.pacer.mode == "full-speed"
+
+
+# -- the Linux battery reader ---------------------------------------------------
+
+def _supply(root, name, **files):
+    folder = root / name
+    folder.mkdir()
+    for key, value in files.items():
+        (folder / key).write_text(f"{value}\n")
+
+
+def test_linux_ignores_a_wireless_mouse_battery(tmp_path):
+    from ninaivu.archive.pacing import _linux_battery
+    # Sorted first, at 0% and discharging: what used to be read as the laptop's.
+    _supply(tmp_path, 'hidpp_battery_0', type='Battery', scope='Device',
+            capacity=0, status='Discharging')
+    _supply(tmp_path, 'AC', type='Mains', online=1)
+    _supply(tmp_path, 'BAT0', type='Battery', capacity=96, status='Charging')
+    assert _linux_battery(tmp_path) == (False, 96)
+
+
+def test_linux_on_battery_when_no_charger_is_online(tmp_path):
+    from ninaivu.archive.pacing import _linux_battery
+    _supply(tmp_path, 'ADP1', type='Mains', online=0)
+    _supply(tmp_path, 'ucsi-source-psy-USBC000:001', type='USB', online=0)
+    _supply(tmp_path, 'BAT0', type='Battery', capacity=12, status='Discharging')
+    assert _linux_battery(tmp_path) == (True, 12)
+
+
+def test_linux_charger_decides_over_the_battery_status(tmp_path):
+    from ninaivu.archive.pacing import _linux_battery
+    # A battery held at a charge limit can say Discharging while the charger
+    # runs the computer.
+    _supply(tmp_path, 'AC0', type='Mains', online=1)
+    _supply(tmp_path, 'BAT1', type='Battery', capacity=80, status='Discharging')
+    assert _linux_battery(tmp_path) == (False, 80)
+
+
+def test_linux_two_batteries_by_energy(tmp_path):
+    from ninaivu.archive.pacing import _linux_battery
+    _supply(tmp_path, 'BAT0', type='Battery', capacity=100, status='Discharging',
+            energy_now=20_000_000, energy_full=20_000_000)
+    _supply(tmp_path, 'BAT1', type='Battery', capacity=0, status='Discharging',
+            energy_now=0, energy_full=60_000_000)
+    assert _linux_battery(tmp_path) == (True, 25)
+
+
+def test_linux_desktop_and_only_peripherals_have_no_battery(tmp_path):
+    from ninaivu.archive.pacing import _linux_battery
+    assert _linux_battery(tmp_path) == (False, None)
+    _supply(tmp_path, 'hid-keyboard-battery', type='Battery', scope='Device', capacity=0)
+    assert _linux_battery(tmp_path) == (False, None)
+
+
+def test_linux_without_the_folder_cannot_say(tmp_path):
+    from ninaivu.archive.pacing import _linux_battery
+    assert _linux_battery(tmp_path / 'missing') == (None, None)

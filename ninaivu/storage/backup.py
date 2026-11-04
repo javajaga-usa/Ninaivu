@@ -316,12 +316,57 @@ def _link_or_copy(source: str, target: str) -> None:
 STAGING_PREFIX = ".backup-staging-"
 
 
+#: In a staging folder, beside the staged ``state``: the process making it.
+STAGING_OWNER = "owner.pid"
+
+
+def _process_alive(pid: int) -> bool:
+    """Whether *pid* is a running process. True when this cannot be told, so
+    a staging folder is never taken from a backup still at work."""
+    if pid <= 0:
+        return False
+    if pid == os.getpid():
+        return True
+    try:
+        import psutil                                    # noqa: PLC0415
+    except ImportError:
+        psutil = None
+    if psutil is not None:
+        return bool(psutil.pid_exists(pid))
+    if os.name != "posix":
+        return True
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except OSError:
+        return True                                      # there, but someone else's
+    return True
+
+
+def _claim_staging(folder: Path) -> None:
+    try:
+        (folder / STAGING_OWNER).write_text(str(os.getpid()), encoding="ascii")
+    except OSError:
+        pass                    # only means a leftover waits for the day to pass
+
+
 def _clear_old_staging(state_dir: Path, older_than: float = 86400) -> None:
-    """Staging left by a backup that was killed part-way."""
+    """Staging left by a backup that was killed part-way.
+
+    One whose process has gone, straight away; any other once it is a day
+    old. Each holds a whole copy of the index: three starts stopped during
+    the copy before an update left 7.7 GB of them, kept for a day.
+    """
     now = time.time()
     for leftover in state_dir.glob(f"{STAGING_PREFIX}*"):
         try:
-            if now - leftover.stat().st_mtime > older_than:
+            try:
+                owner = int((leftover / STAGING_OWNER).read_text(encoding="ascii").strip())
+            except (OSError, ValueError):
+                owner = None
+            gone = owner is not None and not _process_alive(owner)
+            if gone or now - leftover.stat().st_mtime > older_than:
                 shutil.rmtree(leftover, ignore_errors=True)
         except OSError:
             continue
@@ -472,6 +517,7 @@ def _snapshot(state_dir: Path | str, out_dir: Path | str,
     _clear_old_staging(state_dir)
     _clear_old_partials(out_dir)
     with tempfile.TemporaryDirectory(prefix=STAGING_PREFIX, dir=state_dir) as tmp:
+        _claim_staging(Path(tmp))
         staged = Path(tmp) / "state"
         staged.mkdir()
 

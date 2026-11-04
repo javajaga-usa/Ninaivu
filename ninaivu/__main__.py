@@ -320,7 +320,12 @@ def main(argv: list[str] | None = None) -> int:
     if os.environ.get("NINAIVU_PORTABLE"):
         # A 1.12 portable folder still holding its data where 1.11 kept it
         # (``./ninaivu --server`` opens no Control Panel to move it first).
-        from .desktop.portable import settle_quietly  # noqa: PLC0415
+        from .desktop.portable import PortableError, require_active, settle_quietly  # noqa: PLC0415
+        try:
+            require_active()
+        except PortableError as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
         settle_quietly()
     cfg = Config.load()
     try:
@@ -329,12 +334,33 @@ def main(argv: list[str] | None = None) -> int:
             # server lock: an import is done before that lock can be taken, and
             # a second start in the meantime opened the old folder
             # (runfile.starting_lock).
-            with runfile.starting_lock(cfg.state_dir):
+            with contextlib.ExitStack() as starts:
+                # Reload under each gate: a concurrent move may have changed
+                # the location while this process was acquiring the old gate.
+                while True:
+                    locked_state = cfg.state_dir
+                    starts.enter_context(runfile.starting_lock(locked_state))
+                    cfg = Config.load()
+                    if cfg.state_dir == locked_state:
+                        break
                 # Whoever started this waits on the run file; until it is
                 # written, this says how far the start has got
                 # (server/starting.py). Inside the lock, so a start that is
                 # turned away does not overwrite the note of the one at work.
+                from .storage import relocate
                 starting.begin(cfg.state_dir)
+                if (cfg.state_dir / relocate.PENDING).exists() and not args.replica_of:
+                    starting.step("moving and verifying the index in its new folder")
+                    relocated = relocate.apply_pending(cfg.state_dir, starts=starts)
+                else:
+                    relocated = None
+                if relocated is not None:
+                    starting.move_to(relocated)
+                    if os.environ.get("NINAIVU_PORTABLE"):
+                        from .desktop.portable import activate_environment
+                        activate_environment()
+                    cfg = Config.load()
+                starting.step("starting")
                 if not args.replica_of:
                     # An import asked for from the console replaces the state
                     # folder, so it is done here, before the server takes the
@@ -354,6 +380,9 @@ def main(argv: list[str] | None = None) -> int:
             from .storage.upgrade import before_opening_the_index  # noqa: PLC0415
             if not before_opening_the_index(cfg.state_dir):
                 return 1
+            if os.environ.get("NINAIVU_PORTABLE"):
+                from .desktop.portable import note_active
+                note_active(cfg.state_dir)
             return _run(cfg, args)
     except runfile.AlreadyStarting:
         note = starting.read(cfg.state_dir) or {}
