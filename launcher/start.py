@@ -615,9 +615,7 @@ def main() -> int:
     env = {**os.environ, **mode_env, "PYTHONPATH": str(HERE), "PYTHONUNBUFFERED": "1",
            "PYTHONIOENCODING": os.environ.get("PYTHONIOENCODING", "utf-8")}
 
-    runtime_dir = HERE / ".ninaivu-control"
-    runtime_dir.mkdir(parents=True, exist_ok=True)
-    log_path = runtime_dir / "server.log"
+    log_path = server_log_path()
 
     # Only a server that could not be started at all falls back to running
     # it plainly. Once one is running, whatever goes wrong with relaying its
@@ -626,7 +624,7 @@ def main() -> int:
     # beside the first, and have it refused the state folder.
     log_file = None
     try:
-        log_file = log_path.open("a", encoding="utf-8", errors="replace")
+        log_file = open_private_log(log_path)
         log_file.write(f"\n--- Ninaivu launcher starting ({time.strftime('%Y-%m-%d %H:%M:%S')}) ---\n")
         log_file.write(f"Family app     {url}\n")
         log_file.write(f"Admin console  {admin_url}\n\n")
@@ -655,6 +653,37 @@ def main() -> int:
 
     with log_file:
         return follow(proc, (sys.stdout, log_file))
+
+
+def server_log_path(environ=None) -> Path:
+    """Where the server's output is kept: the folder the Control Panel's
+    View logs reads (``ninaivu/desktop/control.py:log_dir``).
+
+    ``NINAIVU_LOG_DIR`` when the launcher was told one (the portable build,
+    and on Linux ``launcher/linux-env.sh``, which every desktop entry and
+    ``launcher/start.sh`` source), ``.ninaivu-control`` otherwise. Always
+    ``.ninaivu-control`` here left a server started from the menu writing to
+    a file the panel never showed: on Linux the panel reads ``logs/``.
+    """
+    environ = os.environ if environ is None else environ
+    told = environ.get("NINAIVU_LOG_DIR", "").strip()
+    folder = Path(told).expanduser() if told else HERE / ".ninaivu-control"
+    folder.mkdir(parents=True, exist_ok=True)
+    return folder / "server.log"
+
+
+def open_private_log(path: Path):
+    """*path* for appending, readable by its owner only, as the Control
+    Panel keeps its logs (``control.open_log``): the server's output names
+    the library's folders and files."""
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND
+                         | getattr(os, "O_BINARY", 0), 0o600)
+    if os.name == "posix":
+        try:
+            os.fchmod(descriptor, 0o600)        # one made before at the umask's 0644
+        except OSError:
+            pass
+    return os.fdopen(descriptor, "a", encoding="utf-8", errors="replace")
 
 
 def relay(lines, sinks) -> None:
