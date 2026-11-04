@@ -183,7 +183,11 @@ def test_another_thread_waits_for_the_group_and_then_writes(index):
 
 
 def test_the_write_lock_is_still_a_plain_lock_to_other_threads():
-    lock = db._write_lock
+    # A lock of the same kind, not the index's own: a thread an earlier test
+    # left running may take that one the moment this lets it go (Windows,
+    # 4 Nov 2026: "assert not lock.locked()").
+    assert isinstance(db._write_lock, db._WriteLock)
+    lock = db._WriteLock()
     with lock:
         held = []
         thread = threading.Thread(target=lambda: held.append(lock.acquire(timeout=0.1)))

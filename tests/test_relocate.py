@@ -182,3 +182,52 @@ class RelocationTests(unittest.TestCase):
                 self.fail('A competing start acquired the destination during handover')
         with runfile.starting_lock(self.target):
             pass
+
+
+class StartingNoteOnWindowsTests(unittest.TestCase):
+    """os.replace and reading are refused on Windows while the file is open
+    elsewhere (the antivirus, a waiter): tried again, not given up."""
+
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.state = Path(self.temporary.name).resolve()
+
+    def test_a_replace_refused_for_a_moment_still_writes_the_note(self):
+        from ninaivu.server import starting
+        real, refused = starting.os.replace, []
+
+        def busy(source, target):
+            if len(refused) < 3:
+                refused.append(target)
+                raise PermissionError(13, 'in use')
+            return real(source, target)
+
+        starting.end()
+        self.addCleanup(starting.end)
+        with patch.object(starting, '_WINDOWS', True), patch.object(starting.os, 'replace', busy):
+            starting.begin(self.state)
+        self.assertEqual(len(refused), 3)
+        self.assertIsNotNone(starting.read(self.state))
+
+    def test_a_read_refused_for_a_moment_still_reads_the_note(self):
+        from ninaivu.server import starting
+        starting.end()
+        self.addCleanup(starting.end)
+        starting.begin(self.state)
+        real, refused = Path.read_text, []
+
+        def busy(path, *args, **kwargs):
+            if path.name == starting.STARTING_FILE and len(refused) < 2:
+                refused.append(path)
+                raise PermissionError(13, 'in use')
+            return real(path, *args, **kwargs)
+
+        with patch.object(starting, '_WINDOWS', True), patch.object(Path, 'read_text', busy):
+            self.assertIsNotNone(starting.read(self.state))
+        self.assertEqual(len(refused), 2)
+
+    def test_elsewhere_a_refusal_is_not_waited_for(self):
+        from ninaivu.server import starting
+        with patch.object(starting, '_WINDOWS', False), self.assertRaises(PermissionError):
+            starting._patiently(lambda: (_ for _ in ()).throw(PermissionError(13, 'no')))
