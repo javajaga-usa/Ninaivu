@@ -15,13 +15,48 @@ import stat
 from pathlib import Path
 
 __all__ = ["CHUNK", "LOCK_FLAGS", "copystat_unlocked", "create_new", "file_flags", "real_path",
-           "remove_own", "same_bytes", "sha256_file", "stays_inside", "sync_folder", "unlock",
-           "atomic_write"]
+           "open_file_limit", "remove_own", "same_bytes", "sha256_file", "stays_inside",
+           "sync_folder", "unlock", "atomic_write"]
 
 #: Bytes read at a time when a whole file is hashed or copied. Large enough
 #: that a photograph is one read; small enough that a film does not sit in
 #: memory.
 CHUNK = 4 * 1024 * 1024
+
+
+#: How many files Ninaivu asks to be allowed to hold open at once. A Mac
+#: gives an app opened from Finder 256: the server's own threads each keep the
+#: index open (three files apiece, with its write-ahead log), and a full
+#: export summing 961,507 files on top of that ran out — "Too many open
+#: files" — 700,000 files in, with the console's own pages failing alongside
+#: it. Linux gives 1,024 and Windows has no such limit.
+OPEN_FILES_WANTED = 10240
+
+
+def open_file_limit(wanted: int = OPEN_FILES_WANTED) -> tuple[int, int] | None:
+    """Raise this process's limit on open files to *wanted*, or as near it as
+    the system allows; never lower it. ``(before, after)``, or None where
+    there is no such limit to ask about (Windows)."""
+    try:
+        import resource                                  # noqa: PLC0415
+    except ImportError:
+        return None
+    try:
+        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    except (OSError, ValueError):
+        return None
+    if soft == resource.RLIM_INFINITY or soft >= wanted:
+        return soft, soft
+    target = wanted if hard == resource.RLIM_INFINITY else min(wanted, hard)
+    while target > soft:
+        try:
+            resource.setrlimit(resource.RLIMIT_NOFILE, (target, hard))
+            return soft, target
+        except (OSError, ValueError):
+            # A Mac refuses more than kern.maxfilesperproc, whatever the hard
+            # limit says (which may say "unlimited").
+            target //= 2
+    return soft, soft
 
 
 def sha256_file(path: Path | str, chunk: int = CHUNK) -> str:
