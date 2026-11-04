@@ -126,7 +126,13 @@ def unpack(archive: Path, into: Path) -> Path:
     staging = Path(tempfile.mkdtemp(prefix="unpack-", dir=into))
     if archive.name.endswith(".tar.gz"):
         with tarfile.open(archive) as tar:
-            tar.extractall(staging, filter="tar")
+            if hasattr(tarfile, "tar_filter"):
+                tar.extractall(staging, filter="tar")
+            else:
+                # Python 3.11 before 3.11.4 (Debian 12's own, which the
+                # Debian check runs this with) has no filters; the archive
+                # is the one this workflow just built.
+                tar.extractall(staging)  # noqa: S202
     elif archive.suffix == ".zip" and sys.platform == "darwin":
         # ditto keeps the app bundle's links and permissions; zipfile does not.
         subprocess.run(["ditto", "-x", "-k", str(archive), str(staging)], check=True)

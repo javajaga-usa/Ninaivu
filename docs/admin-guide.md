@@ -51,10 +51,10 @@ Windows, a LaunchAgent on a Mac) when someone turns it on.
   `~/Library/Application Support/Ninaivu`, as an installed app would.
   `open -a Ninaivu --args --tray` opens the menu-bar tray instead of the
   Control Panel.
-- **Linux.** There are two downloads: `linux-x64` for a PC and `linux-arm64`
-  for an arm64 computer (a Raspberry Pi 4 or 5 with a 64-bit system, an arm64
-  server). The arm64 one has no ffmpeg of its own yet; install the system's
-  (`sudo apt install ffmpeg`).
+- **Linux.** One download, `linux-x64`, for a 64-bit PC running Debian 12
+  or 13, Ubuntu or another current distribution; every release is opened on
+  Debian 12 and 13 before it is published. There is no arm64 (Raspberry Pi)
+  download.
   `./ninaivu --server [PHOTOS] [options]` runs the server alone in
   the terminal, with the same folders; `./ninaivu --tray` opens the tray;
   `./ninaivu --where` prints the folders. The script may be reached through a
@@ -74,7 +74,7 @@ ReadWritePaths=/opt/ninaivu /var/lib/ninaivu
 
 ```bash
 sudo useradd --system --user-group --home-dir /opt/ninaivu --shell /usr/sbin/nologin ninaivu
-sudo tar -xzf Ninaivu-<version>-linux-x64-portable.tar.gz -C /opt   # or linux-arm64
+sudo tar -xzf Ninaivu-<version>-linux-x64-portable.tar.gz -C /opt
 sudo mv /opt/Ninaivu-<version>-linux-x64-portable /opt/ninaivu
 sudo chown -R ninaivu: /opt/ninaivu
 sudo cp installers/systemd/ninaivu.service /etc/systemd/system/   # edited as above

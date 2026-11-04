@@ -425,37 +425,39 @@ jobs:
             installers/linux/build/*.tar.gz
             installers/linux/build/*-packages.txt
 
-  # arm64 Linux (a Raspberry Pi 4 or 5, an arm64 server), built natively on
-  # GitHub's arm64 runner: the bundled Python installs the packages, so it
-  # has to run on the machine it is for. No older arm64 download to bring a
-  # library across from yet.
-  linux-arm64:
-    name: Linux arm64, portable
-    needs: gate
-    runs-on: ${{ vars.LINUX_ARM64_RUNNER || 'ubuntu-24.04-arm' }}
-    timeout-minutes: 80
+  # The Linux download on Debian, as a household's Debian desktop has it:
+  # the archive linux built, unpacked and used on Debian 12 (bookworm) and
+  # 13 (trixie) instead of the Ubuntu runner it was built on. It carries its
+  # own Python, so only what any Debian desktop already has is installed
+  # here: an X server (Xvfb, so the Control Panel can be drawn) and the X,
+  # font and GL libraries a desktop's Tk and OpenCV find there. The Python
+  # here only runs the check; the download uses its own.
+  debian:
+    name: "Linux x64 on Debian ${{ matrix.debian }}"
+    needs: linux
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    container: debian:${{ matrix.debian }}
+    strategy:
+      fail-fast: false
+      matrix:
+        debian: ["12", "13"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          python-version: "3.12"
-      - name: Build
+          name: linux
+          path: download
+      - name: What a Debian desktop already has
         run: |
-          python -m pip install -c requirements/build-tools.txt pip
-          bash installers/linux/build.sh
-      # The system's ffmpeg, as README-PORTABLE.txt says for arm64.
+          apt-get update -q
+          apt-get install -y -q --no-install-recommends python3 ca-certificates procps \
+            xvfb xauth libx11-6 libxext6 libxrender1 libxft2 libxss1 libfontconfig1 \
+            fonts-dejavu-core libgl1 libegl1 libglib2.0-0 libsm6 libice6
       - name: Use the archive as a household would
-        run: |
-          sudo apt-get update -q && sudo apt-get install -y -q xvfb ffmpeg
-          xvfb-run -a python tools/check_portable.py check installers/linux/build/Ninaivu-*-linux-arm64-portable.tar.gz --work "$RUNNER_TEMP/check"
+        run: xvfb-run -a python3 tools/check_portable.py check download/Ninaivu-*-linux-x64-portable.tar.gz --work "$RUNNER_TEMP/check"
       - name: Two copies of it, paired
-        run: python tools/check_portable.py pair installers/linux/build/Ninaivu-*-linux-arm64-portable.tar.gz --work "$RUNNER_TEMP/pair"
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: linux-arm64
-          path: |
-            installers/linux/build/*.tar.gz
-            installers/linux/build/*-packages.txt
+        run: python3 tools/check_portable.py pair download/Ninaivu-*-linux-x64-portable.tar.gz --work "$RUNNER_TEMP/pair"
 
   # Mugil's two computers on two different systems: each pair is two jobs
   # running at once, the Secondary and the Primary, on the runners of their
@@ -544,7 +546,7 @@ jobs:
 
   release:
     name: Attach to the release
-    needs: [gate, windows, macos, linux, linux-arm64, pair-across]
+    needs: [gate, windows, macos, linux, debian, pair-across]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     if: github.ref_type == 'tag' || github.event_name == 'workflow_dispatch'
@@ -597,9 +599,8 @@ jobs:
           # `sha256sum -c --ignore-missing SHA256SUMS.txt` works in the folder
           # they were downloaded to.
           cd out
-          for file in windows/*.zip macos/*.zip linux/*.tar.gz linux-arm64/*.tar.gz \
-                      windows/*-packages.txt macos/*-packages.txt linux/*-packages.txt \
-                      linux-arm64/*-packages.txt; do
+          for file in windows/*.zip macos/*.zip linux/*.tar.gz \
+                      windows/*-packages.txt macos/*-packages.txt linux/*-packages.txt; do
             (cd "$(dirname "$file")" && sha256sum "$(basename "$file")")
           done > SHA256SUMS.txt
           cat SHA256SUMS.txt
@@ -617,7 +618,6 @@ jobs:
             out/windows/*.zip
             out/macos/*.zip
             out/linux/*.tar.gz
-            out/linux-arm64/*.tar.gz
             out/SHA256SUMS.txt
       # The notes say what is in this release (its section of the changelog)
       # and, honestly, whether the installers are signed: an unsigned one
@@ -629,7 +629,7 @@ jobs:
           {
             echo "Ninaivu $version — your family's photographs, on a computer at home."
             echo
-            echo "Ninaivu is portable: nothing is installed. Extract it anywhere you can write to (your Documents, a USB drive) and open it; deleting the folder removes everything it made. **Windows:** \`Ninaivu-$version-windows-x64-portable.zip\` — open \`Ninaivu.exe\`. **Mac (Apple silicon):** \`Ninaivu-$version-macos-arm64-portable.zip\` — open \`Ninaivu.app\` in the folder it makes. **Linux (x64: Ubuntu, Debian and the like):** \`Ninaivu-$version-linux-x64-portable.tar.gz\`; **arm64 (a Raspberry Pi 4 or 5):** \`Ninaivu-$version-linux-arm64-portable.tar.gz\`, with the system's ffmpeg (\`sudo apt install ffmpeg\`) — run \`./ninaivu\` (\`./ninaivu --server <photos>\` without a desktop). To update, unpack the newer one beside the old folder, on the same drive, and open it: it offers to bring the library across, and can give it back (README-PORTABLE.txt in each says more). Docker and running from source are in the technical administrator guide."
+            echo "Ninaivu is portable: nothing is installed. Extract it anywhere you can write to (your Documents, a USB drive) and open it; deleting the folder removes everything it made. **Windows:** \`Ninaivu-$version-windows-x64-portable.zip\` — open \`Ninaivu.exe\`. **Mac (Apple silicon):** \`Ninaivu-$version-macos-arm64-portable.zip\` — open \`Ninaivu.app\` in the folder it makes. **Linux (x64: Ubuntu, Debian and the like):** \`Ninaivu-$version-linux-x64-portable.tar.gz\` — run \`./ninaivu\` (\`./ninaivu --server <photos>\` without a desktop). To update, unpack the newer one beside the old folder, on the same drive, and open it: it offers to bring the library across, and can give it back (README-PORTABLE.txt in each says more). Docker and running from source are in the technical administrator guide."
             echo "Each one carries its own Python, so the computer needs none, and every package: nothing is downloaded when it runs. The checksums are in \`SHA256SUMS.txt\` (how to check one: the Security page of the docs); each \`*-packages.txt\` lists what that download carries."
             echo
             echo "**The guide**, to read or share: \`Ninaivu-guide.pdf\` (English) and \`Ninaivu-guide-ta.pdf\` (தமிழ்). For whoever looks after the technical side: \`Ninaivu-admin-guide.pdf\` (English)."
@@ -670,11 +670,9 @@ jobs:
             out/windows/*.zip
             out/macos/*.zip
             out/linux/*.tar.gz
-            out/linux-arm64/*.tar.gz
             out/windows/*-packages.txt
             out/macos/*-packages.txt
             out/linux/*-packages.txt
-            out/linux-arm64/*-packages.txt
             out/SHA256SUMS.txt
             out/Ninaivu-guide.pdf
             out/Ninaivu-guide-ta.pdf
