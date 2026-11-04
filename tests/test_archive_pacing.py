@@ -160,7 +160,9 @@ def test_linux_ignores_a_wireless_mouse_battery(tmp_path):
 def test_linux_on_battery_when_no_charger_is_online(tmp_path):
     from ninaivu.archive.pacing import _linux_battery
     _supply(tmp_path, 'ADP1', type='Mains', online=0)
-    _supply(tmp_path, 'ucsi-source-psy-USBC000:001', type='USB', online=0)
+    # The kernel names it ucsi-source-psy-USBC000:001; Windows, where this
+    # runs too, allows no ':' in a folder name, and only the type counts.
+    _supply(tmp_path, 'ucsi-source-psy-USBC000-001', type='USB', online=0)
     _supply(tmp_path, 'BAT0', type='Battery', capacity=12, status='Discharging')
     assert _linux_battery(tmp_path) == (True, 12)
 
