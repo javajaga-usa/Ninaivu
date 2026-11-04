@@ -430,7 +430,9 @@ jobs:
   # 13 (trixie) instead of the Ubuntu runner it was built on. It carries its
   # own Python, so only what any Debian desktop already has is installed
   # here: an X server (Xvfb, so the Control Panel can be drawn) and the X,
-  # font and GL libraries a desktop's Tk and OpenCV find there. The Python
+  # font and GL libraries a desktop's Tk and OpenCV find there, and FriBiDi,
+  # which every Debian desktop has and Pillow lays out Tamil with
+  # (ninaivu/utils/fribidi.py: the Linux download uses the system's). The Python
   # here only runs the check; the download uses its own.
   debian:
     name: "Linux x64 on Debian ${{ matrix.debian }}"
@@ -453,7 +455,7 @@ jobs:
           apt-get update -q
           apt-get install -y -q --no-install-recommends python3 ca-certificates procps \
             xvfb xauth libx11-6 libxext6 libxrender1 libxft2 libxss1 libfontconfig1 \
-            fonts-dejavu-core libgl1 libegl1 libglib2.0-0 libsm6 libice6
+            fonts-dejavu-core libgl1 libegl1 libglib2.0-0 libsm6 libice6 libfribidi0
       - name: Use the archive as a household would
         run: xvfb-run -a python3 tools/check_portable.py check download/Ninaivu-*-linux-x64-portable.tar.gz --work "$RUNNER_TEMP/check"
       - name: Two copies of it, paired
