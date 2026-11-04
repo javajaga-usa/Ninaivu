@@ -48,6 +48,25 @@ def _path(state_dir: str | Path) -> Path:
     return Path(state_dir) / STARTING_FILE
 
 
+#: On Windows a file cannot be replaced while anything has it open (a
+#: waiter reading it, the antivirus or the search indexer looking at it):
+#: os.replace and the read are tried again for this long before giving up.
+SHARING_PATIENCE = 0.5
+_WINDOWS = os.name == "nt"
+
+
+def _patiently(action):
+    """*action*, tried again while Windows says the file is in use."""
+    deadline = time.monotonic() + SHARING_PATIENCE
+    while True:
+        try:
+            return action()
+        except PermissionError:
+            if not _WINDOWS or time.monotonic() >= deadline:
+                raise
+            time.sleep(0.02)
+
+
 def _write(note: dict[str, Any]) -> None:
     target = _path(note["state_dir"])
     body = {k: v for k, v in note.items() if k != "state_dir"}
@@ -55,7 +74,9 @@ def _write(note: dict[str, Any]) -> None:
     partial = target.with_name(f"{target.name}.{os.getpid()}.tmp")
     try:
         partial.write_text(json.dumps(body), encoding="utf-8")
-        os.replace(partial, target)
+        # Given up at the first refusal, the note was simply not there: the
+        # Control Panel lost the start it was following for a beat.
+        _patiently(lambda: os.replace(partial, target))
     except OSError:
         # Only a waiter's comfort: a start never fails over it.
         try:
@@ -86,6 +107,9 @@ def begin(state_dir: str | Path, what: str = "starting") -> None:
             pass
         _current = {"state_dir": str(state_dir), "pid": os.getpid(), "step": what,
                     "since": time.time(), "step_since": time.time()}
+        # A wake left by an earlier start's end() would have this start's
+        # heartbeat write at once, while a waiter may be reading.
+        _wake.clear()
         _write(_current)
     atexit.register(end)
     threading.Thread(target=_beat, daemon=True, name="ninaivu-starting").start()
@@ -139,7 +163,8 @@ def read(state_dir: str | Path, *, now: float | None = None) -> dict[str, Any] |
     """
     from ..storage.relocate import resolve
     try:
-        note = json.loads(_path(resolve(Path(state_dir))).read_text(encoding="utf-8"))
+        path = _path(resolve(Path(state_dir)))
+        note = json.loads(_patiently(lambda: path.read_text(encoding="utf-8")))
     except (OSError, ValueError):
         return None
     if not isinstance(note, dict):
