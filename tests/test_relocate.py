@@ -13,7 +13,10 @@ class RelocationTests(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
-        self.base = Path(self.temporary.name)
+        # Resolved, as Config.load gives the state folder: on Windows the
+        # temporary folder is an 8.3 name (RUNNER~1), on a Mac /var is
+        # /private/var, and relocate.resolve() returns the real path.
+        self.base = Path(self.temporary.name).resolve()
         self.source = self.base / 'old'
         self.source.mkdir()
         (self.source / 'index.db').write_bytes(b'index contents')
