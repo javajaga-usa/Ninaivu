@@ -47,6 +47,7 @@ from typing import Any, Callable
 from ..words import filled, said
 from .filenames import portable_name
 from .files import copystat_unlocked, create_new, remove_own, same_bytes, sha256_file, sync_folder
+from .mounts import unescape
 
 log = logging.getLogger(__name__)
 
@@ -672,8 +673,8 @@ def _linux_device(path: str, table: str = "/proc/mounts") -> str | None:
         with open(table, encoding="utf-8") as mounts:
             for line in mounts:
                 parts = line.split()
-                if len(parts) >= 2 and parts[1].replace("\\040", " ") == path:
-                    return parts[0]
+                if len(parts) >= 2 and unescape(parts[1]) == path:
+                    return unescape(parts[0])
     except OSError:
         return None
     return None

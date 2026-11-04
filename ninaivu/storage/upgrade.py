@@ -151,6 +151,37 @@ def schemas(state_dir: Path | str) -> dict[str, tuple[int, int]]:
     }
 
 
+#: The start's step while the copy before an update is made. The Control
+#: Panel shows it as it waits; each stage of the copy is added after a colon.
+UPDATE_STEP = "copying the settings and the index before the update"
+#: The stages of :func:`backup.snapshot`, as the person waiting is told them.
+UPDATE_STAGES = {
+    "copying": "copying",
+    "checking": "working out a checksum of every file",
+    "verifying": "checking the copied index",
+    "packing": "packing the copy",
+}
+
+
+def _update_progress(tell: Any) -> Any:
+    """A ``progress`` for :func:`backup.snapshot` that tells *tell* each new
+    stage of the copy, once.
+
+    The copy said "copying" from first to last: on a 2.7 GB index, eight
+    minutes with no change, which a person waiting took for a start that had
+    hung — and stopped, leaving the copy to be made from the beginning again.
+    """
+    told: list[str] = []
+
+    def progress(stage: str, **_counts: Any) -> None:
+        if told and told[-1] == stage:
+            return
+        told.append(stage)
+        tell(f"{UPDATE_STEP}: {UPDATE_STAGES.get(stage, stage)}")
+
+    return progress
+
+
 def prepare(state_dir: Path | str, *, version: str = __version__,
             environ: dict[str, str] | None = None) -> dict[str, Any]:
     """Make starting *version* on *state_dir* safe, or raise :class:`UpdateError`.
@@ -201,14 +232,16 @@ def prepare(state_dir: Path | str, *, version: str = __version__,
             from ..server import starting                # noqa: PLC0415
             from . import backup                         # noqa: PLC0415
 
-            # The longest step of a start on a big index: a minute for 2.7 GB.
-            starting.step("copying the settings and the index before the update")
+            # The longest step of a start on a big index: on a 2.7 GB one,
+            # about eight minutes all told, most of it packing.
+            starting.step(UPDATE_STEP)
             folder = state / BEFORE_UPDATE
             note: dict[str, Any] = {"from": old or "1.0.4 or earlier", "to": version}
             if old == version:
                 # The same version with a different index: say which.
                 note["shape"] = {"from": before.get("shape"), "to": shape}
-            made = backup.snapshot(state, folder, note={"before_update": note})
+            made = backup.snapshot(state, folder, note={"before_update": note},
+                                   progress=_update_progress(starting.step))
             if made is None:
                 raise UpdateBackupError(
                     f"Ninaivu {version} did not start, so that nothing in {state} changes "
