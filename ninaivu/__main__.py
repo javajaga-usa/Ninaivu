@@ -300,6 +300,32 @@ def run_command(argv: list[str]) -> int:
     return backup_restore.main(["list" if command == "list-backups" else command, *rest])
 
 
+#: How the start note begins while an index is moved (the Control Panel waits
+#: past its usual ceiling for it: desktop/control.py).
+MOVE_STEP = "moving the index to its new folder"
+#: And while its databases are checked and repaired (storage/index_check.py).
+CHECK_STEP = "checking the index"
+
+
+def _move_progress():
+    """Say in the start note how far the move has got, once per percent."""
+    from .server import starting                                  # noqa: PLC0415
+    told = [None]
+    words = {"copying": "copying", "verifying": "reading it back to check it",
+             "waiting": "waiting for other programs to finish writing in the index folder"}
+
+    def tell(stage: str, done: int, total: int) -> None:
+        percent = int(100 * done / total) if total else 100
+        if told[0] == (stage, percent):
+            return
+        told[0] = (stage, percent)
+        if stage == "waiting":                       # *done* is seconds here
+            starting.step(f"{MOVE_STEP}: {words[stage]}, {done} s so far")
+        else:
+            starting.step(f"{MOVE_STEP}: {words.get(stage, stage)}, {percent}%")
+    return tell
+
+
 def main(argv: list[str] | None = None) -> int:
     # Before anything is printed, including argparse's own errors.
     use_utf8_output()
@@ -327,6 +353,14 @@ def main(argv: list[str] | None = None) -> int:
             print(str(exc), file=sys.stderr)
             return 1
         settle_quietly()
+    # An index moved by an earlier start: the models and panel folders the
+    # launcher named inside the old folder are followed to the new one on
+    # every start, not only on the start that moved it.
+    from .desktop.portable import activate_environment             # noqa: PLC0415
+    try:
+        activate_environment()
+    except (OSError, ValueError):
+        pass        # an unreachable index is reported by Config.load below
     cfg = Config.load()
     try:
         with contextlib.ExitStack() as held:
@@ -350,16 +384,16 @@ def main(argv: list[str] | None = None) -> int:
                 from .storage import relocate
                 starting.begin(cfg.state_dir)
                 if (cfg.state_dir / relocate.PENDING).exists() and not args.replica_of:
-                    starting.step("moving and verifying the index in its new folder")
-                    relocated = relocate.apply_pending(cfg.state_dir, starts=starts)
+                    starting.step(MOVE_STEP)
+                    relocated = relocate.apply_pending(cfg.state_dir, starts=starts,
+                                                       progress=_move_progress())
                 else:
                     relocated = None
                 if relocated is not None:
                     starting.move_to(relocated)
-                    if os.environ.get("NINAIVU_PORTABLE"):
-                        from .desktop.portable import activate_environment
-                        activate_environment()
+                    activate_environment()
                     cfg = Config.load()
+                    print(f"  ✓ The index is in {cfg.state_dir} now.", flush=True)
                 starting.step("starting")
                 if not args.replica_of:
                     # An import asked for from the console replaces the state
@@ -377,6 +411,13 @@ def main(argv: list[str] | None = None) -> int:
                 if not take_up_replica(cfg, args):
                     return 1
                 return _run(cfg, args)
+            # Damage found while it ran, a move, or an administrator's asking:
+            # checked and repaired now, with the server lock held and nothing
+            # open (storage/index_check.py).
+            from .storage import index_check                       # noqa: PLC0415
+            if index_check.wanted(cfg.state_dir):
+                starting.step(CHECK_STEP)
+                index_check.run(cfg.state_dir, tell=starting.step)
             from .storage.upgrade import before_opening_the_index  # noqa: PLC0415
             if not before_opening_the_index(cfg.state_dir):
                 return 1

@@ -253,8 +253,14 @@ def require_active() -> None:
 
 
 def activate_environment() -> None:
-    """Carry state-relative model and panel folders through forwarding notes."""
-    if root() is None or not os.environ.get('NINAIVU_STATE_DIR'):
+    """Carry state-relative model and panel folders through forwarding notes.
+
+    For any launcher that names the index folder (a portable folder, a
+    checkout, a service): without this a start after the one that moved the
+    index found the index in its new folder but went on taking its models
+    from the recovery copy, until cleaning that copy took them away.
+    """
+    if not os.environ.get('NINAIVU_STATE_DIR'):
         return
     from ..storage.relocate import resolve
     configured = Path(os.environ['NINAIVU_STATE_DIR']).expanduser().resolve()

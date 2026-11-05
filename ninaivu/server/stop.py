@@ -20,11 +20,26 @@ def default_state_dir() -> Path:
     work from whatever Python is on PATH (see tools/stop.py)."""
     env = os.environ.get("NINAIVU_STATE_DIR")
     if env:
-        return Path(env).expanduser().resolve()
-    base = os.environ.get("XDG_DATA_HOME")
-    if base:
-        return Path(base).expanduser().resolve() / "ninaivu"
-    return Path.home() / ".ninaivu"
+        named = Path(env).expanduser().resolve()
+    elif os.environ.get("XDG_DATA_HOME"):
+        named = Path(os.environ["XDG_DATA_HOME"]).expanduser().resolve() / "ninaivu"
+    else:
+        named = Path.home() / ".ninaivu"
+    # Through the note an index move leaves (storage/relocate.py): the CA of a
+    # moved index is in its new folder.
+    # Read by path, as tools/stop.py reads this module: it needs nothing but
+    # the standard library.
+    try:
+        import importlib.util
+        source = Path(__file__).resolve().parents[1] / "storage" / "relocate.py"
+        spec = importlib.util.spec_from_file_location("_ninaivu_relocate", source)
+        if spec is None or spec.loader is None:
+            return named
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module.resolve(named)
+    except (ImportError, OSError, ValueError):
+        return named
 
 
 def tls_context(state_dir: Path | str | None = None) -> ssl.SSLContext:

@@ -1108,6 +1108,39 @@ names) is not in that copy; the photographs are not affected either way.
 Versions up to 1.0.4 do not have this check, so going back to one of those
 needs the restore first.
 
+## Moving the index to another folder
+
+The index, thumbnails and settings (the state folder) can move to another
+folder or drive from the console: **Migration → Move the index to another
+folder**. Your photographs stay where they are.
+
+- Give a new folder, an empty one, or one that already holds a copy of this
+  index (a copy made by hand, an earlier attempt, or the folder the index
+  moved from). With a copy, only what is missing or different is copied.
+- Before Ninaivu restarts, the folder is checked: that Ninaivu can write in
+  it, that the drive has room for what is left to copy, and that the index
+  holds no symbolic links.
+- Ninaivu restarts and does the move before anything else runs, so its own
+  work (describing, scanning, consolidating, backups) waits for it and resumes
+  after. On Linux it also waits, up to five minutes, for any other program
+  still writing in the index folder.
+- Every file is read back from the new folder, from the drive rather than
+  from memory on Linux, and compared with the original. A file that differs
+  is copied again; files changed during the copy are copied again too.
+- Only when everything matches does the old folder get its forwarding note,
+  `index-location.json`, which sends every launcher to the new folder. Keep
+  that file. The old folder stays as a recovery copy, which the console can
+  clean up once you are happy.
+- The new folder's databases are then checked, and repaired if need be (see
+  *Checking and repairing the index* in the backup guide).
+
+If the move cannot finish, the index stays where it was, the console says why
+and where it tried, and what was copied is kept: moving to the same folder
+again continues from it. The Control Panel shows the progress while it runs,
+and the server log has every step (`Index move: …`). Choose a drive with a
+Linux or macOS file system for the index (ext4, APFS); a Windows (NTFS) drive
+read through Linux is not a good home for it.
+
 ## Environment variables and the state folder
 
 Some settings also read an environment variable (`NINAIVU_STATE_DIR`,

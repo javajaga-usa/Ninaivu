@@ -145,6 +145,10 @@ class Services:
         cfg.ensure_dirs()
         # Before anything else that might have something to say.
         logs.configure(cfg.state_dir, debug=cfg.debug)
+        # A database found damaged while Ninaivu runs is checked and repaired
+        # at the next start, before anything opens it (storage/index_check.py).
+        from .storage import index_check                            # noqa: PLC0415
+        index_check.watch(cfg.state_dir)
         from .utils.files import open_file_limit                    # noqa: PLC0415
         limit = open_file_limit()
         if limit is not None:

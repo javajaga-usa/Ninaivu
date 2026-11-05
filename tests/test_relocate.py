@@ -44,11 +44,15 @@ class RelocationTests(unittest.TestCase):
 
     def test_failed_verification_keeps_original(self):
         relocate.request(self.source, self.target)
-        with patch.object(relocate, '_digest', side_effect=[b'a', b'b']):
+        # Every read-back disagrees: the copy cannot be trusted.
+        with patch.object(relocate, '_read_back', return_value=b'not it'):
             self.assertIsNone(relocate.apply_pending(self.source))
-        self.assertFalse(self.target.exists())
         self.assertEqual(relocate.resolve(self.source), self.source)
-        self.assertFalse(json.loads((self.source / relocate.RESULT).read_text())['ok'])
+        result = json.loads((self.source / relocate.RESULT).read_text())
+        self.assertFalse(result['ok'])
+        # What was copied stays, marked, for the next attempt to continue.
+        self.assertTrue(result['kept_copy'])
+        self.assertTrue((self.target / relocate.PARTIAL).exists())
 
     def test_running_server_cannot_be_copied(self):
         relocate.request(self.source, self.target)
