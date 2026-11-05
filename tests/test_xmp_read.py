@@ -168,3 +168,18 @@ def test_the_reader_is_woken_by_a_scan_that_added_photographs(app):
     services._scan_found({"phase": "done", "added": 2})
     services._scan_found({"phase": "done", "added": 0, "updated": 3})
     assert woken == [1]
+
+
+def test_building_the_services_starts_no_timer(scanned):
+    """Only starting them does: services built and never started (as much of
+    the suite does) must leave nothing running that would keep them alive."""
+    import threading
+    from ninaivu import build_services
+    cfg, _, _ = scanned
+    before = {t.ident for t in threading.enumerate()}
+    services = build_services(cfg)
+    started = [t.name for t in threading.enumerate() if t.ident not in before]
+    assert not any("xmp-read" in name for name in started), started
+    services.xmp_reader.schedule()
+    assert any(t.name == "ninaivu-xmp-read-timer" for t in threading.enumerate())
+    services.xmp_reader.stop(join=True)

@@ -376,7 +376,6 @@ class Services:
         from .storage.xmp_read import XmpReader                 # noqa: PLC0415
         self.xmp_reader = XmpReader(cfg, lambda: db.connect(cfg.db_path),
                                     confirm=self._confirm_face)
-        self.xmp_reader.schedule()
         # The family archive: the library on a USB drive, readable with a
         # browser alone. See ninaivu/storage/keepsake.py.
         from .storage.keepsake import Keepsake                  # noqa: PLC0415
@@ -704,6 +703,11 @@ class Services:
         self.repairer.keep()
         self.offsite.keep()
         self.xmp.keep()
+        # Started here, with the other timers, not where the services are
+        # built: services built and never started (as much of the test suite
+        # does) started a timer nothing stopped, and each one kept its whole
+        # app alive (#392: the Basic tier ran out of its 2 GB).
+        self.xmp_reader.schedule()
         self.transcriber.keep()
         self.describer.keep()
         self.moment_finder.keep()
