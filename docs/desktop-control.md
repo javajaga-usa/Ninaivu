@@ -99,6 +99,25 @@ What it shows:
   taken before an update, and a check or repair of the index. A step that
   cannot say how far it has got shows a bar that moves without filling. The
   card goes when Ninaivu is serving.
+
+  A start that has not moved on (the same step at the same figure) for 15
+  minutes is called stuck: the card says so in amber, the panel stops
+  waiting on it, and **Stop this start…** ends it, after saying what that
+  does at its step. Every step before Ninaivu serves can be stopped safely:
+  a move or switch of the index leaves it where it was and is tried again at
+  the next start, a check is done again, a repair keeps the original beside
+  it, the copy before an update is made again. While an index from another
+  computer is being put in place, Stop is offered only once it is stuck.
+  Only a Ninaivu process is ended: asked first, then by force after 20
+  seconds. A process waiting on a disk that does not answer cannot end until
+  the disk does, and the panel says so.
+- **The window always answers and always closes.** It only draws: the
+  readings, the run file, the log and the panel's actions are read and done
+  on threads of their own, so a drive that is slow to wake (a USB disk with
+  the index) slows a reading, not the window. Closing it while Ninaivu
+  starts or stops leaves that going on; closing it half-way through a
+  restart hands the rest to the restart helper, so Ninaivu is not left
+  stopped. Only *Go back*, which moves the library's files, is waited for.
 - The whole computer's CPU and memory, Ninaivu's own CPU, memory and threads,
   the battery, free disk space, and a minute of CPU history. Battery power is
   the measured whole-device discharge rate, where the battery reports an

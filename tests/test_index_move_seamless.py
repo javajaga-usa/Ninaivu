@@ -231,8 +231,11 @@ class Progress(Base):
         controller.save_mode = lambda _mode: None
         controller.mode = None
         controller.runtime = self.base
-        note = {'since': now, 'step': f'{main.MOVE_STEP}: copying, 40%'}
-        with patch.object(control.starting, 'read', return_value=note):
+        # A move that keeps going: its figure moves on at every look (one
+        # that sat at the same figure for a quarter of an hour is stuck).
+        shares = iter(i / 1000 for i in range(10 ** 6))
+        with patch.object(control.starting, 'read', side_effect=lambda *_a, **_k: {
+                'since': now, 'step': f'{main.MOVE_STEP}: copying', 'progress': next(shares)}):
             said = controller._wait_for_start(now, clock=lambda: next(clock), sleep=lambda _s: None)
         self.assertEqual(said, 'Ninaivu is running.')
 
