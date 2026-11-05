@@ -106,7 +106,11 @@ def main(argv=None):
     # new server writes its run file (server/starting.py): in between, the
     # old server finishing what it has in hand and the new one's first word.
     from ..server import starting
-    starting.RESTARTING.begin(controller.cfg.state_dir, 'waiting for Ninaivu to finish what is in hand')
+    # Only where it knows the index folder: without one there is nowhere to
+    # put the note, and the restart itself does not need it.
+    state_dir = getattr(getattr(controller, 'cfg', None), 'state_dir', None)
+    if state_dir is not None:
+        starting.RESTARTING.begin(state_dir, 'waiting for Ninaivu to finish what is in hand')
 
     def progress(what, _seconds, share=None):
         # Into restart.log once per step, so a slow restart says where it was.

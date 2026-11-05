@@ -140,8 +140,12 @@ def test_a_long_import_is_not_called_late(monkeypatch, tmp_path):
     panel.runtime = tmp_path
     clock = iter([0, 0, control.START_CEILING_SECONDS + 10, control.START_CEILING_SECONDS + 20,
                   control.START_CEILING_SECONDS + 30])
+    # An import that keeps going: its figure moves at every look. One that sat
+    # at the same figure for a quarter of an hour would be stuck.
+    shares = iter(i / 100 for i in range(1, 1000))
     monkeypatch.setattr(control.starting, "read", lambda state: {
-        "since": time.time(), "step": "bringing in the index from the other computer: unpacking, 80%"})
+        "since": time.time(), "step": "bringing in the index from the other computer: unpacking",
+        "progress": next(shares)})
     assert panel._wait_for_start(time.time(), clock=lambda: next(clock),
                                  sleep=lambda s: None) == "Ninaivu is running."
 
@@ -189,11 +193,14 @@ def move(tmp_path, monkeypatch):
 
 def test_an_import_says_how_far_it_has_got(move, monkeypatch, capsys):
     steps = []
-    monkeypatch.setattr(starting, "step", steps.append)
+    monkeypatch.setattr(starting, "step", lambda what, done=None, total=None: steps.append(
+        (what, done, total)))
     full_export.ask_for_import(move.here, move.bundle)
     assert full_export.apply_pending(move.here) is True
 
-    assert any("unpacking, 100%" in s for s in steps), steps
+    # How far, as numbers beside the words, for the Control Panel's bar.
+    assert any(what.endswith(": unpacking") and total and done == total
+               for what, done, total in steps), steps
     log = capsys.readouterr()
     said = log.out + log.err
     assert "in one pass" in said and "is in place" in said
