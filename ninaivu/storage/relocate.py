@@ -15,6 +15,13 @@ start, before anything opens the index (:func:`apply_pending`):
   attempt goes on using the original, and keeps what it copied (marked with
   ``index-move-partial.json``) for the next attempt.
 
+Ninaivu can also be pointed at the index in another folder, without
+copying or moving anything (:func:`request_switch`): the index folder
+(``state_dir``) changed from Advanced settings, on a one-computer Ninaivu or
+the Primary. At the next start the current folder is given a forwarding note
+to it, and the index in the current folder is kept exactly as it was, so
+deleting that note goes back.
+
 Each step is written to the server's log, and :func:`status` is what the
 console shows.
 """
@@ -418,7 +425,10 @@ def apply_pending(source: Path, *, starts: ExitStack | None = None,
     published = False
     copied = 0
     try:
-        destination = validate(source, _destination(json.loads(marker.read_text(encoding='utf-8'))))
+        asked = json.loads(marker.read_text(encoding='utf-8'))
+        if isinstance(asked, dict) and asked.get('mode') == 'switch':
+            return _switch(source, _destination(asked).resolve(), marker, starts)
+        destination = validate(source, _destination(asked))
         # The settings are rewritten for the new folder at the end; a file
         # that cannot be is refused before anything is copied.
         settings = None
@@ -551,6 +561,121 @@ def apply_pending(source: Path, *, starts: ExitStack | None = None,
             'kept_copy': kept_copy, 'copied_bytes': copied})
         _say(f'not done: {error}' + (f' What was copied stays in {destination}; moving there '
                                       f'again continues from it.' if kept_copy else ''))
+        return None
+
+
+# --------------------------------------------------------------------------
+# Pointing at the index in another folder
+
+
+def index_folder_editable(cfg) -> bool:
+    """Whether the index folder (``state_dir``) may be changed from Advanced
+    settings: on a one-computer Ninaivu and on the Primary, not on the
+    Secondary, nor on a copy that follows another computer (the Pi)."""
+    if getattr(cfg, 'replica_from', None):
+        return False
+    try:
+        from ..mugil import SECONDARY, role
+        return role(cfg) != SECONDARY
+    except Exception:                                    # noqa: BLE001 — no two-computer setup
+        return True
+
+
+def describe_index(folder: Path) -> dict:
+    """What the console shows of an index before Ninaivu is pointed at it."""
+    import sqlite3
+    from contextlib import closing
+    facts: dict = {'folder': str(folder), 'photographs': None,
+                   'libraries': _record(folder / 'config.json').get('roots') or [],
+                   'version': _record(folder / 'version.json').get('version'),
+                   'modified': None}
+    try:
+        facts['modified'] = (folder / 'index.db').stat().st_mtime
+        with closing(sqlite3.connect((folder / 'index.db').as_uri() + '?mode=ro', uri=True,
+                                     timeout=5)) as conn:
+            facts['photographs'] = conn.execute(
+                'SELECT COUNT(*) FROM assets WHERE trashed = 0').fetchone()[0]
+    except (OSError, sqlite3.Error):
+        pass
+    return facts
+
+
+def switch_target(source: Path, destination: Path) -> Path:
+    """*destination* as a folder Ninaivu may be pointed at, or ValueError:
+    an index of its own there, not this one, not in use, not opened by a
+    newer Ninaivu, and not moved away itself."""
+    from .. import __version__
+    from ..desktop.portable import _version_key
+    from ..server import runfile
+    source = Path(source).resolve()
+    destination = Path(destination).expanduser()
+    if not destination.is_absolute():
+        raise ValueError('Choose an absolute folder path on the Ninaivu computer.')
+    destination = destination.resolve()
+    if destination == source:
+        raise ValueError('That is the index Ninaivu uses now.')
+    if source in destination.parents or destination in source.parents:
+        raise ValueError('Choose a folder outside the current index folder.')
+    if not destination.is_dir() or not (destination / 'index.db').is_file():
+        raise ValueError('That folder has no Ninaivu index in it. To move this index there, use '
+                         'Move the index on the Move to another computer page.')
+    if (destination / REDIRECT).exists() or (destination / PENDING).exists():
+        raise ValueError('That index has been moved or is waiting to move. Choose the folder '
+                         'it is in now.')
+    opened = _record(destination / 'version.json').get('version')
+    if opened and _version_key(opened) > _version_key(__version__):
+        raise ValueError(f'That index was last opened by Ninaivu {opened}, newer than this '
+                         f'one ({__version__}). Open it with that version or a newer one.')
+    try:
+        with runfile.server_lock(destination):
+            pass
+    except runfile.AlreadyRunning as exc:
+        raise ValueError('Another Ninaivu is using that index. Stop it first.') from exc
+    return destination
+
+
+def request_switch(source: Path, destination: Path) -> dict:
+    """Have the next start read the index in *destination*. Nothing is copied
+    or moved; the index in *source* is kept as it is."""
+    source = Path(source).resolve()
+    destination = switch_target(source, destination)
+    if (source / 'import-pending.json').exists() or (source / PENDING).exists():
+        raise ValueError('An index import or move is already waiting. Finish it first.')
+    record = {'destination': str(destination), 'mode': 'switch', 'asked_at': time.time(),
+              'photographs': describe_index(destination).get('photographs')}
+    write(source / PENDING, record)
+    (source / RESULT).unlink(missing_ok=True)
+    _say(f'asked to read the index in {destination} from the next start, instead of {source}')
+    return record
+
+
+def _switch(source: Path, destination: Path, marker: Path, starts: ExitStack | None) -> Path | None:
+    """At the start: point *source* at the index in *destination*."""
+    from ..server import runfile
+    try:
+        with runfile.server_lock(source), ExitStack() as held:
+            (starts if starts is not None else held).enter_context(
+                runfile.starting_lock(destination))
+            switch_target(source, destination)
+            write(destination / RESULT, {'ok': True, 'switched': True, 'at': time.time(),
+                                         'source': str(source),
+                                         'destination': str(destination)})
+            # Another index, perhaps last opened long ago: checked as the
+            # start goes on (storage/index_check.py).
+            from . import index_check
+            index_check.ask(destination, 'switched')
+            write(source / REDIRECT, {'destination': str(destination)})
+            marker.unlink(missing_ok=True)
+            (source / RESULT).unlink(missing_ok=True)
+            _say(f'reading the index in {destination} now; the one in {source} is kept as it '
+                 f'was (delete {source / REDIRECT} to go back)')
+            return destination
+    except (OSError, ValueError, KeyError, runfile.AlreadyRunning) as error:
+        marker.unlink(missing_ok=True)
+        write(source / RESULT, {'ok': False, 'at': time.time(), 'error': str(error),
+                                'source': str(source), 'destination': str(destination),
+                                'switch': True, 'kept_copy': False, 'copied_bytes': 0})
+        _say(f'not switched: {error}')
         return None
 
 

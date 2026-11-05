@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### The index folder in Advanced settings
+
+- **`state_dir` can be changed from Advanced settings** on a one-computer Ninaivu and on the Primary: Ninaivu reads the index already in the folder given, from the next restart. It shows what is in that folder first and asks for the administrator's password. Nothing is copied or moved; the index used until then is kept as it is, and deleting the forwarding note (`index-location.json`) beside it goes back. Refused for a folder with no index, an index in use, one a newer Ninaivu opened, or one that moved away. Never written into `config.json`; not offered on the Secondary or on a copy following another computer.
+
 ### Two computers run apart, then paired
 
 - **What only the Secondary has comes into the Primary's library.** A household that ran the two as separate one-computer Ninaivus, and imported more on the one that becomes the Secondary, pairs them and presses **Look on the Secondary** (Mugil → Two computers, on the Primary). The Secondary lists every file in its originals folder the Primary never had, and its own versions of photographs the Primary also has. **Bring them in** copies each into the Primary's library at the same path, checked against its fingerprint, with its own date. A version that differs from the Primary's goes beside it as `<name> (from <Secondary>).<ext>`, so neither is lost. Not brought in: what the Primary has under another name, the Secondary's recycle bin, photographs somebody deleted on the Primary, and folders that are no library of the Primary's (listed, to move into a library folder). Nothing on the Secondary is changed, moved or removed, and the next run does not send any of it back.

@@ -384,6 +384,12 @@ def describe(cfg: Config) -> dict[str, Any]:
                     item["hint"] = masked_url(str(value or ""))
             else:
                 item["value"] = _plain(value)
+            if name == "state_dir":
+                # Changed from Advanced settings through the index move, not
+                # written down (RUNTIME_ONLY): moved or switched to at a
+                # restart, on a one-computer Ninaivu and on the Primary.
+                from ..storage.relocate import index_folder_editable  # noqa: PLC0415
+                item["action"] = "index_folder" if index_folder_editable(cfg) else None
             items.append(item)
         groups.append({"name": group, "settings": items})
     return {"groups": groups, "first_screen": list(FIRST_SCREEN)}

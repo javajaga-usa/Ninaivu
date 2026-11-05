@@ -409,7 +409,9 @@ export class IndexExport {
     }
     if (loc.pending) {
       const box = el('div', 'mg-alert');
-      box.append(el('strong', null, i18n.t('The move is scheduled. Restart Ninaivu to complete it.')));
+      box.append(el('strong', null, loc.pending.mode === 'switch'
+        ? i18n.t('Switching to the index in this folder is scheduled. Restart Ninaivu to complete it.')
+        : i18n.t('The move is scheduled. Restart Ninaivu to complete it.')));
       box.append(el('code', 'mg-path', loc.pending.destination));
       if (loc.pending.asked_at) box.append(el('div', 'hint subtle', i18n.t('Asked for {when}.', { when: when(loc.pending.asked_at) })));
       if (this.moveRestartFailed) {
@@ -421,6 +423,13 @@ export class IndexExport {
     const last = loc.last;
     if (!last) {
       if (!this.scheduledNote) report.replaceChildren();
+      return;
+    }
+    if (last.ok && last.switched) {
+      const box = el('div');
+      box.append(el('strong', null, i18n.t('Switched to this index {when}.', { when: when(last.at) })));
+      box.append(el('div', 'hint', i18n.t('The index in {path} is kept as it was. Deleting index-location.json there goes back to it.', { path: last.source || '' })));
+      report.replaceChildren(box);
       return;
     }
     if (last.ok) {
