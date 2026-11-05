@@ -50,6 +50,24 @@ const size = (n) => {
 
 const count = (n) => (Number(n) || 0).toLocaleString(i18n.locale());
 
+/**
+ * Choose the Secondary's originals folder. When this computer's own library
+ * is inside it (a one-computer Ninaivu becoming the Secondary), the server
+ * asks first: the library is kept as the originals only when confirmed.
+ */
+export async function keepAsOriginals(request, folder) {
+  const body = { role: 'secondary', originals_dir: folder };
+  try {
+    return await request('/api/admin/mugil/role', { method: 'POST', body });
+  } catch (exc) {
+    const inside = exc.data?.library_inside;
+    if (exc.status !== 409 || !inside?.length) throw exc;
+    if (!window.confirm(i18n.t('The library this computer shows ({paths}) is inside that folder. Keep it as the originals? This computer stops showing it as its library, and the Primary brings in what only it has. No file is moved, changed or removed. Turn on XMP sidecars first and let them be written, so the names, albums and stars go with the photographs.', { paths: inside.join(', ') }))) throw exc;
+    return request('/api/admin/mugil/role', {
+      method: 'POST', body: { ...body, library_into_originals: true } });
+  }
+}
+
 const when = (seconds) => (seconds
   ? new Date(seconds * 1000).toLocaleString(i18n.locale(),
     { dateStyle: 'medium', timeStyle: 'short' })
@@ -78,9 +96,7 @@ export class TwoComputers {
       () => json('/api/admin/mugil/role', { method: 'POST', body: { role: $('#tc-role').value } }),
       i18n.t('Saved'));
     $('#tc-save-folder').onclick = () => this.act(
-      () => json('/api/admin/mugil/role', {
-        method: 'POST', body: { role: 'secondary', originals_dir: $('#tc-folder').value.trim() },
-      }),
+      () => keepAsOriginals(json, $('#tc-folder').value.trim()),
       i18n.t('The originals will be kept in that folder'));
     $('#tc-wait').onclick = () => this.act(
       () => json('/api/admin/mugil/welcome', { method: 'POST' }),
@@ -150,6 +166,23 @@ export class TwoComputers {
       }).then(() => { this.rebuildAt = 0; return json('/api/admin/mugil'); }),
       i18n.t('Rebuilding the library'));
     };
+    $('#tc-only-look').onclick = () => this.act(
+      () => json('/api/admin/mugil/only-on-secondary/look', { method: 'POST' })
+        .then(() => { this.onlyAt = 0; return json('/api/admin/mugil'); }),
+      i18n.t('Looking on the Secondary'));
+    $('#tc-only-bring').onclick = () => {
+      const found = this.only?.found?.counts || {};
+      const files = (found.only?.files || 0) + (found.other_version?.files || 0);
+      const bytes = (found.only?.bytes || 0) + (found.other_version?.bytes || 0);
+      if (!window.confirm(i18n.t('Bring {files} files ({size}) from the Secondary into this computer\'s library? Each is checked as it arrives; nothing here is replaced, and nothing on the Secondary changes.', {
+        files: count(files), size: size(bytes) }))) return;
+      this.act(() => json('/api/admin/mugil/only-on-secondary/bring', { method: 'POST' })
+        .then(() => { this.onlyAt = 0; return json('/api/admin/mugil'); }),
+      i18n.t('Bringing them in'));
+    };
+    $('#tc-only-stop').onclick = () => this.act(
+      () => json('/api/admin/mugil/only-on-secondary/stop', { method: 'POST' })
+        .then(() => { this.onlyAt = 0; return json('/api/admin/mugil'); }));
     $('#tc-rebuild-stop').onclick = () => this.act(
       () => json('/api/admin/mugil/rebuild/stop', { method: 'POST' })
         .then(() => { this.rebuildAt = 0; return json('/api/admin/mugil'); }));
@@ -224,8 +257,10 @@ export class TwoComputers {
       await this.optimize();
       await this.exactCopies();
       await this.rebuilding();
+      await this.onlyOnSecondary();
     } else {
       $('#tc-optimize').hidden = true; $('#tc-free').hidden = true; $('#tc-rebuild').hidden = true;
+      $('#tc-only').hidden = true;
       $('#tc-copies').hidden = true;
     }
     this.schedule();
@@ -533,6 +568,7 @@ export class TwoComputers {
     if (!this.visible || !this.status) return;
     const status = this.status;
     const busy = Boolean(status.sending?.running) || Boolean(status.freeing?.running)
+      || Boolean(this.only?.found?.running) || Boolean(this.only?.bring?.running)
       || (status.role === 'primary' && !status.paired)
       || (status.role === 'secondary' && status.welcome?.waiting);
     this.timer = setTimeout(() => this.refresh(), busy ? 4000 : 60000);
@@ -731,6 +767,63 @@ export class TwoComputers {
         count: count(spare.left_alone) }));
     }
     $('#tc-copies-says').textContent = lines.join(' ');
+  }
+
+  /** The Primary: what only the Secondary has, and bringing it in (mugil/bring_in.py). */
+  async onlyOnSecondary() {
+    const now = Date.now();
+    const busy = this.only?.found?.running || this.only?.bring?.running;
+    if (!busy && this.onlyAt && now - this.onlyAt < 120000) return;
+    this.onlyAt = now;
+    try {
+      this.only = await json('/api/admin/mugil/only-on-secondary');
+    } catch {
+      return;
+    }
+    const answer = this.only;
+    const found = answer.found || {};
+    const bring = answer.bring || {};
+    const counts = found.counts || {};
+    const of = (kind) => counts[kind] || { files: 0, bytes: 0 };
+    $('#tc-only').hidden = false;
+    const lines = [];
+    if (answer.why_not) lines.push(i18n.fromServer(answer.why_not));
+    if (answer.away) lines.push(i18n.t('The Secondary is not answering.'));
+    if (found.running) {
+      lines.push(i18n.t('Looking on the Secondary: {files} files gone through, {size} read.', {
+        files: count(found.files_seen), size: size(found.bytes_read) }));
+    } else if (found.error) {
+      lines.push(i18n.fromServer(found.error));
+    } else if (found.finished && !bring.running && !bring.started) {
+      const wanted = of('only').files + of('other_version').files;
+      lines.push(wanted
+        ? i18n.t('To bring in: {files} files ({size}), {versions} of them its own versions of photographs this computer also has, to go beside them.', {
+          files: count(wanted), size: size(of('only').bytes + of('other_version').bytes),
+          versions: count(of('other_version').files) })
+        : i18n.t('The Secondary has nothing this computer does not.'));
+      lines.push(i18n.t('Not brought in: {same} this computer has under another name; {binned} in its recycle bin; {stray} in folders that are no library here (move them into a library folder on the Secondary, then look again).', {
+        same: count(of('duplicate').files), binned: count(of('deleted_folder').files),
+        stray: count(of('not_a_library').files) }));
+    }
+    if (bring.started) {
+      lines.push(i18n.t('{copied} brought in ({size}); {beside} beside this computer\'s own; {already} here already; {deleted} deleted here, not brought back; {bad} did not arrive whole.', {
+        copied: count(bring.copied), size: size(bring.copied_bytes), beside: count(bring.beside),
+        already: count(bring.already), deleted: count(bring.deleted_here), bad: count(bring.not_same) }));
+      if (bring.not_a_library_here) {
+        lines.push(i18n.t('{count} are in a library this computer does not have, or whose disk is away.', {
+          count: count(bring.not_a_library_here) }));
+      }
+    }
+    if (bring.running && bring.current) lines.push(i18n.t('Now: {path}', { path: bring.current }));
+    if (bring.waiting) lines.push(i18n.t('Waiting: {reason}', { reason: i18n.fromServer(bring.waiting) }));
+    if (bring.complete) lines.push(i18n.t('Done. The library is being indexed; the names, albums and stars come from the sidecars.'));
+    if (bring.error) lines.push(i18n.fromServer(bring.error));
+    $('#tc-only-says').textContent = lines.join(' ');
+    $('#tc-only-look').hidden = Boolean(found.running || bring.running);
+    $('#tc-only-look').disabled = Boolean(answer.why_not);
+    const wanted = of('only').files + of('other_version').files;
+    $('#tc-only-bring').hidden = !(answer.can_bring && wanted);
+    $('#tc-only-stop').hidden = !bring.running;
   }
 
   /** The Primary: a library copied back from the Secondary (mugil/rebuild.py). */
