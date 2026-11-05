@@ -103,6 +103,9 @@ export class IndexExport {
     // An import asked for with a restart: when it was asked, so the page can
     // say it is waiting and then show that import's result, not an older one.
     this.importing = null;
+    // A move asked for with a restart: Ninaivu is down while it copies and
+    // checks the index, and the page waits for it and then shows the result.
+    this.moving = null;
     i18n.onChange(() => { if (this.state) this.render(); });
   }
 
@@ -147,7 +150,12 @@ export class IndexExport {
     try {
       this.state = await json('/api/admin/migration/export');
     } catch (exc) {
-      if (this.importing) {
+      if (this.moving) {
+        // Down while it moves the index: an answer of any kind is it back.
+        if (exc.status) this.moving.back = true;
+        this.renderMove(this.state || {});
+        this.timer = setTimeout(() => this.refresh(), RESTART_POLL_MS);
+      } else if (this.importing) {
         // Ninaivu is down while it imports: keep saying so, and keep asking.
         // An answer of any kind (a sign-in asked for, the imported index
         // knowing nothing of this session) is Ninaivu back; no answer for
@@ -161,6 +169,13 @@ export class IndexExport {
       }
       return;
     }
+    if (this.moving && !this.state.index_move_pending) {
+      this.moving = null;            // back, and the move is done or refused
+    } else if (this.moving && !this.state.restarting && Date.now() - this.moving.since > 15000) {
+      // Still answering with the move waiting, and nothing restarting it.
+      this.moving = null;
+      this.moveRestartFailed = true;
+    }
     const last = this.state.last_import;
     if (this.importing && last && last.at >= this.importing.asked && !this.state.pending) {
       this.importing = null;
@@ -173,7 +188,7 @@ export class IndexExport {
     this.render();
     if (!$('#ix-block')?.isConnected) return;
     if (this.state.export?.running || this.state.check?.running || this.state.recovery_cleanup?.running) this.timer = setTimeout(() => this.refresh(), POLL_MS);
-    else if (this.importing) this.timer = setTimeout(() => this.refresh(), RESTART_POLL_MS);
+    else if (this.importing || this.moving) this.timer = setTimeout(() => this.refresh(), RESTART_POLL_MS);
   }
 
   /** Whether Ninaivu has been gone longer than this import should take. */
@@ -223,17 +238,7 @@ export class IndexExport {
   render() {
     const s = this.state;
     if (!s) return;
-    const location = $('#index-move-current');
-    if (location) location.textContent = i18n.t('Current index folder: {path}', { path: s.index_folder || '' });
-    const moveReport = $('#index-move-report');
-    if (moveReport && s.index_move_pending) {
-      moveReport.textContent = i18n.t('The move is scheduled. Restart Ninaivu to complete it.');
-    } else if (moveReport && s.index_move) {
-      moveReport.textContent = s.index_move.ok
-        ? i18n.t('The index was moved and verified. The original folder is kept as a recovery copy.')
-        : i18n.t('The index move failed. The original index is still in use.') + ' ' + (s.index_move.error || '');
-    }
-    if ($('#index-move-start')) $('#index-move-start').disabled = Boolean(s.index_move_pending);
+    this.renderMove(s);
     const cleanup = s.recovery_cleanup || {};
     const cleanupButton = $('#index-recovery-cleanup');
     if (cleanupButton) {
@@ -357,6 +362,89 @@ export class IndexExport {
     finally { button.disabled = Boolean(this.state?.recovery_cleanup?.running); }
   }
 
+  /** Where the index is, and how its move stands. */
+  renderMove(s) {
+    const loc = s.index_location
+      || { folder: s.index_folder, last: s.index_move, pending: s.index_move_pending };
+    const location = $('#index-move-current');
+    if (location && (loc.folder || s.index_folder)) {
+      location.replaceChildren(i18n.t('Current index folder: {path}', { path: loc.folder || s.index_folder }));
+      if (loc.free_bytes != null) {
+        location.append(' ', i18n.t('({size} free on its drive)', { size: bytes(loc.free_bytes) }));
+      }
+      if (loc.forwarded_from) {
+        location.append(el('div', 'hint subtle', i18n.t('Launchers that name {path} are sent here by the index-location.json file in it. Keep that file.',
+          { path: loc.forwarded_from })));
+      }
+    }
+    const button = $('#index-move-start');
+    if (button) button.disabled = Boolean(this.moving || loc.pending);
+    const report = $('#index-move-report');
+    if (!report) return;
+    if (this.moving) {
+      const box = el('div', 'mg-alert');
+      if (this.moving.back) {
+        box.append(el('strong', null, i18n.t('Ninaivu is back. Sign in again to see how the move went.')));
+      } else {
+        box.append(el('strong', null, i18n.t('Ninaivu is restarting to move the index.')));
+        box.append(el('code', 'mg-path', this.moving.destination));
+        box.append(el('progress', 'ix-bar'));
+        box.append(el('div', 'hint', i18n.t('It copies the index, then reads every file back to check it. On a large index this takes a while; the Control Panel on that computer shows how far it has got.')));
+        box.append(el('div', 'hint subtle', i18n.t('Waiting for it to answer again, {time} so far. This page checks every few seconds and shows the result here.',
+          { time: took((Date.now() - this.moving.since) / 1000) })));
+      }
+      report.replaceChildren(box);
+      return;
+    }
+    if (loc.pending) {
+      const box = el('div', 'mg-alert');
+      box.append(el('strong', null, i18n.t('The move is scheduled. Restart Ninaivu to complete it.')));
+      box.append(el('code', 'mg-path', loc.pending.destination));
+      if (loc.pending.asked_at) box.append(el('div', 'hint subtle', i18n.t('Asked for {when}.', { when: when(loc.pending.asked_at) })));
+      if (this.moveRestartFailed) {
+        box.append(el('div', 'hint', i18n.t('Ninaivu could not restart itself to move the index. Restart Ninaivu to do it.')));
+      }
+      report.replaceChildren(box);
+      return;
+    }
+    const last = loc.last;
+    if (!last) {
+      if (!this.scheduledNote) report.replaceChildren();
+      return;
+    }
+    if (last.ok) {
+      const box = el('div');
+      box.append(el('strong', null, i18n.t('The index was moved and verified. The original folder is kept as a recovery copy.')));
+      if (last.at) {
+        box.append(el('div', 'hint', last.seconds != null
+          ? i18n.t('Moved here {when} from {path}, in {time}.', { when: when(last.at), path: last.source || '', time: took(last.seconds) })
+          : i18n.t('Moved here {when} from {path}.', { when: when(last.at), path: last.source || '' })));
+      }
+      if (last.files != null) {
+        box.append(el('div', 'hint subtle', i18n.t('{count} files, {size}. {already} were already there and were not copied again.',
+          { count: count(last.files), size: bytes(last.bytes), already: count(last.already_there) })));
+      }
+      if (last.copied_again?.length) {
+        box.append(el('div', 'hint', i18n.t('Copied again because the first copy read back differently: {files}',
+          { files: last.copied_again.join(', ') })));
+      }
+      if (loc.recovery_folder && !loc.recovery_present) {
+        box.append(el('div', 'hint subtle', i18n.t('The recovery copy has been removed.')));
+      }
+      report.replaceChildren(box);
+      return;
+    }
+    const box = el('div', 'mg-alert bad');
+    box.append(el('strong', null, i18n.t('The index move failed. The original index is still in use.')));
+    box.append(document.createTextNode(' ' + (last.error || '')));
+    if (last.destination) box.append(el('code', 'mg-path', last.destination));
+    if (last.at) box.append(el('div', 'hint subtle', i18n.t('Tried {when}.', { when: when(last.at) })));
+    if (last.kept_copy) {
+      box.append(el('div', 'hint', i18n.t('What was copied is kept in that folder. Moving there again continues from it instead of starting over.')));
+    }
+    report.replaceChildren(box);
+  }
+
   async moveIndex() {
     const folder = $('#index-move-folder').value.trim();
     if (!folder) { this.toast(i18n.t('Give the new index folder on the Ninaivu computer.'), true); return; }
@@ -365,14 +453,24 @@ export class IndexExport {
     const report = $('#index-move-report');
     button.disabled = true;
     report.textContent = i18n.t('Scheduling the index move…');
+    this.moveRestartFailed = false;
+    let result;
     try {
-      const result = await json('/api/admin/migration/move-index', { folder });
-      report.textContent = result.restarting
-        ? i18n.t('Ninaivu is restarting to move the index. Large libraries can take a while. Refresh this page after Ninaivu returns to check the new location.')
-        : i18n.t('The move is scheduled. Restart Ninaivu to complete it.') + ' ' + (result.restart_problem || '');
+      result = await json('/api/admin/migration/move-index', { folder });
     } catch (error) {
       report.textContent = error.message;
       button.disabled = false;
+      return;
+    }
+    if (result.restarting) {
+      this.moving = { since: Date.now(), destination: result.destination || folder };
+      this.renderMove(this.state || {});
+      clearTimeout(this.timer);
+      this.timer = setTimeout(() => this.refresh(), RESTART_POLL_MS);
+    } else {
+      // Kept on screen until the page is next drawn from the server.
+      this.scheduledNote = true;
+      report.textContent = i18n.t('The move is scheduled. Restart Ninaivu to complete it.') + ' ' + (result.restart_problem || '');
     }
   }
 

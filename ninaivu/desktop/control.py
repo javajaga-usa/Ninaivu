@@ -304,6 +304,8 @@ START_CEILING_SECONDS = 60 * 60
 #: How the server's start note begins while it brings in an index from
 #: another computer (__main__.py, storage/full_export.py).
 IMPORT_STEP = 'bringing in the index'
+#: The start note while an index moves to another folder (ninaivu/__main__.py).
+MOVE_STEP = 'moving the index'
 #: How long a stop is waited on. The server finishes the files in hand and
 #: checkpoints the index first; the console's restart helper waits as long.
 STOP_SECONDS = 20 * 60
@@ -559,11 +561,12 @@ class Controller:
                 raise RuntimeError(f'Ninaivu stopped saying how its start is going while '
                                    f'{step}, {describe_wait(now - heard)} ago. It may still '
                                    f'finish: watch the status, or use View logs.')
-            # Not while an index is being brought in: that says how far it has
-            # got as it goes (storage/full_export.py), and on a large library
+            # Not while an index is being brought in or moved: each says how far
+            # it has got as it goes (storage/full_export.py, relocate.py), and on a large library
             # it rightly takes longer than any ceiling; a stall still shows as
             # the note going quiet, above.
-            if waited > START_CEILING_SECONDS and not str(step or '').startswith(IMPORT_STEP):
+            if (waited > START_CEILING_SECONDS
+                    and not str(step or '').startswith((IMPORT_STEP, MOVE_STEP))):
                 raise RuntimeError(f'Ninaivu has been starting for {describe_wait(waited)}, '
                                    f'still {step or "starting"}. It carries on: watch the '
                                    f'status, or use View logs.')

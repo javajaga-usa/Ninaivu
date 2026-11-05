@@ -310,16 +310,14 @@ def _export_state(cfg) -> dict[str, Any]:
     from ..storage import full_export                    # noqa: PLC0415
     from . import server_api                             # noqa: PLC0415
     from ..storage import relocate
-    import json
-    def move_record(name):
-        try:
-            return json.loads((cfg.state_dir / name).read_text(encoding='utf-8'))
-        except (OSError, ValueError):
-            return None
+    # Where the index is, what forwards to it, and its move's state; records
+    # copied in from another folder are left out (relocate.status).
+    location = relocate.status(cfg.state_dir)
     return {
         "index_folder": str(cfg.state_dir),
-        "index_move": move_record(relocate.RESULT),
-        "index_move_pending": move_record(relocate.PENDING),
+        "index_location": location,
+        "index_move": location["last"],
+        "index_move_pending": location["pending"],
         "recovery_cleanup": _recovery_cleaner.status(cfg.state_dir),
         "export": _the_exporter().status(cfg.state_dir),
         # The reading-through of the export last checked for an import.
@@ -478,7 +476,7 @@ def move_index():
     if _the_exporter().running:
         return jsonify({'error': 'Wait for the index export to finish first.'}), 409
     try:
-        relocate.request(cfg.state_dir, Path(destination))
+        pending = relocate.request(cfg.state_dir, Path(destination))
     except (ValueError, OSError) as error:
         return jsonify({'error': str(error)}), 400
     problem = server_api._restart_problem()
@@ -489,7 +487,7 @@ def move_index():
         if not restarting:
             problem = reply.get('error')
     return jsonify({'restarting': restarting, 'restart_problem': problem,
-                    'destination': destination}), 202
+                    'destination': pending['destination'], 'pending': pending}), 202
 
 
 @migration_bp.get('/api/admin/migration/recovery-cleanup')

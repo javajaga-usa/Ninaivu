@@ -58,8 +58,10 @@ try {
 
   await page.unroute(moveUrl);
   await page.route(moveUrl, route => route.fulfill({ status: 202, json: { restarting: true } }));
-  const state = { ...initial, index_move_pending: null, index_move: null, recovery_cleanup: {} };
-  await page.route(statusUrl, route => route.fulfill({ json: state }));
+  const state = { ...initial, index_location: null, index_move_pending: null, index_move: null, recovery_cleanup: {} };
+  // While Ninaivu restarts to move the index it does not answer at all.
+  let down = false;
+  await page.route(statusUrl, route => (down ? route.abort('connectionrefused') : route.fulfill({ json: state })));
   async function reloadMigration() {
     await page.reload();
     await page.click('#tabs button[data-tab="migration"]');
@@ -67,13 +69,22 @@ try {
   }
   await reloadMigration();
   await page.fill('#index-move-folder', `${source}-new`);
+  down = true;
   page.once('dialog', dialog => dialog.accept());
   await move.click();
   await report.filter({ hasText: 'restarting to move the index' }).waitFor();
-  ok('accepted automatic restart explains the interruption', /Refresh this page/.test(await report.textContent()));
+  ok('accepted automatic restart explains the interruption', /checks every few seconds/.test(await report.textContent()));
+  ok('the move cannot be asked for twice while it runs', await move.isDisabled());
 
+  // Back from the restart: the page notices by itself, without a reload.
   state.index_folder = `${source}-new`;
-  state.index_move = { ok: true, source, destination: state.index_folder, recovery_files: 3, recovery_bytes: 512 };
+  state.index_move = { ok: true, at: Date.now() / 1000, seconds: 42, source, destination: state.index_folder,
+    files: 3, bytes: 512, already_there: 1, copied_again: [], recovery_files: 3, recovery_bytes: 512 };
+  down = false;
+  await report.filter({ hasText: 'moved and verified' }).waitFor({ timeout: 15000 });
+  ok('returning server shows the verified result without a reload', /were already there/.test(await report.textContent()));
+  await page.locator('#index-move-current').filter({ hasText: `${source}-new` }).waitFor();
+  ok('the current folder is the new one', true);
   await reloadMigration();
   await report.filter({ hasText: 'moved and verified' }).waitFor();
   ok('returning server displays the new location and verified result', /recovery copy/.test(await report.textContent()));
@@ -102,10 +113,13 @@ try {
   ok('cleanup reports preserved files and forwarding note', /preserved 1/.test(await cleanupReport.textContent()));
 
   state.index_folder = source;
-  state.index_move = { ok: false, error: 'The copied file could not be verified: index.db' };
+  state.index_move = { ok: false, error: 'The copy keeps coming back different from what was written: index.db.',
+    destination: `${source}-new`, kept_copy: true, at: Date.now() / 1000 };
   await reloadMigration();
   await report.filter({ hasText: 'original index is still in use' }).waitFor();
-  ok('failed move displays the verification error and original location', /could not be verified/.test(await report.textContent()));
+  ok('failed move displays the verification error and original location', /keeps coming back different/.test(await report.textContent()));
+  ok('failed move says where it tried and that a retry continues', (await report.textContent()).includes(`${source}-new`)
+    && /continues from it/.test(await report.textContent()));
   ok('cleanup is unavailable after a failed move', await cleanup.isHidden());
   ok('no browser errors', errors.length === 0, errors.join('; '));
 } finally {
