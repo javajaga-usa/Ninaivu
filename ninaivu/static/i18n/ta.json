@@ -5327,5 +5327,18 @@
   "Enter a new or empty folder on the Ninaivu computer, or one that already holds a copy of this index; then only what differs is copied. Space and permissions are checked before Ninaivu restarts.": "நினைவு கணினியில் புதிய அல்லது காலியான கோப்புறையை, அல்லது இந்தக் குறியீட்டின் பிரதி ஏற்கனவே உள்ள கோப்புறையை உள்ளிடவும்; அப்போது வேறுபடுவது மட்டுமே பிரதியெடுக்கப்படும். நினைவு மறுதொடக்கம் செய்வதற்கு முன் இடமும் அனுமதிகளும் சரிபார்க்கப்படும்.",
   "That is a file, not a folder.": "அது கோப்பு, கோப்புறை அல்ல.",
   "That folder already holds other files. Choose an empty or new folder, or one that holds a copy of this index.": "அந்தக் கோப்புறையில் ஏற்கனவே வேறு கோப்புகள் உள்ளன. காலியான அல்லது புதிய கோப்புறையை, அல்லது இந்தக் குறியீட்டின் பிரதி உள்ள கோப்புறையைத் தேர்ந்தெடுக்கவும்.",
-  "Ninaivu cannot write in that folder. Check who owns it, or choose another.": "அந்தக் கோப்புறையில் நினைவால் எழுத முடியவில்லை. அது யாருக்குச் சொந்தமானது என்று சரிபார்க்கவும், அல்லது வேறொன்றைத் தேர்ந்தெடுக்கவும்."
+  "Ninaivu cannot write in that folder. Check who owns it, or choose another.": "அந்தக் கோப்புறையில் நினைவால் எழுத முடியவில்லை. அது யாருக்குச் சொந்தமானது என்று சரிபார்க்கவும், அல்லது வேறொன்றைத் தேர்ந்தெடுக்கவும்.",
+  "Check and repair the index": "குறியீட்டைச் சரிபார்த்துச் சீர்செய்",
+  "Ninaivu checks its databases when it starts after a move, and after it has seen an error that says one is damaged. A damaged one is repaired, and the original is kept beside it. Checking now restarts Ninaivu; on a large index it takes a minute or two.": "நகர்த்திய பின் தொடங்கும்போதும், ஒரு தரவுத்தளம் சேதமடைந்துள்ளது என்று சொல்லும் பிழையைப் பார்த்த பின்பும் நினைவு தன் தரவுத்தளங்களைச் சரிபார்க்கும். சேதமடைந்த ஒன்று சீர்செய்யப்படும்; அசல் அதன் அருகிலேயே வைக்கப்படும். இப்போது சரிபார்த்தால் நினைவு மறுதொடக்கம் செய்யும்; பெரிய குறியீட்டுக்கு ஓரிரு நிமிடங்கள் ஆகும்.",
+  "Check now and restart": "இப்போது சரிபார்த்து மறுதொடக்கம் செய்",
+  "Ninaivu is back. Sign in again to see how the check went.": "நினைவு திரும்பி வந்துவிட்டது. சரிபார்ப்பு எப்படி நடந்தது என்று பார்க்க மீண்டும் உள்நுழையுங்கள்.",
+  "Ninaivu is restarting to check the index. This page shows the result when it is back.": "குறியீட்டைச் சரிபார்க்க நினைவு மறுதொடக்கம் செய்கிறது. அது திரும்பியதும் இந்தப் பக்கம் முடிவைக் காட்டும்.",
+  "A check of the index is waiting for Ninaivu to restart.": "குறியீட்டுச் சரிபார்ப்பு நினைவு மறுதொடக்கம் செய்வதற்காகக் காத்திருக்கிறது.",
+  "Ninaivu saw an error that says a database is damaged ({when}):": "ஒரு தரவுத்தளம் சேதமடைந்துள்ளது என்று சொல்லும் பிழையை நினைவு கண்டது ({when}):",
+  "Checked {when}: {names} could not be repaired, and is as it was. Restore it from a backup on the Backup & health page.": "{when} அன்று சரிபார்க்கப்பட்டது: {names} சீர்செய்ய முடியவில்லை, அது முன்பு இருந்தபடியே உள்ளது. காப்புப்பிரதி & நலம் பக்கத்தில் ஒரு காப்புப்பிரதியிலிருந்து அதை மீட்டெடுங்கள்.",
+  "Checked {when}: repaired {names}.": "{when} அன்று சரிபார்க்கப்பட்டது: {names} சீர்செய்யப்பட்டது.",
+  "{name} was rebuilt from what could be read; {count} unreadable stretches were left out. A scan brings back photographs that are still in the library.": "படிக்க முடிந்தவற்றிலிருந்து {name} மீண்டும் கட்டப்பட்டது; படிக்க முடியாத {count} பகுதிகள் விடுபட்டன. நூலகத்தில் இன்னும் உள்ள புகைப்படங்களை ஒரு ஸ்கேன் மீண்டும் கொண்டுவரும்.",
+  "The damaged original is kept in {path}. Delete it once Ninaivu works as it should, to free the space.": "சேதமடைந்த அசல் {path} இல் வைக்கப்பட்டுள்ளது. நினைவு சரியாக வேலை செய்தவுடன், இடத்தை விடுவிக்க அதை நீக்குங்கள்.",
+  "Checked {when}: all sound.": "{when} அன்று சரிபார்க்கப்பட்டது: அனைத்தும் சரியாக உள்ளன.",
+  "Check the index and restart Ninaivu? Everybody using Ninaivu is interrupted while it restarts.": "குறியீட்டைச் சரிபார்த்து நினைவை மறுதொடக்கம் செய்யவா? மறுதொடக்கம் நடக்கும்போது நினைவைப் பயன்படுத்தும் அனைவருக்கும் இடையூறு ஏற்படும்."
 }

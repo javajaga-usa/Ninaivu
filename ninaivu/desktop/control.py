@@ -306,6 +306,8 @@ START_CEILING_SECONDS = 60 * 60
 IMPORT_STEP = 'bringing in the index'
 #: The start note while an index moves to another folder (ninaivu/__main__.py).
 MOVE_STEP = 'moving the index'
+#: While a damaged index is rebuilt, which on a large one can take long too.
+REPAIR_STEP = 'repairing the index'
 #: How long a stop is waited on. The server finishes the files in hand and
 #: checkpoints the index first; the console's restart helper waits as long.
 STOP_SECONDS = 20 * 60
@@ -566,7 +568,7 @@ class Controller:
             # it rightly takes longer than any ceiling; a stall still shows as
             # the note going quiet, above.
             if (waited > START_CEILING_SECONDS
-                    and not str(step or '').startswith((IMPORT_STEP, MOVE_STEP))):
+                    and not str(step or '').startswith((IMPORT_STEP, MOVE_STEP, REPAIR_STEP))):
                 raise RuntimeError(f'Ninaivu has been starting for {describe_wait(waited)}, '
                                    f'still {step or "starting"}. It carries on: watch the '
                                    f'status, or use View logs.')

@@ -313,11 +313,13 @@ def _export_state(cfg) -> dict[str, Any]:
     # Where the index is, what forwards to it, and its move's state; records
     # copied in from another folder are left out (relocate.status).
     location = relocate.status(cfg.state_dir)
+    from ..storage import index_check
     return {
         "index_folder": str(cfg.state_dir),
         "index_location": location,
         "index_move": location["last"],
         "index_move_pending": location["pending"],
+        "index_check": index_check.status(cfg.state_dir),
         "recovery_cleanup": _recovery_cleaner.status(cfg.state_dir),
         "export": _the_exporter().status(cfg.state_dir),
         # The reading-through of the export last checked for an import.
@@ -488,6 +490,26 @@ def move_index():
             problem = reply.get('error')
     return jsonify({'restarting': restarting, 'restart_problem': problem,
                     'destination': pending['destination'], 'pending': pending}), 202
+
+
+@migration_bp.post('/api/admin/migration/check-index')
+@require_admin
+def check_index():
+    """Check the index's databases, and repair them, at a restart now."""
+    from ..storage import index_check
+    from . import server_api
+    cfg = _cfg()
+    if _the_exporter().running:
+        return jsonify({'error': 'Wait for the index export to finish first.'}), 409
+    index_check.ask(cfg.state_dir, 'asked')
+    problem = server_api._restart_problem()
+    restarting = False
+    if problem is None:
+        reply, status = server_api._begin_restart(what=' to check the index')
+        restarting = status == 202
+        if not restarting:
+            problem = reply.get('error')
+    return jsonify({'restarting': restarting, 'restart_problem': problem}), 202
 
 
 @migration_bp.get('/api/admin/migration/recovery-cleanup')

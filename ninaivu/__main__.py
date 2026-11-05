@@ -303,20 +303,26 @@ def run_command(argv: list[str]) -> int:
 #: How the start note begins while an index is moved (the Control Panel waits
 #: past its usual ceiling for it: desktop/control.py).
 MOVE_STEP = "moving the index to its new folder"
+#: And while its databases are checked and repaired (storage/index_check.py).
+CHECK_STEP = "checking the index"
 
 
 def _move_progress():
     """Say in the start note how far the move has got, once per percent."""
     from .server import starting                                  # noqa: PLC0415
     told = [None]
-    words = {"copying": "copying", "verifying": "reading it back to check it"}
+    words = {"copying": "copying", "verifying": "reading it back to check it",
+             "waiting": "waiting for other programs to finish writing in the index folder"}
 
     def tell(stage: str, done: int, total: int) -> None:
         percent = int(100 * done / total) if total else 100
         if told[0] == (stage, percent):
             return
         told[0] = (stage, percent)
-        starting.step(f"{MOVE_STEP}: {words.get(stage, stage)}, {percent}%")
+        if stage == "waiting":                       # *done* is seconds here
+            starting.step(f"{MOVE_STEP}: {words[stage]}, {done} s so far")
+        else:
+            starting.step(f"{MOVE_STEP}: {words.get(stage, stage)}, {percent}%")
     return tell
 
 
@@ -405,6 +411,13 @@ def main(argv: list[str] | None = None) -> int:
                 if not take_up_replica(cfg, args):
                     return 1
                 return _run(cfg, args)
+            # Damage found while it ran, a move, or an administrator's asking:
+            # checked and repaired now, with the server lock held and nothing
+            # open (storage/index_check.py).
+            from .storage import index_check                       # noqa: PLC0415
+            if index_check.wanted(cfg.state_dir):
+                starting.step(CHECK_STEP)
+                index_check.run(cfg.state_dir, tell=starting.step)
             from .storage.upgrade import before_opening_the_index  # noqa: PLC0415
             if not before_opening_the_index(cfg.state_dir):
                 return 1

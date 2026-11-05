@@ -271,15 +271,106 @@ def _read_back(path: Path) -> bytes:
         return hashlib.file_digest(stream, 'sha256').digest()
 
 
-def _again(source: Path, destination: Path, rel: str, first: bytes) -> bytes:
+#: How long a move waits for other programs to finish writing in the index
+#: folder before it gives up and leaves the index where it is.
+WRITERS_PATIENCE = 5 * 60
+#: How many times files changed during the copy are copied again.
+_SETTLE_ROUNDS = 3
+
+
+def _stamp(path: Path) -> tuple[int, int] | None:
+    try:
+        st = path.stat()
+    except OSError:
+        return None
+    return st.st_size, st.st_mtime_ns
+
+
+def _writers(folder: Path) -> list[str]:
+    """Other processes with a file in *folder* open for writing (Linux; an
+    empty list elsewhere, where the copy's own re-check is what guards).
+
+    Logs are left out: the Control Panel holds the server's log open, and a
+    log that grows during the move is copied again but stops nothing."""
+    proc = Path('/proc')
+    if not (proc / 'self' / 'fdinfo').is_dir():
+        return []
+    me = os.getpid()
+    inside = str(folder) + os.sep
+    found = []
+    for entry in proc.iterdir():
+        if not entry.name.isdigit() or int(entry.name) == me:
+            continue
+        try:
+            fds = list((entry / 'fd').iterdir())
+        except OSError:
+            continue                      # gone, or another user's
+        for fd in fds:
+            try:
+                target = os.readlink(fd)
+            except OSError:
+                continue
+            name = target.rsplit(os.sep, 1)[-1]
+            if (not target.startswith(inside) or target.endswith((' (deleted)', '.log'))
+                    or name in _LOCKS):
+                continue
+            try:
+                flags = next(line for line in (entry / 'fdinfo' / fd.name).read_text().splitlines()
+                             if line.startswith('flags:'))
+                writing = int(flags.split()[1], 8) & 3
+            except (OSError, StopIteration, ValueError, IndexError):
+                continue
+            if writing:
+                try:
+                    command = (entry / 'comm').read_text().strip()
+                except OSError:
+                    command = '?'
+                found.append(f'{command} (process {entry.name}, {target[len(inside):]})')
+                break
+    return found
+
+
+def _wait_for_writers(folder: Path, tell: Progress) -> None:
+    """Wait until no other program is writing in *folder*.
+
+    Ninaivu's own work (describing, scanning, consolidating, thumbnails,
+    backups, sending to the Secondary) runs in the server, which has not
+    started yet: it is paused by the move and takes up again after it. This
+    waits for anything else: a converter left running by the server that
+    stopped, a command run from a terminal."""
+    began = time.monotonic()
+    said = False
+    while True:
+        busy = _writers(folder)
+        if not busy:
+            if said:
+                _say('nothing else is writing in the index folder now')
+            return
+        if not said:
+            _say(f'waiting for other programs to finish writing in {folder}: {", ".join(busy[:5])}')
+            said = True
+        waited = time.monotonic() - began
+        if waited >= WRITERS_PATIENCE:
+            raise ValueError(f'Other programs are still writing in the index folder: '
+                             f'{", ".join(busy[:5])}. The index stays where it is; close them, '
+                             f'or restart the computer, and move again.')
+        tell('waiting', int(waited), WRITERS_PATIENCE)
+        time.sleep(2)
+
+
+def _again(source: Path, destination: Path, rel: str, first: bytes,
+           stamp: tuple[int, int] | None = None) -> bytes:
     """*rel* read back different from what was copied: copy it once more, and
     when it is still different, say which side is at fault."""
     _say(f'{rel} read back differently from {destination}; copying it again')
+    changed = stamp is not None and _stamp(source / rel) != stamp
     second = _hash_copy(source / rel, destination / rel)
     _flush()
     back = _read_back(destination / rel)
-    if second == first and back == second:
-        _say(f'{rel} is right on the second copy')
+    if back == second and (second == first or changed):
+        # Right now; a file another program changed meanwhile is copied as it
+        # is now, and the re-check after the copy sees that it changed.
+        _say(f'{rel} is right on the second copy' + (' (it had changed meanwhile)' if changed else ''))
         return second
     if second != first or _digest(source / rel) != second:
         _say(f'{rel} reads differently each time it is read from {source}')
@@ -301,8 +392,9 @@ def apply_pending(source: Path, *, starts: ExitStack | None = None,
     it acquires the server lock. Otherwise a second start could open the new
     folder between publication and the original start's handover.
 
-    *progress* is told ``(stage, bytes_done, bytes_total)`` as it goes, with
-    stage ``copying`` and then ``verifying``.
+    *progress* is told ``(stage, done, total)`` as it goes: ``waiting``
+    (seconds) while another program is still writing in the index folder,
+    then ``copying`` and ``verifying`` (bytes).
     """
     marker = source / PENDING
     if not marker.exists():
@@ -332,7 +424,9 @@ def apply_pending(source: Path, *, starts: ExitStack | None = None,
             # Nobody may be using a copy that is being brought up to date.
             copying.enter_context(runfile.server_lock(destination))
             write(destination / PARTIAL, {'source': str(source), 'started_at': began})
+            _wait_for_writers(source, tell)
             files = _files(source)
+            stamps = {rel: _stamp(source / rel) for rel in files}
             total = sum(files.values())
             stale = [rel for rel in _held(destination) if rel not in files]
             for rel in stale:
@@ -368,11 +462,42 @@ def apply_pending(source: Path, *, starts: ExitStack | None = None,
             for rel, size in files.items():
                 expected = digests.get(rel) or _digest(source / rel)
                 if _read_back(destination / rel) != expected:
-                    expected = _again(source, destination, rel, expected)
+                    expected = _again(source, destination, rel, expected, stamps[rel])
                     retried.append(rel)
                 recovery_files[rel] = {'sha256': expected.hex(), 'size': size}
                 done += size
                 tell('verifying', done, total)
+
+            # Anything that changed while it was copied (another program
+            # writing after all) is copied again, until nothing does.
+            for attempt in range(1, _SETTLE_ROUNDS + 1):
+                now = _files(source)
+                gone = [rel for rel in files if rel not in now]
+                changed = [rel for rel in now if rel not in files or _stamp(source / rel) != stamps[rel]]
+                for rel in gone:
+                    (destination / rel).unlink(missing_ok=True)
+                    files.pop(rel)
+                    recovery_files.pop(rel, None)
+                for rel in changed:
+                    stamps[rel] = _stamp(source / rel)
+                    digest = _hash_copy(source / rel, destination / rel)
+                    _flush()
+                    if _read_back(destination / rel) != digest:
+                        digest = _again(source, destination, rel, digest, stamps[rel])
+                    files[rel] = now[rel]
+                    recovery_files[rel] = {'sha256': digest.hex(), 'size': now[rel]}
+                    copied += now[rel]
+                moving = [rel for rel in (*changed, *gone) if not rel.endswith('.log')]
+                if not moving:
+                    break
+                _say(f'{len(moving)} files changed while they were copied '
+                     f'({", ".join(moving[:5])}); copied again')
+                if attempt == _SETTLE_ROUNDS:
+                    raise ValueError(f'Files in the index folder kept changing while it was copied '
+                                     f'({", ".join(moving[:5])}): another program is still writing '
+                                     f'there. The index stays where it is; close it and move again.')
+                _wait_for_writers(source, tell)
+            total = sum(files.values())
 
             if settings is not None:
                 settings['state_dir'] = str(destination)
@@ -387,6 +512,10 @@ def apply_pending(source: Path, *, starts: ExitStack | None = None,
                 'already_there': len(kept), 'copied_again': retried,
                 'recovery_files': len(recovery_files), 'recovery_bytes': total})
             (destination / PARTIAL).unlink(missing_ok=True)
+            # The copy is the original byte for byte; whether the original was
+            # sound is checked, and repaired if need be, as the start goes on.
+            from . import index_check
+            index_check.ask(destination, 'moved')
             write(source / REDIRECT, {'destination': str(destination)})
             published = True
             marker.unlink(missing_ok=True)

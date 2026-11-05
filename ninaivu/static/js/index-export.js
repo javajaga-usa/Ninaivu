@@ -106,6 +106,8 @@ export class IndexExport {
     // A move asked for with a restart: Ninaivu is down while it copies and
     // checks the index, and the page waits for it and then shows the result.
     this.moving = null;
+    // The same for a check of the index asked for with a restart.
+    this.checking = null;
     i18n.onChange(() => { if (this.state) this.render(); });
   }
 
@@ -114,6 +116,7 @@ export class IndexExport {
     this.wired = true;
     $('#index-move-start')?.addEventListener('click', () => this.moveIndex());
     $('#index-recovery-cleanup')?.addEventListener('click', () => this.cleanRecovery());
+    $('#index-check-start')?.addEventListener('click', () => this.checkIndex());
     $('#ix-export')?.addEventListener('click', () => this.exportNow());
     $('#ix-look')?.addEventListener('click', () => this.look());
     $('#ix-import')?.addEventListener('click', () => this.importNow());
@@ -150,10 +153,11 @@ export class IndexExport {
     try {
       this.state = await json('/api/admin/migration/export');
     } catch (exc) {
-      if (this.moving) {
-        // Down while it moves the index: an answer of any kind is it back.
-        if (exc.status) this.moving.back = true;
+      if (this.moving || this.checking) {
+        // Down while it moves or checks the index: any answer is it back.
+        if (exc.status) (this.moving || this.checking).back = true;
         this.renderMove(this.state || {});
+        this.renderCheck(this.state || {});
         this.timer = setTimeout(() => this.refresh(), RESTART_POLL_MS);
       } else if (this.importing) {
         // Ninaivu is down while it imports: keep saying so, and keep asking.
@@ -176,6 +180,12 @@ export class IndexExport {
       this.moving = null;
       this.moveRestartFailed = true;
     }
+    if (this.checking && !this.state.index_check?.wanted) {
+      this.checking = null;          // back, and checked
+    } else if (this.checking && !this.state.restarting && Date.now() - this.checking.since > 15000) {
+      this.checking = null;
+      this.checkRestartFailed = true;
+    }
     const last = this.state.last_import;
     if (this.importing && last && last.at >= this.importing.asked && !this.state.pending) {
       this.importing = null;
@@ -188,7 +198,7 @@ export class IndexExport {
     this.render();
     if (!$('#ix-block')?.isConnected) return;
     if (this.state.export?.running || this.state.check?.running || this.state.recovery_cleanup?.running) this.timer = setTimeout(() => this.refresh(), POLL_MS);
-    else if (this.importing || this.moving) this.timer = setTimeout(() => this.refresh(), RESTART_POLL_MS);
+    else if (this.importing || this.moving || this.checking) this.timer = setTimeout(() => this.refresh(), RESTART_POLL_MS);
   }
 
   /** Whether Ninaivu has been gone longer than this import should take. */
@@ -239,6 +249,7 @@ export class IndexExport {
     const s = this.state;
     if (!s) return;
     this.renderMove(s);
+    this.renderCheck(s);
     const cleanup = s.recovery_cleanup || {};
     const cleanupButton = $('#index-recovery-cleanup');
     if (cleanupButton) {
@@ -443,6 +454,86 @@ export class IndexExport {
       box.append(el('div', 'hint', i18n.t('What was copied is kept in that folder. Moving there again continues from it instead of starting over.')));
     }
     report.replaceChildren(box);
+  }
+
+  /** The last check of the index's databases, and one waiting. */
+  renderCheck(s) {
+    const report = $('#index-check-report');
+    if (!report) return;
+    const button = $('#index-check-start');
+    const check = s.index_check || {};
+    if (button) button.disabled = Boolean(this.checking || this.moving || check.wanted);
+    const box = el('div');
+    if (this.checking) {
+      box.className = 'mg-alert';
+      box.append(el('strong', null, this.checking.back
+        ? i18n.t('Ninaivu is back. Sign in again to see how the check went.')
+        : i18n.t('Ninaivu is restarting to check the index. This page shows the result when it is back.')));
+      if (!this.checking.back) box.append(el('progress', 'ix-bar'));
+      report.replaceChildren(box);
+      return;
+    }
+    if (check.wanted) {
+      box.className = 'mg-alert';
+      box.append(el('strong', null, i18n.t('A check of the index is waiting for Ninaivu to restart.')));
+      if (check.wanted.reason === 'error') {
+        box.append(el('div', 'hint', i18n.t('Ninaivu saw an error that says a database is damaged ({when}):', { when: when(check.wanted.at) })));
+        box.append(el('code', 'mg-path', check.wanted.detail || ''));
+      } else if (check.wanted.at) {
+        box.append(el('div', 'hint subtle', i18n.t('Asked for {when}.', { when: when(check.wanted.at) })));
+      }
+      if (this.checkRestartFailed) box.append(el('div', 'hint', i18n.t('Restart Ninaivu to do it.')));
+      report.replaceChildren(box);
+      return;
+    }
+    const last = check.last;
+    if (!last) { report.replaceChildren(); return; }
+    const dbs = last.databases || [];
+    const failed = dbs.filter((d) => !d.ok);
+    const repaired = dbs.filter((d) => d.ok && d.how);
+    if (failed.length) {
+      box.className = 'mg-alert bad';
+      box.append(el('strong', null, i18n.t('Checked {when}: {names} could not be repaired, and is as it was. Restore it from a backup on the Backup & health page.',
+        { when: when(last.at), names: failed.map((d) => d.name).join(', ') })));
+      for (const d of failed) box.append(el('code', 'mg-path', `${d.name}: ${(d.left || d.problems || []).join('; ')}`));
+    } else if (repaired.length) {
+      box.className = 'mg-alert';
+      box.append(el('strong', null, i18n.t('Checked {when}: repaired {names}.', { when: when(last.at), names: repaired.map((d) => d.name).join(', ') })));
+      for (const d of repaired) {
+        if (d.how === 'rebuild' && d.skipped) {
+          box.append(el('div', 'hint', i18n.t('{name} was rebuilt from what could be read; {count} unreadable stretches were left out. A scan brings back photographs that are still in the library.',
+            { name: d.name, count: count(d.skipped) })));
+        }
+        box.append(el('div', 'hint subtle', i18n.t('The damaged original is kept in {path}. Delete it once Ninaivu works as it should, to free the space.', { path: d.damaged_copy || '' })));
+      }
+    } else {
+      box.className = 'hint';
+      box.append(i18n.t('Checked {when}: all sound.', { when: when(last.at) }));
+    }
+    report.replaceChildren(box);
+  }
+
+  async checkIndex() {
+    if (!window.confirm(i18n.t('Check the index and restart Ninaivu? Everybody using Ninaivu is interrupted while it restarts.'))) return;
+    const button = $('#index-check-start');
+    button.disabled = true;
+    this.checkRestartFailed = false;
+    let result;
+    try {
+      result = await json('/api/admin/migration/check-index', {});
+    } catch (error) {
+      $('#index-check-report').textContent = error.message;
+      button.disabled = false;
+      return;
+    }
+    if (result.restarting) {
+      this.checking = { since: Date.now() };
+      this.renderCheck(this.state || {});
+      clearTimeout(this.timer);
+      this.timer = setTimeout(() => this.refresh(), RESTART_POLL_MS);
+    } else {
+      $('#index-check-report').textContent = i18n.t('A check of the index is waiting for Ninaivu to restart.') + ' ' + (result.restart_problem || '');
+    }
   }
 
   async moveIndex() {

@@ -5076,5 +5076,18 @@
   "Enter a new or empty folder on the Ninaivu computer, or one that already holds a copy of this index; then only what differs is copied. Space and permissions are checked before Ninaivu restarts.": "Enter a new or empty folder on the Ninaivu computer, or one that already holds a copy of this index; then only what differs is copied. Space and permissions are checked before Ninaivu restarts.",
   "That is a file, not a folder.": "That is a file, not a folder.",
   "That folder already holds other files. Choose an empty or new folder, or one that holds a copy of this index.": "That folder already holds other files. Choose an empty or new folder, or one that holds a copy of this index.",
-  "Ninaivu cannot write in that folder. Check who owns it, or choose another.": "Ninaivu cannot write in that folder. Check who owns it, or choose another."
+  "Ninaivu cannot write in that folder. Check who owns it, or choose another.": "Ninaivu cannot write in that folder. Check who owns it, or choose another.",
+  "Check and repair the index": "Check and repair the index",
+  "Ninaivu checks its databases when it starts after a move, and after it has seen an error that says one is damaged. A damaged one is repaired, and the original is kept beside it. Checking now restarts Ninaivu; on a large index it takes a minute or two.": "Ninaivu checks its databases when it starts after a move, and after it has seen an error that says one is damaged. A damaged one is repaired, and the original is kept beside it. Checking now restarts Ninaivu; on a large index it takes a minute or two.",
+  "Check now and restart": "Check now and restart",
+  "Ninaivu is back. Sign in again to see how the check went.": "Ninaivu is back. Sign in again to see how the check went.",
+  "Ninaivu is restarting to check the index. This page shows the result when it is back.": "Ninaivu is restarting to check the index. This page shows the result when it is back.",
+  "A check of the index is waiting for Ninaivu to restart.": "A check of the index is waiting for Ninaivu to restart.",
+  "Ninaivu saw an error that says a database is damaged ({when}):": "Ninaivu saw an error that says a database is damaged ({when}):",
+  "Checked {when}: {names} could not be repaired, and is as it was. Restore it from a backup on the Backup & health page.": "Checked {when}: {names} could not be repaired, and is as it was. Restore it from a backup on the Backup & health page.",
+  "Checked {when}: repaired {names}.": "Checked {when}: repaired {names}.",
+  "{name} was rebuilt from what could be read; {count} unreadable stretches were left out. A scan brings back photographs that are still in the library.": "{name} was rebuilt from what could be read; {count} unreadable stretches were left out. A scan brings back photographs that are still in the library.",
+  "The damaged original is kept in {path}. Delete it once Ninaivu works as it should, to free the space.": "The damaged original is kept in {path}. Delete it once Ninaivu works as it should, to free the space.",
+  "Checked {when}: all sound.": "Checked {when}: all sound.",
+  "Check the index and restart Ninaivu? Everybody using Ninaivu is interrupted while it restarts.": "Check the index and restart Ninaivu? Everybody using Ninaivu is interrupted while it restarts."
 }

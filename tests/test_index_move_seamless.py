@@ -348,5 +348,120 @@ class StartUp(Base):
             self.assertEqual(Config.load().state_dir, self.target)
 
 
+
+class OtherWriters(Base):
+    """Ninaivu's own work runs in the server, which has not started while the
+    move runs; anything else writing in the folder is waited for, and what
+    changes during the copy is copied again."""
+
+    def _writer(self, name, mode):
+        import subprocess
+        import sys
+        path = self.source / name
+        child = subprocess.Popen([sys.executable, '-c',
+                                  'import sys, time; f = open(sys.argv[1], sys.argv[2]); '
+                                  'print("open", flush=True); time.sleep(60)', str(path), mode],
+                                 stdout=subprocess.PIPE, text=True)
+        self.addCleanup(child.kill)
+        self.assertEqual(child.stdout.readline().strip(), 'open')
+        return child
+
+    @unittest.skipUnless(Path('/proc/self/fdinfo').is_dir(), 'Linux /proc')
+    def test_a_program_writing_in_the_folder_is_seen(self):
+        (self.source / 'films').mkdir()
+        child = self._writer('films/ffmpeg-output.mp4', 'wb')
+        busy = relocate._writers(self.source)
+        self.assertEqual(len(busy), 1)
+        self.assertIn(f'process {child.pid}', busy[0])
+        self.assertIn('films/ffmpeg-output.mp4', busy[0])
+
+    @unittest.skipUnless(Path('/proc/self/fdinfo').is_dir(), 'Linux /proc')
+    def test_readers_and_logs_are_not_writers(self):
+        self._writer('renditions/323699-v1.jpg', 'rb')
+        self._writer('server.log', 'ab')
+        self.assertEqual(relocate._writers(self.source), [])
+
+    def test_the_move_waits_for_a_writer_to_finish(self):
+        busy = [['ffmpeg (process 42)'], ['ffmpeg (process 42)'], []]
+        told = []
+        with patch.object(relocate, '_writers', side_effect=lambda _f: busy.pop(0) if busy else []), \
+                patch.object(relocate.time, 'sleep'):
+            self.assertEqual(self.move(progress=lambda *a: told.append(a)), self.target)
+        self.assertEqual(told[0][0], 'waiting')
+        self.assertIn('waiting for other programs', self.logged())
+
+    def test_a_writer_that_does_not_finish_leaves_the_index_where_it_is(self):
+        with patch.object(relocate, '_writers', return_value=['ffmpeg (process 42, films/x.mp4)']), \
+                patch.object(relocate, 'WRITERS_PATIENCE', 0):
+            self.assertIsNone(self.move())
+        result = self.result(self.source)
+        self.assertIn('still writing', result['error'])
+        self.assertIn('ffmpeg', result['error'])
+        self.assertFalse(self.target.exists())
+        self.assertEqual(relocate.resolve(self.source), self.source)
+
+    def test_a_file_changed_during_the_copy_is_copied_again(self):
+        real, changed = relocate._hash_copy, []
+
+        def meanwhile(original, copy):
+            digest = real(original, copy)
+            if original.name == 'index.db' and not changed:
+                changed.append(1)
+                (self.source / 'index.db').write_bytes(b'written while it was copied' * 50)
+            return digest
+
+        with patch.object(relocate, '_hash_copy', meanwhile):
+            self.assertEqual(self.move(), self.target)
+        self.assertEqual((self.target / 'index.db').read_bytes(), b'written while it was copied' * 50)
+        self.assertIn('changed while they were copied', self.logged())
+        manifest = json.loads((self.target / relocate.MANIFEST).read_text())
+        self.assertEqual(manifest['files']['index.db']['size'], len(b'written while it was copied') * 50)
+
+    def test_a_file_that_keeps_changing_leaves_the_index_where_it_is(self):
+        real, n = relocate._hash_copy, [0]
+
+        def always(original, copy):
+            digest = real(original, copy)
+            if original.name == 'index.db':
+                n[0] += 1
+                (self.source / 'index.db').write_bytes(b'change %d' % n[0] * 50)
+            return digest
+
+        with patch.object(relocate, '_hash_copy', always):
+            self.assertIsNone(self.move())
+        self.assertIn('kept changing', self.result(self.source)['error'])
+        self.assertEqual(relocate.resolve(self.source), self.source)
+
+    def test_a_file_changed_by_another_program_is_not_blamed_on_the_disk(self):
+        real_back, real_copy, once = relocate._read_back, relocate._hash_copy, []
+
+        def wrong_once(path):
+            if path.name == 'face.jpg' and not once:
+                once.append(1)
+                # Another program rewrites the original just as it is checked.
+                (self.source / 'thumbs/ab/face.jpg').write_bytes(b'newer face' * 20)
+                return b'garbled'
+            return real_back(path)
+
+        with patch.object(relocate, '_read_back', wrong_once), \
+                patch.object(relocate, '_hash_copy', real_copy):
+            self.assertEqual(self.move(), self.target)
+        self.assertEqual((self.target / 'thumbs/ab/face.jpg').read_bytes(), b'newer face' * 20)
+
+    def test_a_log_that_grows_does_not_stop_the_move(self):
+        (self.source / 'ninaivu.log').write_text('start\n')
+        real, n = relocate._hash_copy, [0]
+
+        def growing(original, copy):
+            digest = real(original, copy)
+            with (self.source / 'ninaivu.log').open('a') as log:
+                n[0] += 1
+                log.write(f'line {n[0]}\n')
+            return digest
+
+        with patch.object(relocate, '_hash_copy', growing):
+            self.assertEqual(self.move(), self.target)
+
+
 if __name__ == '__main__':
     unittest.main()
