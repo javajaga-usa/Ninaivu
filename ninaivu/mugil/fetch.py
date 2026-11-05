@@ -28,6 +28,7 @@ import shutil
 import stat
 import threading
 import time
+import weakref
 from pathlib import Path
 from typing import Any
 
@@ -43,13 +44,27 @@ MOST_BYTES = 20 * 1024 ** 3
 #: How long to wait on the Secondary for each piece of a file.
 TIMEOUT = 60.0
 
-_locks: dict[str, threading.Lock] = {}
+#: One lock per original being sent for. Held weakly: a lock is kept while
+#: some thread holds or waits on it, and goes with the last of them. A plain
+#: dict kept one for every original ever sent for, for as long as the server
+#: ran.
+_locks: weakref.WeakValueDictionary[str, threading.Lock] = weakref.WeakValueDictionary()
 _locks_guard = threading.Lock()
+
+#: Part of the name a file is downloaded under (see original).
+PARTIAL = ".ninaivu-partial-"
+#: A partial file written to this recently is a download still going on. One
+#: older was left by a server that stopped mid-download, and does not keep its
+#: folder from being trimmed.
+PARTIAL_LIVE = 15 * 60
 
 
 def _lock_for(digest: str) -> threading.Lock:
     with _locks_guard:
-        return _locks.setdefault(digest, threading.Lock())
+        lock = _locks.get(digest)
+        if lock is None:
+            lock = _locks[digest] = threading.Lock()
+        return lock
 
 
 def folder(state_dir: str | Path) -> Path:
@@ -102,7 +117,7 @@ def original(cfg, root: str, rel: str, *, partner=None) -> Path | None:
             return None
         home = folder(cfg.state_dir) / digest[:2] / digest
         home.mkdir(parents=True, exist_ok=True)
-        partial = home / f".{name}.ninaivu-partial-{secrets.token_hex(4)}"
+        partial = home / f".{name}{PARTIAL}{secrets.token_hex(4)}"
         try:
             with open(partial, "xb") as handle:
                 def write(chunk: bytes) -> None:
@@ -137,24 +152,44 @@ def original(cfg, root: str, rel: str, *, partner=None) -> Path | None:
 def trim(state_dir: str | Path, *, most: int = MOST_BYTES, keep: Path | None = None) -> int:
     """Let the least recently used fetched originals go past *most*; bytes freed."""
     base = folder(state_dir)
+    now = time.time()
     entries = []
     total = 0
     try:
-        for first in base.iterdir():
-            for home in first.iterdir():
-                size = sum(f.stat().st_size for f in home.iterdir() if f.is_file())
-                entries.append((home.stat().st_mtime, size, home))
-                total += size
+        firsts = list(base.iterdir())
     except OSError:
         return 0
+    for first in firsts:
+        try:
+            homes = list(first.iterdir())
+        except OSError:
+            continue
+        for home in homes:
+            # One at a time: another thread may be trimming too, or may have
+            # just taken a folder away. One that is gone is simply not
+            # counted, where it used to abandon the whole trim.
+            try:
+                files = [f for f in home.iterdir() if f.is_file()]
+                size = sum(f.stat().st_size for f in files)
+                busy = any(PARTIAL in f.name and now - f.stat().st_mtime < PARTIAL_LIVE
+                           for f in files)
+                entries.append((home.stat().st_mtime, size, home, busy))
+            except OSError:
+                continue
+            total += size
     freed = 0
-    for _used, size, home in sorted(entries):
+    for _used, size, home, busy in sorted(entries, key=lambda e: e[0]):
         if total - freed <= most:
             break
-        if keep is not None and home == keep:
+        # A folder still being written into is another thread's download:
+        # taking it away failed that download at the last step.
+        if busy or (keep is not None and home == keep):
             continue
-        for f in home.iterdir():
-            os.chmod(f, stat.S_IRUSR | stat.S_IWUSR)
+        try:
+            for f in home.iterdir():
+                os.chmod(f, stat.S_IRUSR | stat.S_IWUSR)
+        except OSError:
+            pass
         shutil.rmtree(home, ignore_errors=True)
         freed += size
     return freed
@@ -164,7 +199,7 @@ def summary(state_dir: str | Path) -> dict[str, int]:
     files = size = 0
     for path in folder(state_dir).rglob("*"):
         try:
-            if path.is_file() and ".ninaivu-partial-" not in path.name:
+            if path.is_file() and PARTIAL not in path.name:
                 files += 1
                 size += path.stat().st_size
         except OSError:

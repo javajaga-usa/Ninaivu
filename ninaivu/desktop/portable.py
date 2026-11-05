@@ -53,8 +53,10 @@ import os
 import re
 import shutil
 import sys
+import tarfile
 import tempfile
 import time
+import zlib
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Callable
@@ -694,8 +696,8 @@ def _put_back_index(state: Path, bundle: Path) -> None:
     from ..storage import backup                         # noqa: PLC0415
 
     with tempfile.TemporaryDirectory(prefix=".ninaivu-go-back-", dir=state) as tmp:
-        copy = backup.extract(bundle, Path(tmp))
-        backup.verify_state(copy)
+        # Unpacked and checked in one pass over the bundle (extract_verified).
+        copy = backup.extract_verified(bundle, Path(tmp))
         for name in (*backup.DATABASES, "config.json"):
             if not (copy / name).is_file():
                 continue
@@ -764,7 +766,9 @@ def go_back(folder: Folder | None = None, *, version: str | None = None,
             kept = _copy_now(folder.state, str(last.get("version")))
             try:
                 _put_back_index(folder.state, bundle)
-            except (OSError, ValueError) as exc:
+            except (OSError, ValueError, EOFError, zlib.error, tarfile.TarError) as exc:
+                # A copy damaged on its disk fails in gzip (EOFError,
+                # zlib.error) or tar, not as OSError: Go back crashed on it.
                 raise PortableError(f"The index could not be put back ({exc}). "
                                     f"Nothing was moved.") from exc
             (folder.state / upgrade.VERSION_FILE).unlink(missing_ok=True)

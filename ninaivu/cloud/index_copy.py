@@ -248,7 +248,12 @@ def make_bundle(state_dir: Path | str, out_dir: Path | str) -> Path:
         backup.verify_state(staged)
         stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         bundle = out_dir / f"{backup.PREFIX}{stamp}_from_drive{BUNDLE}"
-        with tarfile.open(bundle, "w:gz") as tar:
+        # Level 9 as before, on several cores (utils/pgzip.py): one gzip
+        # member, the same to every reader.
+        from ..utils.pgzip import ParallelGzipWriter              # noqa: PLC0415
+        with open(bundle, "wb") as output, \
+                ParallelGzipWriter(output, 9) as packer, \
+                tarfile.open(fileobj=packer, mode="w|") as tar:
             tar.add(staged, arcname="state")
     return bundle
 
@@ -563,8 +568,14 @@ def fetch(client: DriveClient, entry: dict[str, Any], key: bytes | None,
         bundle = work / "index-copy.tar.gz"
         crypto.decrypt_file_v2(raw, bundle, key)
         raw.unlink(missing_ok=True)
-    state = backup.extract(bundle, work / "unpacked")
-    backup.verify_state(state)
+    # One pass: unpacked and checked together. And nothing left behind when
+    # a check fails: the service takes an unpacked folder it finds here for
+    # one already checked, and would have used a half-checked index.
+    try:
+        state = backup.extract_verified(bundle, work / "unpacked")
+    except BaseException:
+        shutil.rmtree(work / "unpacked", ignore_errors=True)
+        raise
     return state, bundle
 
 

@@ -365,7 +365,9 @@ class Notifier:
             # pages on the house's network.
             log.debug("webhook failed: %s", exc)
             return f"The webhook answered HTTP {exc.code}."
-        except (urllib.error.URLError, OSError, ValueError) as exc:
+        except (urllib.error.URLError, OSError, ValueError, http.client.HTTPException) as exc:
+            # HTTPException too: a garbled status line or a body cut short is
+            # neither of the others, and escaping here skipped the email.
             log.debug("webhook failed: %s", exc)
             return "Could not reach the webhook."
 

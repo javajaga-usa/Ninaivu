@@ -28,6 +28,7 @@ from __future__ import annotations
 from ..words import refusal
 
 import hashlib
+import http.client
 import logging
 import shutil
 import threading
@@ -177,7 +178,9 @@ def fetch_model(models_dir: Path | str | None = None, *, force: bool = False,
             return {"downloaded": False, "ready": False,
                     **refusal("checksum mismatch (got {actual}…)", actual=actual[:12])}
         tmp.replace(path)
-    except (urllib.error.URLError, OSError, TimeoutError) as exc:
+    except (urllib.error.URLError, OSError, TimeoutError, http.client.HTTPException) as exc:
+        # HTTPException: a download cut short mid-body (IncompleteRead) is
+        # not an OSError; it escaped and left the .part file behind.
         tmp.unlink(missing_ok=True)
         return {"downloaded": False, "ready": False, "error": str(exc)}
     return {"downloaded": True, "kept": False, "ready": True, "path": str(path)}

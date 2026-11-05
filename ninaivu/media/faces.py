@@ -36,6 +36,7 @@ matching rules can be tested without a model on disk.
 from __future__ import annotations
 
 import hashlib
+import http.client
 import logging
 import shutil
 import threading
@@ -264,7 +265,9 @@ def fetch_models(state_dir: Path | None = None, *, force: bool = False,
                 continue
             tmp.replace(path)
             result["downloaded"].append(spec["file"])
-        except (urllib.error.URLError, OSError, TimeoutError) as exc:
+        except (urllib.error.URLError, OSError, TimeoutError, http.client.HTTPException) as exc:
+            # HTTPException: a download cut short mid-body (IncompleteRead) is
+            # not an OSError; it escaped and left the .part file behind.
             tmp.unlink(missing_ok=True)
             result["errors"].append(f"{spec['file']}: {exc}")
 
