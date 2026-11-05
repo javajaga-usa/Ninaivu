@@ -16,8 +16,12 @@ A damaged database is first copied aside, unchanged, as
    read, table by table, skipping over unreadable stretches; then the
    indexes and triggers, and the photo search rebuilt from the photographs.
 
-When neither gives a sound database the original is left as it was and the
-console says so: a backup is the way back then (Backup & health).
+Each repaired database must pass the full ``integrity_check`` before it is
+used. When neither step gives one that does, the original is put back exactly
+as it was and the console says so. Restoring from a backup is then the way
+back, and it is left to the administrator (Backup & health): it would undo
+everything done since that backup, which only a person can weigh. Repairing
+needs room for two more copies of the database; without it nothing is changed.
 """
 from __future__ import annotations
 
@@ -58,10 +62,35 @@ def _record(path: Path) -> dict:
     return data if isinstance(data, dict) else {}
 
 
+def _sync_folder(folder: Path) -> None:
+    """Make a rename in *folder* durable (POSIX; Windows has no folder sync)."""
+    if os.name == "nt":
+        return
+    try:
+        handle = os.open(folder, os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(handle)
+    except OSError:
+        pass
+    finally:
+        os.close(handle)
+
+
+def _sync_file(path: Path) -> None:
+    with path.open("rb+") as stream:
+        os.fsync(stream.fileno())
+
+
 def _write(path: Path, value: dict) -> None:
     temporary = path.with_name(path.name + ".tmp")
-    temporary.write_text(json.dumps(value), encoding="utf-8")
+    with temporary.open("w", encoding="utf-8") as stream:
+        json.dump(value, stream)
+        stream.flush()
+        os.fsync(stream.fileno())
     os.replace(temporary, path)
+    _sync_folder(path.parent)
 
 
 def ask(state: Path | str, reason: str, detail: str = "") -> None:
@@ -125,14 +154,30 @@ def watch(state: Path | str) -> Watch:
 # Checking
 
 
-def check(path: Path) -> list[str]:
-    """What is wrong with the database at *path*: nothing, when it is sound."""
+def check(path: Path, *, thorough: bool = False) -> list[str]:
+    """What is wrong with the database at *path*: nothing, when it is sound.
+
+    ``quick_check`` when looking for damage: it reads every page but does not
+    compare indexes with their tables, so it is quick enough for a start.
+    *thorough*, after a repair, is the full ``integrity_check``, which does.
+    """
+    pragma = "integrity_check" if thorough else "quick_check"
     try:
         with closing(sqlite3.connect(path, timeout=60)) as conn:
-            rows = [str(row[0]) for row in conn.execute(f"PRAGMA quick_check({_SAMPLE})")]
+            rows = [str(row[0]) for row in conn.execute(f"PRAGMA {pragma}({_SAMPLE})")]
     except sqlite3.DatabaseError as exc:
         return [str(exc)]
     return [] if rows == ["ok"] else rows
+
+
+def _orphans(path: Path) -> int:
+    """Rows whose parent row was lost in a rebuild (``foreign_key_check``):
+    reported, not removed; Ninaivu's own tidying takes care of them."""
+    try:
+        with closing(sqlite3.connect(path, timeout=60)) as conn:
+            return len(conn.execute("PRAGMA foreign_key_check").fetchall())
+    except sqlite3.DatabaseError:
+        return 0
 
 
 def _companions(path: Path) -> list[Path]:
@@ -155,7 +200,25 @@ def _set_aside(path: Path) -> Path:
     for item in (path, *_companions(path)):
         if item.exists():
             shutil.copy2(item, aside / item.name)
+            _sync_file(aside / item.name)
+            # Nothing is changed until the copy is known to be the original.
+            if _sha256(aside / item.name) != _sha256(item):
+                raise OSError(f"the copy of {item.name} set aside does not match it")
+    _sync_folder(aside)
+    _sync_folder(path.parent)
     return aside
+
+
+def _sha256(path: Path) -> bytes:
+    import hashlib
+    with path.open("rb") as stream:
+        return hashlib.file_digest(stream, "sha256").digest()
+
+
+def _room(path: Path) -> bool:
+    """Room for the copy set aside and a rebuilt file beside the original."""
+    size = sum(p.stat().st_size for p in (path, *_companions(path)) if p.exists())
+    return shutil.disk_usage(path.parent).free > 2 * size + 64 * 1024 * 1024
 
 
 def _quote(name: str) -> str:
@@ -173,7 +236,7 @@ def _reindex(path: Path) -> list[str]:
             conn.commit()
     except sqlite3.DatabaseError as exc:
         return [str(exc)]
-    return check(path)
+    return check(path, thorough=True)
 
 
 def _salvage(old: sqlite3.Connection, new: sqlite3.Connection, table: str,
@@ -303,26 +366,36 @@ def _rebuild(path: Path, tell: Tell) -> dict:
     if report["problems"]:
         new.unlink(missing_ok=True)
         return report
-    left = check(new)
+    left = check(new, thorough=True)
     if left:
         report["problems"] = left
         new.unlink(missing_ok=True)
         return report
+    report["orphans"] = _orphans(new)
+    # Written without a journal for speed: on the disk before it takes the
+    # original's place, and the old journal never applied to it.
+    _sync_file(new)
     for item in _companions(path):
         item.unlink(missing_ok=True)
     os.replace(new, path)
+    _sync_folder(path.parent)
     return report
 
 
 def repair(path: Path, problems: list[str], tell: Tell = lambda _what: None) -> dict:
     """Repair the damaged database at *path*, keeping the original aside."""
     result: dict = {"name": path.name, "ok": False, "problems": problems[:5], "how": None}
+    if not _room(path):
+        result["left"] = ["There is not enough free space beside it to keep the damaged "
+                          "original and build a repaired copy. Nothing was changed."]
+        _say(f"{path.name} is damaged, but there is no room to repair it safely; nothing changed")
+        return result
     aside = _set_aside(path)
     result["damaged_copy"] = str(aside)
     _say(f"{path.name} is damaged ({'; '.join(problems[:3])}); the original is kept in {aside}")
     tell(f"repairing the index: {path.name}")
     if not _reindex(path):
-        result.update(ok=True, how="reindex")
+        result.update(ok=True, how="reindex", orphans=_orphans(path))
         _say(f"{path.name} repaired by rebuilding its indexes")
         return result
     try:
@@ -336,15 +409,18 @@ def repair(path: Path, problems: list[str], tell: Tell = lambda _what: None) -> 
             item.unlink(missing_ok=True)
             if (aside / item.name).exists():
                 shutil.copy2(aside / item.name, item)
+        _sync_file(path)
+        _sync_folder(path.parent)
         result["left"] = report["problems"][:5]
         _say(f"{path.name} could not be repaired: {'; '.join(report['problems'][:3])}")
         return result
     result.update(ok=True, how="rebuild", rows=sum(report["tables"].values()),
-                  skipped=report["skipped"])
+                  skipped=report["skipped"], orphans=report.get("orphans", 0))
     if path.name == "index.db":
         _rebuild_search_later(path)
     _say(f"{path.name} rebuilt into a fresh file: {result['rows']} rows"
-         + (f", {report['skipped']} unreadable stretches skipped" if report["skipped"] else ""))
+         + (f", {report['skipped']} unreadable stretches skipped" if report["skipped"] else "")
+         + (f", {result['orphans']} rows whose parent row was lost" if result["orphans"] else ""))
     return result
 
 

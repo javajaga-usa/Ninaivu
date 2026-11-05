@@ -107,6 +107,17 @@ def write(path: Path, value: dict) -> None:
         stream.flush()
         os.fsync(stream.fileno())
     os.replace(temporary, path)
+    # The rename itself, durable too: the forwarding note above all, which
+    # says where the index is after a power cut.
+    if os.name != 'nt':
+        try:
+            handle = os.open(path.parent, os.O_RDONLY)
+            try:
+                os.fsync(handle)
+            finally:
+                os.close(handle)
+        except OSError:
+            pass
 
 
 # --------------------------------------------------------------------------

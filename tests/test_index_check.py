@@ -161,6 +161,53 @@ class CannotBeRepaired(Base):
         self.assertTrue(Path(result['databases'][0]['damaged_copy']).is_dir())
 
 
+@unittest.skipUnless(DBSTAT, 'needs SQLite with dbstat to aim the damage')
+class Safeguards(Base):
+    def test_without_room_for_a_safe_repair_nothing_is_changed(self):
+        path = self.make()
+        self.damage(path, 'assets')
+        before = path.read_bytes()
+        with patch.object(index_check.shutil, 'disk_usage', return_value=SimpleNamespace(free=1)):
+            result = index_check.run(self.state)
+        self.assertFalse(result['ok'])
+        self.assertIn('not enough free space', result['databases'][0]['left'][0])
+        self.assertEqual(path.read_bytes(), before)
+        self.assertEqual(list(self.state.glob('*.damaged-*')), [])
+
+    def test_a_copy_set_aside_that_does_not_match_stops_the_repair(self):
+        path = self.make()
+        self.damage(path, 'assets')
+        before = path.read_bytes()
+        real = index_check._sha256
+        with patch.object(index_check, '_sha256',
+                          side_effect=lambda p: b'other' if '.damaged-' in str(p) else real(p)):
+            result = index_check.run(self.state)
+        self.assertFalse(result['ok'])
+        self.assertEqual(path.read_bytes(), before)
+
+    def test_a_repaired_database_passes_the_full_integrity_check(self):
+        path = self.make()
+        self.damage(path, 'assets_path')
+        index_check.run(self.state)
+        with closing(sqlite3.connect(path)) as conn:
+            self.assertEqual(conn.execute('PRAGMA integrity_check').fetchall(), [('ok',)])
+
+    def test_rows_that_lost_their_parent_are_counted(self):
+        path = self.state / 'index.db'
+        with closing(sqlite3.connect(path)) as conn:
+            conn.executescript("""
+                CREATE TABLE people(id INTEGER PRIMARY KEY, name TEXT);
+                CREATE TABLE faces(id INTEGER PRIMARY KEY, person INTEGER REFERENCES people(id), crop TEXT);
+            """)
+            conn.executemany('INSERT INTO people(name) VALUES (?)', [(f'person {i} ' * 20,) for i in range(5000)])
+            conn.executemany('INSERT INTO faces(person, crop) VALUES (?, ?)', [(i % 5000 + 1, 'c') for i in range(5000)])
+            conn.commit()
+        self.damage(path, 'people')
+        result = index_check.run(self.state)
+        self.assertTrue(result['ok'])
+        self.assertGreater(result['databases'][0]['orphans'], 0)
+
+
 class Watching(Base):
     def test_a_logged_damage_asks_for_a_check_once(self):
         watch = index_check.Watch(self.state)

@@ -92,6 +92,44 @@ Thumbnails and other caches can be rebuilt. The household's own work (names on
 faces, albums, visibility, recorded stories, accounts) is in the index and in
 the state folder, which is why the scheduled backups above exist.
 
+## Checking and repairing the index
+
+Ninaivu checks its databases (`index.db`, `archive.db`, `mugil-sent.db`) at
+start, before anything opens them, when there is reason to:
+
+- the index has just moved to another folder;
+- an error such as `database disk image is malformed` was logged while
+  Ninaivu ran (it notices this in its own log);
+- an administrator pressed **Check now and restart** on the console's
+  Migration page.
+
+The check is SQLite's `quick_check`: every page read once, a minute or two on
+a large index. A sound index is left untouched. A damaged database is handled
+the way SQLite recommends:
+
+1. It is copied aside unchanged, as `<name>.damaged-<date>/` in the state
+   folder, and the copy is compared with the original before anything else
+   happens. Only the newest such copy is kept.
+2. `REINDEX` rebuilds damaged indexes from their tables.
+3. If that is not enough, the database is rebuilt into a fresh file: the
+   schema, then every row that can still be read, with its id, table by
+   table, stepping over unreadable stretches; then indexes and triggers, and
+   the photo search is rebuilt from the photographs.
+4. A repaired database is used only if it passes the full `integrity_check`.
+   Rows whose parent row was lost are counted (`foreign_key_check`) and
+   reported.
+
+Photographs still in the library that lost their row come back with the next
+scan; names on faces, captions or albums in an unreadable stretch do not.
+When no repair passes, the original is put back exactly as it was, and the
+console says so. **Restore** a backup then (above). Ninaivu never restores a
+backup by itself, as that undoes everything since the backup.
+
+Repairing needs room for two more copies of the database beside it; without
+that room nothing is changed and the console says why. The Control Panel
+shows each step while it runs (`checking the index`, `repairing the index`).
+Delete the `.damaged-` folder once Ninaivu works as it should.
+
 ## Restore procedure
 
 1. Stop Ninaivu and disable automatic restarts for the duration of the restore.

@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Moving the index
+
+- **A move that meets one bad file no longer starts over.** A file that reads back differently from the new folder is copied once more; if it still differs, the console says whether the current disk or the new drive is at fault. What was copied is kept, and moving to the same folder again continues from it.
+- **An empty folder made beforehand, or a copy made by hand, is accepted.** Only what is missing or different is copied; out-of-date files in the copy (an old journal, a run file) are removed. Moving back to the folder the index came from works too.
+- **Permissions, free space and links are checked before Ninaivu restarts**, so a restart is not spent on a move that cannot work.
+- **Safe while other programs write.** Ninaivu's own work (describing, scanning, consolidating, backups, sending to the Secondary) does not run during a move and resumes after it. On Linux a program still writing in the index folder is waited for, up to five minutes; files that change during the copy are copied again.
+- **The move says how far it has got**: the Control Panel shows copying and checking with a percentage, and no longer gives up on a long move after an hour. Every step is in the server log.
+- **After a move every start uses the new folder**, for the AI models and the Control Panel's files too, not only the start that moved it. The stop command finds a moved index.
+- **The console's status is right**: the current folder and its free space, what forwards to it, a waiting move, the last move with its date, or a failure with where it tried. It waits through the restart and shows the result by itself. Records copied in from another folder are ignored.
+
+### Checking and repairing the index
+
+- **A damaged index is found and repaired at start.** After a move, after an error such as "database disk image is malformed" was logged, or when asked from the console (Migration → Check now and restart), Ninaivu checks its databases before opening them. A damaged one is copied aside unchanged, then repaired: its indexes rebuilt, or the whole database rebuilt from everything still readable, keeping photo ids. A repair is used only if it passes SQLite's full integrity check; otherwise the original is put back as it was and the console points to Backup & health. A backup is never restored without the administrator.
+
 ## 3.6.0 — 4 November 2026
 
 ### Moving the index
