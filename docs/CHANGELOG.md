@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Quicker copies and checks, and background work that keeps going (audit of 5 November)
+
+- **The copy before an update, and every bundle, is compressed on several cores.** It stays level 9 and within about 0.2% of the old size, and is still one ordinary gzip file, so every Ninaivu, older ones too, restores it. On one core this was most of the update copy's eight minutes.
+- **Checking a bundle reads it once instead of three times**: the daily check, *Go back*, and restoring the index from Google Drive. Checksums during a check are worked out on several threads, a few files per thread at a time (a million-file export no longer queues every file at once), and the first mismatch stops the rest.
+- **A restore from Google Drive that fails its check leaves nothing behind**, where a retry used to take the half-checked index for a checked one.
+- ***Go back* says "Nothing was moved" for a damaged bundle** instead of crashing.
+- **Background checks no longer stop for good on one bad answer.** On the Pi, one garbled reply from the Mac mini ended its checks on whether the mini was awake; an unexpected error in the archive health check ended every later daily check, silently. Both now log it and try again.
+- **A model download cut off part-way removes its `.part` file** (77 MB left behind), and **a garbled reply from the notification webhook no longer stops the email** going out.
+- **Two computers:** the Primary no longer keeps a lock in memory for every original it ever fetched from the Secondary, and tidying fetched originals no longer removes a folder another download is still writing into, or gives up when a folder goes from under it.
+
 ### A progress card in the Control Panel
 
 - **Whatever holds up a start shows how far it has got**, in a card under the Control Panel's buttons: the step, a bar and a percentage, how long so far and, once it can be judged, the time left. It covers a restart (the old server finishing what it has in hand, then the new start), an index moved or switched to another folder, one brought in from another computer, the copy before an update, and a check or repair of the index, whose bar now moves within each database rather than only between them. A start or restart begun from the console, the tray or at sign-in is followed as well as one begun in the panel. Where a step cannot say how far it has got, the bar moves without filling rather than showing a made-up figure. It replaces the thin line that only moved.

@@ -26,6 +26,7 @@ for network access" on in its Energy settings.
 
 from __future__ import annotations
 
+import http.client
 import logging
 import re
 import socket
@@ -108,7 +109,9 @@ class Front:
         try:
             with self._open(f"{self.primary}/healthz", timeout=PROBE_TIMEOUT) as answer:
                 awake = 200 <= getattr(answer, "status", 200) < 300
-        except (urllib.error.URLError, OSError, ValueError):
+        except (urllib.error.URLError, OSError, ValueError, http.client.HTTPException):
+            # HTTPException too: a garbled answer (BadStatusLine) is none of
+            # the others, and escaping here ended the probing thread for good.
             awake = False
         if awake != self._awake and self._awake is not None:
             log.info("the Mac mini is %s", "awake: sending people to it" if awake
@@ -130,9 +133,18 @@ class Front:
         self._thread.start()
 
     def _loop(self) -> None:
-        self.look()
+        self._look_safely()
         while not self._stop.wait(PROBE_EVERY):
+            self._look_safely()
+
+    def _look_safely(self) -> None:
+        """One probe that cannot end the loop: anything a probe raises is
+        logged, and the mini counts as not answering until the next one."""
+        try:
             self.look()
+        except Exception:                                   # noqa: BLE001
+            log.exception("could not ask the Mac mini whether it is awake")
+            self._awake = False
 
     def stop(self) -> None:
         self._stop.set()

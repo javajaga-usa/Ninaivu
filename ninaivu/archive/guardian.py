@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import shutil
 import sqlite3
@@ -14,6 +15,8 @@ from typing import Callable
 from . import database as db
 from .safety import long_path
 from .scanner import hash_file
+
+log = logging.getLogger(__name__)
 
 
 class ArchiveGuardian:
@@ -58,14 +61,25 @@ class ArchiveGuardian:
         if self._stop.wait(5):
             return
         while not self._stop.is_set():
-            last = float(self._state.get('checked_at') or 0)
-            # Soon for what may put itself right within minutes: a check that
-            # could not finish, an unplugged drive, and a nearly full disk
-            # (for its space only: sample_due keeps the read-back daily).
-            retry = 300 if (self._state.get('retry_soon')
-                            or self._state.get('status') in ('no-archive', 'warning')) else self.interval
-            if time.time() - last >= retry and not self.is_archive_running():
-                self.run_once(sample=self.sample_due())
+            retry = 300
+            try:
+                last = float(self._state.get('checked_at') or 0)
+                # Soon for what may put itself right within minutes: a check that
+                # could not finish, an unplugged drive, and a nearly full disk
+                # (for its space only: sample_due keeps the read-back daily).
+                retry = 300 if (self._state.get('retry_soon')
+                                or self._state.get('status') in ('no-archive', 'warning')) \
+                    else self.interval
+                if time.time() - last >= retry and not self.is_archive_running():
+                    self.run_once(sample=self.sample_due())
+            except Exception:                               # noqa: BLE001
+                # run_once keeps the database and the disk to themselves;
+                # anything else (a damaged row, a bad setting) ended this
+                # thread, and with it every daily check, without a word.
+                log.exception('archive health check failed; trying again in 5 minutes')
+                with self._lock:
+                    self._state = {**self._state, 'retry_soon': True}
+                retry = 300
             self._stop.wait(min(300, max(5, retry)))
 
     def sample_due(self) -> bool:

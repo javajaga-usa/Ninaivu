@@ -23,8 +23,11 @@ from __future__ import annotations
 
 from .. import __version__
 from ..utils.files import sha256_file
+from ..utils.pgzip import ParallelGzipWriter
 
+import collections
 import hashlib
+import itertools
 import json
 import logging
 import os
@@ -40,7 +43,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 from datetime import datetime
 from pathlib import Path, PurePosixPath
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
 
 log = logging.getLogger(__name__)
 
@@ -411,6 +414,32 @@ def _full_sizes(state_dir: Path) -> tuple[int, int]:
 #: How many files are summed at once while an export is checked.
 HASH_WORKERS = max(2, min(8, os.cpu_count() or 2))
 
+
+def _sums(paths: list[Path]) -> Iterator[str]:
+    """The SHA-256 of each of *paths*, in their order, summed on
+    :data:`HASH_WORKERS` threads.
+
+    A few per thread are in hand at a time. ``pool.map`` would queue every
+    file at once: a million of them on a large export, each with its own
+    waiting task. Closed early (the first mismatch), what is queued is
+    cancelled and only the sums under way are waited for. Use it with
+    ``contextlib.closing`` so that happens at once.
+    """
+    ahead = iter(paths)
+    with ThreadPoolExecutor(max_workers=HASH_WORKERS, thread_name_prefix="ninaivu-sum") as pool:
+        pending = collections.deque(pool.submit(sha256_file, path)
+                                    for path in itertools.islice(ahead, HASH_WORKERS * 4))
+        try:
+            while pending:
+                digest = pending.popleft().result()
+                following = next(ahead, None)
+                if following is not None:
+                    pending.append(pool.submit(sha256_file, following))
+                yield digest
+        finally:
+            for waiting in pending:
+                waiting.cancel()
+
 #: How many files go by between two reports of how far a step is.
 REPORT_EVERY = 200
 
@@ -579,8 +608,8 @@ def _snapshot(state_dir: Path | str, out_dir: Path | str,
         tally.start("checking")
         # Several at a time: a full export is hundreds of thousands of small
         # thumbnails, where the time goes in opening each one, not in the sum.
-        with ThreadPoolExecutor(max_workers=HASH_WORKERS) as pool:
-            for path, digest in zip(everything, pool.map(sha256_file, everything)):
+        with closing(_sums(everything)) as sums:
+            for path, digest in zip(everything, sums):
                 manifest["files"][path.relative_to(staged).as_posix()] = {
                     "size": sizes[path], "sha256": digest}
                 tally.add(sizes[path])
@@ -615,9 +644,13 @@ def _snapshot(state_dir: Path | str, out_dir: Path | str,
                 # already: the fastest level costs nothing in size. And no
                 # hard-link members (dereference): two names for one file in
                 # the state folder would make one, and a restore refuses them.
-                with tarfile.open(fileobj=output, mode="w:gz",
-                                  compresslevel=1 if full else 9,
-                                  dereference=full) as tar:
+                # Deflated on several cores (utils/pgzip.py): level 9 on one
+                # was most of the update copy's eight minutes. Still one
+                # gzip member, so every reader, old Ninaivus too, reads it.
+                with ParallelGzipWriter(output, 1 if full else 9,
+                                        workers=HASH_WORKERS) as packer, \
+                        tarfile.open(fileobj=packer, mode="w|",
+                                     dereference=full) as tar:
                     tar.add(staged, arcname="state", filter=packed)
                 output.flush()
                 os.fsync(output.fileno())
@@ -719,12 +752,24 @@ def verify_state(state: Path, checked: Callable[[int], None] | None = None,
             raise ValueError(f"Invalid manifest path: {name}")
         if not isinstance(meta, dict) or type(meta.get("size")) is not int:
             raise ValueError(f"Invalid file metadata: {name}")
-        path = state / name
-        if path.stat().st_size != meta["size"] or (
-                hashes and sha256_file(path) != meta.get("sha256")):
+        if (state / name).stat().st_size != meta["size"]:
             raise ValueError(f"Checksum or size mismatch: {name}")
-        if checked is not None:
-            checked(meta["size"])
+    names = list(files)
+    if hashes:
+        # Several at a time, as the export sums them (_snapshot): the time in
+        # a few hundred thousand thumbnails goes in opening each one. Matched
+        # in the manifest's order, so *checked* hears them as before.
+        # The first mismatch ends it: what was still queued is cancelled, not
+        # summed to the end before the error is raised.
+        with closing(_sums([state / name for name in names])) as sums:
+            for name, digest in zip(names, sums):
+                if digest != files[name].get("sha256"):
+                    raise ValueError(f"Checksum or size mismatch: {name}")
+                if checked is not None:
+                    checked(files[name]["size"])
+    elif checked is not None:
+        for name in names:
+            checked(files[name]["size"])
     for name in DATABASES:
         path = state / name
         if path.is_file():
@@ -854,8 +899,10 @@ def verify_bundle(archive: Path | str) -> dict[str, Any]:
                               "error": None, "assets": None, "profiles": None}
     try:
         with tempfile.TemporaryDirectory(prefix="ninaivu_verify_") as tmp:
-            state = extract(archive, Path(tmp))
-            verify_state(state)
+            # One pass over the bundle: the same checks as extract() and
+            # verify_state() together, which read it three times over — a
+            # daily check of a large export took most of an hour that way.
+            state = extract_verified(archive, Path(tmp) / "restore")
             index = state / "index.db"
             with closing(sqlite3.connect(index.as_uri() + "?mode=ro", uri=True)) as conn:
                 tables = {r[0] for r in conn.execute(
