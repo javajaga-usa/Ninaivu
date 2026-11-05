@@ -311,8 +311,29 @@ REPAIR_STEP = 'repairing the index'
 #: How long a stop is waited on. The server finishes the files in hand and
 #: checkpoints the index first; the console's restart helper waits as long.
 STOP_SECONDS = 20 * 60
-#: How often the panel is told how a long wait is going.
-PROGRESS_EVERY = 5
+#: How often the panel is told how a long wait is going: often enough for its
+#: progress bar to move as the server's note does.
+PROGRESS_EVERY = 1
+
+
+def under_way(state_dir):
+    """The start or restart going on now, wherever it was begun, or None.
+
+    ``{'kind': 'starting' | 'restarting', 'step', 'progress', 'since'}``:
+    the server's own start note first, as it says the most; else the restart
+    helper's (desktop/relaunch.py), from the console's Restart to the new
+    server's first word. ``progress`` is between 0 and 1, or None when the
+    step cannot say how far it has got. Only a note whose process is still
+    there counts.
+    """
+    for kind, note in (('starting', starting.read(state_dir)),
+                       ('restarting', starting.RESTARTING.read(state_dir))):
+        if note and _pid_alive(note.get('pid')):
+            share = note.get('progress')
+            return {'kind': kind, 'step': str(note.get('step') or kind),
+                    'progress': float(share) if isinstance(share, (int, float)) else None,
+                    'since': float(note.get('since') or time.time())}
+    return None
 
 
 class Controller:
@@ -536,6 +557,7 @@ class Controller:
         began = clock()
         heard = None           # when the server last said where it was
         step = None
+        share = None           # how far that step has got, when it says
         told = None
         while True:
             if self.record():
@@ -553,7 +575,11 @@ class Controller:
             # A note left by an earlier start is not this one's.
             if note and float(note.get('since') or 0) >= launched - 5:
                 heard = now
+                if (note.get('step') or step) != step:
+                    share = None                 # a new step starts its own bar
                 step = note.get('step') or step
+                if isinstance(note.get('progress'), (int, float)):
+                    share = float(note['progress'])
             waited = now - began
             if heard is None and waited > FIRST_WORD_SECONDS:
                 raise RuntimeError(f'Ninaivu has not said how its start is going for '
@@ -574,7 +600,7 @@ class Controller:
                                    f'status, or use View logs.')
             if self.on_progress and (told is None or now - told >= PROGRESS_EVERY):
                 told = now
-                self.on_progress(step or 'starting', waited)
+                self.on_progress(step or 'starting', waited, share)
             sleep(.5)
 
     def failed_start(self):
@@ -652,7 +678,7 @@ class Controller:
         while time.monotonic() - began < STOP_SECONDS:
             if self.on_progress and time.monotonic() - told >= PROGRESS_EVERY:
                 told = time.monotonic()
-                self.on_progress('finishing what is in hand', told - began)
+                self.on_progress('finishing what is in hand', told - began, None)
             if not self.record():
                 # On Windows the venv launcher can outlive the server briefly.
                 # Restart must wait for that owned launcher instead of reporting
@@ -784,7 +810,8 @@ class Monitor:
                     'ram_used':0, 'ram_total':0, 'server_cpu':0.0,
                     'server_ram':0,'threads':0,'battery':None,
                     'plugged':None,'disk_free':0,
-                    'uptime':max(0,time.time()-record.get('started_at',time.time())) if record else 0}
+                    'uptime':max(0,time.time()-record.get('started_at',time.time())) if record else 0,
+                    'under_way':self._under_way()}
         now=time.monotonic();elapsed=max(.01,now-self.last);self.last=now
         processes=[]
         if record:
@@ -811,7 +838,15 @@ class Monitor:
                 'server_cpu':min(100,cpu/(_reading(psutil.cpu_count) or 1)),
                 'server_ram':rss,'threads':threads,'battery':getattr(battery,'percent',None),
                 'plugged':getattr(battery,'power_plugged',None),'disk_free':getattr(disk,'free',0),
-                'uptime':max(0,time.time()-record.get('started_at',time.time())) if record else 0}
+                'uptime':max(0,time.time()-record.get('started_at',time.time())) if record else 0,
+                'under_way':self._under_way()}
+
+    def _under_way(self):
+        """A start or restart this panel can follow (:func:`under_way`)."""
+        try:
+            return under_way(self.controller.cfg.state_dir)
+        except (OSError, ValueError, AttributeError):
+            return None
 
 
 def _reading(read, default=None):

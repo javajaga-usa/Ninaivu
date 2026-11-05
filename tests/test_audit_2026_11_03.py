@@ -34,7 +34,7 @@ def test_the_copy_before_an_update_names_each_stage_once(tmp_path, monkeypatch):
     state.mkdir()
     (state / "index.db").write_bytes(b"")
     steps = []
-    monkeypatch.setattr(starting, "step", steps.append)
+    monkeypatch.setattr(starting, "step", lambda what, *_counts: steps.append(what))
     monkeypatch.setattr(upgrade, "schemas", lambda _: {})
     made = tmp_path / "copy.tar.gz"
 

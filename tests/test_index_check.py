@@ -260,7 +260,7 @@ class AfterAMove(Base):
         path = self.make()
         if DBSTAT:
             self.damage(path, 'assets')
-        index_check.run(self.state, tell=told.append)
+        index_check.run(self.state, tell=lambda what, *_counts: told.append(what))
         self.assertTrue(told[0].startswith(main.CHECK_STEP))
         if DBSTAT:
             self.assertTrue(any(step.startswith(control.REPAIR_STEP) for step in told))

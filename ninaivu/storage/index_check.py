@@ -46,7 +46,17 @@ _SAMPLE = 20
 _CHUNK = 500
 
 log = logging.getLogger(__name__)
-Tell = Callable[[str], None]
+#: ``tell(what, done=None, total=None)``: the step in words, and how far it
+#: has got when that is known (server/starting.py, for the Control Panel's bar).
+Tell = Callable[..., None]
+#: How many of SQLite's progress steps a check takes for each page of the
+#: database, before a check here has measured it: what a table of short rows
+#: takes, the most there is, so that a first estimate runs ahead of nothing.
+#: Each check measures its own and keeps it (``pace`` in the result) for the
+#: next one.
+PACE = {"quick_check": 62.0, "integrity_check": 195.0}
+#: SQLite calls the progress handler once every this many of its steps.
+_STEPS = 1000
 
 
 def _say(message: str) -> None:
@@ -154,20 +164,58 @@ def watch(state: Path | str) -> Watch:
 # Checking
 
 
-def check(path: Path, *, thorough: bool = False) -> list[str]:
+def check(path: Path, *, thorough: bool = False,
+          progress: Callable[[float], None] | None = None,
+          pace: dict | None = None, measured: dict | None = None) -> list[str]:
     """What is wrong with the database at *path*: nothing, when it is sound.
 
     ``quick_check`` when looking for damage: it reads every page but does not
     compare indexes with their tables, so it is quick enough for a start.
     *thorough*, after a repair, is the full ``integrity_check``, which does.
+    *progress* is told how far it has got (:func:`_follow`); *measured* is
+    given the steps a page took, for the *pace* of the next check.
     """
     pragma = "integrity_check" if thorough else "quick_check"
     try:
         with closing(sqlite3.connect(path, timeout=60)) as conn:
+            counted = _follow(conn, pragma, progress, pace) if progress else None
             rows = [str(row[0]) for row in conn.execute(f"PRAGMA {pragma}({_SAMPLE})")]
+            if counted and measured is not None and counted["pages"]:
+                measured[pragma] = round(counted["steps"] * _STEPS / counted["pages"], 1)
     except sqlite3.DatabaseError as exc:
         return [str(exc)]
     return [] if rows == ["ok"] else rows
+
+
+def _follow(conn: sqlite3.Connection, pragma: str, progress: Callable[[float], None],
+            pace: dict | None) -> dict:
+    """Tell *progress* how far the check on *conn* has got, between 0 and 1.
+
+    SQLite has no count of a check's steps beforehand: the pages of the
+    database times the steps a page took the last time (*pace*), or
+    :data:`PACE` before there was a last time. Held short of the end until
+    the check is over: a bar that sat full while the check went on would say
+    something false.
+    """
+    pages = int(conn.execute("PRAGMA page_count").fetchone()[0] or 0)
+    try:
+        per_page = float((pace or {}).get(pragma) or PACE[pragma])
+    except (TypeError, ValueError):
+        per_page = PACE[pragma]
+    expected = max(1.0, pages * per_page / _STEPS)
+    counted = {"pages": pages, "steps": 0, "said": -1}
+
+    def handler() -> int:
+        counted["steps"] += 1
+        share = min(0.99, counted["steps"] / expected)
+        percent = int(share * 100)
+        if percent != counted["said"]:
+            counted["said"] = percent
+            progress(share)
+        return 0                                  # never interrupts the check
+    conn.set_progress_handler(handler, _STEPS)
+    progress(0.0)
+    return counted
 
 
 def _orphans(path: Path) -> int:
@@ -328,7 +376,8 @@ def _rebuild(path: Path, tell: Tell) -> dict:
                     tables.append(name)
         conn.commit()
         for number, table in enumerate(tables, 1):
-            tell(f"repairing the index: {path.name}, table {number} of {len(tables)}")
+            tell(f"repairing the index: {path.name}, table {number} of {len(tables)}",
+                 number - 1, len(tables))
             info = conn.execute(f"PRAGMA table_info({_quote(table)})").fetchall()
             columns = [row[1] for row in info]
             keys = [row for row in info if row[5]]
@@ -382,7 +431,7 @@ def _rebuild(path: Path, tell: Tell) -> dict:
     return report
 
 
-def repair(path: Path, problems: list[str], tell: Tell = lambda _what: None) -> dict:
+def repair(path: Path, problems: list[str], tell: Tell = lambda *_said: None) -> dict:
     """Repair the damaged database at *path*, keeping the original aside."""
     result: dict = {"name": path.name, "ok": False, "problems": problems[:5], "how": None}
     if not _room(path):
@@ -435,19 +484,47 @@ def _rebuild_search_later(path: Path) -> None:
         pass
 
 
-def run(state: Path | str, tell: Tell = lambda _what: None) -> dict:
+def _size(path: Path) -> int:
+    """*path* and its journal, in bytes (at least one, so each has a share)."""
+    total = 0
+    for item in (path, *_companions(path)):
+        try:
+            total += item.stat().st_size
+        except OSError:
+            pass
+    return max(1, total)
+
+
+def run(state: Path | str, tell: Tell = lambda *_said: None) -> dict:
     """Check every database of the index folder, and repair what is damaged."""
     state = Path(state)
     why = wanted(state) or {"reason": "asked"}
     began = time.time()
     _say(f"checking the index in {state} ({why.get('reason')})")
     databases = []
-    for name in DATABASES:
-        path = state / name
-        if not path.is_file():
-            continue
-        tell(f"checking the index: {name}")
-        problems = check(path)
+    present = [(name, state / name) for name in DATABASES if (state / name).is_file()]
+    # One bar for the whole check, each database its share by size: the
+    # index is most of it.
+    sizes = {name: _size(path) for name, path in present}
+    whole = sum(sizes.values()) or 1
+    before = (_record(state / RESULT) or {}).get("pace")
+    pace = before if isinstance(before, dict) else {}
+    measured_all: dict[str, dict] = {}
+    done = 0
+    for name, path in present:
+        words = f"checking the index: {name}"
+        share = sizes[name]
+
+        def told(part: float, _words: str = words, _done: int = done, _share: int = share) -> None:
+            tell(_words, _done + part * _share, whole)
+        tell(words, done, whole)
+        measured: dict = {}
+        own = pace.get(name)
+        problems = check(path, progress=told, pace=own if isinstance(own, dict) else None,
+                         measured=measured)
+        done += share
+        if measured:
+            measured_all[name] = measured
         if not problems:
             databases.append({"name": name, "ok": True, "how": None})
             continue
@@ -460,7 +537,8 @@ def run(state: Path | str, tell: Tell = lambda _what: None) -> dict:
     result = {"at": time.time(), "seconds": round(time.time() - began, 1),
               "reason": why.get("reason"), "detail": why.get("detail", ""),
               "databases": databases, "ok": all(d["ok"] for d in databases),
-              "repaired": [d["name"] for d in databases if d.get("how")]}
+              "repaired": [d["name"] for d in databases if d.get("how")],
+              "pace": {**pace, **measured_all}}
     _write(state / RESULT, result)
     (state / WANTED).unlink(missing_ok=True)
     _say("all sound" if result["ok"] and not result["repaired"] else

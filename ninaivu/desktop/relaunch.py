@@ -99,12 +99,19 @@ def main(argv=None):
 
     controller = Controller()
     said = [None]
+    # The Control Panel follows this restart by this note, from now until the
+    # new server writes its run file (server/starting.py): in between, the
+    # old server finishing what it has in hand and the new one's first word.
+    from ..server import starting
+    starting.RESTARTING.begin(controller.cfg.state_dir, 'waiting for Ninaivu to finish what is in hand')
 
-    def progress(what, _seconds):
+    def progress(what, _seconds, share=None):
         # Into restart.log once per step, so a slow restart says where it was.
         if what != said[0]:
             said[0] = what
             say(f'waiting: {what}')
+        if what == 'finishing what is in hand':
+            starting.RESTARTING.step('waiting for Ninaivu to finish what is in hand')
     controller.on_progress = progress
     # The running server's own mode, not the panel's last saved choice: the
     # server may have been started some other way.
@@ -145,7 +152,11 @@ def main(argv=None):
         # is missing", leaving Ninaivu stopped. This helper runs on the
         # server's own interpreter, which certainly starts it.
         os.environ['NINAIVU_PYTHON'] = sys.executable
-    say(controller.start())
+    starting.RESTARTING.step('starting Ninaivu again')
+    try:
+        say(controller.start())
+    finally:
+        starting.RESTARTING.end()
     return 0
 
 
