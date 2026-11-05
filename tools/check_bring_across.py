@@ -298,9 +298,17 @@ def check(older_archive: Path, newer_archive: Path, work: Path) -> None:
     new_env = where(newer, home)
     new_state = Path(new_env["NINAIVU_STATE_DIR"])
     app_before = program_files(newer)
+    # From 3.6.0 every Linux portable folder keeps the index in ~/.ninaivu, so
+    # an older 3.6.0 or later and this one share it: bringing the library
+    # across moves nothing, and the index stays where it is. Before 3.6.0 the
+    # older folder kept it inside itself, and it moves.
+    shared = old_state.resolve() == new_state.resolve()
+    if shared:
+        print(f"   both keep the index in {new_state}: it stays where it is")
     run_launcher(newer, home, "--bring", str(older))
     expect((new_state / "index.db").is_file(), "the index is in the newer folder")
-    expect(not (old_state / "index.db").exists(), "and no longer in the older one")
+    if not shared:
+        expect(not (old_state / "index.db").exists(), "and no longer in the older one")
     expect((older / "LIBRARY-MOVED.txt").is_file(), "the older folder says where it went")
 
     step("The newer Ninaivu starts on it")
@@ -317,7 +325,8 @@ def check(older_archive: Path, newer_archive: Path, work: Path) -> None:
     step("Go back to the older version")
     run_launcher(newer, home, "--go-back")
     expect((old_state / "index.db").is_file(), "the index is back in the older folder")
-    expect(not (new_state / "index.db").exists(), "and gone from the newer one")
+    if not shared:
+        expect(not (new_state / "index.db").exists(), "and gone from the newer one")
     expect(not (older / "LIBRARY-MOVED.txt").exists(), "the moved note is gone")
     # Put back from the copy only when the newer version changed the index's
     # shape; the same version (a pull request before the version is raised)
