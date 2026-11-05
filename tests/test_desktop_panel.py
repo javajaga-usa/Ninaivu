@@ -455,6 +455,11 @@ def test_switching_the_look_repaints_the_open_window(tmp_path, monkeypatch):
         assert dashboard.log_text.cget("bg") == dark["log_bg"]
         assert dashboard.status_pill.cget("bg") == dark["status_stopped_bg"]
         assert dashboard.style.lookup("TButton", "background") == dark["surface"]
+        # Kept off Tk's thread, so a moment later.
+        deadline = time.monotonic() + 10
+        while (app.theme_preference(Controller(root=tmp_path, cfg=controller.cfg)) != "dark"
+               and time.monotonic() < deadline):
+            time.sleep(0.02)
         assert app.theme_preference(Controller(root=tmp_path, cfg=controller.cfg)) == "dark"
 
         # Back to following the computer, which has meanwhile turned dark.

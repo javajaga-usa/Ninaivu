@@ -52,7 +52,7 @@ from . import portable
 from . import theme
 from . import control
 from .control import UPDATE_ADVICE, Controller, Monitor, read_power
-from .progress import describe_step, heading, percent, remaining
+from .progress import describe_step, heading, may_stop, percent, remaining, stop_warning, stuck_words
 from .logs import LogTail
 from ..utils.resources import budget
 
@@ -266,6 +266,24 @@ if tk is not None:
                              bg='surface')
             self.bar.pack(fill='x', pady=(dashboard._scaled(10), 0))
             self.bar.bind('<Configure>', lambda _e: self.draw())
+            # Under the bar: a warning when nothing has moved for long, and
+            # what can be done about a start. Its own buttons, not the
+            # panel's: those are greyed while the panel waits, and these are
+            # for exactly then.
+            self.foot = paint(tk.Frame(card), bg='surface')
+            self.warning = Words(value='')
+            self.warning_label = paint(tk.Label(self.foot, textvariable=self.warning, font=fonts['small'],
+                                                anchor='w', justify='left'), bg='surface', fg='gold')
+            self.warning_label.pack(side='left', fill='x', expand=True)
+            self.warning_label.bind('<Configure>', lambda e: self.warning_label.configure(
+                wraplength=max(200, e.width)))
+            self.stop_button = ttk.Button(self.foot, text='Stop this start…', command=dashboard.stop_this_start)
+            self.stop_button.pack(side='right')
+            self.logs_button = ttk.Button(self.foot, text='View logs', command=dashboard.open_logs)
+            self.logs_button.pack(side='right', padx=(0, dashboard._scaled(8)))
+            self.footed = False
+            self.stop_asked = False
+            self.moved = (None, 0.0)    # (the step and its figure, when that last changed)
             self.shown = None          # who asked for it: 'panel' or 'follow', or None
             self.target = None         # how far, between 0 and 1, or None
             self.value = 0.0           # what the bar shows, easing towards target
@@ -274,7 +292,7 @@ if tk is not None:
             self.step = None
             self.began = None          # (when, how far) at this step's first word
 
-        def show(self, source, kind, step, share, seconds):
+        def show(self, source, kind, step, share, seconds, step_since=None):
             title, detail = describe_step(step)
             self.heading.set(small_caps(heading(kind, seconds)))
             self.title.set(title)
@@ -286,6 +304,27 @@ if tk is not None:
                 self.began = None if share is None else (now, share)
             self.left.set(remaining(self.began, share, now))
             self.step, self.target = step, share
+            # Stuck: the same step at the same figure for long. A step with no
+            # figure is timed from when the server began it, as it says.
+            wall = time.time()
+            key = (step, None if share is None else round(share, 3))
+            if key != self.moved[0]:
+                self.moved = (key, wall)
+            quiet = wall - (step_since if share is None and step_since else self.moved[1])
+            stuck = quiet > control.STALL_SECONDS
+            self.warning.set(stuck_words(quiet) if stuck else '')
+            stoppable = kind in ('starting', 'restarting') and may_stop(step, stuck)
+            if stoppable and not self.stop_button.winfo_manager():
+                self.stop_button.pack(side='right')
+            elif not stoppable and self.stop_button.winfo_manager():
+                self.stop_button.pack_forget()
+            self.stop_button.configure(state='disabled' if self.stop_asked else 'normal')
+            wanted = stuck or stoppable
+            if wanted and not self.footed:
+                self.foot.pack(fill='x', pady=(self.dashboard._scaled(10), 0))
+            elif not wanted and self.footed:
+                self.foot.pack_forget()
+            self.footed = wanted
             if self.shown is None:
                 self.outer.pack(fill='x', pady=(self.dashboard._scaled(12), 0), after=self.after_widget)
                 self.dashboard._grow_to_fit()
@@ -300,6 +339,8 @@ if tk is not None:
                 return
             self.outer.pack_forget()
             self.shown, self.step, self.target, self.value = None, None, None, 0.0
+            self.stop_asked = False
+            self.moved = (None, 0.0)
 
         def tick(self):
             if self.shown is None:
@@ -356,6 +397,8 @@ class Dashboard:
         self.finished = threading.Event()
         self.busy = False
         self.operation_label = ''
+        self.restart_mode = None     # the mode a restart begun here starts in
+        self.closing = False         # the window was closed (close)
         self.cpu_history = []
         self.cards = {}
         self.buttons = []
@@ -368,6 +411,7 @@ class Dashboard:
         self.theme_choice = tk.StringVar(value=theme_preference(self.controller))
         self.following_system = self.theme_choice.get() == 'system'   # for the thread, which may not read Tk's
         self.system_dark = theme.system_prefers_dark()
+        self.looks_heard = 0          # the system's changes of look seen so far
         self.palette = theme.palette(theme.resolve(self.theme_choice.get(), self.system_dark))
 
         root.title('Ninaivu Control Panel')
@@ -488,7 +532,9 @@ class Dashboard:
         self.button(actions, 'Open the family app', lambda: self.open_in_browser(False))
         self.button(actions, 'Open the console', lambda: self.open_in_browser(True))
 
-        self.endpoints_info = Words(value=self.format_endpoints())
+        # Filled from the first reading: worked out on the reading thread, as
+        # it reads the run file in the index folder (endpoints_text).
+        self.endpoints_info = Words(value='')
         self.endpoints_label = self.paint(
             tk.Label(action_row, textvariable=self.endpoints_info, font=self.fonts['small'], justify='right', anchor='e'),
             bg='bg', fg='text2')
@@ -591,7 +637,7 @@ class Dashboard:
         older_version = portable.can_go_back()
         if older_version:
             self.button(mode_actions, f'Go back to {older_version}…', self.go_back)
-        self._sync_trust_button()
+        self._sync_trust_button({})
         if autostart.supported():
             # So a restart for an update, or after a power cut, brings the
             # family app back without anybody opening Ninaivu.
@@ -617,8 +663,8 @@ class Dashboard:
         threading.Thread(target=self.monitor_loop, daemon=True, name='ninaivu-panel-monitor').start()
         threading.Thread(target=self.power_loop, daemon=True, name='ninaivu-panel-power').start()
         threading.Thread(target=self.appearance_loop, daemon=True, name='ninaivu-panel-appearance').start()
+        threading.Thread(target=self.log_loop, daemon=True, name='ninaivu-panel-logs').start()
         root.after(100, self.pump)
-        root.after(200, self.poll_logs)
 
     # -- the two looks ------------------------------------------------------------
 
@@ -652,13 +698,27 @@ class Dashboard:
         """The switch was pressed: show that look, and keep the choice."""
         choice = self.theme_choice.get()
         self.following_system = choice == 'system'
-        if self.following_system:
-            self.system_dark = theme.system_prefers_dark()
-        try:
-            save_theme_preference(self.controller, choice)
-        except OSError:
-            pass                                           # shown now, just not remembered
         self.apply_theme()
+
+        # Asking the system for its look runs a program, and the choice is
+        # kept in the panel's settings: both off Tk's thread.
+        def keep():
+            dark = theme.system_prefers_dark() if choice == 'system' else None
+            try:
+                save_theme_preference(self.controller, choice)
+            except OSError:
+                pass                                       # shown now, just not remembered
+            return dark
+
+        asked = self.looks_heard
+
+        def then(dark):
+            # Only if the system has not said otherwise since it was asked.
+            if (isinstance(dark, bool) and self.following_system and dark != self.system_dark
+                    and asked == self.looks_heard):
+                self.system_dark = dark
+                self.apply_theme()
+        self.in_background(keep, then, name='ninaivu-panel-look')
 
     def apply_theme(self):
         """Colour everything for the chosen look, in place."""
@@ -896,27 +956,37 @@ class Dashboard:
         """The family app or the console in this computer's browser, and
         Ninaivu started first when it is stopped: a page opened on a stopped
         Ninaivu never loads, and the person pressed Open, not Start."""
-        if self.controller.record():
-            webbrowser.open(self.controller.local_url(admin))
-            return
+        def look():
+            if self.controller.record():
+                webbrowser.open(self.controller.local_url(admin))
+                return True
+            return False
+
+        def then(opened):
+            if opened is True:
+                return
+            if isinstance(opened, Exception):
+                self.notice.set(f'Could not open it: {opened}')
+                return
+            self.run(start_then_open, 'Starting')
 
         def start_then_open():
             message = self.controller.start()
             webbrowser.open(self.controller.local_url(admin))
             return message
 
-        self.run(start_then_open, 'Starting')
+        self.in_background(look, then, name='ninaivu-panel-open')
 
     def mode_line(self):
         return 'Active mode: ' + self.controller.mode.replace('-', ' ').title()
 
-    def _sync_trust_button(self, record=None):
+    def _sync_trust_button(self, record):
         """The certificate button, only while the server runs on HTTPS with
-        Ninaivu's own certificate."""
+        Ninaivu's own certificate. *record* is the run file as last read on
+        the reading thread."""
         button = getattr(self, 'trust_button', None)
         if button is None:
             return
-        record = self.controller.record() if record is None else record
         args = self.controller.settings.get('arguments', [])
         custom = any(a == '--cert' or str(a).startswith('--cert=') for a in args)
         wanted = bool(record) and record.get('scheme') == 'https' and not custom
@@ -926,9 +996,10 @@ class Dashboard:
         elif not wanted and shown:
             button.pack_forget()
 
-    def format_endpoints(self):
-        record = self.controller.record()
-        self._sync_trust_button(record or {})
+    def endpoints_text(self, record):
+        """The line of addresses, for the run file *record* (None: stopped).
+        No Tk here: it reads the index folder's settings, so it is worked out
+        on the reading thread and only shown on Tk's."""
         if record:
             scheme = (record.get('scheme') or 'http').upper()
             port = record.get('port', 443 if scheme == 'HTTPS' else 80)
@@ -1006,6 +1077,12 @@ class Dashboard:
         self.paint(tk.Label(panel, textvariable=self.log_info, font=self.fonts['small']),
                    bg='log_bg', fg='text2').pack(anchor='w', pady=(8, 0))
         self.log_tail = LogTail(self.log_path())
+        self.log_generation = 0
+        self.log_wake = threading.Event()
+        # The Pause box, as a plain value the log thread may read (a Tk
+        # variable may only be read on Tk's thread).
+        self.logs_paused = False
+        self.log_paused.trace_add('write', lambda *_: setattr(self, 'logs_paused', bool(self.log_paused.get())))
 
     def _paint_logs(self, p):
         """The log's colours: errors red, warnings amber, addresses blue."""
@@ -1050,13 +1127,18 @@ class Dashboard:
         self.log_info.set('Copied the lines shown. Look for private paths and names before sharing them.')
 
     def switch_log(self):
+        self.log_generation += 1
         self.log_tail = LogTail(self.log_path())
         self.clear_log_view()
-        self.poll_logs(again=False)
+        self.poll_logs()
 
-    def _update_log_display(self):
+    def _show_log(self, generation, text, exists, error):
+        """What :meth:`log_loop` read, put on the screen (Tk's thread)."""
+        if generation != self.log_generation or self.logs_paused:
+            return
         try:
-            text = self.log_tail.read()
+            if error is not None:
+                raise error
             if text:
                 self.log_text.configure(state='normal')
                 for line in text.splitlines(keepends=True):
@@ -1073,7 +1155,7 @@ class Dashboard:
                 if self.log_follow.get():
                     self.log_text.see('end')
                 self.log_info.set(f"{self.log_source.get()} · Live output · Showing at most 2,000 lines / 200 KB")
-            elif not self.log_tail.path.exists():
+            elif not exists:
                 if self.log_source.get() == 'Server':
                     self.log_info.set('No log yet. A server started from this panel or the tray writes one here.')
                 else:
@@ -1081,13 +1163,26 @@ class Dashboard:
         except OSError as error:
             self.log_info.set(f'Log temporarily unavailable: {error.strerror or "read error"}')
 
+    def log_loop(self):
+        """Reads the log on this thread, every three quarters of a second, and
+        hands what is new to Tk's (:meth:`_show_log`): the log can be on the
+        index's disk, and one that is slow to answer froze the window. Only
+        this thread reads a :class:`LogTail`; one swapped for another log is
+        known by its generation, and what was read from the old one dropped."""
+        while not self.finished.is_set():
+            tail, generation = self.log_tail, self.log_generation
+            if not self.logs_paused:
+                try:
+                    text = tail.read()
+                    self.events.put(('log', (generation, text, bool(text) or tail.path.exists(), None)))
+                except OSError as error:
+                    self.events.put(('log', (generation, '', True, error)))
+            self.log_wake.wait(0.75)
+            self.log_wake.clear()
+
     def poll_logs(self, again=True):
-        if self.finished.is_set():
-            return
-        if not self.log_paused.get():
-            self._update_log_display()
-        if again:
-            self.root.after(750, self.poll_logs)
+        """Read the log now rather than at the next turn of :meth:`log_loop`."""
+        self.log_wake.set()
 
     # -- buttons and their state ------------------------------------------------
 
@@ -1132,11 +1227,13 @@ class Dashboard:
                                   f"{b['server_threads']} request threads. Image resolution and quality stay unchanged.")
 
     def restart(self):
+        self.restart_mode = self.controller.mode
         self.controller.stop()
         return self.controller.start()
 
     def apply_selected_mode(self):
         selected = self.mode.get()
+        self.restart_mode = selected
         self.run(lambda: self.controller.apply_mode(selected))
 
     def run(self, operation, label='Applying settings'):
@@ -1156,11 +1253,27 @@ class Dashboard:
 
         def worker():
             try:
-                self.events.put(('done', operation()))
+                answer = operation()
+                self.events.put(('done', (answer, *self._after_operation())))
+            except control.StartStopped as stopped:        # asked for: said, not alarmed
+                self.events.put(('done', (str(stopped), *self._after_operation())))
             except Exception as error:                     # noqa: BLE001 — shown, not raised
-                self.events.put(('error', str(error) or error.__class__.__name__))
+                self.events.put(('error', (str(error) or error.__class__.__name__, *self._after_operation())))
 
         threading.Thread(target=worker, daemon=True, name='ninaivu-panel-action').start()
+
+    def _after_operation(self):
+        """The run file and the addresses once an operation is over: read on
+        its worker thread, not on Tk's (:meth:`in_background`)."""
+        try:
+            record = self.controller.record()
+        except (OSError, ValueError, KeyError, TypeError):
+            record = None
+        try:
+            endpoints = self.endpoints_text(record)
+        except Exception:                                  # noqa: BLE001 - the next reading has them
+            endpoints = None
+        return record, endpoints
 
     def set_controls(self, running=None):
         for widget in [*self.buttons, *self.radios]:
@@ -1185,9 +1298,27 @@ class Dashboard:
     # -- readings -----------------------------------------------------------------
 
     def monitor_loop(self):
+        """The readings, every second or two, on this thread: everything that
+        reads the index folder or another process (the run file, the start
+        notes, the running server's settings, the addresses) is done here,
+        so a disk that is slow to answer delays a reading, not the window."""
         while not self.finished.is_set():
             try:
-                self.events.put(('sample', self.monitor.sample()))
+                sample = self.monitor.sample()
+                record = sample.get('record')
+                if record and not self.busy:
+                    # A server started elsewhere, or restarted from the
+                    # console's Server page into another mode: the radio
+                    # follows it.
+                    try:
+                        self.controller.capture_running_settings()
+                    except (KeyError, TypeError, OSError):
+                        pass                               # a run file half-read; the next will do
+                try:
+                    sample['endpoints'] = self.endpoints_text(record)
+                except Exception:                          # noqa: BLE001 — the last ones stay shown
+                    sample['endpoints'] = None
+                self.events.put(('sample', sample))
             except Exception:                              # noqa: BLE001 — a reading, not a crash
                 self.events.put(('monitor-error', 'Some readings are unavailable for the moment.'))
             self.finished.wait(2 if self.controller.mode == 'power-saving' else 1)
@@ -1217,18 +1348,27 @@ class Dashboard:
                 self.cards['power'][1].set('Whole-device battery discharge, not Ninaivu alone' if value is not None
                                            else 'On AC power, or no discharge sensor; nothing is estimated')
             elif kind == 'appearance':
+                self.looks_heard += 1
                 self.system_dark = value
                 if self.following_system:
                     self.apply_theme()
             elif kind in ('done', 'error'):
-                self.progress_card.hide()
+                if self.closing:
+                    # The work the closed window was finishing out of sight.
+                    self._end()
+                    return
+                value, record, endpoints = value
+                self.progress_card.hide('panel')
                 self.active_mode.set(self.mode_line())
                 self.busy = False
                 self.operation_label = ''
-                running = bool(self.controller.record())
+                self.restart_mode = None
+                running = bool(record)
                 self.set_controls(running)
                 self.show_status(running)
-                self.endpoints_info.set(self.format_endpoints())
+                self._sync_trust_button(record or {})
+                if endpoints:
+                    self.endpoints_info.set(endpoints)
                 self.notice.set(value)
                 if kind == 'error':
                     messagebox.showerror('Ninaivu Control Panel', value, parent=self.root)
@@ -1239,6 +1379,10 @@ class Dashboard:
                     self.finished.set()
                     self.root.destroy()
                     return
+            elif kind == 'call':
+                value()
+            elif kind == 'log':
+                self._show_log(*value)
             elif kind == 'progress':
                 if self.busy:
                     what, seconds, share = value
@@ -1310,18 +1454,14 @@ class Dashboard:
             self.show_status('busy')
             self.status.set(OPERATION_WORDS.get(under_way['kind'], 'Starting') + '…')
             self.progress_card.show('follow', under_way['kind'], under_way['step'], under_way['progress'],
-                                    max(0.0, time.time() - under_way['since']))
+                                    max(0.0, time.time() - under_way['since']), under_way.get('step_since'))
             self.active_mode.set(self.mode_line())
         else:
             self.progress_card.hide('follow')
             self.show_status(is_running)
             if is_running:
-                # A server started elsewhere, or restarted from the console's
-                # Server page into another mode: the radio follows it.
-                try:
-                    self.controller.capture_running_settings()
-                except (KeyError, TypeError, OSError):
-                    pass                                   # a run file half-read; next second's will do
+                # The running server's mode, read on the reading thread
+                # (monitor_loop): the radio follows it.
                 if self.mode.get() != self.controller.mode:
                     self.mode.set(self.controller.mode)
                     self._update_mode_selection()
@@ -1331,7 +1471,10 @@ class Dashboard:
                     self.controller.started = None
             self.active_mode.set(self.mode_line())
 
-        self.endpoints_info.set(self.format_endpoints())
+        if 'record' in s:
+            self._sync_trust_button(s.get('record') or {})
+        if s.get('endpoints'):
+            self.endpoints_info.set(s['endpoints'])
         self.set_controls(is_running)
         if under_way and not self.busy:
             # Started already: pressing Start would only wait on it.
@@ -1376,7 +1519,7 @@ class Dashboard:
             self.log_button_text.set('Hide logs')
         self.log_paused.set(False)
         self.log_follow.set(True)
-        self._update_log_display()
+        self.poll_logs()
         self.log_text.focus_set()
         self.log_text.see('end')
 
@@ -1398,11 +1541,19 @@ class Dashboard:
 
     def toggle_start_at_sign_in(self):
         wanted = self.start_at_sign_in.get()
-        try:
-            self.notice.set(autostart.enable(self.controller.root) if wanted else autostart.disable())
-        except (OSError, RuntimeError) as exc:
-            self.start_at_sign_in.set(autostart.enabled())
-            messagebox.showerror('Start when I sign in', str(exc), parent=self.root)
+
+        def change():
+            return autostart.enable(self.controller.root) if wanted else autostart.disable()
+
+        def then(result):
+            if isinstance(result, (OSError, RuntimeError)):
+                self.in_background(autostart.enabled, lambda on: self.start_at_sign_in.set(bool(on) is True))
+                messagebox.showerror('Start when I sign in', str(result), parent=self.root)
+            elif isinstance(result, Exception):
+                messagebox.showerror('Start when I sign in', str(result), parent=self.root)
+            else:
+                self.notice.set(result)
+        self.in_background(change, then, name='ninaivu-panel-sign-in')
 
     def open_certificate(self):
         """Trust Ninaivu's own certificate on this computer.
@@ -1522,12 +1673,68 @@ class Dashboard:
 
         self.run(operation, 'Going back')
 
-    def close(self):
-        if self.busy:
-            messagebox.showinfo('Ninaivu Control Panel', 'Wait for the current start or stop to finish.', parent=self.root)
+    def in_background(self, work, then=None, name='ninaivu-panel-task'):
+        """*work* on a thread of its own; *then* with its result (or the
+        exception it raised) back on Tk's thread. For whatever reads a disk
+        or another process: Tk's thread only draws, so a disk that does not
+        answer can slow a reading but never freeze the window."""
+        def worker():
+            try:
+                result = work()
+            except Exception as error:                     # noqa: BLE001 - handed to *then*
+                result = error
+            if then is not None and not self.finished.is_set():
+                self.events.put(('call', lambda: then(result)))
+
+        threading.Thread(target=worker, daemon=True, name=name).start()
+
+    def stop_this_start(self):
+        """Stop the start under way, after saying what that does at its step."""
+        card = self.progress_card
+        if card.stop_asked:
             return
+        words = stop_warning(card.step)
+        if not messagebox.askyesno('Stop this start', f'Stop Ninaivu starting?\n\n{words}',
+                                   icon='warning', parent=self.root):
+            return
+        card.stop_asked = True
+        card.stop_button.configure(state='disabled')
+        self.notice.set('Stopping the start…')
+
+        def done(result):
+            self.notice.set(str(result))
+        self.in_background(self.controller.stop_start, done, name='ninaivu-panel-stop-start')
+
+    def close(self):
+        """Close the window, at any time. Ninaivu does not need it: a start
+        goes on, a stop too, and a restart half-way is handed to the restart
+        helper so that it is not left stopped. The panel's own file work
+        (going back to an older version) cannot be cut short safely, so the
+        window goes at once and the panel finishes that out of sight, then
+        ends."""
+        if self.closing:
+            return
+        self.closing = True
+        if (self.busy and self.operation_label in ('Restarting', 'Applying settings')
+                and getattr(self.controller, 'started', None) is None):
+            # Not started again yet: the old server may still be stopping.
+            try:
+                self.controller.hand_over_restart(self.restart_mode)
+            except (OSError, ValueError, RuntimeError):
+                import logging
+                logging.getLogger(__name__).exception('could not hand the restart over')
+        if self.busy and self.operation_label not in OPERATION_KINDS \
+                and self.operation_label != 'Applying settings':
+            self.root.withdraw()            # gone from the screen; ends when the work does
+            return
+        self._end()
+
+    def _end(self):
         self.finished.set()
-        self.root.destroy()
+        try:
+            self.root.destroy()
+        except tk.TclError:
+            pass
 
 
 def line_tag(line):

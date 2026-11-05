@@ -1131,7 +1131,8 @@ folder**. Your photographs stay where they are.
   `index-location.json`, which sends every launcher to the new folder. Keep
   that file. The old folder stays as a recovery copy, which the console can
   clean up once you are happy.
-- The new folder's databases are then checked, and repaired if need be (see
+- The new folder's databases are then opened and their tables listed (every
+  page was already compared during the copy), and repaired if need be (see
   *Checking and repairing the index* in the backup guide).
 
 If the move cannot finish, the index stays where it was, the console says why

@@ -97,14 +97,21 @@ the state folder, which is why the scheduled backups above exist.
 Ninaivu checks its databases (`index.db`, `archive.db`, `mugil-sent.db`) at
 start, before anything opens them, when there is reason to:
 
-- the index has just moved to another folder;
+- the index has just moved to another folder, or Ninaivu was pointed at the
+  index in another folder (Advanced settings);
 - an error such as `database disk image is malformed` was logged while
   Ninaivu ran (it notices this in its own log);
 - an administrator pressed **Check now and restart** on the console's
   Migration page.
 
-The check is SQLite's `quick_check`: every page read once, a minute or two on
-a large index. A sound index is left untouched. A damaged database is handled
+The check is SQLite's `quick_check`: every page read once. It reads a
+database in the order of its tables rather than of the file, which on a hard
+disk (an index on a USB drive such as an N300) is a great many small reads
+far apart, so each database is first read straight through, at the disk's
+full speed, while there is memory free to hold it; the check then reads from
+memory. The Control Panel shows how far it has got. After a move, which
+already compared every file it copied with the original, each database is
+only opened and its tables listed. A sound index is left untouched. A damaged database is handled
 the way SQLite recommends:
 
 1. It is copied aside unchanged, as `<name>.damaged-<date>/` in the state

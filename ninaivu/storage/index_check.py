@@ -5,7 +5,17 @@ after "database disk image is malformed" or a like error was logged while
 Ninaivu ran (:class:`Watch`), and when an administrator asks from the console.
 It runs before anything opens the index, with the server lock held, so
 nothing else is reading or writing it. A check on a sound index is one pass
-of ``PRAGMA quick_check``: a minute or so on a large one, and only then.
+of ``PRAGMA quick_check``, and only then.
+
+``quick_check`` reads a database in the order of its trees, not of the file:
+on a hard disk (an index on a USB drive) that is hundreds of thousands of
+small reads far apart, and a large index took an hour or more. So each
+database is first read straight through, which a hard disk does at full
+speed, while there is memory free to hold it (:class:`_ReadAhead`, on a
+thread of its own, a database ahead of the check); the check then finds every
+page in memory. After a move the full check is left out: the move read every
+file back and compared it with the original, so only that each database
+opens and has its tables is looked at (*light*).
 
 A damaged database is first copied aside, unchanged, as
 ``<name>.damaged-<when>``, and then repaired, each step checked again:
@@ -30,6 +40,7 @@ import logging
 import os
 import shutil
 import sqlite3
+import threading
 import time
 from contextlib import closing
 from pathlib import Path
@@ -57,6 +68,15 @@ Tell = Callable[..., None]
 PACE = {"quick_check": 62.0, "integrity_check": 195.0}
 #: SQLite calls the progress handler once every this many of its steps.
 _STEPS = 1000
+#: Reasons a database is only opened and its tables listed, not read through:
+#: a move compared every file it copied with the original.
+LIGHT = frozenset({"moved"})
+#: Of a database's share of the bar, the reading through it; the rest is the check.
+READ_SHARE = 0.6
+#: How much is read at a time, and at most what share of the memory free.
+_READ_CHUNK = 8 * 1024 * 1024
+_READ_MEMORY = 0.5
+_MAGIC = b"SQLite format 3\x00"
 
 
 def _say(message: str) -> None:
@@ -164,7 +184,7 @@ def watch(state: Path | str) -> Watch:
 # Checking
 
 
-def check(path: Path, *, thorough: bool = False,
+def check(path: Path, *, thorough: bool = False, light: bool = False,
           progress: Callable[[float], None] | None = None,
           pace: dict | None = None, measured: dict | None = None) -> list[str]:
     """What is wrong with the database at *path*: nothing, when it is sound.
@@ -173,8 +193,11 @@ def check(path: Path, *, thorough: bool = False,
     compare indexes with their tables, so it is quick enough for a start.
     *thorough*, after a repair, is the full ``integrity_check``, which does.
     *progress* is told how far it has got (:func:`_follow`); *measured* is
-    given the steps a page took, for the *pace* of the next check.
+    given the steps a page took, for the *pace* of the next check. *light*
+    only opens it and lists its tables (:data:`LIGHT`).
     """
+    if light:
+        return _opens(path)
     pragma = "integrity_check" if thorough else "quick_check"
     try:
         with closing(sqlite3.connect(path, timeout=60)) as conn:
@@ -185,6 +208,89 @@ def check(path: Path, *, thorough: bool = False,
     except sqlite3.DatabaseError as exc:
         return [str(exc)]
     return [] if rows == ["ok"] else rows
+
+
+def _opens(path: Path) -> list[str]:
+    """What is wrong with *path* that shows without reading it through: not a
+    database at all, or tables SQLite cannot list."""
+    try:
+        with path.open("rb") as stream:
+            if stream.read(len(_MAGIC)) != _MAGIC:
+                return ["file is not a database"]
+        with closing(sqlite3.connect(path.as_uri() + "?mode=ro", uri=True, timeout=60)) as conn:
+            conn.execute("SELECT name, sql FROM sqlite_master").fetchall()
+            conn.execute("PRAGMA user_version").fetchone()
+    except (OSError, sqlite3.DatabaseError) as exc:
+        return [str(exc)]
+    return []
+
+
+def _memory_free() -> int:
+    """Bytes of memory free for the system to keep files in; 0 when unknown."""
+    try:
+        import psutil
+        return int(psutil.virtual_memory().available)
+    except Exception:                                   # noqa: BLE001 - only an optimisation
+        pass
+    try:
+        return int(os.sysconf("SC_AVPHYS_PAGES")) * int(os.sysconf("SC_PAGE_SIZE"))
+    except (AttributeError, OSError, ValueError):
+        return 0
+
+
+class _ReadAhead(threading.Thread):
+    """Reads databases straight through, one after another, ahead of the check.
+
+    What is read stays in the system's file cache, so the check that follows
+    reads memory rather than the disk. A database bigger than what is left of
+    :data:`_READ_MEMORY` of the free memory is not read (it would push out
+    what was read before it), and is only checked. One thread, reading in
+    order: two reading one hard disk at once would make it seek between them.
+    """
+
+    def __init__(self, paths: list[Path], room: int) -> None:
+        super().__init__(daemon=True, name="ninaivu-index-read-ahead")
+        self.paths, self.room = paths, room
+        self.read = {path: 0 for path in paths}
+        self.skipped: set[Path] = set()
+        self.finished = {path: threading.Event() for path in paths}
+        self.stop = threading.Event()
+
+    def run(self) -> None:
+        room = self.room
+        buffer = bytearray(_READ_CHUNK)
+        for path in self.paths:
+            try:
+                size = _size(path)
+                if size > room:
+                    self.skipped.add(path)
+                    continue
+                room -= size
+                for item in (path, *_companions(path)):
+                    self._through(item, buffer, path)
+                    if self.stop.is_set():
+                        return
+            except OSError:
+                self.skipped.add(path)
+            finally:
+                self.finished[path].set()
+
+    def _through(self, item: Path, buffer: bytearray, path: Path) -> None:
+        try:
+            stream = item.open("rb", buffering=0)
+        except FileNotFoundError:
+            return
+        with stream:
+            try:
+                os.posix_fadvise(stream.fileno(), 0, 0, os.POSIX_FADV_SEQUENTIAL)
+            except (AttributeError, OSError):
+                pass                                    # not on Windows or a Mac
+            view = memoryview(buffer)
+            while not self.stop.is_set():
+                got = stream.readinto(view)
+                if not got:
+                    break
+                self.read[path] += got
 
 
 def _follow(conn: sqlite3.Connection, pragma: str, progress: Callable[[float], None],
@@ -510,32 +616,32 @@ def run(state: Path | str, tell: Tell = lambda *_said: None) -> dict:
     before = (_record(state / RESULT) or {}).get("pace")
     pace = before if isinstance(before, dict) else {}
     measured_all: dict[str, dict] = {}
+    light = why.get("reason") in LIGHT
+    ahead = None if light else _ReadAhead([path for _, path in present],
+                                          int(_memory_free() * _READ_MEMORY))
+    if ahead is not None:
+        ahead.start()
     done = 0
-    for name, path in present:
-        words = f"checking the index: {name}"
-        share = sizes[name]
-
-        def told(part: float, _words: str = words, _done: int = done, _share: int = share) -> None:
-            tell(_words, _done + part * _share, whole)
-        tell(words, done, whole)
-        measured: dict = {}
-        own = pace.get(name)
-        problems = check(path, progress=told, pace=own if isinstance(own, dict) else None,
-                         measured=measured)
-        done += share
-        if measured:
-            measured_all[name] = measured
-        if not problems:
-            databases.append({"name": name, "ok": True, "how": None})
-            continue
-        try:
-            databases.append(repair(path, problems, tell))
-        except OSError as exc:
-            _say(f"{name} could not be repaired: {exc}")
-            databases.append({"name": name, "ok": False, "problems": problems[:5],
-                              "left": [str(exc)]})
+    try:
+        for name, path in present:
+            problems = _check_one(name, path, done, sizes[name], whole, tell, light, ahead,
+                                  pace, measured_all)
+            done += sizes[name]
+            if not problems:
+                databases.append({"name": name, "ok": True, "how": None})
+                continue
+            try:
+                databases.append(repair(path, problems, tell))
+            except OSError as exc:
+                _say(f"{name} could not be repaired: {exc}")
+                databases.append({"name": name, "ok": False, "problems": problems[:5],
+                                  "left": [str(exc)]})
+    finally:
+        if ahead is not None:
+            ahead.stop.set()
     result = {"at": time.time(), "seconds": round(time.time() - began, 1),
               "reason": why.get("reason"), "detail": why.get("detail", ""),
+              "light": light,
               "databases": databases, "ok": all(d["ok"] for d in databases),
               "repaired": [d["name"] for d in databases if d.get("how")],
               "pace": {**pace, **measured_all}}
@@ -545,3 +651,28 @@ def run(state: Path | str, tell: Tell = lambda *_said: None) -> dict:
          f"repaired {', '.join(result['repaired'])}" if result["ok"] else
          "a database could not be repaired; restore it from a backup")
     return result
+
+
+def _check_one(name: str, path: Path, done: int, share: int, whole: int, tell: Tell,
+               light: bool, ahead: _ReadAhead | None, pace: dict, measured_all: dict) -> list[str]:
+    """Check one database, telling how far the whole check has got: first
+    while it is read through (:class:`_ReadAhead`), then while it is checked."""
+    words = f"checking the index: {name}"
+    tell(words, done, whole)
+    read_part = 0.0
+    if ahead is not None:
+        while not ahead.finished[path].wait(0.25):
+            tell(words, done + READ_SHARE * share * min(1.0, ahead.read[path] / share), whole)
+        if path not in ahead.skipped:
+            read_part = READ_SHARE
+
+    def told(part: float) -> None:
+        tell(words, done + share * (read_part + (1 - read_part) * part), whole)
+    measured: dict = {}
+    own = pace.get(name)
+    problems = check(path, light=light, progress=told,
+                     pace=own if isinstance(own, dict) else None, measured=measured)
+    if measured:
+        measured_all[name] = measured
+    return problems
+
