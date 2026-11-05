@@ -1141,6 +1141,31 @@ and the server log has every step (`Index move: …`). Choose a drive with a
 Linux or macOS file system for the index (ext4, APFS); a Windows (NTFS) drive
 read through Linux is not a good home for it.
 
+### Reading the index from another folder (Advanced settings)
+
+On a one-computer Ninaivu and on the Primary, the `state_dir` row of
+**Advanced settings** points Ninaivu at the index already in another
+folder: the one used before a new download, say, when the new copy started
+with an empty index of its own.
+
+1. Type the folder that holds the index (the folder with `index.db` in it)
+   and press **Use this folder…**.
+2. Ninaivu shows what is in it: how many photographs, its libraries, and
+   which version last opened it.
+3. Enter your password and press **Restart and use it**.
+
+Nothing is copied or moved. At the restart the folder Ninaivu used until
+then gets a forwarding note, `index-location.json`, to the new one, and the
+index in it is kept exactly as it was: deleting that note goes back to it.
+The index read from now on is checked, and repaired if need be, as the start
+goes on.
+
+Ninaivu refuses a folder with no index in it (moving this index somewhere is
+**Move the index**, above), the folder it uses now, an index another Ninaivu
+is using, one a newer Ninaivu last opened, and one that has itself moved
+elsewhere. The setting is never written into `config.json`, and is not
+offered on the Secondary or on a copy that follows another computer (the Pi).
+
 ## Environment variables and the state folder
 
 Some settings also read an environment variable (`NINAIVU_STATE_DIR`,

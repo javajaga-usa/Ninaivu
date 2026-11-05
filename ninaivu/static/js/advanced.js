@@ -127,7 +127,13 @@ export class AdvancedPanel {
     if (setting.default != null && setting.default !== '' && !setting.secret) {
       head.append(el('span', 'hint', i18n.t('default {value}', { value: show(setting.default, setting.kind) })));
     }
-    if (setting.runtime) head.append(el('span', 'hint', i18n.t('set when Ninaivu starts')));
+    if (setting.runtime && setting.action !== 'index_folder') {
+      head.append(el('span', 'hint', i18n.t('set when Ninaivu starts')));
+    }
+    if (setting.action === 'index_folder') {
+      head.append(el('span', 'hint', i18n.t('changed at a restart')));
+      row.classList.remove('runtime');
+    }
     if (setting.managed_by) head.append(el('span', 'hint', i18n.t('changed on {page}', { page: i18n.t(setting.managed_by) })));
     row.append(head);
     if (setting.doc) row.append(el('p', 'hint', setting.doc));
@@ -136,6 +142,7 @@ export class AdvancedPanel {
   }
 
   control(setting) {
+    if (setting.action === 'index_folder') return this.indexFolder(setting);
     const wrap = el('div', 'adv-control');
     const fixed = !!(setting.runtime || setting.managed_by);
     if (setting.choices?.length && !fixed) {
@@ -191,6 +198,111 @@ export class AdvancedPanel {
     });
     wrap.append(input);
     return wrap;
+  }
+
+  /**
+   * The index folder (state_dir), on a one-computer Ninaivu or the Primary.
+   * Ninaivu is pointed at the index already in the folder given, from the next
+   * start: nothing is copied or moved, and the index used now is kept as it
+   * is (storage/relocate.py, request_switch). What is in the folder is shown
+   * first, and the administrator's password is asked for.
+   */
+  indexFolder(setting) {
+    const wrap = el('div', 'adv-control');
+    wrap.append(el('p', 'hint', i18n.t('Ninaivu reads its index from the folder given here, from the next start. The folder must already hold a Ninaivu index, such as the one used before a new download. Nothing is copied or moved, and the index used now is kept as it is.')));
+    const input = el('input', 'input');
+    input.type = 'text';
+    input.setAttribute('aria-label', setting.name);
+    input.value = show(setting.value, setting.kind);
+    const go = el('button', 'btn small', i18n.t('Use this folder…'));
+    go.type = 'button';
+    const confirm = el('div', 'adv-confirm');
+    confirm.hidden = true;
+    go.onclick = () => this.checkIndexFolder(setting, input, go, confirm);
+    input.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') { event.preventDefault(); go.click(); }
+    });
+    wrap.append(input, go, confirm);
+    return wrap;
+  }
+
+  async indexFolderRequest(body) {
+    const url = '/api/admin/settings/index-folder';
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    let data = null;
+    try { data = await response.json(); } catch { data = null; }
+    if (response.status === 401 && !data?.needs_password) reportUnauthorized(url);
+    return { status: response.status, ok: response.ok, data: data || {} };
+  }
+
+  /** What is in the folder, then the password, then the restart. */
+  async checkIndexFolder(setting, input, go, confirm) {
+    const folder = input.value.trim();
+    confirm.hidden = true;
+    confirm.replaceChildren();
+    if (!folder || folder === String(setting.value)) {
+      this.toast(i18n.t('Type the folder the index should be read from.'), true);
+      return;
+    }
+    go.disabled = true;
+    let checked;
+    try {
+      checked = await this.indexFolderRequest({ folder, check_only: true });
+    } finally {
+      go.disabled = false;
+    }
+    if (!checked.ok) {
+      this.toast(i18n.fromServer(checked.data, i18n.t('Request failed ({status})', { status: checked.status })), true);
+      return;
+    }
+    const facts = checked.data.index || {};
+    const said = [
+      facts.photographs != null ? i18n.t('{count} photographs', { count: Number(facts.photographs).toLocaleString(i18n.locale()) }) : null,
+      facts.libraries?.length ? i18n.t('libraries: {list}', { list: facts.libraries.join(', ') }) : null,
+      facts.version ? i18n.t('last opened by Ninaivu {version}', { version: facts.version }) : null,
+    ].filter(Boolean).join('; ');
+    confirm.append(el('p', null, i18n.t('{folder} holds a Ninaivu index ({facts}). From the next start Ninaivu reads that one. The index used now stays as it is; deleting index-location.json in it goes back.', { folder, facts: said || '—' })));
+    const password = el('input', 'input');
+    password.type = 'password';
+    password.autocomplete = 'current-password';
+    password.placeholder = i18n.t('Your password');
+    password.setAttribute('aria-label', i18n.t('Your password'));
+    const yes = el('button', 'btn small primary', i18n.t('Restart and use it'));
+    yes.type = 'button';
+    const no = el('button', 'btn small ghost', i18n.t('Cancel'));
+    no.type = 'button';
+    no.onclick = () => { confirm.hidden = true; confirm.replaceChildren(); };
+    const submit = async () => {
+      yes.disabled = true;
+      try {
+        const answer = await this.indexFolderRequest({ folder, password: password.value });
+        if (!answer.ok) {
+          this.toast(i18n.fromServer(answer.data, i18n.t('Request failed ({status})', { status: answer.status })), true);
+          password.select();
+          return;
+        }
+        confirm.hidden = true;
+        confirm.replaceChildren();
+        this.toast(answer.data.restarting
+          ? i18n.t('Ninaivu is restarting to read the index in that folder.')
+          : `${i18n.t('Restart Ninaivu to read the index in that folder.')} ${answer.data.restart_problem || ''}`);
+      } finally {
+        yes.disabled = false;
+      }
+    };
+    yes.onclick = submit;
+    password.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter') { event.preventDefault(); submit(); }
+    });
+    const row = el('div', 'ar-actions');
+    row.append(password, yes, no);
+    confirm.append(row);
+    confirm.hidden = false;
+    password.focus();
   }
 
   async save(setting, value, revert, done) {

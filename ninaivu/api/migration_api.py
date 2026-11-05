@@ -464,6 +464,64 @@ def import_cancel():
     return jsonify(_export_state(cfg))
 
 
+@migration_bp.post('/api/admin/settings/index-folder')
+@require_admin
+def index_folder():
+    """Read the index from another folder from the next start (Advanced
+    settings, ``state_dir``). Nothing is copied or moved.
+
+    ``check_only`` says what is in the folder, or why it cannot be used,
+    before anything is asked for. Otherwise the administrator's password is
+    asked for, as for deleting photographs, and Ninaivu restarts to switch.
+    """
+    from ..storage import relocate
+    from . import server_api
+    from .accounts_api import reauthenticate_limited
+    cfg = _cfg()
+    body = json_object()
+    folder = str(body.get('folder') or '').strip()
+    if not relocate.index_folder_editable(cfg):
+        return jsonify({'error': SWITCH_HERE_ONLY['reason']}), 409
+    if not folder:
+        return jsonify({'error': 'Type the folder the index should be read from.'}), 400
+    if _the_exporter().running:
+        return jsonify({'error': 'Wait for the index export to finish first.'}), 409
+    try:
+        target = relocate.switch_target(cfg.state_dir, Path(folder))
+    except (ValueError, OSError) as error:
+        return jsonify({'error': str(error)}), 400
+    facts = relocate.describe_index(target)
+    if body.get('check_only') is True:
+        return jsonify({'ok': True, 'index': facts})
+    user = current_user()
+    answer = reauthenticate_limited(db.connect(cfg.db_path), user.id, str(body.get('password', '')))
+    if answer is None:
+        return jsonify({'error': 'Too many attempts. Wait a few minutes and try again.'}), 429
+    if not answer:
+        return jsonify({'needs_password': True,
+                        'error': ('Enter your password to change the index folder.'
+                                  if not body.get('password') else 'That password is not right.')}), 401
+    try:
+        pending = relocate.request_switch(cfg.state_dir, target)
+    except (ValueError, OSError) as error:
+        return jsonify({'error': str(error)}), 400
+    auth.audit(db.connect(cfg.db_path), user.id, 'index_folder', f'{cfg.state_dir} -> {target}')
+    problem = server_api._restart_problem()
+    restarting = False
+    if problem is None:
+        reply, status = server_api._begin_restart(what=' to read the index from another folder')
+        restarting = status == 202
+        if not restarting:
+            problem = reply.get('error')
+    return jsonify({'restarting': restarting, 'restart_problem': problem,
+                    'pending': pending, 'index': facts}), 202
+
+
+#: As a "reason", so tools/server_messages.py collects it for translation.
+SWITCH_HERE_ONLY = {'reason': 'The index folder is changed here on a one-computer Ninaivu and on '
+                              'the Primary.'}
+
+
 @migration_bp.post('/api/admin/migration/move-index')
 @require_admin
 def move_index():
