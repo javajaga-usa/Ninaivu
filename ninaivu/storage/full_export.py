@@ -617,8 +617,8 @@ def apply_pending(state_dir: Path | str) -> bool | None:
     here = _library_folders(state_dir)
 
     def progress(stage: str, done_files: int, total: int) -> None:
-        percent = done_files * 100 // total if total else 0
-        starting.step(f"bringing in the index from the other computer: {stage}, {percent}%")
+        starting.step(f"bringing in the index from the other computer: {stage}",
+                      done_files, total)
 
     said = io.StringIO()
     try:

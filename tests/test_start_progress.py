@@ -57,7 +57,7 @@ def test_a_start_that_keeps_saying_how_it_goes_is_waited_on_past_a_minute(tmp_pa
                 'since': launched, 'at': time.time()}
     monkeypatch.setattr(starting, 'read', read)
     heard = []
-    c.on_progress = lambda what, seconds: heard.append((what, seconds))
+    c.on_progress = lambda what, seconds, share=None: heard.append((what, seconds))
     assert c._wait_for_start(launched, clock=clock, sleep=clock.sleep) == 'Ninaivu is running.'
     assert heard[-1][0] == 'copying the settings and the index before the update'
     assert heard[-1][1] > 60

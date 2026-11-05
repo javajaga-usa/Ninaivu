@@ -171,13 +171,23 @@ def _update_progress(tell: Any) -> Any:
     minutes with no change, which a person waiting took for a start that had
     hung — and stopped, leaving the copy to be made from the beginning again.
     """
-    told: list[str] = []
+    told: list[tuple[str, int | None]] = []
 
-    def progress(stage: str, **_counts: Any) -> None:
-        if told and told[-1] == stage:
+    def progress(stage: str, **counts: Any) -> None:
+        # By the bytes where they are counted, else by the files; told again
+        # only when the stage or its whole percentage changes.
+        done, total = counts.get("bytes_done"), counts.get("bytes_total")
+        if not total:
+            done, total = counts.get("files_done"), counts.get("files_total")
+        percent = int(100 * done / total) if done is not None and total else None
+        if told and told[-1] == (stage, percent):
             return
-        told.append(stage)
-        tell(f"{UPDATE_STEP}: {UPDATE_STAGES.get(stage, stage)}")
+        told.append((stage, percent))
+        words = f"{UPDATE_STEP}: {UPDATE_STAGES.get(stage, stage)}"
+        if percent is None:
+            tell(words)
+        else:
+            tell(words, done, total)
 
     return progress
 

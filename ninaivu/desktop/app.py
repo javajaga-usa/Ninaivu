@@ -37,6 +37,7 @@ import queue
 import subprocess
 import sys
 import threading
+import time
 try:
     import tkinter as tk
     import tkinter.font as tkfont
@@ -50,7 +51,8 @@ from . import autostart
 from . import portable
 from . import theme
 from . import control
-from .control import UPDATE_ADVICE, Controller, Monitor, describe_wait, read_power
+from .control import UPDATE_ADVICE, Controller, Monitor, read_power
+from .progress import describe_step, heading, percent, remaining
 from .logs import LogTail
 from ..utils.resources import budget
 
@@ -137,6 +139,11 @@ PLAIN = (('▶  ', ''), ('■  ', ''), ('●  ', ''), ('○  ', ''), ('✕ ', ''
          ('↻  ', ''), ('●', '*'), ('•', '*'), ('…', '...'), ('—', '-'),
          ('–', '-'), ('’', "'"), ('‘', "'"), ('“', '"'), ('”', '"'))
 
+#: The progress card's heading for each of the panel's own operations.
+OPERATION_KINDS = {'Starting': 'starting', 'Restarting': 'restarting', 'Stopping': 'stopping'}
+#: The status pill's word while a start or restart begun elsewhere is followed.
+OPERATION_WORDS = {'starting': 'Starting', 'restarting': 'Restarting', 'stopping': 'Stopping'}
+
 #: Set once by :class:`Dashboard` when its Tk has core fonts only.
 _plain = False
 
@@ -214,16 +221,138 @@ def font_families(root, platform=None):
     return ui, mono
 
 
+if tk is not None:
+    class ProgressCard:
+        """The card under the buttons while Ninaivu is not serving yet.
+
+        What the start or restart is doing, how far it has got as a figure and
+        a bar, and how long it has been. A step that cannot say how far it has
+        got has a bar that moves without filling, so the card never claims a
+        figure nobody gave it. Drawn on a canvas: Tk's own progress bar is a
+        grey slab on every system, and nothing like the rest of the panel.
+        """
+
+        FRAME_MS = 33          # about thirty frames a second, only while shown
+
+        def __init__(self, dashboard, parent, after):
+            self.dashboard, self.after_widget = dashboard, after
+            paint, fonts = dashboard.paint, dashboard.fonts
+            self.outer = paint(tk.Frame(parent), bg='bg')
+            card = paint(tk.Frame(self.outer, padx=dashboard._scaled(16), pady=dashboard._scaled(12),
+                                  highlightthickness=1), bg='surface', highlightbackground='border')
+            card.pack(fill='x')
+            top = paint(tk.Frame(card), bg='surface')
+            top.pack(fill='x')
+            words = paint(tk.Frame(top), bg='surface')
+            words.pack(side='left', fill='x', expand=True)
+            self.heading, self.title, self.detail, self.figure = (Words(value='') for _ in range(4))
+            paint(tk.Label(words, textvariable=self.heading, font=fonts['caps'], anchor='w'),
+                  bg='surface', fg='accent2').pack(fill='x')
+            paint(tk.Label(words, textvariable=self.title, font=fonts['title'], anchor='w'),
+                  bg='surface', fg='text').pack(fill='x', pady=(dashboard._scaled(3), 0))
+            detail = paint(tk.Label(words, textvariable=self.detail, font=fonts['small'], anchor='w',
+                                    justify='left'), bg='surface', fg='text2')
+            detail.pack(fill='x')
+            detail.bind('<Configure>', lambda e: detail.configure(wraplength=max(200, e.width)))
+            figures = paint(tk.Frame(top), bg='surface')
+            figures.pack(side='right', anchor='ne', padx=(dashboard._scaled(16), 0))
+            self.left = Words(value='')
+            paint(tk.Label(figures, textvariable=self.figure, font=fonts['value'], anchor='e'),
+                  bg='surface', fg='accent').pack(anchor='e')
+            paint(tk.Label(figures, textvariable=self.left, font=fonts['small'], anchor='e'),
+                  bg='surface', fg='text3').pack(anchor='e')
+            self.thickness = max(5, dashboard._scaled(7))
+            self.bar = paint(tk.Canvas(card, height=self.thickness, highlightthickness=0, borderwidth=0),
+                             bg='surface')
+            self.bar.pack(fill='x', pady=(dashboard._scaled(10), 0))
+            self.bar.bind('<Configure>', lambda _e: self.draw())
+            self.shown = None          # who asked for it: 'panel' or 'follow', or None
+            self.target = None         # how far, between 0 and 1, or None
+            self.value = 0.0           # what the bar shows, easing towards target
+            self.phase = 0.0
+            self.ticking = False
+            self.step = None
+            self.began = None          # (when, how far) at this step's first word
+
+        def show(self, source, kind, step, share, seconds):
+            title, detail = describe_step(step)
+            self.heading.set(small_caps(heading(kind, seconds)))
+            self.title.set(title)
+            self.detail.set(detail)
+            self.figure.set(percent(share))
+            now = time.monotonic()
+            if step != self.step or share is None or (self.target is not None and share < self.target):
+                self.value = share or 0.0      # a new stage starts its own bar, from where it is
+                self.began = None if share is None else (now, share)
+            self.left.set(remaining(self.began, share, now))
+            self.step, self.target = step, share
+            if self.shown is None:
+                self.outer.pack(fill='x', pady=(self.dashboard._scaled(12), 0), after=self.after_widget)
+                self.dashboard._grow_to_fit()
+            self.shown = source
+            if not self.ticking:
+                self.ticking = True
+                self.tick()
+
+        def hide(self, source=None):
+            """Hidden, unless *source* is given and someone else showed it."""
+            if self.shown is None or (source is not None and self.shown != source):
+                return
+            self.outer.pack_forget()
+            self.shown, self.step, self.target, self.value = None, None, None, 0.0
+
+        def tick(self):
+            if self.shown is None:
+                self.ticking = False
+                return
+            if self.target is not None:
+                self.value += (self.target - self.value) * 0.15
+            self.phase = (self.phase + 0.012) % 1.0
+            self.draw()
+            self.dashboard.root.after(self.FRAME_MS, self.tick)
+
+        def draw(self):
+            bar, p, h = self.bar, self.dashboard.palette, self.thickness
+            try:
+                width = bar.winfo_width()
+                bar.delete('all')
+            except tk.TclError:
+                return
+            if width <= h:
+                return
+            y, start, room = h / 2, h / 2, width - h
+            line = dict(width=h, capstyle='round')
+            bar.create_line(start, y, start + room, y, fill=p['sunken'], **line)
+            gleam = theme.blend('#ffffff', p['accent'], .28)
+            if self.target is None:
+                # Not known how far: a stretch that glides along, eased at the ends.
+                span = room * 0.28
+                x = (self.phase * 1.4 - 0.2) * (room + span) - span
+                left, right = max(0.0, x), min(room, x + span)
+                if right - left > 1:
+                    bar.create_line(start + left, y, start + right, y, fill=p['accent'], **line)
+                return
+            filled = room * max(0.0, min(1.0, self.value))
+            if filled < 0.5:
+                return
+            bar.create_line(start, y, start + filled, y, fill=p['accent'], **line)
+            # A soft light that runs along the filled part: it is still working.
+            span = max(h * 3, filled * 0.14)
+            x = self.phase * (filled + span) - span
+            left, right = max(0.0, x), min(filled, x + span)
+            if right - left > 1:
+                bar.create_line(start + left, y, start + right, y, fill=gleam, **line)
+
+
 class Dashboard:
     def __init__(self, root, controller=None):
         self.root = root
         self.controller = controller or Controller()
         self.monitor = Monitor(self.controller)
         self.events = queue.Queue()
-        # A long start says how it is going, in the line under the buttons.
-        self.controller.on_progress = lambda what, seconds: self.events.put(
-            ('progress', f'{self.operation_label or "Starting"}: {what} '
-                         f'({describe_wait(seconds)})…'))
+        # A long start says how it is going, in the card under the buttons.
+        self.controller.on_progress = lambda what, seconds, share=None: self.events.put(
+            ('progress', (what, seconds, share)))
         self.finished = threading.Event()
         self.busy = False
         self.operation_label = ''
@@ -371,14 +500,10 @@ class Dashboard:
         self.endpoints_label.bind('<Configure>', lambda e: self.endpoints_label.configure(
             wraplength=max(self._scaled(240), e.width)))
 
-        # A hairline that moves only while something is starting or stopping.
-        # (Tk's own progress bar is 18 pixels tall whatever it is told, so it
-        # is shown through a slot of three.)
-        slot = self.paint(tk.Frame(command, height=3), bg='bg')
-        slot.pack(fill='x', pady=(10, 0))
-        slot.pack_propagate(False)
-        self.operation_progress = ttk.Progressbar(slot, mode='indeterminate', style='Operation.Horizontal.TProgressbar')
-        self.operation_progress.pack(fill='both', expand=True)
+        # While Ninaivu is not serving yet - a start, a restart, a stop, the
+        # index moved, checked or brought in first - a card here says what it
+        # is doing and how far it has got, whoever began it.
+        self.progress_card = ProgressCard(self, command, after=action_row)
 
         # -- this computer ----------------------------------------------------
         self.section(main, 'This computer')
@@ -544,8 +669,7 @@ class Dashboard:
         self.show_status(self.status_state)
         self._update_mode_selection()
         self._paint_logs(p)
-        self.operation_progress.configure(style='Busy.Horizontal.TProgressbar' if self.busy
-                                          else 'Operation.Horizontal.TProgressbar')
+        self.progress_card.draw()
         for bar in self.card_bars.values():
             self._update_bar(bar, getattr(bar, 'reading', 0), 100)
         self._draw_chart()
@@ -609,12 +733,6 @@ class Dashboard:
         for name, bg, fg in (('TCheckbutton', 'bg', 'text'), ('Log.TCheckbutton', 'log_bg', 'log_text')):
             style.configure(name, font=f['body'], background=p[bg], foreground=p[fg], **indicator)
             style.map(name, background=[('active', p[bg])], foreground=[('disabled', p['text3'])], **indicator_map)
-
-        style.configure('Operation.Horizontal.TProgressbar', thickness=2, troughcolor=p['bg'], background=p['bg'],
-                        bordercolor=p['bg'], lightcolor=p['bg'], darkcolor=p['bg'])
-        style.configure('Busy.Horizontal.TProgressbar', thickness=2, troughcolor=p['border_soft'],
-                        background=p['accent'], bordercolor=p['border_soft'], lightcolor=p['accent'],
-                        darkcolor=p['accent'])
 
         field = dict(fieldbackground=p['surface'], foreground=p['text'], bordercolor=p['border'],
                      lightcolor=p['surface'], darkcolor=p['surface'], insertcolor=p['text'],
@@ -1032,8 +1150,9 @@ class Dashboard:
         self.notice.set(label + '… Ninaivu finishes the files it is working on before it stops.')
         self.show_status('busy')
         self.set_controls()
-        self.operation_progress.configure(style='Busy.Horizontal.TProgressbar')
-        self.operation_progress.start(12)
+        self.progress_card.show('panel', OPERATION_KINDS.get(label, label),
+                                'starting' if label == 'Starting' else 'finishing what is in hand',
+                                None, None)
 
         def worker():
             try:
@@ -1102,8 +1221,7 @@ class Dashboard:
                 if self.following_system:
                     self.apply_theme()
             elif kind in ('done', 'error'):
-                self.operation_progress.stop()
-                self.operation_progress.configure(style='Operation.Horizontal.TProgressbar')
+                self.progress_card.hide()
                 self.active_mode.set(self.mode_line())
                 self.busy = False
                 self.operation_label = ''
@@ -1121,6 +1239,11 @@ class Dashboard:
                     self.finished.set()
                     self.root.destroy()
                     return
+            elif kind == 'progress':
+                if self.busy:
+                    what, seconds, share = value
+                    self.progress_card.show('panel', OPERATION_KINDS.get(self.operation_label, 'starting'),
+                                            what, share, seconds)
             else:
                 self.notice.set(value)
         self.root.after(150, self.pump)
@@ -1177,10 +1300,20 @@ class Dashboard:
 
     def display(self, s):
         is_running = s['running']
+        under_way = s.get('under_way')
         if self.busy:
             self.status.set(self.operation_label + '…')
             self.show_status('busy')
+        elif under_way:
+            # Begun elsewhere - the console's Restart, the tray, a start at
+            # sign-in, another window - and followed here all the same.
+            self.show_status('busy')
+            self.status.set(OPERATION_WORDS.get(under_way['kind'], 'Starting') + '…')
+            self.progress_card.show('follow', under_way['kind'], under_way['step'], under_way['progress'],
+                                    max(0.0, time.time() - under_way['since']))
+            self.active_mode.set(self.mode_line())
         else:
+            self.progress_card.hide('follow')
             self.show_status(is_running)
             if is_running:
                 # A server started elsewhere, or restarted from the console's
@@ -1200,6 +1333,9 @@ class Dashboard:
 
         self.endpoints_info.set(self.format_endpoints())
         self.set_controls(is_running)
+        if under_way and not self.busy:
+            # Started already: pressing Start would only wait on it.
+            self.start_button.configure(state='disabled')
 
         self.cards['cpu'][0].set(f"{s['cpu']:.0f}%")
         self.cards['cpu'][1].set('Across all applications and CPU cores')

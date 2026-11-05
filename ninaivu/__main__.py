@@ -322,7 +322,9 @@ def _move_progress():
         if stage == "waiting":                       # *done* is seconds here
             starting.step(f"{MOVE_STEP}: {words[stage]}, {done} s so far")
         else:
-            starting.step(f"{MOVE_STEP}: {words.get(stage, stage)}, {percent}%")
+            # The percentage goes with the note as a number, for the Control
+            # Panel's bar, rather than into the words.
+            starting.step(f"{MOVE_STEP}: {words.get(stage, stage)}", done, total or 1)
     return tell
 
 
@@ -428,6 +430,8 @@ def main(argv: list[str] | None = None) -> int:
     except runfile.AlreadyStarting:
         note = starting.read(cfg.state_dir) or {}
         doing = note.get("step") or "starting"
+        if isinstance(note.get("progress"), (int, float)):
+            doing = f"{doing}, {int(note['progress'] * 100)}%"
         print(f"Ninaivu is already starting in another window ({doing}). It opens by "
               f"itself when that is done: there is no need to start it again.",
               file=sys.stderr)

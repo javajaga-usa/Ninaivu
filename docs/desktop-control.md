@@ -89,6 +89,16 @@ What it shows:
   shutdown with the run file's token and never force-kills a busy server;
   the panel shows **Stopping…** until the process has let go of the state
   folder, then **Stopped**.
+- **A progress card while Ninaivu is not serving yet**, under the buttons:
+  what is holding the start up, how far it has got with a bar and a
+  percentage, how long it has been, and the time left once it can be judged.
+  It appears for a start or restart begun anywhere (here, the console's
+  Restart, the tray, a start at sign-in) and covers the slow steps: the old
+  server finishing what it has in hand during a restart, an index moved or
+  switched to another folder, one brought in from another computer, the copy
+  taken before an update, and a check or repair of the index. A step that
+  cannot say how far it has got shows a bar that moves without filling. The
+  card goes when Ninaivu is serving.
 - The whole computer's CPU and memory, Ninaivu's own CPU, memory and threads,
   the battery, free disk space, and a minute of CPU history. Battery power is
   the measured whole-device discharge rate, where the battery reports an

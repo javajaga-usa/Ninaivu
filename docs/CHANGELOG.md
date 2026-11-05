@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### A progress card in the Control Panel
+
+- **Whatever holds up a start shows how far it has got**, in a card under the Control Panel's buttons: the step, a bar and a percentage, how long so far and, once it can be judged, the time left. It covers a restart (the old server finishing what it has in hand, then the new start), an index moved or switched to another folder, one brought in from another computer, the copy before an update, and a check or repair of the index, whose bar now moves within each database rather than only between them. A start or restart begun from the console, the tray or at sign-in is followed as well as one begun in the panel. Where a step cannot say how far it has got, the bar moves without filling rather than showing a made-up figure. It replaces the thin line that only moved.
+
 ### The index folder in Advanced settings
 
 - **`state_dir` can be changed from Advanced settings** on a one-computer Ninaivu and on the Primary: Ninaivu reads the index already in the folder given, from the next restart. It shows what is in that folder first and asks for the administrator's password. Nothing is copied or moved; the index used until then is kept as it is, and deleting the forwarding note (`index-location.json`) beside it goes back. Refused for a folder with no index, an index in use, one a newer Ninaivu opened, or one that moved away. Never written into `config.json`; not offered on the Secondary or on a copy following another computer.

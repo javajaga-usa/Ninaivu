@@ -200,14 +200,15 @@ class Progress(Base):
         from ninaivu import __main__ as main
         from ninaivu.server import starting
         steps = []
-        with patch.object(starting, 'step', steps.append):
+        with patch.object(starting, 'step', lambda *said: steps.append(said)):
             tell = main._move_progress()
             for done in (0, 10, 50, 50, 100):
                 tell('copying', done, 100)
             tell('verifying', 100, 100)
-        self.assertEqual(steps[1], f'{main.MOVE_STEP}: copying, 10%')
+        # The percentage goes with the note as numbers, for the panel's bar.
+        self.assertEqual(steps[1], (f'{main.MOVE_STEP}: copying', 10, 100))
         self.assertEqual(len(steps), 5)                 # the repeated 50% is said once
-        self.assertTrue(steps[-1].endswith('reading it back to check it, 100%'))
+        self.assertEqual(steps[-1], (f'{main.MOVE_STEP}: reading it back to check it', 100, 100))
 
     def test_the_control_panel_waits_past_its_ceiling_for_a_move(self):
         from ninaivu import __main__ as main
