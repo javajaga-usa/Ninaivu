@@ -251,3 +251,50 @@ def test_the_card_shows_a_start_begun_elsewhere_and_goes_with_it(tmp_path, monke
     finally:
         stop_panel(dashboard)
         root.destroy()
+
+
+# -- the check read straight through first, and left out after a move ----------------
+
+def test_each_database_is_read_through_ahead_of_its_check(state):
+    _database(state / "index.db", 20000)
+    _database(state / "archive.db", 1000)
+    paths = [state / "index.db", state / "archive.db"]
+    ahead = index_check._ReadAhead(paths, room=10 ** 12)
+    ahead.start()
+    for path in paths:
+        assert ahead.finished[path].wait(10)
+        assert ahead.read[path] == index_check._size(path)
+    assert not ahead.skipped
+
+
+def test_a_database_bigger_than_the_memory_free_is_only_checked(state):
+    _database(state / "index.db", 20000)
+    path = state / "index.db"
+    ahead = index_check._ReadAhead([path], room=1024)
+    ahead.start()
+    assert ahead.finished[path].wait(10)
+    assert ahead.skipped == {path} and ahead.read[path] == 0
+    told = []
+    with patch.object(index_check, "_memory_free", return_value=1024):
+        index_check.run(state, tell=lambda what, done=None, total=None: told.append(
+            None if total is None else done / total))
+    shares = [s for s in told if s is not None]
+    assert shares == sorted(shares) and shares[-1] < 1      # the bar still moves, by the check alone
+
+
+def test_after_a_move_the_databases_are_only_opened(state):
+    _database(state / "index.db", 2000)
+    index_check.ask(state, "moved")
+    with patch.object(index_check, "_follow", side_effect=AssertionError("read through")), \
+            patch.object(index_check, "_ReadAhead", side_effect=AssertionError("read ahead")):
+        result = index_check.run(state)
+    assert result["ok"] and result["light"] is True
+    (state / "index.db").write_bytes(b"not a database at all" * 100)
+    assert index_check.check(state / "index.db", light=True) == ["file is not a database"]
+
+
+def test_a_switch_is_checked_in_full(state):
+    _database(state / "index.db", 2000)
+    index_check.ask(state, "switched")
+    result = index_check.run(state)
+    assert result["light"] is False and result["pace"]["index.db"]["quick_check"] > 0

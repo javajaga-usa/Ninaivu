@@ -94,3 +94,46 @@ def remaining(began: tuple[float, float] | None, share: float | None, now: float
 #: How long, and how far, a step goes before its time left is estimated.
 MEASURE_SECONDS = 8.0
 MEASURE_SHARE = 0.03
+
+
+#: What stopping a start does, by the step it is on: said before it is
+#: stopped, so nobody stops one without knowing.
+STOPPING = (
+    ('moving the index', 'The index stays where it is now, and the move is tried again at '
+                         'the next start. To call the move off, delete index-move-pending.json '
+                         'in the index folder before starting again.'),
+    ('checking the index', 'The check is done again at the next start.'),
+    ('repairing the index', 'A database being repaired keeps its original beside it, and the '
+                            'check and repair are done again at the next start.'),
+    ('copying the settings and the index before the update',
+     'Nothing in the index has changed yet. The copy is made again at the next start.'),
+    ('bringing in the index', 'The import is left unfinished and is not tried again by itself. '
+                              'The index stays as it was, unless the start is stopped in the '
+                              'moment the new one is put in its place: then the earlier one is '
+                              'kept beside it, in a folder whose name begins .ninaivu_pre_restore_. '
+                              'Stop it only if nothing has moved for a long time.'),
+    ('waiting for Ninaivu to finish what is in hand',
+     'The restart is called off: Ninaivu finishes what it has in hand and stops. Start it again '
+     'from here when you like.'),
+)
+
+
+def stop_warning(step: str | None) -> str:
+    """What stopping the start on *step* does, in words for the person asked."""
+    step = str(step or '')
+    for start, words in STOPPING:
+        if step.startswith(start):
+            return words
+    return 'Nothing is lost: the next start begins again.'
+
+
+def may_stop(step: str | None, stuck: bool) -> bool:
+    """Whether Stop this start is offered: for any step, but while an index
+    from another computer is being put in place, only once it is stuck."""
+    return stuck or not str(step or '').startswith('bringing in the index')
+
+
+def stuck_words(seconds: float) -> str:
+    """The card's warning for a start that has not moved on."""
+    return (f'Nothing has moved for {describe_wait(seconds)}. It may still finish: '
+            f'View logs shows what it is doing.')

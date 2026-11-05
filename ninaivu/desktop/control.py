@@ -5,6 +5,7 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import time
 import urllib.request
 from pathlib import Path
@@ -281,6 +282,10 @@ GIVE_UP_AFTER = 2
 FAILED_STARTS = 'failed-starts.json'
 
 
+#: One save of the panel's settings at a time (Controller.save_setting).
+_SAVING = threading.RLock()
+
+
 def _pid_alive(pid) -> bool:
     """Whether the process a start note names is still there."""
     try:
@@ -314,6 +319,18 @@ STOP_SECONDS = 20 * 60
 #: How often the panel is told how a long wait is going: often enough for its
 #: progress bar to move as the server's note does.
 PROGRESS_EVERY = 1
+#: A start that keeps its heartbeat but has not moved on - the same step, the
+#: same percentage - for this long is called stuck: the panel stops waiting
+#: on it (so its window can be used and closed) and offers to stop it. The
+#: slowest step that cannot say how far it has got, rebuilding the indexes of
+#: a large damaged index, takes minutes, not a quarter of an hour.
+STALL_SECONDS = 15 * 60
+#: How long a start being stopped is given to end before it is ended by force.
+END_START_SECONDS = 20
+
+
+class StartStopped(RuntimeError):
+    """The person stopped the start this panel was waiting on."""
 
 
 def under_way(state_dir):
@@ -332,7 +349,9 @@ def under_way(state_dir):
             share = note.get('progress')
             return {'kind': kind, 'step': str(note.get('step') or kind),
                     'progress': float(share) if isinstance(share, (int, float)) else None,
-                    'since': float(note.get('since') or time.time())}
+                    'since': float(note.get('since') or time.time()),
+                    'step_since': float(note.get('step_since') or note.get('since') or time.time()),
+                    'pid': note.get('pid')}
     return None
 
 
@@ -358,9 +377,11 @@ class Controller:
         self.mode = budget(self.settings.get('mode', 'standard'))['mode']
         self.started = None
         self.went_back = False
-        #: Told ``(what, seconds)`` while a start or a stop is waited on: the
-        #: step the server says it is on, and how long the wait has lasted.
+        #: Told ``(what, seconds, share)`` while a start or a stop is waited
+        #: on: the step the server says it is on, how long the wait has
+        #: lasted, and how far the step has got (0 to 1, or None).
         self.on_progress = None
+        self.stopping_start = False     # set by stop_start, read by _wait_for_start
         self.capture_running_settings()
 
     def record(self):
@@ -418,12 +439,17 @@ class Controller:
         self.save_setting('mode', mode)
 
     def save_setting(self, name, value):
-        """Keep one of the panel's settings (the mode, the look) in settings.json."""
-        self.settings[name] = value
-        self.runtime.mkdir(parents=True,exist_ok=True)
-        temporary = self.settings_path.with_suffix('.tmp')
-        temporary.write_text(json.dumps(self.settings,indent=2))
-        temporary.replace(self.settings_path)
+        """Keep one of the panel's settings (the mode, the look) in settings.json.
+
+        The panel saves from more than one thread (a start on its worker, the
+        look on another), and two writers of the one temporary file could
+        leave either's half in it: one at a time."""
+        with _SAVING:
+            self.settings[name] = value
+            self.runtime.mkdir(parents=True,exist_ok=True)
+            temporary = self.settings_path.with_suffix('.tmp')
+            temporary.write_text(json.dumps(self.settings,indent=2))
+            temporary.replace(self.settings_path)
 
     def scheme(self, record=None, args=None):
         """http or https: the running server's own, or what the next start
@@ -558,13 +584,22 @@ class Controller:
         heard = None           # when the server last said where it was
         step = None
         share = None           # how far that step has got, when it says
+        moved = began          # when the step or its figure last changed
+        said = None
         told = None
+        self.stopping_start = False
         while True:
             if self.record():
                 self.capture_running_settings()
                 self.save_mode(self.mode)
                 (self.runtime / FAILED_STARTS).unlink(missing_ok=True)
                 return 'Ninaivu is running.'
+            if getattr(self, 'stopping_start', False):
+                # Ended by the person (stop_start): not a start that failed,
+                # which two of after an update would send the library back.
+                self.started = None
+                raise StartStopped('The start was stopped. Nothing is lost: the next start '
+                                   'begins again.')
             if self.started is not None and self.started.poll() is not None:
                 went_back = self.failed_start()
                 if went_back:
@@ -580,6 +615,9 @@ class Controller:
                 step = note.get('step') or step
                 if isinstance(note.get('progress'), (int, float)):
                     share = float(note['progress'])
+                if (step, None if share is None else round(share, 3)) != said:
+                    said = (step, None if share is None else round(share, 3))
+                    moved = now
             waited = now - began
             if heard is None and waited > FIRST_WORD_SECONDS:
                 raise RuntimeError(f'Ninaivu has not said how its start is going for '
@@ -589,6 +627,10 @@ class Controller:
                 raise RuntimeError(f'Ninaivu stopped saying how its start is going while '
                                    f'{step}, {describe_wait(now - heard)} ago. It may still '
                                    f'finish: watch the status, or use View logs.')
+            if heard is not None and now - moved > STALL_SECONDS:
+                raise RuntimeError(f'Ninaivu has been {step} for {describe_wait(now - moved)} '
+                                   f'without moving on. It may still finish: the card under the '
+                                   f'buttons follows it, and Stop this start ends it safely.')
             # Not while an index is being brought in or moved: each says how far
             # it has got as it goes (storage/full_export.py, relocate.py), and on a large library
             # it rightly takes longer than any ceiling; a stall still shows as
@@ -673,6 +715,11 @@ class Controller:
         if not ask_to_stop(int(record['admin_port']), record.get('token', ''), 10.0, scheme,
                            state_dir=self.cfg.state_dir):
             raise RuntimeError('Ninaivu did not accept the shutdown request. No process was forcibly stopped.')
+        return self.wait_for_stop(server)
+
+    def wait_for_stop(self, server):
+        """Wait for a server already asked to stop (*server*, its process)
+        to let go of the state folder."""
         began = time.monotonic()
         told = began
         while time.monotonic() - began < STOP_SECONDS:
@@ -699,6 +746,60 @@ class Controller:
                 return 'Ninaivu stopped cleanly.'
             time.sleep(.5)
         raise RuntimeError('Ninaivu is still finishing active work. Leave it time to checkpoint; no process was forced closed.')
+
+    def stop_start(self, patience=END_START_SECONDS):
+        """End the start under way, begun here or anywhere else.
+
+        For a start that is stuck, or that somebody does not want to wait for.
+        Each step before Ninaivu serves can be cut short: a move or switch of
+        the index leaves it where it was, and is tried again at the next
+        start; a check of the index is done again; a repair keeps the
+        original beside it; the copy before an update is made again. The
+        restart helper goes first, so that it does not start another. Only a
+        process that is Ninaivu's is ended: asked first, then by force after
+        *patience* seconds.
+        """
+        if psutil is None:
+            raise RuntimeError('Stopping a start needs psutil, which is not installed.')
+        notes = [starting.RESTARTING.read(self.cfg.state_dir), starting.read(self.cfg.state_dir)]
+        pids = [int(n['pid']) for n in notes if n and str(n.get('pid', '')).isdigit()]
+        ours = getattr(self.started, 'pid', None)
+        if ours is not None and self.started.poll() is None and ours not in pids:
+            pids.append(int(ours))
+        if not pids:
+            return 'Ninaivu is not starting.'
+        self.stopping_start = True
+        done = [_end_ninaivu(pid, patience) for pid in pids]
+        if 'stuck' in done:
+            return ('Ninaivu was told to stop but has not ended yet: it is waiting on a disk that '
+                    'does not answer, and ends as soon as the disk does. Check that the drive '
+                    'with the index is connected and awake.')
+        if 'ended' in done:
+            return 'The start was stopped. Start Ninaivu again when you are ready.'
+        return 'Ninaivu is not starting.'
+
+
+    def hand_over_restart(self, mode=None):
+        """Leave a restart this panel began to the restart helper, which
+        lives on when the panel closes: the server already asked to stop is
+        waited for, then started again (desktop/relaunch.py)."""
+        python = python_for_server(self.root)
+        if not python.is_file():
+            python = Path(sys.executable)
+        command = [str(python), '-m', 'ninaivu.desktop.relaunch', '--stopping']
+        if mode:
+            command += ['--mode', mode]
+        env = dict(os.environ, NINAIVU_STATE_DIR=str(self.cfg.state_dir), PYTHONUNBUFFERED='1')
+        with open_log(self.logs / 'restart.log') as log:
+            kwargs = dict(cwd=self.root, env=env, stdin=subprocess.DEVNULL, stdout=log, stderr=log)
+            if sys.platform == 'win32':
+                detached = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+                try:
+                    return subprocess.Popen(command, creationflags=detached | subprocess.CREATE_BREAKAWAY_FROM_JOB
+                                            | HIDDEN, **kwargs)
+                except OSError:
+                    return subprocess.Popen(command, creationflags=detached | HIDDEN, **kwargs)
+            return subprocess.Popen(command, start_new_session=True, **kwargs)
 
     def apply_mode(self, mode):
         if mode not in ('standard', 'performance', 'power-saving'):
@@ -786,6 +887,38 @@ def _server_process(record):
         return None
 
 
+def _end_ninaivu(pid, patience):
+    """End process *pid* if it is a Ninaivu one.
+
+    ``'ended'``; ``'stuck'`` when it was told to and has not ended (a process
+    waiting on a disk that does not answer cannot end until the disk does);
+    None when there was no Ninaivu process to end. A process id can be taken
+    by another program once its process is gone, so its command line is
+    looked at first.
+    """
+    try:
+        process = psutil.Process(int(pid))
+        command = ' '.join(process.cmdline()).lower()
+    except (_PsutilError, ValueError, TypeError):
+        return None
+    if 'ninaivu' not in command or process.pid == os.getpid():
+        return None
+    try:
+        process.terminate()
+        try:
+            process.wait(patience)
+        except psutil.TimeoutExpired:
+            process.kill()
+            process.wait(patience)
+    except psutil.NoSuchProcess:
+        pass
+    except psutil.TimeoutExpired:
+        return 'stuck'
+    except _PsutilError:
+        return None
+    return 'ended'
+
+
 def _has_ended(process):
     """Whether it has exited. One exited but not yet collected by whatever
     started it holds no files, and so no lock, any more."""
@@ -811,7 +944,7 @@ class Monitor:
                     'server_ram':0,'threads':0,'battery':None,
                     'plugged':None,'disk_free':0,
                     'uptime':max(0,time.time()-record.get('started_at',time.time())) if record else 0,
-                    'under_way':self._under_way()}
+                    'under_way':self._under_way(), 'record':record}
         now=time.monotonic();elapsed=max(.01,now-self.last);self.last=now
         processes=[]
         if record:
@@ -839,7 +972,7 @@ class Monitor:
                 'server_ram':rss,'threads':threads,'battery':getattr(battery,'percent',None),
                 'plugged':getattr(battery,'power_plugged',None),'disk_free':getattr(disk,'free',0),
                 'uptime':max(0,time.time()-record.get('started_at',time.time())) if record else 0,
-                'under_way':self._under_way()}
+                'under_way':self._under_way(), 'record':record}
 
     def _under_way(self):
         """A start or restart this panel can follow (:func:`under_way`)."""

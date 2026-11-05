@@ -91,6 +91,9 @@ def main(argv=None):
     parser.add_argument('--mode', choices=MODES)
     parser.add_argument('--network', choices=('on', 'off'))
     parser.add_argument('--https', choices=('on', 'off'))
+    # The Control Panel closed half-way through its own restart: the server
+    # was asked to stop already, and asking again could find it gone.
+    parser.add_argument('--stopping', action='store_true')
     args = parser.parse_args(argv)
 
     # The request that started this is still being answered; let it go out.
@@ -119,7 +122,11 @@ def main(argv=None):
     say(f'restart requested (mode {mode}'
         + (f', network {args.network})' if args.network else ')'))
     deadline = time.monotonic() + STOP_PATIENCE
-    while True:
+    if args.stopping:
+        from .control import _server_process
+        record = controller.record()
+        say(controller.wait_for_stop(_server_process(record)) if record else 'Ninaivu is stopped.')
+    while not args.stopping:
         try:
             say(controller.stop())
             break
