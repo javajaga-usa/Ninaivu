@@ -104,6 +104,30 @@ def _holding(cfg) -> Holding | None:
     return Holding(folder) if folder else None
 
 
+def _libraries_inside(folder: str, cfg) -> list[str]:
+    """This computer's library folders inside *folder*, when the folder
+    holds nothing else of Ninaivu's: not its state folder, and not itself
+    inside a library."""
+    try:
+        target = Path(folder).expanduser().resolve()
+        state = Path(cfg.state_dir).resolve()
+    except OSError:
+        return []
+    if target == state or target in state.parents or state in target.parents:
+        return []
+    inside = []
+    for root in cfg.roots:
+        try:
+            resolved = Path(root).expanduser().resolve()
+        except OSError:
+            continue
+        if resolved == target or resolved in target.parents:
+            return []                    # the folder is in a library, or is one
+        if target in resolved.parents:
+            inside.append(str(root))
+    return inside
+
+
 def _audit(what: str) -> None:
     auth.audit(db.connect(_cfg().db_path), current_user().id, "two_computers", what)
 
@@ -171,7 +195,8 @@ def mugil_role():
     cfg = _cfg()
     data = json_body()
     if not isinstance(data, dict) or set(data) - {"role", "originals_dir", "copy_every_hours",
-                                                  "family_copy", "free_space", "copy_mode"}:
+                                                  "family_copy", "free_space", "copy_mode",
+                                                  "library_into_originals"}:
         return jsonify({**refusal("Send role, originals_dir or copy_every_hours."), "status": 400}), 400
     if "copy_mode" in data and data["copy_mode"] not in ("automatic", "manual"):
         return jsonify({**refusal("Choose automatic or manual."), "status": 400}), 400
@@ -195,6 +220,25 @@ def mugil_role():
     if wanted == SECONDARY and (folder or "originals_dir" in data) \
             and folder != (cfg.mugil_originals_dir or ""):
         problem = folder_problem(folder, list(cfg.roots), cfg.state_dir)
+        inside = _libraries_inside(folder, cfg) if problem else []
+        if problem and inside:
+            # This computer's own library is in that folder: a one-computer
+            # Ninaivu becoming the Secondary, its library to be the originals.
+            # Done only when asked, and with the sidecars written first, so the
+            # names and albums go with the photographs (storage/xmp_read.py).
+            if data.get("library_into_originals") is not True:
+                return jsonify({"error": problem, "status": 409, "library_inside": inside}), 409
+            writer = getattr(current_app.config["MV_SERVICES"], "xmp", None)
+            if writer is not None and writer.running:
+                return jsonify({**refusal("The sidecars are still being written. Wait for them "
+                                          "to finish, so the names and albums go with the "
+                                          "photographs."), "status": 409}), 409
+            rest = [r for r in cfg.roots if r not in inside]
+            problem = folder_problem(folder, rest, cfg.state_dir)
+            if not problem:
+                for root in inside:
+                    cfg.remove_library(root)
+                _audit(f"this computer's library {', '.join(inside)} is kept as originals in {folder}")
         if problem:
             return jsonify({"error": problem, "status": 400}), 400
     if wanted != PRIMARY and _courier() is not None:
@@ -878,6 +922,174 @@ def mugil_rebuild_stop():
         return _not_here()
     _rebuild().stop()
     return jsonify(_rebuild().status())
+
+
+# -- the files only the Secondary has (mugil/survey.py, mugil/bring_in.py) -------
+
+def _bring_in():
+    return getattr(current_app.config["MV_SERVICES"], "mugil_bring_in", None)
+
+
+def _survey(cfg):
+    """The Secondary's look for its own files, one per originals folder."""
+    from ..mugil.survey import Survey                            # noqa: PLC0415
+    services = current_app.config["MV_SERVICES"]
+    holding = _holding(cfg)
+    if holding is None:
+        return None
+    current = getattr(services, "mugil_survey", None)
+    if current is None or current.folder != holding.folder:
+        current = Survey(cfg.state_dir, holding.folder)
+        services.mugil_survey = current
+    return current
+
+
+def _only_answer(cfg) -> dict:
+    """What the Secondary has that this computer does not, and bringing it in."""
+    from ..mugil import bring_in                                 # noqa: PLC0415
+    courier = _courier()
+    answer: dict = {"bring": _bring_in().status(), "found": None, "away": False,
+                    "why_not": bring_in.ready(cfg, courier)}
+    if pairing.load(cfg.state_dir) is not None and cfg.mugil_partner_url:
+        try:
+            answer["found"] = _bring_in().found()
+        except PartnerError:
+            answer["away"] = True
+    last = (courier.status().get("last") or {}) if courier is not None else {}
+    asked = _bring_in().asked_at
+    found = answer["found"] or {}
+    # Looked at after the last complete run, and finished: what it found
+    # holds now. Before that, a file still to be sent could look like the
+    # Secondary's own.
+    answer["looked_since_run"] = bool(asked and asked >= float(last.get("finished") or 0))
+    answer["can_bring"] = bool(
+        answer["why_not"] is None and answer["looked_since_run"] and found.get("finished")
+        and not found.get("running") and not found.get("error")
+        and not _bring_in().running)
+    return answer
+
+
+@mugil_bp.get("/api/admin/mugil/only-on-secondary")
+@require_admin
+def mugil_only_status():
+    cfg = _cfg()
+    if role(cfg) != PRIMARY or _bring_in() is None:
+        return _not_here()
+    return jsonify(_only_answer(cfg))
+
+
+@mugil_bp.post("/api/admin/mugil/only-on-secondary/look")
+@require_admin
+def mugil_only_look():
+    from ..mugil import bring_in                                 # noqa: PLC0415
+    cfg = _cfg()
+    if role(cfg) != PRIMARY or _bring_in() is None:
+        return _not_here()
+    why = bring_in.ready(cfg, _courier())
+    if why:
+        return jsonify({**refusal(why), "status": 409}), 409
+    try:
+        found = _bring_in().look()
+    except PartnerError as exc:
+        return jsonify({**refusal(str(exc)), "status": exc.status or 409}), exc.status or 409
+    return jsonify({"found": found})
+
+
+@mugil_bp.post("/api/admin/mugil/only-on-secondary/bring")
+@require_admin
+def mugil_only_bring():
+    cfg = _cfg()
+    if role(cfg) != PRIMARY or _bring_in() is None:
+        return _not_here()
+    if not _only_answer(cfg).get("can_bring"):
+        return jsonify({**refusal("Look on the Secondary first, after a complete run of "
+                                  "sending the originals."), "status": 409}), 409
+    try:
+        answer = _bring_in().start()
+    except PartnerError as exc:
+        return jsonify({**refusal(str(exc)), "status": exc.status or 409}), exc.status or 409
+    _audit("bringing in the files only the Secondary has")
+    return jsonify(answer)
+
+
+@mugil_bp.post("/api/admin/mugil/only-on-secondary/stop")
+@require_admin
+def mugil_only_stop():
+    cfg = _cfg()
+    if role(cfg) != PRIMARY or _bring_in() is None:
+        return _not_here()
+    _bring_in().stop()
+    return jsonify(_bring_in().status())
+
+
+@mugil_peer_bp.post("/api/mugil/survey")
+def mugil_survey_start():
+    """On the Secondary: look for the files the Primary has not named."""
+    cfg = _cfg()
+    if role(cfg) != SECONDARY:
+        return _not_here()
+    if _signed(pairing.body_digest(read_at_most(JSON_MAX_BYTES))) is None:
+        return _unsigned()
+    survey = _survey(cfg)
+    if survey is None or folder_problem(str(survey.folder), list(cfg.roots), cfg.state_dir):
+        return jsonify({"refused": "This computer has no originals folder it can read.",
+                        "status": 503}), 503
+    return jsonify(survey.start())
+
+
+@mugil_peer_bp.get("/api/mugil/survey")
+def mugil_survey_status():
+    cfg = _cfg()
+    if role(cfg) != SECONDARY:
+        return _not_here()
+    if _signed(pairing.body_digest(b"")) is None:
+        return _unsigned()
+    survey = _survey(cfg)
+    if survey is None:
+        return jsonify({"refused": "This computer has no originals folder it can read.",
+                        "status": 503}), 503
+    return jsonify(survey.status())
+
+
+@mugil_peer_bp.get("/api/mugil/survey/items")
+def mugil_survey_items():
+    cfg = _cfg()
+    if role(cfg) != SECONDARY:
+        return _not_here()
+    if _signed(pairing.body_digest(b"")) is None:
+        return _unsigned()
+    survey = _survey(cfg)
+    if survey is None or survey.running:
+        return jsonify({"refused": "The look for this computer's own files is not finished.",
+                        "status": 409}), 409
+    kinds = tuple(k for k in str(request.args.get("kinds", "")).split(",") if k)
+    try:
+        limit = int(request.args.get("limit", "500"))
+    except ValueError:
+        limit = 500
+    library = request.args.get("library")
+    return jsonify({"items": survey.items(kinds or ("only", "other_version"), library,
+                                          request.args.get("after", ""), limit)})
+
+
+@mugil_peer_bp.get("/api/mugil/survey/file")
+def mugil_survey_file():
+    """On the Secondary: one of its own files, as it is on the disk."""
+    cfg = _cfg()
+    if role(cfg) != SECONDARY:
+        return _not_here()
+    if _signed(pairing.body_digest(b"")) is None:
+        return _unsigned()
+    survey = _survey(cfg)
+    found = survey.file(request.args.get("path", "")) if survey is not None else None
+    if found is None:
+        return jsonify({"refused": "That file is not here as it was found.", "status": 404}), 404
+    path, row = found
+    response = send_file(path, mimetype="application/octet-stream", conditional=False,
+                         max_age=0)
+    response.headers["X-Mugil-Digest"] = f"{row['algo']}:{row['digest']}"
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @mugil_peer_bp.post("/api/mugil/introduce")

@@ -321,6 +321,12 @@ class Services:
         from .mugil.rebuild import Rebuild                      # noqa: PLC0415
         self.mugil_rebuild = Rebuild(cfg, hold=lambda: self.workload.hold("upload"),
                                      done=self._rebuilt)
+        # The files only the Secondary has, brought in here (mugil/bring_in.py),
+        # and on the Secondary, the look for them (mugil/survey.py).
+        from .mugil.bring_in import BringIn                     # noqa: PLC0415
+        self.mugil_bring_in = BringIn(cfg, hold=lambda: self.workload.hold("upload"),
+                                      done=self._brought_in)
+        self.mugil_survey = None
         # And the two finding each other: the Secondary's wait for a Primary
         # and its answer to the Primary's question (ninaivu/mugil/meeting.py).
         from .mugil import display_name                         # noqa: PLC0415
@@ -365,6 +371,12 @@ class Services:
         from .storage.xmp import XmpWriter                      # noqa: PLC0415
         self.xmp = XmpWriter(cfg, lambda: db.connect(cfg.db_path),
                              hold=lambda: self.workload.hold("upload"))
+        # And reading back the sidecars of photographs new here, written by
+        # another Ninaivu (storage/xmp_read.py): their names, albums and stars.
+        from .storage.xmp_read import XmpReader                 # noqa: PLC0415
+        self.xmp_reader = XmpReader(cfg, lambda: db.connect(cfg.db_path),
+                                    confirm=self._confirm_face)
+        self.xmp_reader.schedule()
         # The family archive: the library on a USB drive, readable with a
         # browser alone. See ninaivu/storage/keepsake.py.
         from .storage.keepsake import Keepsake                  # noqa: PLC0415
@@ -474,6 +486,11 @@ class Services:
         if (payload.get("phase") in ("indexed", "done")
                 and (payload.get("added") or payload.get("updated"))):
             self.cloud.library_changed()
+        # Sidecars another Ninaivu wrote, beside photographs new here.
+        reader = getattr(self, "xmp_reader", None)
+        if (reader is not None and payload.get("phase") == "done"
+                and payload.get("added")):
+            reader.wake()
         # The on-device engine describes what the scan brought in.
         describer = getattr(self, "describer", None)
         if (describer is not None and payload.get("phase") == "done"
@@ -503,6 +520,21 @@ class Services:
         as the family app does when a phone has finished (api_phone_backup)."""
         from .api import api_phone_backup                       # noqa: PLC0415
         api_phone_backup._file(conn, self.cfg, self.scanner, user_id, user_id)  # noqa: SLF001
+
+    def _confirm_face(self, conn, face_id: int, person_id: int) -> None:
+        """A face named from a sidecar: confirmed as a person here would, with
+        the person's likeness rebuilt when the face models are loaded."""
+        indexer = getattr(self.scanner, "_faces", None)
+        if indexer is not None:
+            indexer.confirm(conn, face_id, person_id)
+        else:
+            from .storage import db                                 # noqa: PLC0415
+            db.set_face_person(conn, face_id, person_id, source="confirmed", confidence=1.0)
+
+    def _brought_in(self, folder: str) -> None:
+        """Files brought in from the Secondary: the library they went into is
+        scanned, so the family sees them, and their sidecars are read."""
+        self.scanner.start(folder)
 
     def _rebuilt(self, folder: str) -> None:
         """A library copied back from the Secondary: a library here, indexed."""
@@ -1549,8 +1581,11 @@ class Services:
                             ("mugil_handover", "sending the family app's copy"),
                             ("mugil_free", "freeing space"),
                             ("mugil_rebuild", "rebuilding the library"),
+                            ("mugil_bring_in", "bringing in the Secondary's files"),
+                            ("mugil_survey", "looking for the Secondary's own files"),
                             ("mugil_adopter", "checking the copy made by hand"),
                             ("repairer", "the repair"), ("xmp", "the sidecars"),
+                            ("xmp_reader", "reading the sidecars"),
                             ("keepsake", "the family archive"), ("importer", "the import")):
             part = getattr(self, name, None)
             if part is not None:

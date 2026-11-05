@@ -14,6 +14,7 @@
    addresses — so finishing the walk-through leaves the console exactly as if
    the person had visited those pages themselves. Every step can be skipped. */
 
+import { keepAsOriginals } from './two-computers.js';
 import * as i18n from './i18n.js';
 
 const $ = (sel) => document.querySelector(sel);
@@ -540,8 +541,7 @@ export class FirstDay {
       cta: i18n.t('Use this folder'),
       pick: async (path) => {
         try {
-          this.mugil = await this.json('/api/admin/mugil/role', {
-            method: 'POST', body: { role: 'secondary', originals_dir: path } });
+          this.mugil = await keepAsOriginals(this.json, path);
         } catch (exc) {
           this.toast(exc.message, true);
         }

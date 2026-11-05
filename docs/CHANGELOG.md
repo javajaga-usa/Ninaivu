@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Two computers run apart, then paired
+
+- **What only the Secondary has comes into the Primary's library.** A household that ran the two as separate one-computer Ninaivus, and imported more on the one that becomes the Secondary, pairs them and presses **Look on the Secondary** (Mugil → Two computers, on the Primary). The Secondary lists every file in its originals folder the Primary never had, and its own versions of photographs the Primary also has. **Bring them in** copies each into the Primary's library at the same path, checked against its fingerprint, with its own date. A version that differs from the Primary's goes beside it as `<name> (from <Secondary>).<ext>`, so neither is lost. Not brought in: what the Primary has under another name, the Secondary's recycle bin, photographs somebody deleted on the Primary, and folders that are no library of the Primary's (listed, to move into a library folder). Nothing on the Secondary is changed, moved or removed, and the next run does not send any of it back.
+- **A one-computer Ninaivu can keep its own library as the originals when it becomes the Secondary.** Choosing a folder that holds its library (an N300 with `NinaivuMaster/Ninaivu Archive`) asks first, then stops showing it as a library without moving or changing a file. It waits while sidecars are still being written.
+- **Sidecars Ninaivu wrote are read back** for photographs new to an index: names on the faces where they were, albums, stars and favourites, a written description, a corrected date and the place. Only Ninaivu's own sidecars, only to fill in what nobody here has said, and a face somebody here confirmed is never renamed. Turn on XMP sidecars on the computer whose work should travel, before bringing the photographs over.
+
 ### Moving the index
 
 - **A move that meets one bad file no longer starts over.** A file that reads back differently from the new folder is copied once more; if it still differs, the console says whether the current disk or the new drive is at fault. What was copied is kept, and moving to the same folder again continues from it.

@@ -377,6 +377,55 @@ myself** the household copies the library instead:
 Nothing in the originals folder is changed by the check except the modified
 times put back.
 
+## Two computers that ran apart first
+
+A household may run the two computers as separate one-computer Ninaivus for a
+while (the Mac with its library, the Linux PC with the N300 and its own) and
+import more on one than the other. Pairing them later loses nothing:
+
+1. **On the computer that becomes the Secondary, turn on XMP sidecars** (the
+   sidecars setting) and let them be written. Each photograph gets a small
+   file beside it with what the household told that Ninaivu: names on faces,
+   albums, stars, written descriptions, corrected dates, places.
+2. **Make it the Secondary**, choosing as the originals folder the folder that
+   holds its library, for example `/media/jaga/Toshiba/NinaivuMaster` for
+   `NinaivuMaster/Ninaivu Archive`. The library folder's name must be the
+   Primary's library folder's name. Ninaivu asks before it keeps its own
+   library as the originals, then stops showing it as a library. No file is
+   moved, changed or removed; its index stays where it was.
+3. **Choose *I will copy them myself*, then *I have finished copying*.** The
+   Secondary reads every file once and writes down its fingerprint, so
+   nothing the two already share crosses the network.
+4. **Pair**, and let the Primary's first run finish. It sends only what the
+   Secondary lacks. A file at the same path with different content is set
+   aside on the Secondary, never written over.
+5. **On the Primary, press Look on the Secondary**, then **Bring them in**
+   (Mugil → Two computers → Only on the Secondary).
+
+The look lists, from the Secondary's originals folder:
+
+- files at a path the Primary does not keep, with content it does not keep
+  anywhere: brought in at the same path in the library;
+- the Secondary's own versions of files the Primary sent different ones of
+  (step 4): brought in beside the Primary's, as `IMG_1 (from Linux PC).jpg`;
+- files the Primary has under another name, files in the Secondary's
+  recycle bin (`_deleted`), and files in folders that are no library of the
+  Primary's: listed, not brought in. Move a stray folder into a library
+  folder on the Secondary and look again.
+
+Each file is checked against its fingerprint as it arrives, written under a
+temporary name and renamed, and given its own modified time. A photograph
+somebody deleted or erased on the Primary is not brought back. A file
+already there is left as it is. When everything is in, the library is
+scanned, and the sidecars that came with the photographs give them their
+names, albums and stars (only what nobody on the Primary has said; a face
+somebody confirmed there is never renamed). The Primary's next run sends
+none of it back: the Secondary has every one at its path already.
+
+Looking is offered only after a complete run of sending the originals, so a
+photograph the Primary has, still to be sent, is not mistaken for the
+Secondary's own.
+
 ## Setting it up from the command line
 
 Install Ninaivu on both computers, and on each run `ninaivu mugil setup` once
