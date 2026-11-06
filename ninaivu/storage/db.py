@@ -1621,6 +1621,7 @@ def meta_counter(conn: sqlite3.Connection, key: str) -> int | None:
 
 _AGGREGATES: dict[tuple, tuple[Any, Any, float]] = {}
 _aggregates_lock = threading.Lock()
+
 #: Enough for every viewer's ceiling and folder in a household several times
 #: over; the least recently asked-for goes first.
 _AGGREGATES_MAX = 256
@@ -2712,6 +2713,10 @@ def hidden_from(asset: dict[str, Any] | None, max_visibility: int) -> bool:
     return str(asset.get("kind") or "") in ADMIN_ONLY_KINDS or bool(asset.get("nsfw"))
 
 
+#: How long the total of a word search is kept (query_assets).
+WORDS_TOTAL_SECONDS = 30.0
+
+
 def query_assets(
     conn: sqlite3.Connection,
     roots: Sequence[str] | str,
@@ -2748,6 +2753,7 @@ def query_assets(
     limit: int = 200,
     offset: int = 0,
     columns: Sequence[str] | None = None,
+    positional: bool = False,
     seed: int | None = None,
     with_total: bool = True,
     guest_search: bool = False,
@@ -2785,7 +2791,9 @@ def query_assets(
     ``columns`` narrows each row to those asset columns plus ``favorite`` and
     ``rating``, returned as read with no JSON decoding. It is for callers that
     take tens of thousands of rows at once — the gallery layout — where decoding
-    every row's tags and quality flags costs more than the query itself.
+    every row's tags and quality flags costs more than the query itself. With
+    ``positional=True`` too, each row is a list in that order, then
+    ``favorite`` and ``rating`` as stored: no dict is made for each of them.
 
     Two access controls are applied on *every* call and cannot be bypassed by
     a request parameter: ``max_visibility`` (derived from the caller's role)
@@ -2974,8 +2982,12 @@ def query_assets(
                 # description of it (storage/descriptions.py). Only when one
                 # has them: the join below is what ranks the full-text
                 # answer, and an OR cannot be put beside a MATCH that is joined.
-                where.append("(a.id IN (SELECT rowid FROM assets_fts WHERE assets_fts MATCH ?)"
-                             + "".join(f" OR a.id IN ({c[0]})" for c in also) + ")")
+                # One list of ids, joined by UNION: SQLite builds it once,
+                # merged. Written as a.id IN (…) OR a.id IN (…) it looked
+                # every row up once per list it was in, a quarter slower on a
+                # common word.
+                where.append("a.id IN (SELECT rowid FROM assets_fts WHERE assets_fts MATCH ?"
+                             + "".join(f" UNION {c[0]}" for c in also) + ")")
                 params.append(match)
                 for clause in also:
                     params.extend(clause[1])
@@ -3031,18 +3043,32 @@ def query_assets(
     rememberable = remember_total and not (
         text or favorites or min_rating or quality
         or exclude_reviewed_large or ids is not None)
-    if not with_total:
-        total = -1
-    elif rememberable:
-        also = ((TAGS_GENERATION_KEY,) if tag else ()) \
-            + ((FACES_GENERATION_KEY,) if person or people else ()) \
-            + ((OCCASIONS_GENERATION_KEY,) if occasion else ()) \
-            + ((PLACES_GENERATION_KEY,) if place or near else ()) \
-            + ((ALBUMS_GENERATION_KEY,) if album else ())
-        total = cached_aggregate(conn, ("total", count_query, tuple(count_params)),
-                                 count, also=also)
-    else:
-        total = count()
+    # Words, otherwise like the above: what they match is also in the
+    # descriptions and voice stories, which no counter follows. Kept briefly,
+    # so that scrolling through what a search found does not count it all
+    # again for every page; a change to the library still ends it at once.
+    words = remember_total and bool(text) and not (
+        favorites or min_rating or quality or exclude_reviewed_large or ids is not None)
+
+    def total_of(returned: int) -> int:
+        if not with_total:
+            return -1
+        # A page that came back short of its limit says the total itself:
+        # what came before it and what it holds. Most searches fit in one
+        # piece of the gallery, and every one of them counted every match a
+        # second time for that same number. Exact, so never stale.
+        if 0 < limit and returned < limit and (returned or not offset):
+            return offset + returned
+        if rememberable or words:
+            also = ((TAGS_GENERATION_KEY,) if tag else ()) \
+                + ((FACES_GENERATION_KEY,) if person or people else ()) \
+                + ((OCCASIONS_GENERATION_KEY,) if occasion else ()) \
+                + ((PLACES_GENERATION_KEY,) if place or near else ()) \
+                + ((ALBUMS_GENERATION_KEY,) if album else ())
+            return cached_aggregate(conn, ("total", count_query, tuple(count_params)),
+                                    count, also=also,
+                                    max_age=WORDS_TOTAL_SECONDS if words else None)
+        return count()
 
     page_sql = (f"SELECT {projection} {from_sql} WHERE {where_sql} "
                 f"ORDER BY {order} LIMIT ? OFFSET ?")
@@ -3050,6 +3076,9 @@ def query_assets(
     if columns is not None:
         values = _page_in_one_step(conn, page_sql, page_params,
                                    [*columns, "mine_favorite", "mine_rating"])
+        total = total_of(len(values))
+        if positional:
+            return values, int(total)
         names = [*columns, "favorite", "rating"]
         lean = [dict(zip(names, row)) for row in values]
         for data in lean:
@@ -3057,7 +3086,7 @@ def query_assets(
             data["rating"] = int(data["rating"] or 0)
         return lean, int(total)
     rows = conn.execute(page_sql, page_params).fetchall()
-    return [row_to_dict(r) for r in rows], int(total)
+    return [row_to_dict(r) for r in rows], int(total_of(len(rows)))
 
 
 def _json_value(column: str) -> str:

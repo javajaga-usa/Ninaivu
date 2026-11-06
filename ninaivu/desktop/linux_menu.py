@@ -181,7 +181,10 @@ def add(root: Path, environ=None, out=print) -> int:
             trust(shortcut)
             out(f"On the Desktop: {shortcut}")
     if shutil.which("update-desktop-database"):
-        subprocess.run(["update-desktop-database", str(menu)], capture_output=True)
+        try:
+            subprocess.run(["update-desktop-database", str(menu)], capture_output=True, timeout=30)
+        except (OSError, subprocess.TimeoutExpired):
+            pass                    # the menu reads the entry anyway, only later
     return 0
 
 

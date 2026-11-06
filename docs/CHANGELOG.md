@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Searching and the gallery, quicker (sweep of 5 November)
+
+Measured on a library of 200,000 made-up photographs:
+
+- **A search answers sooner.** A gallery search for a common word went from 630 to 427 ms, a two-word one from 75 to 51 ms, and a page of the Creative Studio's picker from 155 to 73 ms. The words are matched against the index, the descriptions and the voice stories as one list (`UNION`) rather than three tests on every row.
+- **A list is not counted when its page already says how many there are.** A page shorter than was asked for holds the rest of the list, so its length is the total; most searches fit in one piece of the gallery, and every one of them counted every match a second time. A search too long for one page is counted once while it is scrolled, not once per page.
+- **The gallery's layout is built without a dictionary for every photograph.** After a change to the library the whole layout is worked out again; on 200,000 photographs that went from about a second to three quarters of one. Byte for byte the same answer.
+- **Opening a log or a file from the tray no longer waits for the program that shows it**, which on some Linux desktops kept the tray's menu waiting until that program closed.
+
 ### Quicker copies and checks, and background work that keeps going (audit of 5 November)
 
 - **The copy before an update, and every bundle, is compressed on several cores.** It stays level 9 and within about 0.2% of the old size, and is still one ordinary gzip file, so every Ninaivu, older ones too, restores it. On one core this was most of the update copy's eight minutes.
