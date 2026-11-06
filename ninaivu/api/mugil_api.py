@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 from pathlib import Path
 
@@ -128,6 +129,46 @@ def _libraries_inside(folder: str, cfg) -> list[str]:
     return inside
 
 
+def _library_folder_chosen(folder: str, cfg) -> str | None:
+    """The folder that keeps the originals when *folder* is a library folder
+    itself: its parent, so the library is ``<originals>/<its name>``, the
+    layout the Primary sends into. A library folder is one of this
+    computer's library folders, or a folder carrying a library's id
+    (``.ninaivu-library``: the Primary's library copied over by hand). None
+    when *folder* is not one; empty when it is the top of its disk, so the
+    folder above it is on another disk."""
+    from ..storage import library_id                              # noqa: PLC0415
+    try:
+        target = Path(folder).expanduser()
+        if not target.is_absolute():
+            return None
+        target = target.resolve()
+        roots = {Path(r).expanduser().resolve() for r in cfg.roots}
+    except OSError:
+        return None
+    if target not in roots and library_id.read_id(target) is None:
+        return None
+    parent = target.parent
+    if parent == target or os.path.ismount(target):
+        # The top of a disk: the folder above it is on another disk.
+        return ""
+    return str(parent)
+
+
+def _holds_files(folder: str, holding: Holding | None = None) -> bool:
+    """Whether *folder* already holds photographs or videos not yet known as
+    kept: a library copied, or kept, there before pairing."""
+    from ..mugil.adopt import walk                                # noqa: PLC0415
+    try:
+        kept = (holding or Holding(folder)).kept_paths()
+    except Exception:                                    # noqa: BLE001 - nothing known kept
+        kept = set()
+    try:
+        return any(rel not in kept for rel, _full in walk(Path(folder)))
+    except OSError:
+        return False
+
+
 def _audit(what: str) -> None:
     auth.audit(db.connect(_cfg().db_path), current_user().id, "two_computers", what)
 
@@ -217,6 +258,18 @@ def mugil_role():
     if not isinstance(folder, str):
         return jsonify({**refusal("Give the whole path to the folder."), "status": 400}), 400
     folder = folder.strip()
+    check_found = False
+    if wanted == SECONDARY and folder and folder != (cfg.mugil_originals_dir or ""):
+        # The library folder itself chosen: its files are kept where they
+        # are, and the folder above it keeps the originals.
+        above = _library_folder_chosen(folder, cfg)
+        if above == "":
+            return jsonify({**refusal(
+                "That library is the whole disk. Make a folder on the disk, move the library "
+                "folders into it, and choose that folder: the originals are kept as "
+                "<that folder>/<library folder name>."), "status": 400}), 400
+        if above is not None:
+            folder = above
     if wanted == SECONDARY and (folder or "originals_dir" in data) \
             and folder != (cfg.mugil_originals_dir or ""):
         problem = folder_problem(folder, list(cfg.roots), cfg.state_dir)
@@ -227,7 +280,8 @@ def mugil_role():
             # Done only when asked, and with the sidecars written first, so the
             # names and albums go with the photographs (storage/xmp_read.py).
             if data.get("library_into_originals") is not True:
-                return jsonify({"error": problem, "status": 409, "library_inside": inside}), 409
+                return jsonify({"error": problem, "status": 409, "library_inside": inside,
+                                "originals_dir": folder}), 409
             writer = getattr(current_app.config["MV_SERVICES"], "xmp", None)
             if writer is not None and writer.running:
                 return jsonify({**refusal("The sidecars are still being written. Wait for them "
@@ -241,6 +295,11 @@ def mugil_role():
                 _audit(f"this computer's library {', '.join(inside)} is kept as originals in {folder}")
         if problem:
             return jsonify({"error": problem, "status": 400}), 400
+        # Photographs already in the folder (the library kept as the
+        # originals, or a copy made before this) are checked at once, so the
+        # Primary sends only what is missing or different: those already
+        # here are marked as in sync without crossing the network.
+        check_found = bool(folder) and "copy_mode" not in data and _holds_files(folder)
     if wanted != PRIMARY and _courier() is not None:
         _courier().stop()
     if wanted == SECONDARY and role(cfg) != SECONDARY:
@@ -264,6 +323,12 @@ def mugil_role():
             _adopter().copying()
         elif _adopter() is not None:
             _adopter().stop()
+    if check_found:
+        cfg.mugil_copy_mode = "manual"
+        cfg.save()
+        if _adopter() is not None:
+            _adopter().copying()                 # a check of another folder stops first
+            _adopter().finished_copying()
     cfg.save()
     _audit(f"this computer is {wanted}; originals folder {folder or '(none)'}; "
            f"first copy {cfg.mugil_copy_mode}")

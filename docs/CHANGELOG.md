@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Two computers: the Secondary keeps the originals in its library folder
+
+- **The library folder itself can be chosen as the place for the originals.** On the Secondary, *Where should the originals be kept?* used to refuse a library folder ("Keep the originals in a folder of their own"). Choosing it now keeps the originals there: the folder above it becomes the originals folder, so the library is `<originals folder>/<library folder name>`, the layout the Primary sends into. It works for the Secondary's own library (asked first, as before; that computer then stops showing it as a library) and for the Primary's library copied onto the big disk by hand, even under another folder name: the copy carries the library's id (`.ninaivu-library`) and is known by it. A library that is a whole disk is refused with what to do instead.
+- **Photographs already in the chosen folder are checked at once, and the Primary marks them as in sync.** Each is read and fingerprinted on the Secondary; the Primary then sends nothing for a file at the same path with the same size and fingerprint, only puts back its modified time, and sends what is missing or different (a different file is set aside, never written over). No *I have finished copying* is needed for a folder that already holds the library.
+
 ## 3.7.0 — 5 November 2026
 
 ### Searching and the gallery, quicker (sweep of 5 November)
