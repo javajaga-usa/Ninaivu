@@ -160,8 +160,8 @@ def test_every_item_counted_phase_can_say_how_far_through_it_is():
     straight back to a sentence that never changes — the bug this is here to
     stop coming back, one new pass at a time.
     """
-    phases = counting_phases((SCRIPTS / "api.js").read_text(encoding="utf-8"))
-    assert ITEM_PHASES <= phases, f"api.js cannot count {ITEM_PHASES - phases}"
+    phases = counting_phases((SCRIPTS / "http.js").read_text(encoding="utf-8"))
+    assert ITEM_PHASES <= phases, f"http.js cannot count {ITEM_PHASES - phases}"
     for name in STRIP_SCRIPTS:
         content = (SCRIPTS / name).read_text(encoding="utf-8")
         assert "SCAN_COUNTS" in content, f"{name} does not use SCAN_COUNTS"
@@ -183,8 +183,8 @@ def test_the_gallery_reaches_the_strip_it_no_longer_draws_itself():
 def test_each_line_carries_both_numbers():
     """A count with no total is a number nobody can place."""
     body = re.search(r"(?:export\s+)?const SCAN_COUNTS = \{(.*?)\n\};",
-                     (SCRIPTS / "api.js").read_text(encoding="utf-8"), re.S)
-    assert body, "SCAN_COUNTS is missing from api.js"
+                     (SCRIPTS / "http.js").read_text(encoding="utf-8"), re.S)
+    assert body, "SCAN_COUNTS is missing from http.js"
     for line in re.findall(r"^\s*\w+: \(done, total\) =>(.*)$",
                            body.group(1), re.M):
         assert "${done}" in line and "${total}" in line, line
@@ -195,8 +195,8 @@ def test_the_phases_the_strip_counts_are_the_ones_the_snapshot_measures():
     phase in the strip's map but not the snapshot's set would draw a count
     beside a percentage computed from files walked, which is worse than
     either on its own."""
-    phases = counting_phases((SCRIPTS / "api.js").read_text(encoding="utf-8"))
-    assert phases == set(ITEM_PHASES), f"api.js: {phases ^ set(ITEM_PHASES)}"
+    phases = counting_phases((SCRIPTS / "http.js").read_text(encoding="utf-8"))
+    assert phases == set(ITEM_PHASES), f"http.js: {phases ^ set(ITEM_PHASES)}"
 
 
 # --- and how long is left --------------------------------------------------
@@ -244,10 +244,10 @@ def test_the_pass_clock_restarts_when_the_next_pass_announces_itself():
 
 
 def test_the_words_for_a_long_pass_are_checked_in_the_strip():
-    """The rounding lives in the browser; defined in api.js and shared."""
-    api_script = (SCRIPTS / "api.js").read_text(encoding="utf-8")
-    assert "function timeLeft(" in api_script, "api.js"
-    assert "hours left" in api_script and "minutes left" in api_script, "api.js"
+    """The rounding lives in the browser; defined in http.js and shared."""
+    api_script = (SCRIPTS / "http.js").read_text(encoding="utf-8")
+    assert "function timeLeft(" in api_script, "http.js"
+    assert "hours left" in api_script and "minutes left" in api_script, "http.js"
     for name in STRIP_SCRIPTS:
         script = (SCRIPTS / name).read_text(encoding="utf-8")
         assert "timeLeft" in script, f"{name} does not use timeLeft"

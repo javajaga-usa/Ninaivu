@@ -113,7 +113,7 @@ def app_js() -> str:
 
 
 def test_the_status_is_asked_for_without_the_counts():
-    api = (SCRIPTS / "api.js").read_text(encoding="utf-8")
+    api = (SCRIPTS / "http.js").read_text(encoding="utf-8")
     assert "'/api/status?stats=0'" in api, "the gallery is asking for the counts again"
     assert "/api/status/stats" in api
 
