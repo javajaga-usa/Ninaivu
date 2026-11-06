@@ -112,7 +112,8 @@ def test_on_a_mac_a_failed_trust_shows_the_file_and_the_last_step(tmp_path, nina
     monkeypatch.setattr(app.messagebox, "askyesno", lambda *a, **k: True)
     monkeypatch.setattr(tls, "trust_ca_on_mac", lambda path: (False, "macOS did not trust it."))
     ran = []
-    monkeypatch.setattr("ninaivu.desktop.tray.subprocess.run", lambda command, **kw: ran.append(command))
+    # Started, not waited for (tray.open_file): Finder shows the file.
+    monkeypatch.setattr("ninaivu.desktop.tray.subprocess.Popen", lambda command, **kw: ran.append(command))
     dashboard.open_certificate()
     assert ran == [["open", "-R", str(ninaivu_ca)]]
     assert "Always Trust" in notices[0]
