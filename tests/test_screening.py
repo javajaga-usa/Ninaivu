@@ -222,3 +222,16 @@ def test_a_clip_stays_held_while_anybody_still_asks_about_its_still(app, as_fami
     assert _vis(conn, still) == 2 and _vis(conn, clip) == 2
     assert _send(other, [still], sent=False)["withdrawn"] == 1
     assert _vis(conn, still) == 1 and _vis(conn, clip) == 1
+
+
+def test_two_sends_in_one_clock_tick_keep_the_order_they_were_sent(as_family, as_admin,
+                                                                   monkeypatch):
+    """CI on 6 November 2026: on Windows, Python 3.12's clock moves only every
+    15.6 ms, so two quick sends had one time and the queue sorted them by id."""
+    import types
+    monkeypatch.setattr(screening, "time", types.SimpleNamespace(time=lambda: 1_800_000_000.0))
+    ids = ids_of(as_family)[:3]
+    first, rest = max(ids), sorted(set(ids) - {max(ids)}, reverse=True)
+    _send(as_family, [first])
+    _send(as_family, rest)
+    assert [item["id"] for item in _queue(as_admin)] == [first, *sorted(rest)]

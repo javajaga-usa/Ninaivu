@@ -82,7 +82,10 @@ def send(conn: sqlite3.Connection, asset_ids: Sequence[int], user_id: int,
     now = time.time()
     sent = already = 0
     with _write_lock:
-        for asset_id in dict.fromkeys(int(i) for i in asset_ids):
+        # By id within one send, so the queue (by time, then by the order
+        # written) lists them that way even when two sends share a moment:
+        # Python 3.12's clock on Windows moves only every 15.6 ms.
+        for asset_id in sorted({int(i) for i in asset_ids}):
             cursor = conn.execute(
                 "INSERT OR IGNORE INTO screening_requests "
                 "(asset_id, user_id, note, created_at) VALUES (?, ?, ?, ?)",
@@ -148,7 +151,7 @@ def queue(conn: sqlite3.Connection, limit: int = 500) -> list[dict[str, Any]]:
     """
     rows = conn.execute(
         "SELECT asset_id, user_id, note, created_at FROM screening_requests "
-        "ORDER BY created_at, asset_id").fetchall()
+        "ORDER BY created_at, rowid").fetchall()
     items: dict[int, dict[str, Any]] = {}
     for row in rows:
         entry = items.setdefault(int(row["asset_id"]), {

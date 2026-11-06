@@ -209,6 +209,22 @@ def last_version(state: Path) -> str | None:
 # Running a server
 
 
+def free_ports(count: int) -> list[int]:
+    """*count* different free ports, all held until every one is found: one
+    at a time, the system can give the same port twice (CI on 6 November
+    2026 started a server with both apps on one port)."""
+    sockets = []
+    try:
+        for _ in range(count):
+            s = socket.socket()
+            sockets.append(s)
+            s.bind(("127.0.0.1", 0))
+        return [s.getsockname()[1] for s in sockets]
+    finally:
+        for s in sockets:
+            s.close()
+
+
 def free_port() -> int:
     with closing(socket.socket()) as sock:
         sock.bind(("127.0.0.1", 0))
@@ -217,7 +233,7 @@ def free_port() -> int:
 
 def serve(env: dict[str, str], photos: Path, log: Path, *, until) -> None:
     """Start the server on *photos*, wait for ``/healthz`` and *until*, stop it."""
-    port, admin = free_port(), free_port()
+    port, admin = free_ports(2)
     command = [env["NINAIVU_PYTHON"], "-m", "ninaivu", str(photos), "--http", "--local-only",
                "--no-mdns", "--strict-port", "--port", str(port), "--admin-port", str(admin),
                "--ai", "off", "--no-watch", "--allow-sleep"]
