@@ -690,12 +690,18 @@ def _run(cfg, args) -> int:
         services.replica_front = Front(cfg, replica)
     home = create_home_app(services)
     admin = None if args.no_admin else create_admin_app(services)
+    # A Secondary found by the Primary says how its family app is served
+    # (mugil/meeting.py): over HTTPS, the Primary has to speak HTTPS too.
+    services.mugil_beacon.https = bool(args.https)
+    services.mugil_beacon.own_ca = bool(args.https) and not bool(args.cert)
     for app in (home, admin):
         if app is not None:
             app.config["APP_VERSION"] = __version__
             # A leftover CA from an earlier setup cannot establish trust in
             # an explicitly supplied certificate from another issuer.
             app.config["MV_SERVE_LOCAL_CA"] = bool(args.https) and not bool(args.cert)
+            # The other computer of a pair is told how to reach this one.
+            app.config["MV_HTTPS"] = bool(args.https)
             # What decided over the console's Use HTTPS switch, if anything.
             app.config["MV_HTTPS_FIXED_BY"] = https_fixed_by
 

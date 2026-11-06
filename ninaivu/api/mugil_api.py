@@ -398,7 +398,7 @@ def _pair_by_tap(cfg, ident: str):
                         "status": 409}), 409
     key = pairing.tap_key(met["private"], met["theirs"], met["half"], met["theirs"])
     try:
-        answer = Partner(met["url"], timeout=10).request(
+        answer = Partner(met["url"], timeout=10, ca=met.get("ca")).request(
             "POST", "/api/mugil/pair",
             body={"tap": True, "public": met["half"].hex(), "proof": pairing.tap_proof(key)},
             signed=False)
@@ -408,7 +408,8 @@ def _pair_by_tap(cfg, ident: str):
                         "status": 409}), 409
     pairing.save(cfg.state_dir, {
         "key": key, "role": PRIMARY, "partner_name": str(answer.get("name") or met["name"]),
-        "partner_url": met["url"], "number": met["number"], "paired_at": time.time()})
+        "partner_url": met["url"], "number": met["number"], "paired_at": time.time(),
+        **({"partner_ca": met["ca"]} if met.get("ca") else {})})
     _introductions().clear()
     cfg.mugil_partner_url = met["url"]
     cfg.save()
@@ -464,9 +465,11 @@ def mugil_join():
     url = partner_address(data["url"], int(getattr(cfg, "port", 0) or 0))
     try:
         partner = Partner(url, timeout=15)
-        private, hello = pairing.primary_hello(code)
+        https, ca = _own_tls(cfg)
+        private, hello = pairing.primary_hello(code, ca)
         answer = partner.request("POST", "/api/mugil/join", signed=False, body={
-            **hello, "name": _name(cfg), "port": int(getattr(cfg, "port", 0) or 0)})
+            **hello, "name": _name(cfg), "port": int(getattr(cfg, "port", 0) or 0),
+            **({"https": True} if https else {})})
     except PartnerError as exc:
         log.warning("Pairing with the Primary at %s did not work: %s", url, exc)
         if exc.status == 403:
@@ -561,10 +564,14 @@ def mugil_look():
     for other in meeting.discover():
         item = {k: other[k] for k in ("id", "name", "address", "waiting")}
         if other["waiting"]:
-            url = f"http://{_host(other['address'])}:{other['port']}"
+            # A Secondary with Use HTTPS on says so, and hands over the
+            # authority its certificate comes from: the number covers it.
+            scheme = "https" if other.get("https") else "http"
+            ca = other.get("ca") if other.get("https") else None
+            url = f"{scheme}://{_host(other['address'])}:{other['port']}"
             private, half = pairing.new_half()
             try:
-                answer = Partner(url, timeout=5).request(
+                answer = Partner(url, timeout=5, ca=ca).request(
                     "POST", "/api/mugil/introduce",
                     body={"public": half.hex(), "name": _name(cfg)}, signed=False)
                 theirs = bytes.fromhex(str(answer.get("public", "")))
@@ -576,13 +583,22 @@ def mugil_look():
                 item["unreachable"] = True
             else:
                 item["number"] = _introductions().keep(other["id"], private, half, theirs,
-                                                       url, other["name"])
+                                                       url, other["name"], ca=ca)
         found.append(item)
     return jsonify({"found": found})
 
 
 def _host(address: str) -> str:
     return f"[{address}]" if ":" in address else address
+
+
+def _own_tls(cfg) -> tuple[bool, str | None]:
+    """Whether this computer's family app speaks HTTPS (set at start,
+    __main__), and the home authority its certificate comes from, when it is
+    Ninaivu's own (not one given with --cert)."""
+    https = bool(current_app.config.get("MV_HTTPS"))
+    ca = meeting.own_ca(cfg) if https and current_app.config.get("MV_SERVE_LOCAL_CA") else None
+    return https, ca
 
 
 @mugil_bp.post("/api/admin/mugil/unpair")
@@ -761,7 +777,9 @@ def mugil_move_answer():
         port = 0
     if 0 < port < 65536 and request.remote_addr:
         # Where the Primary is now, for what this computer asks of it.
-        moved["partner_url"] = f"http://{_host(request.remote_addr)}:{port}"
+        old = str(pair.get("partner_url") or "")
+        scheme = "https" if old.startswith("https://") else "http"
+        moved["partner_url"] = f"{scheme}://{_host(request.remote_addr)}:{port}"
     pairing.save(cfg.state_dir, moved)
     machines.remember(cfg.state_dir, {
         "machine": {"name": name, "role": PRIMARY},
@@ -1166,8 +1184,9 @@ def mugil_introduce():
     hello = json_body()
     if not isinstance(hello, dict):
         return jsonify({"refused": "Send the introduction as JSON.", "status": 400}), 400
+    _, ca = _own_tls(cfg)
     answer = _welcome().introduce(str(hello.get("public", "")), str(hello.get("name", "")),
-                                  request.remote_addr or "")
+                                  request.remote_addr or "", pairing.ca_fingerprint(ca))
     if answer is None:
         return jsonify({"refused": "This computer is not waiting for a Primary.", "status": 403}), 403
     return jsonify({**answer, "name": _name(cfg)})
@@ -1583,11 +1602,14 @@ def mugil_join_answer():
         return jsonify({"refused": "That code is not the one this computer is showing, or it has expired.",
                         "status": 403}), 403
     key, answer = found
-    # The address it came from: the one this computer can reach it at.
-    url = f"http://{_host(request.remote_addr or '')}:{port}"
+    # The address it came from: the one this computer can reach it at, in
+    # the scheme its family app speaks. Its authority was in the proof.
+    scheme = "https" if hello.get("https") else "http"
+    url = f"{scheme}://{_host(request.remote_addr or '')}:{port}"
+    ca = hello.get("ca") if hello.get("https") and pairing.ca_fingerprint(hello.get("ca")) else None
     pairing.save(cfg.state_dir, {
         "key": key, "role": PRIMARY, "partner_name": str(hello.get("name") or "")[:200],
-        "partner_url": url, "paired_at": time.time()})
+        "partner_url": url, "paired_at": time.time(), **({"partner_ca": ca} if ca else {})})
     cfg.mugil_partner_url = url
     cfg.save()
     auth.audit(db.connect(cfg.db_path), None, "two_computers",

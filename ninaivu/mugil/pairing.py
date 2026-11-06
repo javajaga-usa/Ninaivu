@@ -29,6 +29,7 @@ import hmac
 import json
 import os
 import secrets
+import ssl
 import threading
 import time
 from collections import OrderedDict
@@ -139,12 +140,34 @@ def new_half() -> tuple[X25519PrivateKey, bytes]:
     return private, _raw(private.public_key())
 
 
-def match_number(primary_half: bytes, secondary_half: bytes) -> str:
-    """Six digits both screens show, worked out from the two public halves.
+def ca_fingerprint(pem: Any) -> bytes:
+    """SHA-256 of the certificate in *pem*; empty when there is none.
+
+    A Secondary with Use HTTPS on serves a certificate from its own home
+    authority (utils/tls.py), which no other computer trusts. It hands that
+    authority over when it is found (mugil/meeting.py), and its fingerprint
+    goes into the number both screens show, or into the proof of the code:
+    a computer in between that put its own authority there shows another
+    number, or cannot make the proof. The Primary then trusts that one
+    authority, and only it, for the Secondary (:func:`pinned_ca`)."""
+    if not isinstance(pem, str) or not pem.strip():
+        return b""
+    try:
+        der = ssl.PEM_cert_to_DER_cert(pem.strip())
+    except ValueError:
+        return b""
+    return hashlib.sha256(der).digest()
+
+
+def match_number(primary_half: bytes, secondary_half: bytes, ca: bytes = b"") -> str:
+    """Six digits both screens show, worked out from the two public halves
+    and, for a Secondary on HTTPS, the fingerprint of its authority (*ca*).
 
     A device pretending to be one of the two has halves of its own, so the
     numbers on the two real screens would not agree."""
-    digest = hashlib.sha256(b"ninaivu-mugil-match\0" + primary_half + secondary_half).digest()
+    extra = b"\0ca\0" + ca if ca else b""
+    digest = hashlib.sha256(b"ninaivu-mugil-match\0" + primary_half + secondary_half
+                            + extra).digest()
     number = int.from_bytes(digest[:8], "big") % 1_000_000
     return f"{number // 1000:03d} {number % 1000:03d}"
 
@@ -159,11 +182,20 @@ def tap_proof(key: str) -> str:
     return hmac.new(bytes.fromhex(key), b"the primary taps pair", hashlib.sha256).hexdigest()
 
 
-def primary_hello(code: str) -> tuple[X25519PrivateKey, dict[str, str]]:
-    """What the Primary sends: its public half and its proof of the code."""
+def primary_hello(code: str, ca: str | None = None) -> tuple[X25519PrivateKey, dict[str, str]]:
+    """What the Primary sends: its public half and its proof of the code.
+
+    Sent by a Secondary joining a Primary (api/mugil_api.py mugil_join),
+    *ca* is the Secondary's own authority when it serves HTTPS: it goes with
+    the hello and into the proof, so it cannot be swapped on the way."""
     private = X25519PrivateKey.generate()
     half = _raw(private.public_key())
-    return private, {"public": half.hex(), "proof": _proof(code, b"primary", half)}
+    fingerprint = ca_fingerprint(ca)
+    hello = {"public": half.hex(),
+             "proof": _proof(code, b"primary", half, *([fingerprint] if fingerprint else []))}
+    if fingerprint:
+        hello["ca"] = str(ca)
+    return private, hello
 
 
 def secondary_answer(code_book: Codes, hello: dict[str, Any]) -> tuple[str, dict[str, str]] | None:
@@ -176,7 +208,9 @@ def secondary_answer(code_book: Codes, hello: dict[str, Any]) -> tuple[str, dict
         return None
     if len(theirs) != 32:
         return None
-    code = code_book.take(lambda c: hmac.compare_digest(_proof(c, b"primary", theirs), proof))
+    fingerprint = ca_fingerprint(hello.get("ca"))
+    parts = (b"primary", theirs, *([fingerprint] if fingerprint else []))
+    code = code_book.take(lambda c: hmac.compare_digest(_proof(c, *parts), proof))
     if code is None:
         return None
     private = X25519PrivateKey.generate()
@@ -263,16 +297,37 @@ def primary_move_key(private: X25519PrivateKey, old_key: str,
 
 # -- keeping the pairing -----------------------------------------------------
 
+#: The other computer's home authority, by pairing key, for every pairing
+#: read or written in this process (see :func:`ca_fingerprint`).
+_pins: dict[str, str] = {}
+
+
+def _remember_pin(data: dict[str, Any]) -> None:
+    ca = data.get("partner_ca")
+    if data.get("key") and isinstance(ca, str) and ca_fingerprint(ca):
+        _pins[str(data["key"])] = ca
+
+
+def pinned_ca(key: str | None) -> str | None:
+    """The authority the other computer of the pairing with *key* was paired
+    with, when it serves HTTPS with one of its own; None otherwise."""
+    return _pins.get(str(key)) if key else None
+
+
 def load(state_dir: str | Path) -> dict[str, Any] | None:
     """The pairing this computer is in, or None."""
     try:
         data = json.loads((Path(state_dir) / PAIR_FILE).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
-    return data if isinstance(data, dict) and data.get("key") else None
+    if not (isinstance(data, dict) and data.get("key")):
+        return None
+    _remember_pin(data)
+    return data
 
 
 def save(state_dir: str | Path, data: dict[str, Any]) -> None:
+    _remember_pin(data)
     path = Path(state_dir) / PAIR_FILE
     atomic_write(path, json.dumps(data, indent=2))
     try:
@@ -287,7 +342,7 @@ def forget(state_dir: str | Path) -> None:
 
 def public(data: dict[str, Any] | None) -> dict[str, Any]:
     """What the console may show of a pairing: everything but the keys."""
-    return {k: v for k, v in (data or {}).items() if k not in ("key", "replaced_key")}
+    return {k: v for k, v in (data or {}).items() if k not in ("key", "replaced_key", "partner_ca")}
 
 
 def mark_moved(state_dir: str | Path) -> bool:

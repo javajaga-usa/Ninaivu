@@ -499,6 +499,12 @@ and `GET /api/admin/mugil` for the state.
   proves it knows the code, whichever computer shows it: an administrator at
   the computer that shows the code, and one at the computer it is typed on,
   both take part.
+- A Secondary with Use HTTPS on says so when it is found, and hands over the
+  home authority its certificate comes from. The six-digit number covers that
+  authority too, and so does the code's proof when the code is typed on the
+  Secondary. The Primary keeps it with the pairing and trusts it alone for the
+  Secondary: a certificate it did not issue is refused. Both computers need
+  Ninaivu newer than 3.7.0 for this; on plain HTTP nothing changes.
 - After pairing, every request between them is signed with the key. A request
   that is unsigned, signed by another key, more than five minutes old or a
   replay is refused.
