@@ -21,6 +21,7 @@ hold of server/workload.py), and on its own runs every
 from __future__ import annotations
 
 import contextlib
+import functools
 import http.client
 import json
 import logging
@@ -121,10 +122,28 @@ class PartnerError(Exception):
         return self.status == 409 and bool(self.answer.get("replaced"))
 
 
+@functools.lru_cache(maxsize=8)
+def _tls_context(ca: str | None) -> ssl.SSLContext:
+    """How the other computer's certificate is checked over HTTPS.
+
+    With *ca*, the home authority it was paired with (pairing.ca_fingerprint),
+    that authority is the only one trusted: the system's are not loaded, and
+    a certificate it did not issue is refused. Its name is not checked
+    against the address, because the address changes (another network,
+    Tailscale) while only that computer holds the authority's key. Without
+    one, the usual check: the system's authorities and the name."""
+    if not ca:
+        return ssl.create_default_context()
+    context = ssl.create_default_context(cadata=ca)
+    context.check_hostname = False
+    return context
+
+
 class Partner:
     """The Secondary, spoken to as one Ninaivu speaks to another."""
 
-    def __init__(self, url: str, key: str | None = None, *, timeout: float = TIMEOUT) -> None:
+    def __init__(self, url: str, key: str | None = None, *, timeout: float = TIMEOUT,
+                 ca: str | None = None) -> None:
         parts = urlsplit(str(url or "").strip().rstrip("/"))
         if parts.scheme not in ("http", "https") or not parts.hostname:
             raise PartnerError("Give the other computer's console address, such as http://linux-pc:3000.")
@@ -132,12 +151,14 @@ class Partner:
         self._parts = parts
         self.key = key
         self.timeout = timeout
+        # The authority it was paired with, when it serves HTTPS with its own.
+        self.ca = ca if ca is not None else pairing.pinned_ca(key)
 
     def _connection(self) -> http.client.HTTPConnection:
         if self._parts.scheme == "https":
             return http.client.HTTPSConnection(self._parts.hostname, self._parts.port,
                                                timeout=self.timeout,
-                                               context=ssl.create_default_context())
+                                               context=_tls_context(self.ca or None))
         return http.client.HTTPConnection(self._parts.hostname, self._parts.port,
                                           timeout=self.timeout)
 

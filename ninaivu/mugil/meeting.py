@@ -92,9 +92,11 @@ class Welcome:
                                     "number": m["number"], "at": m["at"]}
                                    for m in self._met.values()] if waiting else []}
 
-    def introduce(self, theirs_hex: str, name: str, address: str) -> dict[str, str] | None:
+    def introduce(self, theirs_hex: str, name: str, address: str,
+                  ca: bytes = b"") -> dict[str, str] | None:
         """A Primary's public half arrived: this side's half and the number,
-        or None when no wait is open."""
+        or None when no wait is open. *ca*: the fingerprint of the authority
+        this computer handed out when found, which the number covers."""
         try:
             theirs = bytes.fromhex(str(theirs_hex))
         except ValueError:
@@ -106,7 +108,7 @@ class Welcome:
                 return None
             if theirs.hex() not in self._met and len(self._met) >= MOST:
                 return None
-            number = pairing.match_number(theirs, self._half)
+            number = pairing.match_number(theirs, self._half, ca)
             self._met[theirs.hex()] = {"name": str(name or "")[:120], "address": address,
                                        "number": number, "at": self._clock()}
             return {"public": self._half.hex(), "number": number}
@@ -133,9 +135,28 @@ def _same(a: str, b: str) -> bool:
 
 # -- the Secondary answering ----------------------------------------------------
 
-def answer_for(cfg, welcome: Welcome, name: str) -> dict[str, Any]:
-    return {TAG: 1, "role": role(cfg), "name": name, "port": int(cfg.port),
-            "waiting": welcome.waiting, "id": machine_id(cfg)}
+def answer_for(cfg, welcome: Welcome, name: str, *, https: bool = False,
+               ca: str | None = None) -> dict[str, Any]:
+    """What the Secondary says when asked. *https*: its family app speaks
+    HTTPS, so the Primary must too; *ca*: the home authority that signed its
+    certificate (pairing.ca_fingerprint), for the Primary to trust it."""
+    answer = {TAG: 1, "role": role(cfg), "name": name, "port": int(cfg.port),
+              "waiting": welcome.waiting, "id": machine_id(cfg)}
+    if https:
+        answer["https"] = True
+        if ca:
+            answer["ca"] = ca
+    return answer
+
+
+def own_ca(cfg) -> str | None:
+    """This computer's own home authority, as PEM, or None."""
+    from ..utils import tls                                       # noqa: PLC0415
+    try:
+        text = tls.ca_certificate_path(cfg.state_dir).read_text(encoding="ascii")
+    except (OSError, ValueError):
+        return None
+    return text if pairing.ca_fingerprint(text) else None
 
 
 def machine_id(cfg) -> str:
@@ -175,6 +196,10 @@ class Beacon:
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
         self.problem: str | None = None
+        #: How the family app is served, set at start (__main__): over HTTPS,
+        #: and with a certificate from this computer's own authority.
+        self.https = False
+        self.own_ca = False
 
     def keep(self) -> None:
         if self._thread is not None:
@@ -221,7 +246,9 @@ class Beacon:
                 continue
             if data.strip() != QUESTION:
                 continue
-            reply = json.dumps(answer_for(self.cfg, self.welcome, self.name())).encode()
+            reply = json.dumps(answer_for(
+                self.cfg, self.welcome, self.name(), https=self.https,
+                ca=own_ca(self.cfg) if self.https and self.own_ca else None)).encode()
             try:
                 sock.sendto(reply, sender)
             except OSError:
@@ -282,7 +309,8 @@ def discover(*, listen: float = LISTEN, targets: list[str] | None = None) -> lis
         deadline = time.monotonic() + listen
         while time.monotonic() < deadline:
             try:
-                data, (address, _port) = sock.recvfrom(1024)
+                # Room for a Secondary's authority (answer_for), about 1.2 KB.
+                data, (address, _port) = sock.recvfrom(16384)
             except socket.timeout:
                 continue
             except OSError:
@@ -299,9 +327,12 @@ def discover(*, listen: float = LISTEN, targets: list[str] | None = None) -> lis
                 port = int(answer.get("port"))
             except (TypeError, ValueError):
                 continue
+            ca = answer.get("ca")
             found.setdefault(ident, {"id": ident, "address": address, "port": port,
                                      "name": str(answer.get("name") or address)[:120],
-                                     "waiting": bool(answer.get("waiting"))})
+                                     "waiting": bool(answer.get("waiting")),
+                                     "https": bool(answer.get("https")),
+                                     "ca": ca if pairing.ca_fingerprint(ca) else None})
     finally:
         sock.close()
     return list(found.values())
@@ -316,12 +347,14 @@ class Introductions:
         self._lock = threading.Lock()
         self._met: dict[str, dict[str, Any]] = {}
 
-    def keep(self, ident: str, private, half: bytes, theirs: bytes, url: str, name: str) -> str:
-        number = pairing.match_number(half, theirs)
+    def keep(self, ident: str, private, half: bytes, theirs: bytes, url: str, name: str,
+             ca: str | None = None) -> str:
+        number = pairing.match_number(half, theirs, pairing.ca_fingerprint(ca))
         with self._lock:
             self._met = {k: v for k, v in self._met.items() if v["at"] > self._clock() - WAIT}
             self._met[ident] = {"private": private, "half": half, "theirs": theirs, "url": url,
-                                "name": name, "number": number, "at": self._clock()}
+                                "name": name, "number": number, "at": self._clock(),
+                                "ca": ca}
         return number
 
     def get(self, ident: str) -> dict[str, Any] | None:
