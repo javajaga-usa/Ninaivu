@@ -258,7 +258,9 @@ jobs:
   browser:
     name: Browser tests (${{ matrix.engine }})
     runs-on: ${{ vars.LINUX_RUNNER || 'ubuntu-latest' }}
-    timeout-minutes: 30
+    # Room for a slow package mirror (tools/ci_apt_install.sh tries again)
+    # as well as the tests: 30 minutes went on ffmpeg alone once.
+    timeout-minutes: 45
     # Every suite on Chromium; the critical flows on WebKit too, Safari's
     # engine, since the family app is mostly used on iPhones
     # (run_browser_tests.WEBKIT_FLOWS; external audit 2026-10-11, QA-01).
@@ -286,12 +288,11 @@ jobs:
       # without it they are empty files the viewer cannot play.
       - name: Install dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ffmpeg
+          tools/ci_apt_install.sh ffmpeg
           python -m pip install --upgrade pip setuptools wheel
           pip install -r requirements/requirements-dev.txt -c requirements/constraints-tested.txt
           npm install --no-save playwright@1.63.0
-          npx playwright install --with-deps ${{ matrix.engine }}
+          tools/ci_apt_install.sh --run npx playwright install --with-deps ${{ matrix.engine }}
 
       - name: Run browser tests
         run: python tests/run_browser_tests.py --engine ${{ matrix.engine }}

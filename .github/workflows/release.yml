@@ -420,7 +420,7 @@ jobs:
       # is installed: what the download needs, it carries.
       - name: Use the archive as a household would
         run: |
-          sudo apt-get update -q && sudo apt-get install -y -q xvfb
+          tools/ci_apt_install.sh xvfb
           xvfb-run -a python tools/check_portable.py check installers/linux/build/Ninaivu-*-linux-x64-portable.tar.gz --work "$RUNNER_TEMP/check"
       - name: Two copies of it, paired
         run: python tools/check_portable.py pair installers/linux/build/Ninaivu-*-linux-x64-portable.tar.gz --work "$RUNNER_TEMP/pair"
@@ -489,8 +489,7 @@ jobs:
           path: download
       - name: What a Debian desktop already has
         run: |
-          apt-get update -q
-          apt-get install -y -q --no-install-recommends python3 ca-certificates procps \
+          tools/ci_apt_install.sh python3 ca-certificates procps \
             xvfb xauth libx11-6 libxext6 libxrender1 libxft2 libxss1 libfontconfig1 \
             fonts-dejavu-core libgl1 libegl1 libglib2.0-0 libsm6 libice6 libfribidi0
       - name: Use the archive as a household would
@@ -623,12 +622,12 @@ jobs:
           python-version: "3.12"
       - name: The guide, in English and Tamil
         run: |
-          sudo apt-get update -q && sudo apt-get install -y -q fonts-noto-core
+          src/tools/ci_apt_install.sh fonts-noto-core
           for f in "Noto Sans Tamil" "Noto Serif Tamil" "Noto Serif"; do
             fc-list | grep -qi "$f" || { echo "no $f: the guides would print boxes or a stand-in face"; exit 1; }
           done
           pip install -q -c src/requirements/build-tools.txt markdown playwright pypdf
-          python -m playwright install --with-deps chromium
+          src/tools/ci_apt_install.sh --run python -m playwright install --with-deps chromium
           python src/tools/build_guide_pdf.py out/Ninaivu-guide.pdf
           python src/tools/build_guide_pdf.py --lang ta out/Ninaivu-guide-ta.pdf
           python src/tools/build_guide_pdf.py --lang admin out/Ninaivu-admin-guide.pdf

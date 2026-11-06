@@ -157,9 +157,28 @@ def build_visibility_fixture(root: Path) -> None:
 
 
 def find_free_port() -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("127.0.0.1", 0))
-        return s.getsockname()[1]
+    return find_free_ports(1)[0]
+
+
+def find_free_ports(count: int) -> list[int]:
+    """*count* different free ports, all held open until every one is found.
+
+    Asked for one at a time, the system could give the same port twice, the
+    first having been let go: on 6 November 2026 CI started the 'visibility'
+    library with the family app and the console on one port (41769), which
+    Ninaivu takes to mean one server for both, and the console's sign-in the
+    test waited for never came.
+    """
+    sockets = []
+    try:
+        for _ in range(count):
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sockets.append(s)
+            s.bind(("127.0.0.1", 0))
+        return [s.getsockname()[1] for s in sockets]
+    finally:
+        for s in sockets:
+            s.close()
 
 
 def build_fixture_library(root: Path) -> None:
@@ -700,8 +719,7 @@ def run_group(fixture: str, tests: list[Path], node: str,
     (state_dir / "config.json").write_text('{"first_day_done": true, "photo_stacks": false}',
                                            encoding="utf-8")
 
-    home_port = find_free_port()
-    admin_port = find_free_port()
+    home_port, admin_port = find_free_ports(2)
 
     server_env = os.environ.copy()
     server_env["NINAIVU_STATE_DIR"] = str(state_dir)
