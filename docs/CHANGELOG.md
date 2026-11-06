@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 3.7.0 — 5 November 2026
 
 ### Searching and the gallery, quicker (sweep of 5 November)
 
