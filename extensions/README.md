@@ -13,6 +13,10 @@ An extension:
   `requirements.txt` and tests;
 - registers its blueprints and settings through one entry point, and the core
   runs without it installed;
+- says who may call each route it adds: `require_admin` or `require_family`
+  from `ninaivu.server.auth`, or `ninaivu.server.routes.declare(access, why)`
+  for one that needs neither. A route that says nothing is kept to the
+  administrator, and the log says so;
 - is off until an administrator turns it on in the console, and the console
   shows, on the switch, where data goes and what will be downloaded;
 - never touches a source photograph.

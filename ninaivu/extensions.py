@@ -158,11 +158,17 @@ def install(app, cfg, face: str) -> list[str]:
         if ext.problems:
             log.warning("extension %s is on but not usable: %s", ext.name, "; ".join(ext.problems))
             continue
+        before = set(app.view_functions)
         try:
             ext.module.register(app, face)
         except Exception:                            # noqa: BLE001
             log.exception("extension %s failed to register on the %s app", ext.name, face)
             continue
+        # A route that says nothing about who may call it is the
+        # administrator's (server/routes.py).
+        from .server import routes                   # noqa: PLC0415
+        routes.keep_to_the_administrator(
+            app, set(app.view_functions) - before, f"extension {ext.name}")
         provider = getattr(ext.module, "image_provider", None)
         if provider is not None:
             _providers[ext.name] = provider

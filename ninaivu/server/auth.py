@@ -1321,6 +1321,11 @@ def require(role: str) -> Callable:
                     f"{ROLE_LABELS[user.role]}s cannot do that.", 403
                 )
             return fn(*args, **kwargs)
+        # The route manifest (server/routes.py) reads who may call a view
+        # from here: the stricter of this and any require() under it.
+        inner = getattr(fn, "ninaivu_access", None)
+        wrapper.ninaivu_access = (  # type: ignore[attr-defined]
+            role if inner not in ROLE_RANK or ROLE_RANK[inner] <= needed else inner)
         return wrapper
     return decorator
 
@@ -1353,6 +1358,7 @@ def require_outside_ai(view):
                                      "the administrator. An administrator can allow family "
                                      "members on the Home & extensions page."}), 403
         return view(*args, **kwargs)
+    wrapper.ninaivu_outside_ai = True  # type: ignore[attr-defined]
     return wrapper
 
 
