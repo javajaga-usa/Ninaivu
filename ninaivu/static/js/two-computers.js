@@ -62,7 +62,7 @@ export async function keepAsOriginals(request, folder) {
   } catch (exc) {
     const inside = exc.data?.library_inside;
     if (exc.status !== 409 || !inside?.length) throw exc;
-    if (!window.confirm(i18n.t('The library this computer shows ({paths}) is inside that folder. Keep it as the originals? This computer stops showing it as its library, and the Primary brings in what only it has. No file is moved, changed or removed. Turn on XMP sidecars first and let them be written, so the names, albums and stars go with the photographs.', { paths: inside.join(', ') }))) throw exc;
+    if (!window.confirm(i18n.t('Keep the library this computer shows ({paths}) as the originals, in {folder}? The photographs already there are checked once and marked as in sync, so the Primary sends only what is missing or different. This computer stops showing it as its library, and the Primary brings in what only it has. No file is moved, changed or removed. Turn on XMP sidecars first and let them be written, so the names, albums and stars go with the photographs.', { paths: inside.join(', '), folder: exc.data?.originals_dir || folder }))) throw exc;
     return request('/api/admin/mugil/role', {
       method: 'POST', body: { ...body, library_into_originals: true } });
   }

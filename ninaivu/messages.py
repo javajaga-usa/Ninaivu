@@ -385,6 +385,7 @@ MESSAGES = (
     said('That is not the key these backups were made with (wrong passphrase, or a different recovery file).'),
     said('That is the index Ninaivu uses now.'),
     said('That is too large.'),
+    said('That library is the whole disk. Make a folder on the disk, move the library folders into it, and choose that folder: the originals are kept as <that folder>/<library folder name>.'),
     said('That looks like a key or a password itself. Write where it is kept, never the key or the password.'),
     said('That music cannot be used.'),
     said('That passphrase is too easy to guess: it uses too few different letters, or repeats one word. Use a few different words, for example a short sentence only your family would know.'),
