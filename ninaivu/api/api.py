@@ -1268,51 +1268,61 @@ def segments():
     # The count is kept between pieces: each piece of a large library counted
     # the whole of it again, for the same answer.
     rows, total = db.query_assets(
-        conn, roots, limit=limit, offset=offset, columns=_SEGMENT_COLUMNS,
+        conn, roots, limit=limit, offset=offset, columns=_SEGMENT_COLUMNS, positional=True,
         remember_total=True, stacks=stacked, **_viewer(), **filters
     )
     reached = offset + len(rows)
 
     if order_map:
-        rows.sort(key=lambda r: order_map.get(r["id"], 1 << 30))
+        rows.sort(key=lambda r: order_map.get(r[0], 1 << 30))
 
     grouped: dict[str, list[list[Any]]] = {}
     order: list[str] = []
     # Once for the page, not once a row: asked through the app context for
     # each of 25,000 rows, the same token cost a sixth of the request.
     recipe = _recipe()
-    thumb_version = media.thumb_version
+    tail = f"t{recipe}" if recipe else ""
+    kinds = KIND_CODES
+    # Each row by position (_SEGMENT_COLUMNS, then favourite and rating):
+    # a search for a common word is tens of thousands of rows, and making
+    # each a dict and asking it fifteen times by name was most of the time.
+    (ID, WIDTH, HEIGHT, KIND, THUMB, NSFW, DUP, LAT, VIS, DAY, DURATION, INDEXED, TURN,
+     COLOUR, LIVE, LIVE_VIDEO, RAW, STACK, FAVOURITE, RATING) = range(len(_SEGMENT_COLUMNS) + 2)
     for row in rows:
-        width, height = row.get("width") or 0, row.get("height") or 0
+        width, height = row[WIDTH] or 0, row[HEIGHT] or 0
         aspect = round((width / height) * 100) if width and height else 100
-        aspect = max(30, min(400, aspect))
+        aspect = 30 if aspect < 30 else 400 if aspect > 400 else aspect
+        visibility = row[VIS]
+        thumb = row[THUMB]
         flags = (
-            (1 if row["favorite"] else 0)
-            | (2 if row.get("thumb") else 0)
-            | (4 if row["nsfw"] else 0)
-            | (8 if row.get("dup_group") else 0)
-            | (16 if row.get("gps_lat") is not None else 0)
-            | (32 if (row.get("rating") or 0) > 0 else 0)
-            | (64 if row.get("visibility") == 0 else 0)
-            | (128 if row.get("visibility") == VIS_HIDDEN else 0)
+            (1 if row[FAVOURITE] else 0)
+            | (2 if thumb else 0)
+            | (4 if row[NSFW] else 0)
+            | (8 if row[DUP] else 0)
+            | (16 if row[LAT] is not None else 0)
+            | (32 if (row[RATING] or 0) > 0 else 0)
+            | (64 if visibility == 0 else 0)
+            | (128 if visibility == VIS_HIDDEN else 0)
             # A Live badge on the tile, and a RAW one for a RAW+JPEG shot.
-            | (256 if row.get("is_live") and row.get("live_video_path") else 0)
-            | (512 if row.get("raw_path") else 0)
+            | (256 if row[LIVE] and row[LIVE_VIDEO] else 0)
+            | (512 if row[RAW] else 0)
             # The top photograph of a stack; how many it holds follows.
-            | (1024 if stacked and (row.get("stack_count") or 0) > 1 else 0)
+            | (1024 if stacked and (row[STACK] or 0) > 1 else 0)
         )
-        key = "match" if order_map else (row.get("date_key") or "unknown")
-        if key not in grouped:
-            grouped[key] = []
+        key = "match" if order_map else (row[DAY] or "unknown")
+        items = grouped.get(key)
+        if items is None:
+            items = grouped[key] = []
             order.append(key)
+        # The version is media.thumb_version's, by position.
         item = [
-            row["id"], aspect, KIND_CODES.get(row["kind"], 0), flags,
-            int(row.get("duration") or 0), thumb_version(row, recipe),
-            _swatch(row.get("color")) if row.get("thumb") else "",
+            row[ID], aspect, kinds.get(row[KIND], 0), flags,
+            int(row[DURATION] or 0), f"{int(row[INDEXED] or 0)}r{int(row[TURN] or 0)}{tail}",
+            _swatch(row[COLOUR]) if thumb else "",
         ]
         if flags & 1024:
-            item.append(int(row["stack_count"]))
-        grouped[key].append(item)
+            item.append(int(row[STACK]))
+        items.append(item)
 
     response = jsonify({
         "total": total,
@@ -1379,8 +1389,11 @@ def assets():
         rows.sort(key=lambda r: rank[r["id"]])
         total = len(kept)
     else:
+        # The total is kept between the pieces of one list, as the gallery's
+        # segments keep it (db.query_assets): scrolling through a search
+        # counted every match again for each page of 200.
         rows, total = db.query_assets(
-            conn, roots, limit=limit, offset=offset, **_viewer(), **filters
+            conn, roots, limit=limit, offset=offset, remember_total=True, **_viewer(), **filters
         )
 
     return jsonify({

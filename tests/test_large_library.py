@@ -98,7 +98,9 @@ def test_the_total_is_counted_from_an_index_alone(big):
 
 
 def test_a_favourites_count_still_joins_the_viewer(big):
-    sql, _ = _plans(big, limit=100, favorites=True, **FAMILY_VIEW)["count"]
+    # Past the start: a page that holds every match (or none, from the
+    # first) says the total itself, and is not counted.
+    sql, _ = _plans(big, limit=1, offset=5, favorites=True, **FAMILY_VIEW)["count"]
     assert "user_assets" in sql
 
 

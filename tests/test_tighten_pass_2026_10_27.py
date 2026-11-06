@@ -138,12 +138,16 @@ def test_the_largest_files_count_reads_the_size_index(tmp_path):
         _add(conn, f"2024/01/{n}.jpg", size=(900 << 20) if n < 3 else 1000)
     conn.execute("PRAGMA analysis_limit=0")
     conn.execute("ANALYZE")
-    seen: list[str] = []
-    conn.set_trace_callback(seen.append)
     rows, total = db.query_assets(conn, [ROOT], max_visibility=2, min_size=500 << 20,
                                   exclude_reviewed_large=True, sort="size_desc", limit=200)
-    conn.set_trace_callback(None)
     assert total == 3 and [r["size"] for r in rows] == [900 << 20] * 3
+    # That page held every match, which says the total by itself; a page of
+    # one does not, and is counted.
+    seen: list[str] = []
+    conn.set_trace_callback(seen.append)
+    db.query_assets(conn, [ROOT], max_visibility=2, min_size=500 << 20,
+                    exclude_reviewed_large=True, sort="size_desc", limit=1)
+    conn.set_trace_callback(None)
     count = next(s for s in seen if s.startswith("SELECT COUNT(*)"))
     assert "idx_assets_size" in _plan(conn, count)
 

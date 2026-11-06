@@ -225,7 +225,8 @@ class Tray:
                     return "Left as it was."
                 trusted, message = trust_ca_on_mac(path)
                 if not trusted:
-                    subprocess.run(["open", "-R", str(path)], check=False)
+                    subprocess.Popen(["open", "-R", str(path)], stdin=subprocess.DEVNULL,
+                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                     message += (" In Keychain Access, find \"Ninaivu local CA\" in the login keychain, "
                                 "open Trust and set it to Always Trust.")
                 return message
@@ -249,10 +250,13 @@ def open_file(path: Path) -> None:
     if sys.platform == "win32":
         import os
         os.startfile(str(path))                             # noqa: S606 — the person's own file
-    elif sys.platform == "darwin":
-        subprocess.run(["open", str(path)], check=False)
     else:
-        subprocess.run(["xdg-open", str(path)], check=False)
+        # Started, not waited for: xdg-open waits for the program it opens
+        # with on some desktops (an editor, a terminal), and the tray's menu
+        # waited with it.
+        opener = "open" if sys.platform == "darwin" else "xdg-open"
+        subprocess.Popen([opener, str(path)], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL, start_new_session=True)
 
 
 # -- the pystray adapter --------------------------------------------------

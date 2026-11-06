@@ -98,6 +98,9 @@ def test_a_viewers_favourites_are_read_from_their_own_rows(library_with_favourit
     path, viewer = library_with_favourites
     conn = _open(path)
     plans = _plans(conn, viewer_id=viewer, max_visibility=1, limit=25_000, **asked)
+    # A page that holds every match says the total itself, with no count; a
+    # page of one does not, so that one is counted.
+    plans["count"] = _plans(conn, viewer_id=viewer, max_visibility=1, limit=1, **asked)["count"]
     for kind in ("count", "page"):
         first = plans[kind][1].split(" | ")[0]
         assert first.split()[:2] in (["SEARCH", "ua"], ["SCAN", "ua"]), plans[kind]
