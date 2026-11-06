@@ -267,6 +267,9 @@ def init_db():
         _requeue_untrustworthy_legacy_rows(conn)
         # Only ever raised: a newer version's number is left as it is.
         set_config('schema_version', str(SCHEMA_VERSION))
+    # The steps that must happen once and in order (storage/migrations.py).
+    from ..storage import migrations                      # noqa: PLC0415
+    migrations.run(conn, migrations.ARCHIVE, database="archive")
 
 
 def _requeue_untrustworthy_legacy_rows(conn):
