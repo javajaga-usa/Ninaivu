@@ -90,4 +90,5 @@ def test_a_filter_can_be_removed_with_a_finger():
 
 def test_every_advanced_field_is_named():
     advanced = (JS / "advanced.js").read_text(encoding="utf-8")
-    assert advanced.count("setAttribute('aria-label', setting.name)") == 2
+    # A box, a list, and the index folder's own (indexFolder).
+    assert advanced.count("setAttribute('aria-label', setting.name)") == 3

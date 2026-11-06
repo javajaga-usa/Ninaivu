@@ -65,7 +65,9 @@ class ParallelGzipWriter:
     def __init__(self, fileobj: BinaryIO, level: int = 9, *, workers: int | None = None,
                  chunk: int = CHUNK, mtime: float | None = None) -> None:
         if not 0 <= level <= 9:
-            raise ValueError("level must be 0-9")
+            # A programmer's mistake, never the household's: not in the
+            # catalogue of messages to translate (tools/server_messages.py).
+            raise ValueError(f"gzip level must be 0-9, not {level!r}")
         self._out = fileobj
         self._level = level
         self._chunk = max(_WINDOW, int(chunk))
@@ -93,7 +95,7 @@ class ParallelGzipWriter:
 
     def write(self, data) -> int:
         if self._closed:
-            raise ValueError("write to a closed ParallelGzipWriter")
+            raise ValueError(f"write to a closed {type(self).__name__}")
         view = memoryview(data).cast("B")
         self._buffer += view
         while len(self._buffer) >= self._chunk:
