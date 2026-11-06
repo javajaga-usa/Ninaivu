@@ -2292,6 +2292,13 @@ def _cancel_phone_inbox() -> None:
     api_webdav.cancel_pending()
 
 
+def _declared(app: Flask, face: str) -> None:
+    """Refuse to serve a route that does not say who may call it
+    (server/routes.py: the route manifest)."""
+    from .server import routes                                   # noqa: PLC0415
+    routes.check(app, face)
+
+
 def _register(app: Flask, blueprints) -> None:
     for blueprint in blueprints:
         app.register_blueprint(blueprint)
@@ -2360,6 +2367,7 @@ def create_home_app(services: Services) -> Flask:
     from .api.mugil_update_api import mugil_update_peer_bp
     _register(app, (bp, accounts, home_accounts, mugil_peer_bp, mugil_update_peer_bp))
     extensions.install(app, services.cfg, FACE_HOME)
+    _declared(app, FACE_HOME)
     front = getattr(services, "replica_front", None)
     if front is not None:
         # The Pi serving a read-only copy (ninaivu/replica/front.py).
@@ -2378,6 +2386,7 @@ def create_admin_app(services: Services) -> Flask:
     # visibility) plus every library-level and management endpoint.
     _register(app, (bp, admin_only, accounts, admin_accounts, *_console_blueprints()))
     extensions.install(app, services.cfg, FACE_ADMIN)
+    _declared(app, FACE_ADMIN)
     return app
 
 
@@ -2394,5 +2403,6 @@ def create_app(cfg: Config | None = None, **overrides: Any) -> Flask:
     _register(app, (bp, admin_only, accounts, home_accounts, admin_accounts,
                     *_console_blueprints()))
     extensions.install(app, services.cfg, FACE_HOME)
+    _declared(app, "all")
     services.start()
     return app
