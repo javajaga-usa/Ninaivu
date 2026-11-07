@@ -41,6 +41,7 @@ import logging
 import shutil
 import threading
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -71,12 +72,20 @@ MODEL_ID = "yunet-2023mar/sface-2021dec"
 #: loaded, because a corrupt recogniser does not fail loudly — it quietly
 #: returns embeddings that match nobody, and the symptom is "face grouping
 #: stopped working" weeks later with no error anywhere.
-MODELS: dict[str, dict[str, str]] = {
+#:
+#: ``mirrors`` are the same files on Hugging Face, where OpenCV publishes them
+#: too, tried when GitHub's media host cannot be reached: a home network's web
+#: filter answered it with a plain-text redirect, and every download failed
+#: with "wrong version number". The checksum is what makes either acceptable.
+MODELS: dict[str, dict[str, Any]] = {
     "detector": {
         "file": "face_detection_yunet_2023mar.onnx",
         "url": ("https://media.githubusercontent.com/media/opencv/opencv_zoo/"
                 "main/models/face_detection_yunet/"
                 "face_detection_yunet_2023mar.onnx"),
+        "mirrors": ("https://huggingface.co/opencv/face_detection_yunet/resolve/"
+                    "3cc26e7f1014a5ee5d74a42acee58bafc9d0a310/"
+                    "face_detection_yunet_2023mar.onnx",),
         "sha256": "8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4",
     },
     "recognizer": {
@@ -84,6 +93,9 @@ MODELS: dict[str, dict[str, str]] = {
         "url": ("https://media.githubusercontent.com/media/opencv/opencv_zoo/"
                 "main/models/face_recognition_sface/"
                 "face_recognition_sface_2021dec.onnx"),
+        "mirrors": ("https://huggingface.co/opencv/face_recognition_sface/resolve/"
+                    "3d7082438a6e4551e840c9b2bb60b71e8da4b524/"
+                    "face_recognition_sface_2021dec.onnx",),
         "sha256": "0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79",
     },
 }
@@ -249,27 +261,33 @@ def fetch_models(state_dir: Path | None = None, *, force: bool = False,
             result["kept"].append(spec["file"])
             continue
         tmp = path.with_suffix(path.suffix + ".part")
-        try:
-            if progress:
-                progress(f"Downloading {spec['file']}…")
-            request = urllib.request.Request(
-                spec["url"], headers={"User-Agent": "Ninaivu"})
-            with urllib.request.urlopen(request, timeout=timeout) as response, \
-                    open(tmp, "wb") as handle:
-                shutil.copyfileobj(response, handle, 1 << 20)
-            actual = _sha256(tmp)
-            if actual != spec["sha256"]:
+        if progress:
+            progress(f"Downloading {spec['file']}…")
+        failures: list[str] = []
+        for url in (spec["url"], *spec.get("mirrors", ())):
+            try:
+                request = urllib.request.Request(url, headers={"User-Agent": "Ninaivu"})
+                with urllib.request.urlopen(request, timeout=timeout) as response, \
+                        open(tmp, "wb") as handle:
+                    shutil.copyfileobj(response, handle, 1 << 20)
+                actual = _sha256(tmp)
+                if actual != spec["sha256"]:
+                    tmp.unlink(missing_ok=True)
+                    failures.append(f"checksum mismatch (got {actual[:12]}…)")
+                    continue
+                tmp.replace(path)
+                result["downloaded"].append(spec["file"])
+                failures = []
+                break
+            except (urllib.error.URLError, OSError, TimeoutError, http.client.HTTPException) as exc:
+                # HTTPException: a download cut short mid-body (IncompleteRead) is
+                # not an OSError; it escaped and left the .part file behind.
                 tmp.unlink(missing_ok=True)
-                result["errors"].append(
-                    f"{spec['file']}: checksum mismatch (got {actual[:12]}…)")
-                continue
-            tmp.replace(path)
-            result["downloaded"].append(spec["file"])
-        except (urllib.error.URLError, OSError, TimeoutError, http.client.HTTPException) as exc:
-            # HTTPException: a download cut short mid-body (IncompleteRead) is
-            # not an OSError; it escaped and left the .part file behind.
-            tmp.unlink(missing_ok=True)
-            result["errors"].append(f"{spec['file']}: {exc}")
+                failures.append(str(exc))
+                log.warning("could not download %s from %s: %s", spec["file"],
+                            urllib.parse.urlsplit(url).hostname, exc)
+        if failures:
+            result["errors"].append(f"{spec['file']}: {'; '.join(failures)}")
 
     result["ready"] = all(
         (directory / spec["file"]).exists() for spec in MODELS.values())
