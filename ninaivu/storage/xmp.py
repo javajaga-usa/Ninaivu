@@ -57,6 +57,7 @@ from typing import Any, Callable
 from xml.sax.saxutils import escape
 
 from ..utils.files import create_new, stays_inside
+from .. import work
 
 log = logging.getLogger(__name__)
 
@@ -349,8 +350,7 @@ class XmpWriter:
                     except ValueError:
                         pass
 
-        self._timer = threading.Thread(target=loop, name="ninaivu-xmp-schedule", daemon=True)
-        self._timer.start()
+        self._timer = work.keep_running("ninaivu-xmp-schedule", loop, stop=self._asleep)
 
     def _pause_for_the_household(self) -> None:
         """Wait while people are using Ninaivu (the workload's say), or until stopped.

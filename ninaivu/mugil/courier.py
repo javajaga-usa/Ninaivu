@@ -38,6 +38,7 @@ from urllib.parse import quote, urlencode, urlsplit
 from .. import __version__
 from . import PRIMARY, pairing, role
 from ..storage import fingerprints, library_id
+from .. import work
 
 log = logging.getLogger(__name__)
 
@@ -394,8 +395,7 @@ class Courier:
         if self._keeper is not None:
             return
         self._quit.clear()
-        self._keeper = threading.Thread(target=self._keep, name="mugil-keeper", daemon=True)
-        self._keeper.start()
+        self._keeper = work.keep_running("mugil-keeper", self._keep, stop=self._quit)
 
     def owed(self, now: float | None = None) -> bool:
         every = float(getattr(self.cfg, "mugil_copy_every_hours", 0) or 0) * 3600

@@ -36,6 +36,7 @@ from email.utils import make_msgid
 from io import BytesIO
 from pathlib import Path
 from typing import Any, Callable
+from .. import work
 
 log = logging.getLogger("ninaivu.digest")
 
@@ -319,9 +320,7 @@ class DigestKeeper:
         if self._thread and self._thread.is_alive():
             return
         self._stop.clear()
-        self._thread = threading.Thread(target=self._loop, name="ninaivu-digest",
-                                        daemon=True)
-        self._thread.start()
+        self._thread = work.keep_running("ninaivu-digest", self._loop, stop=self._stop)
 
     def stop(self, timeout: float = 5.0) -> None:
         self._stop.set()

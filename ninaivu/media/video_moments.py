@@ -34,6 +34,7 @@ from PIL import Image
 
 from ..storage import video_moments
 from . import media
+from .. import work
 
 log = logging.getLogger(__name__)
 
@@ -193,9 +194,7 @@ class MomentFinder:
         if self._thread is not None and self._thread.is_alive():
             return
         self._stop.clear()
-        self._thread = threading.Thread(target=self._loop, name="ninaivu-video-moments",
-                                        daemon=True)
-        self._thread.start()
+        self._thread = work.keep_running("ninaivu-video-moments", self._loop, stop=self._stop)
 
     def wake(self) -> None:
         self._wake.set()

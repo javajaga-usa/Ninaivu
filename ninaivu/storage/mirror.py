@@ -73,6 +73,7 @@ from typing import Any, Callable
 
 from ..utils.files import CHUNK, create_new, sha256_file, stays_inside
 from . import fit, roots as roots_kit
+from .. import work
 
 log = logging.getLogger(__name__)
 
@@ -409,9 +410,7 @@ class Mirror:
         if self._keeper and self._keeper.is_alive():
             return
         self._asleep.clear()
-        self._keeper = threading.Thread(target=self._loop, name="ninaivu-second-copy-keeper",
-                                        daemon=True)
-        self._keeper.start()
+        self._keeper = work.keep_running("ninaivu-second-copy-keeper", self._loop, stop=self._asleep)
 
     def _loop(self) -> None:
         while True:

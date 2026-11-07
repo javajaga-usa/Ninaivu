@@ -33,6 +33,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from . import SECONDARY, pairing, role
+from .. import work
 
 log = logging.getLogger(__name__)
 
@@ -242,8 +243,7 @@ class Waker:
     def keep(self) -> None:
         if self._thread is None or not self._thread.is_alive():
             self._stop.clear()
-            self._thread = threading.Thread(target=self._loop, name="mugil-wake", daemon=True)
-            self._thread.start()
+            self._thread = work.keep_running("mugil-wake", self._loop, stop=self._stop)
 
     def stop(self, join: bool = False) -> None:
         self._stop.set()

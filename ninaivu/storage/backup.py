@@ -44,6 +44,7 @@ from contextlib import closing
 from datetime import datetime
 from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Iterator
+from .. import work
 
 log = logging.getLogger(__name__)
 
@@ -1099,9 +1100,7 @@ class BackupKeeper:
         if self.every <= 0 or (self._thread and self._thread.is_alive()):
             return
         self._stop.clear()
-        self._thread = threading.Thread(target=self._loop, name="ninaivu-backup",
-                                        daemon=True)
-        self._thread.start()
+        self._thread = work.keep_running("ninaivu-backup", self._loop, stop=self._stop)
 
     def stop(self, timeout: float = 5.0) -> None:
         self._stop.set()

@@ -61,6 +61,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
+from .. import work
 from ..utils.files import same_bytes, sha256_file, stays_inside
 from .tempfiles import create_new
 
@@ -573,8 +574,7 @@ class Offsite:
                 except Exception:                           # noqa: BLE001
                     log.exception("the off-site copy's schedule")
 
-        self._timer = threading.Thread(target=loop, name="ninaivu-offsite-schedule", daemon=True)
-        self._timer.start()
+        self._timer = work.keep_running("ninaivu-offsite-schedule", loop, stop=self._asleep)
 
     def due(self) -> bool:
         """A day (by default) since the last run that finished, and not

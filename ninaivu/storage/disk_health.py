@@ -40,6 +40,7 @@ import sys
 import threading
 import time
 from typing import Any, Callable
+from .. import work
 
 log = logging.getLogger(__name__)
 
@@ -249,9 +250,7 @@ class DiskWatch:
         if self._thread and self._thread.is_alive():
             return
         self._stop.clear()
-        self._thread = threading.Thread(target=self._loop, name="ninaivu-disks",
-                                        daemon=True)
-        self._thread.start()
+        self._thread = work.keep_running("ninaivu-disks", self._loop, stop=self._stop)
 
     def stop(self, timeout: float = 5.0) -> None:
         self._stop.set()

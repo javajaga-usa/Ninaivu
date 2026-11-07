@@ -33,6 +33,7 @@ from typing import Any, Callable
 
 from . import keyring, restore, store
 from ..utils.files import sha256_file
+from .. import work
 
 log = logging.getLogger(__name__)
 
@@ -150,9 +151,7 @@ class RestoreTester:
         if self._thread and self._thread.is_alive():
             return
         self._stop.clear()
-        self._thread = threading.Thread(target=self._loop, name="ninaivu-restore-test",
-                                        daemon=True)
-        self._thread.start()
+        self._thread = work.keep_running("ninaivu-restore-test", self._loop, stop=self._stop)
 
     def stop(self, timeout: float = 5.0) -> None:
         self._stop.set()

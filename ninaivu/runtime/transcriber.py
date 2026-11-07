@@ -31,6 +31,7 @@ from ..storage import stories, story_words
 from ..words import said
 from . import speech
 from .host import HostError, HostStopped, ModelHost, Unavailable
+from .. import work
 
 log = logging.getLogger(__name__)
 
@@ -87,9 +88,7 @@ class Transcriber:
         if self._thread is not None and self._thread.is_alive():
             return
         self._stop.clear()
-        self._thread = threading.Thread(target=self._loop, name="ninaivu-story-words",
-                                        daemon=True)
-        self._thread.start()
+        self._thread = work.keep_running("ninaivu-story-words", self._loop, stop=self._stop)
 
     def wake(self) -> None:
         """Look for stories to write down now, not at the next half hour."""

@@ -15,6 +15,7 @@ from typing import Callable
 from . import database as db
 from .safety import long_path
 from .scanner import hash_file
+from .. import work
 
 log = logging.getLogger(__name__)
 
@@ -45,9 +46,7 @@ class ArchiveGuardian:
             if self._thread is not None and self._thread.is_alive():
                 return
             self._stop.clear()
-            self._thread = threading.Thread(target=self._loop,
-                                            name='archive-guardian', daemon=True)
-            self._thread.start()
+            self._thread = work.keep_running("archive-guardian", self._loop, stop=self._stop)
 
     def stop(self) -> None:
         self._stop.set()

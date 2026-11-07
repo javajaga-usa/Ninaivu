@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Background checks start again after any error
+
+- **A background loop that stops on an error is started again.** The schedules and checks that run all the time (the daily catch-up, the second copy, the off-site copy, the copy of the index, the test restore, the storage check, the archive health check, the drives, the weekly photograph, the XMP sidecars, the two-computer copies, the hand-over, waking the Primary, the voice stories, the descriptions, the moments in videos and the bin) now run under one supervisor. One that ends on an error the loop itself did not expect is written to the log with its name and started again: 5 seconds later, then twice as long each time, up to 10 minutes. Two of them could end for good on one such error until now: the sidecar schedule and the bin's daily sweep. Each loop keeps its thread name, so the log reads as before. This is the first step of the 4.0 work plane.
+
 ### Two computers with HTTPS on the Secondary
 
 - **A Secondary with Use HTTPS on can be paired.** The Primary always knocked at `http://`, so a Secondary on HTTPS hung up and the Mugil page said it "answers, but its family app cannot be reached". It now says it speaks HTTPS when the Primary looks for it, and the Primary uses `https://`.

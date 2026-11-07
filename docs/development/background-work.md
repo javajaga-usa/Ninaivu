@@ -114,6 +114,20 @@ then fail with "database is locked".
   stop. The record of a finished upload is retried, so a file already on Drive
   is never sent twice.
 
+## Rule 3a: every long-lived loop runs under the supervisor
+
+A loop that runs for as long as Ninaivu does (a schedule, a check, a
+keeper) is started with `work.keep_running(name, loop, stop=event)`
+(`ninaivu/work/__init__.py`), never with a bare `threading.Thread`. The loop
+is written as before, with its own `try` around each look. The supervisor
+catches what the loop did not: it logs the error under the thread's name and
+runs the loop again after 5 s, doubling to 10 minutes, unless `event` is set.
+A loop that returns has finished and is not started again. `work.jobs()` lists
+every supervised loop with its state, restarts and last error.
+
+This is step 1 of the 4.0 work plane. Later steps move the schedules, the
+claims below and the compute into the supervisor as well.
+
 ## Rule 4: CPU budgets come from one place
 
 `utils/resources.budget()` sets the worker and compute-thread counts for the

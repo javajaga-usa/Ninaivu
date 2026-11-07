@@ -48,6 +48,7 @@ from typing import Any, Callable
 
 from . import PRIMARY, pairing, role
 from .courier import SENT, sent_record
+from .. import work
 
 log = logging.getLogger(__name__)
 
@@ -421,8 +422,7 @@ class DisplayCopies:
         if self._thread is not None:
             return
         self._stop.clear()
-        self._thread = threading.Thread(target=self._keep, name="mugil-display", daemon=True)
-        self._thread.start()
+        self._thread = work.keep_running("mugil-display", self._keep, stop=self._stop)
 
     def stop(self, join: bool = False) -> None:
         self._stop.set()

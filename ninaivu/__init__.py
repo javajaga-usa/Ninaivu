@@ -796,7 +796,8 @@ class Services:
                 self._sweep_the_bin()
                 self._tidy_records()
 
-        threading.Thread(target=sweep_daily, name="bin-sweep", daemon=True).start()
+        from . import work                                  # noqa: PLC0415
+        work.keep_running("bin-sweep", sweep_daily, stop=self._bin_stop)
         self.boot_thread = threading.Thread(target=boot, name="ninaivu-boot", daemon=True)
         self.boot_thread.start()
 

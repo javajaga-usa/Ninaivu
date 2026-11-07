@@ -37,6 +37,7 @@ import threading
 import time
 from pathlib import Path
 from typing import Any, Callable
+from .. import work
 
 log = logging.getLogger(__name__)
 
@@ -106,9 +107,7 @@ class DailyCatchUp:
         if self._thread is not None and self._thread.is_alive():
             return
         self._stop.clear()
-        self._thread = threading.Thread(target=self._run, name="ninaivu-daily-catchup",
-                                        daemon=True)
-        self._thread.start()
+        self._thread = work.keep_running("ninaivu-daily-catchup", self._run, stop=self._stop)
 
     def stop(self, join: bool = False, timeout: float = 5.0) -> None:
         self._stop.set()

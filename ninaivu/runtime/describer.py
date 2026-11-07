@@ -30,6 +30,7 @@ from typing import Any, Callable
 from ..storage import descriptions
 from . import florence
 from .host import HostError, HostStopped, ModelHost, Unavailable
+from .. import work
 
 log = logging.getLogger(__name__)
 
@@ -86,9 +87,7 @@ class Describer:
         if self._thread is not None and self._thread.is_alive():
             return
         self._stop.clear()
-        self._thread = threading.Thread(target=self._loop, name="ninaivu-descriptions",
-                                        daemon=True)
-        self._thread.start()
+        self._thread = work.keep_running("ninaivu-descriptions", self._loop, stop=self._stop)
 
     def wake(self) -> None:
         """Look for pictures to describe now, not at the next half hour."""

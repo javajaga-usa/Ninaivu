@@ -51,6 +51,7 @@ from typing import Any, Callable
 
 from ..utils.files import CHUNK, create_new, sha256_file, stays_inside, sync_folder
 from . import roots as roots_kit
+from .. import work
 
 log = logging.getLogger(__name__)
 
@@ -451,9 +452,7 @@ class Repairer:
         if self._timer is not None and self._timer.is_alive():
             return
         self._asleep.clear()
-        self._timer = threading.Thread(target=self._loop, name="ninaivu-check-schedule",
-                                       daemon=True)
-        self._timer.start()
+        self._timer = work.keep_running("ninaivu-check-schedule", self._loop, stop=self._asleep)
 
     def _loop(self) -> None:
         while not self._asleep.wait(TICK):

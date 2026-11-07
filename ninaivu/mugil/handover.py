@@ -44,6 +44,7 @@ from .. import __version__
 from . import PRIMARY, pairing, role
 from .courier import AWAY, Partner, PartnerError
 from .hold import clean_path, hasher
+from .. import work
 
 log = logging.getLogger(__name__)
 
@@ -151,8 +152,7 @@ class Handover:
         if self._thread is not None:
             return
         self._stop.clear()
-        self._thread = threading.Thread(target=self._keep, name="mugil-handover", daemon=True)
-        self._thread.start()
+        self._thread = work.keep_running("mugil-handover", self._keep, stop=self._stop)
 
     def stop(self, join: bool = False) -> None:
         self._stop.set()

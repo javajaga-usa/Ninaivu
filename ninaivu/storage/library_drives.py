@@ -26,6 +26,7 @@ from typing import Any, Callable
 
 from . import library_id
 from . import roots as roots_kit
+from .. import work
 
 log = logging.getLogger(__name__)
 
@@ -54,9 +55,7 @@ class LibraryDrives:
         if self._thread and self._thread.is_alive():
             return
         self._stop.clear()
-        self._thread = threading.Thread(target=self._loop, name="ninaivu-library-drives",
-                                        daemon=True)
-        self._thread.start()
+        self._thread = work.keep_running("ninaivu-library-drives", self._loop, stop=self._stop)
 
     def stop(self, timeout: float = 5.0) -> None:
         self._stop.set()

@@ -37,6 +37,7 @@ import time
 import xml.etree.ElementTree as ET  # nosec B405 — Ninaivu's own small files; expat resists expansion
 from pathlib import Path
 from typing import Any, Callable
+from .. import work
 
 log = logging.getLogger(__name__)
 
@@ -220,8 +221,7 @@ class XmpReader:
         def tick() -> None:
             while not self._asleep.wait(every):
                 self.wake()
-        self._timer = threading.Thread(target=tick, daemon=True, name="ninaivu-xmp-read-timer")
-        self._timer.start()
+        self._timer = work.keep_running("ninaivu-xmp-read-timer", tick, stop=self._asleep)
 
     def stop(self, join: bool = False) -> None:
         self._stop.set()
