@@ -1,14 +1,15 @@
 #!/bin/sh
-# Ninaivu Control Panel on Linux - double-click to open it, as "Start -
-# Ninaivu Control Panel.vbs" does on Windows. Linux Mint's file manager asks
-# whether to run it; choose Run. (GNOME Files opens scripts as text instead:
-# there, `sh launcher/start.sh --add-to-menu` puts the Control Panel in the
-# application menu and on the Desktop, and that entry runs this file.)
+# Ninaivu Control Panel from a Linux checkout, as "Start - Ninaivu Control
+# Panel.vbs" is on Windows. Linux Mint's file manager asks whether to run it;
+# choose Run. (GNOME Files opens scripts as text instead: there,
+# `sh launcher/start.sh --add-to-menu` puts the Control Panel in the
+# application menu and on the Desktop, and that entry runs this file.) The
+# portable download has its own starter, ninaivu, instead.
 #
-# It runs ninaivu_control.pyw with the Python in this folder's .venv, which
-# `sh launcher/start.sh` creates the first time it runs. Without one it says
-# so, in a window when there is no terminal to say it in.
-cd "$(dirname "$0")" || exit 1
+# It runs launcher/ninaivu_control.pyw with the Python in the checkout's
+# .venv, which `sh launcher/start.sh` creates the first time it runs. Without
+# one it says so, in a window when there is no terminal to say it in.
+cd "$(dirname "$0")/.." || exit 1
 
 [ ! -f launcher/linux-env.sh ] || . ./launcher/linux-env.sh
 
@@ -47,4 +48,4 @@ if [ "${1:-}" = --autostart ]; then
     shift
     exec "$PYTHON" -m ninaivu.desktop.autostart --start "$@"
 fi
-exec "$PYTHON" "$PWD/ninaivu_control.pyw" "$@"
+exec "$PYTHON" "$PWD/launcher/ninaivu_control.pyw" "$@"

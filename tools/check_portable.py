@@ -24,7 +24,12 @@ running this is what is being checked.
    length and poster, and names in Tamil and with accents;
 4. the AI models page: ONNX Runtime installed from the Extras list into the
    folder's own Python, a model downloaded, and run once on a picture;
-5. a second start on the same folder, and not one photograph changed.
+5. a second start on the same folder, and not one photograph changed;
+6. the download's one starter opened, as a double-click opens it
+   (``Ninaivu.exe``, ``Ninaivu.app``, the Linux folder's ``ninaivu``): the
+   Control Panel comes up with its tray icon, starts Ninaivu, and Ninaivu
+   serves (:func:`open_the_starter`). Only where there is a desktop to open
+   it on: every runner but a Linux one without ``xvfb-run``.
 
 ``pair`` is Mugil's two computers on this one machine: the download unpacked
 twice, one made the Secondary with a folder for the originals, the other the
@@ -259,8 +264,8 @@ found["purelib"] = sysconfig.get_paths()["purelib"]
 print(json.dumps(found))
 """
 
-#: The Control Panel itself, built as Ninaivu.exe, Ninaivu.app and Open
-#: Ninaivu open it, drawn for a moment, and closed without starting anything.
+#: The Control Panel itself, drawn for a moment and closed without starting
+#: anything: the window, before the starter is opened for real (step 6).
 PANEL = r"""
 import time, tkinter
 from ninaivu.desktop import app
@@ -614,7 +619,91 @@ def check(download: Path, work: Path, *, ai: bool) -> None:
                    "the model is ready, with what it needs installed")
     finally:
         again.stop()
+    if WINDOWS or sys.platform == "darwin" or os.environ.get("DISPLAY"):
+        open_the_starter(portable, photos, logs)
     expect(photo_hashes(photos) == before, "not one photograph was changed")
+
+
+def starter(folder: Path) -> Path:
+    """The one thing in the download to open."""
+    for candidate in (folder / "Ninaivu.exe", folder / "Ninaivu.app" / "Contents" / "MacOS" / "ninaivu",
+                      folder / "ninaivu"):
+        if candidate.is_file():
+            return candidate
+    raise Failed(f"no starter in {folder}")
+
+
+def open_the_starter(portable: Portable, photos: Path, logs: Path) -> None:
+    """Open the download's one starter as a double-click does, and see that
+    it opens the Control Panel, puts its icon in the tray and starts Ninaivu.
+
+    The panel starts Ninaivu with the arguments it keeps in its settings, as
+    it would on a household's computer; they are set here to this check's
+    library and ports. ``NINAIVU_CHECK_OPEN`` asks the panel to say how the
+    start went in a file and then quit, as a person would, leaving Ninaivu
+    running to be looked at and stopped here."""
+    program = starter(portable.folder)
+    step(f"Opening {program.relative_to(portable.folder)}, the download's one starter")
+    port, admin_port = free_ports(2)
+    control = Path(portable.env["NINAIVU_HOME"]) / ".ninaivu-control"
+    control.mkdir(parents=True, exist_ok=True)
+    (control / "settings.json").write_text(json.dumps({"arguments": [
+        str(photos), "--http", "--no-mdns", "--strict-port", "--port", str(port),
+        "--admin-port", str(admin_port), "--ai", "off", "--no-watch", "--allow-sleep", "--local-only"]}),
+        encoding="utf-8")
+    report = WORK / "opened.json"
+    report.unlink(missing_ok=True)
+    # The starter sets the folders itself, as on a double-click.
+    env = {key: value for key, value in portable.env.items() if not key.startswith("NINAIVU_")}
+    env.update(NINAIVU_NO_DIALOG="1", NINAIVU_CHECK_OPEN=str(report))
+    logs.mkdir(parents=True, exist_ok=True)
+    with open(logs / "starter.log", "ab") as out:
+        opened = subprocess.Popen([str(program)], env=env, cwd=str(WORK), stdout=out, stderr=subprocess.STDOUT)
+        try:
+            told = wait_for("the Control Panel saying how the start went",
+                            lambda: json.loads(report.read_text(encoding="utf-8")) if report.is_file() else None,
+                            START_PATIENCE + 60, 1.0)
+            print(f"   {told}")
+            expect(told["kind"] == "done" and told["running"], f"opening it started Ninaivu ({told['answer']})")
+            expect(told["title"] == "Ninaivu Control Panel", "in the Control Panel")
+            if (WINDOWS or sys.platform == "darwin") and not (told["tray"] and told["tray_shown"]):
+                # Said, not failed: a CI runner may have no desktop that shows
+                # tray icons, and a release should not wait on that. The panel
+                # opening and starting Ninaivu is what is required.
+                print("   warning: the tray icon was not shown on this machine "
+                      f"(tray={told['tray']}, shown={told['tray_shown']}); check it by hand")
+            with urllib.request.urlopen(f"http://127.0.0.1:{port}/healthz", timeout=10) as answer:
+                expect(answer.status == 200, "and Ninaivu serves")
+            # Ninaivu.exe ends at once; the panel it opened quits after the report.
+            try:
+                opened.wait(timeout=60)
+            except subprocess.TimeoutExpired:
+                raise Failed("the Control Panel did not quit after its report") from None
+        finally:
+            if opened.poll() is None:
+                opened.kill()
+            _stop_by_run_file(portable, port, admin_port)
+
+
+def _stop_by_run_file(portable: Portable, port: int, admin_port: int) -> None:
+    """Ask the Ninaivu the panel started to stop, as the panel's Stop does."""
+    try:
+        run = json.loads((portable.state / "ninaivu.run").read_text(encoding="utf-8"))
+        request = urllib.request.Request(
+            f"http://127.0.0.1:{admin_port}/api/admin/shutdown",
+            data=json.dumps({"token": run["token"]}).encode(), method="POST",
+            headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(request, timeout=15):
+            pass
+    except (OSError, ValueError, KeyError):
+        return
+    def gone() -> bool:
+        try:
+            urllib.request.urlopen(f"http://127.0.0.1:{port}/healthz", timeout=3).close()
+            return False
+        except OSError:
+            return True
+    wait_for("the server the starter started to stop", gone, 120, 1.0)
 
 
 # ---------------------------------------------------------------------------

@@ -17,7 +17,7 @@ from ninaivu.server.config import Config
 def test_the_installers_say_where_they_live_in_a_name_the_server_does_not_read():
     root = Path(__file__).resolve().parents[1]
     for path in ("installers/windows/portable/Ninaivu.cs", "installers/macos/launcher.sh",
-                 "installers/linux/portable/ninaivu"):
+                 "installers/linux/portable/ninaivu.sh"):
         text = (root / path).read_text(encoding="utf-8")
         assert "NINAIVU_HOME" in text
         assert "NINAIVU_ROOT" not in text, f"{path}: the server reads NINAIVU_ROOT as the library"

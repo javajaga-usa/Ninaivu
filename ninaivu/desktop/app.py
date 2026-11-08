@@ -1,34 +1,41 @@
-"""Ninaivu's Control Panel: a window of its own beside the tray.
+"""Ninaivu on the desktop: the Control Panel, with its icon in the tray.
 
-    python -m ninaivu.desktop.app
-    Start - Ninaivu Control Panel.vbs      (Windows, double-click)
-    Ninaivu Control Panel.app              (macOS, built by Setup Ninaivu.command)
+    Ninaivu.exe | Ninaivu.app | ninaivu       (the portable folder's one starter)
+    python -m ninaivu.desktop.app [--tray]    (a checkout)
 
-The tray (:mod:`ninaivu.desktop.tray`) is one small menu; this is the whole
-picture on one screen: whether Ninaivu is running and where, Start, Stop and
-Restart, the computer's CPU, memory, battery and disk with a minute of CPU
-history, the resource mode, and the server's log as it is written, in a
-light or a dark look (:mod:`desktop.theme`) that follows the computer's own
-unless one is chosen. Most of
-that is on the console's Server page too, but the console is only there
-while the server is, and this window is for the moments it is not.
+One program. Opening it opens this window, puts Ninaivu's icon in the tray
+(the menu bar on a Mac) and starts Ninaivu. The icon is the window
+minimised, not a program of its own (:mod:`ninaivu.desktop.tray` says how
+each system hosts it beside Tk): closing the window puts it there, a click
+on the icon brings it back, and Quit in the icon's menu ends the program.
+Opening Ninaivu again while it is open brings its window to the front
+instead of opening a second (:mod:`ninaivu.desktop.instance`). ``--tray``
+opens it minimised.
 
-The two can run together. Neither holds the server up: both start and stop it
-through :class:`desktop.control.Controller`, which never force-kills and
-always asks through the server's authenticated stop, and both find a server
-that was started another way (``launcher/start.py``, a service, the other).
-Closing the window leaves Ninaivu running.
+The window is the whole picture on one screen: whether Ninaivu is running
+and where, Start, Stop and Restart, the computer's CPU, memory, battery and
+disk with a minute of CPU history, the resource mode, and the server's log as
+it is written, in a light or a dark look (:mod:`desktop.theme`) that follows
+the computer's own unless one is chosen. Most of that is on the console's
+Server page too, but the console is only there while the server is, and this
+window is for the moments it is not.
+
+It does not hold the server up. It starts and stops it through one
+:class:`desktop.control.Controller`, which never force-kills and always asks
+through the server's authenticated stop, and it finds a server that was
+started another way (``launcher/start.py``, a service, a start at sign-in).
+Closing the window, and quitting, leave Ninaivu running.
 
 Background work never blocks Tk. Readings and actions run on threads and
 come back through a queue that the window empties on its own timer, because
 a start can take half a minute and a window that freezes meanwhile looks
-like one that has crashed.
+like one that has crashed. The tray's clicks come through the same queue.
 
-It needs Tk, which the python.org installers and the Windows installer bring
-(Homebrew's Python needs ``brew install python-tk@3.12``), and ``psutil``,
-which ``launcher/start.py`` installs. Without psutil it cannot tell whether
-Ninaivu is running, so :func:`main` says so rather than showing a panel that
-would call a running server stopped and start a second one.
+It needs Tk, which the python.org installers and the portable downloads
+bring (Homebrew's Python needs ``brew install python-tk@3.12``), and
+``psutil``. Without psutil it cannot tell whether Ninaivu is running, so
+:func:`main` says so rather than showing a panel that would call a running
+server stopped and start a second one.
 """
 from __future__ import annotations
 
@@ -61,7 +68,7 @@ ICON = Path(__file__).resolve().parents[1] / 'static' / 'icons' / 'icon-192.png'
 #: What to install when the panel cannot run, said the same way everywhere.
 NEEDS = ('Install what the Control Panel needs into Ninaivu’s environment:\n\n'
          '    pip install -r requirements/requirements-desktop.txt\n\n'
-         'or run the setup again (Setup Ninaivu.command on a Mac, start.cmd on Windows).')
+         'The portable downloads carry all of it.')
 
 # The colours are in :mod:`desktop.theme`, one set for each look.
 CARDS = (
@@ -399,6 +406,12 @@ class Dashboard:
         self.operation_label = ''
         self.restart_mode = None     # the mode a restart begun here starts in
         self.closing = False         # the window was closed (close)
+        self.tray = None             # the icon in the tray, once attach_tray has put it there
+        self.opening = False         # the start that opening Ninaivu began (start_on_open)
+        self.last_running = False    # whether Ninaivu ran at the last reading, for the tray's menu
+        #: Set by tools/check_portable.py only: where to say how opening went,
+        #: and then quit, so a release is checked by opening its one starter.
+        self.check_report = os.environ.get('NINAIVU_CHECK_OPEN', '').strip() or None
         self.cpu_history = []
         self.cards = {}
         self.buttons = []
@@ -525,8 +538,8 @@ class Dashboard:
 
         actions = self.paint(tk.Frame(action_row), bg='bg')
         actions.pack(side='left', anchor='w')
-        self.start_button = self._action_button(actions, '▶  Start', lambda: self.run(self.controller.start, 'Starting'), 'Start.TButton')
-        self.stop_button = self._action_button(actions, '■  Stop', lambda: self.run(self.controller.stop, 'Stopping'), 'Stop.TButton')
+        self.start_button = self._action_button(actions, '▶  Start', self.start, 'Start.TButton')
+        self.stop_button = self._action_button(actions, '■  Stop', self.stop, 'Stop.TButton')
         self.restart_button = self._action_button(actions, restart_label(), lambda: self.run(self.restart, 'Restarting'), 'TButton')
         self.paint(tk.Frame(actions, width=1), bg='border').pack(side='left', fill='y', padx=(4, 12), pady=4)
         self.button(actions, 'Open the family app', lambda: self.open_in_browser(False))
@@ -659,7 +672,7 @@ class Dashboard:
         self.build_logs(split)
         self.apply_theme()
         self._fit_window()
-        root.protocol('WM_DELETE_WINDOW', self.close)
+        root.protocol('WM_DELETE_WINDOW', self.close_window)
         threading.Thread(target=self.monitor_loop, daemon=True, name='ninaivu-panel-monitor').start()
         threading.Thread(target=self.power_loop, daemon=True, name='ninaivu-panel-power').start()
         threading.Thread(target=self.appearance_loop, daemon=True, name='ninaivu-panel-appearance').start()
@@ -1364,20 +1377,31 @@ class Dashboard:
                 self.operation_label = ''
                 self.restart_mode = None
                 running = bool(record)
+                self.last_running = running
                 self.set_controls(running)
                 self.show_status(running)
                 self._sync_trust_button(record or {})
                 if endpoints:
                     self.endpoints_info.set(endpoints)
                 self.notice.set(value)
-                if kind == 'error':
+                if self.opening:
+                    self.opening = False
+                    if self.check_report:
+                        self._report_open(kind, value, running)
+                hidden = self._hidden()
+                if kind == 'error' and self.check_report:
+                    pass                        # said in the report; nobody is there to close a box
+                elif kind == 'error':
+                    if hidden:
+                        self.show_window()      # an error is not left in a hidden window
                     messagebox.showerror('Ninaivu Control Panel', value, parent=self.root)
+                elif hidden and self.tray is not None:
+                    self.tray.notify(value)     # begun from the tray: answered there
                 elif self.went_back or self.controller.went_back:
                     # This folder has no library now: started again from
                     # here it would be an empty one.
                     messagebox.showinfo('Go back', value, parent=self.root)
-                    self.finished.set()
-                    self.root.destroy()
+                    self._end()
                     return
             elif kind == 'call':
                 value()
@@ -1390,6 +1414,7 @@ class Dashboard:
                                             what, share, seconds)
             else:
                 self.notice.set(value)
+        self._refresh_tray()
         self.root.after(150, self.pump)
 
     def _update_bar(self, canvas, value, max_val):
@@ -1444,6 +1469,7 @@ class Dashboard:
 
     def display(self, s):
         is_running = s['running']
+        self.last_running = bool(is_running)
         under_way = s.get('under_way')
         if self.busy:
             self.status.set(self.operation_label + '…')
@@ -1731,10 +1757,154 @@ class Dashboard:
 
     def _end(self):
         self.finished.set()
+        if self.tray is not None:
+            self.tray.close()
         try:
             self.root.destroy()
         except tk.TclError:
             pass
+
+    # -- the one program: the window, its icon in the tray, and opening -----------
+
+    def post(self, work):
+        """*work* run on Tk's thread, at the queue's next emptying: how the
+        tray's menu and a second Ninaivu opened reach the window."""
+        self.events.put(('call', work))
+
+    def attach_tray(self, attach=None):
+        """Put Ninaivu's icon in the tray (the menu bar on a Mac), held by
+        this window: the panel minimised, not a program of its own
+        (:mod:`desktop.tray` says how on each system). Returns the icon, or
+        None where there is no tray to use."""
+        from . import tray
+        self.tray = (attach or tray.attach)(self)
+        if sys.platform == 'darwin':
+            # The Dock's icon clicked, or Ninaivu.app opened again from the
+            # Finder: the window comes back. Quit in the Dock or ⌘Q is the
+            # panel's Quit, which leaves Ninaivu running.
+            self.root.createcommand('::tk::mac::ReopenApplication', self.show_window)
+            self.root.createcommand('::tk::mac::Quit', self.quit)
+        if self.tray is not None and self.tray.shown:
+            self.notice.set(f'Closing this window puts it in the {tray_place()}; Ninaivu keeps running.')
+        self._refresh_tray()
+        return self.tray
+
+    def _refresh_tray(self):
+        if self.tray is not None:
+            self.tray.refresh(self.last_running, self.operation_label if self.busy else None)
+
+    def _hidden(self):
+        try:
+            return self.root.state() == 'withdrawn'
+        except tk.TclError:
+            return False
+
+    def show_window(self):
+        """The window back from the tray, in front."""
+        if self.finished.is_set():
+            return
+        try:
+            self.root.deiconify()
+            self.root.lift()
+            self.root.focus_force()
+        except tk.TclError:
+            pass
+
+    def close_window(self):
+        """The window's own close button. With an icon to find it in again,
+        the window is put away there and the program goes on, readings and
+        all; said once, so the person knows where it went. Where there is no
+        icon (a Linux desktop with no tray), it closes, as it always has:
+        Ninaivu keeps running, and opening Ninaivu again brings the window
+        back."""
+        if close_action(self.tray, self.closing) == 'hide':
+            self.root.withdraw()
+            if not self.tray.told_once:
+                self.tray.told_once = True
+                self.tray.notify(f'Ninaivu keeps running. Its window is in the {tray_place()}.')
+            return
+        self.close()
+
+    def quit(self):
+        """Quit, from the tray's menu (or ⌘Q): the icon goes and the window
+        closes (:meth:`close`, with all it guarantees). Ninaivu keeps
+        running."""
+        if self.tray is not None:
+            self.tray.close()
+            self.tray = None
+        self.close()
+
+    def start(self):
+        """Start, from the button or the tray."""
+        if not self.busy:
+            self.run(self.controller.start, 'Starting')
+
+    def stop(self):
+        """Stop, from the button or the tray: asked, never forced."""
+        if not self.busy:
+            self.run(self.controller.stop, 'Stopping')
+
+    def open_family(self):
+        self.open_in_browser(False)
+
+    def start_on_open(self):
+        """Opening Ninaivu starts it: the one thing to double-click is the
+        one thing to do. Unless it is running already, or starting (begun
+        elsewhere: the start waits on that one, Controller.start), and read
+        on a thread of its own like every other reading."""
+        def then(record):
+            if self.busy or self.finished.is_set():
+                return
+            if isinstance(record, Exception):
+                return                  # not started on a guess; Start is there
+            if record:
+                if self.check_report:
+                    self._report_open('done', 'Ninaivu is already running.', True)
+                return
+            self.opening = True
+            self.start()
+        self.in_background(self.controller.record, then, name='ninaivu-panel-open')
+
+    def _report_open(self, kind, answer, running):
+        """For tools/check_portable.py: what opening the starter did, then
+        Quit, as a person would, leaving the server running for the check to
+        look at and stop."""
+        import json
+        report = {'title': self.root.title(), 'kind': kind, 'answer': answer, 'running': bool(running),
+                  'tray': self.tray is not None, 'tray_shown': bool(self.tray and self.tray.shown),
+                  'platform': sys.platform}
+        target = Path(self.check_report)
+        try:
+            target.with_suffix('.tmp').write_text(json.dumps(report), encoding='utf-8')
+            os.replace(target.with_suffix('.tmp'), target)
+        except OSError:
+            import logging
+            logging.getLogger(__name__).exception('could not write the check report')
+        self.root.after(500, self.quit)
+
+
+def close_action(tray, closing=False):
+    """What the window's close button does: ``'hide'`` into the tray when
+    there is an icon to find it in again, ``'close'`` otherwise."""
+    if tray is not None and getattr(tray, 'shown', False) and not closing:
+        return 'hide'
+    return 'close'
+
+
+def tray_place(platform=None):
+    """Where the icon is, in the words of each system."""
+    return 'menu bar' if (platform or sys.platform) == 'darwin' else 'tray'
+
+
+def parse_arguments(argv):
+    """The desktop program's own options. Anything else is left alone: a
+    launcher may pass on what it was given."""
+    import argparse
+    parser = argparse.ArgumentParser(prog='ninaivu.desktop.app', add_help=False)
+    parser.add_argument('--tray', action='store_true',
+                        help='open minimised to the icon in the tray (menu bar on a Mac)')
+    known, _rest = parser.parse_known_args(argv)
+    return known
 
 
 def line_tag(line):
@@ -1826,13 +1996,54 @@ def windows_dpi_aware(windll=None):
     return False
 
 
-def main():
+def main(argv=None):
+    """The one desktop program: ``Ninaivu.exe``, ``Ninaivu.app`` and the
+    Linux folder's ``ninaivu`` open this, and so does
+    ``python -m ninaivu.desktop.app``.
+
+    It opens the Control Panel with Ninaivu's icon in the tray, and starts
+    Ninaivu. ``--tray`` opens it minimised to the icon. Opened again while it
+    is open, it shows the window it has and ends (:mod:`desktop.instance`).
+    """
+    options = parse_arguments(sys.argv[1:] if argv is None else argv)
     if tk is None:
         # A Python without Tk cannot show the panel; the tray does the same
         # job from a menu, so the person is not left with nothing.
         print('The Control Panel needs Tk, which this Python does not have; opening the tray instead.', file=sys.stderr)
-        from .tray import main as tray_main
-        return tray_main()
+        from .tray import run_alone
+        return run_alone()
+    instance = claim_the_desktop()
+    if instance is ALREADY_OPEN:
+        return 0
+    try:
+        return _open(options, instance)
+    finally:
+        if instance is not None:
+            instance.close()
+
+
+#: :func:`claim_the_desktop`'s answer when another Ninaivu is open and showing itself.
+ALREADY_OPEN = object()
+
+
+def claim_the_desktop(claim=None):
+    """This program as the Ninaivu of its folder (:mod:`desktop.instance`):
+    the :class:`~desktop.instance.Instance`, :data:`ALREADY_OPEN` when one
+    is open already and has been told to show itself, or None when it could
+    not be told either way (a folder that cannot be written): then this one
+    opens, as every Ninaivu did before."""
+    from . import instance
+    try:
+        portable.activate_environment()
+        held = (claim or instance.claim)(control.control_dir(control.ninaivu_root()))
+    except OSError:
+        import logging
+        logging.getLogger(__name__).warning('could not tell whether Ninaivu is already open', exc_info=True)
+        return None
+    return ALREADY_OPEN if held is None else held
+
+
+def _open(options, instance):
     if os.name == 'nt':
         windows_dpi_aware()
     root = tk.Tk(className='Ninaivu')
@@ -1852,14 +2063,21 @@ def main():
         return 2
     root.withdraw()
     offer_the_older_library(root)
-    root.deiconify()
+    if not options.tray:
+        root.deiconify()
     try:
-        Dashboard(root)
+        board = Dashboard(root)
     except (OSError, ValueError, portable.PortableError) as exc:
         root.withdraw()
         messagebox.showerror('Ninaivu Control Panel', str(exc), parent=root)
         root.destroy()
         return 1
+    board.attach_tray()
+    if options.tray and not (board.tray is not None and board.tray.shown):
+        root.deiconify()            # minimised only where there is an icon to find it in
+    if instance is not None:
+        instance.serve(lambda: board.post(board.show_window))
+    board.start_on_open()
     root.mainloop()
     return 0
 

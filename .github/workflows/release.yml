@@ -40,7 +40,10 @@ name: Release installers
 # (tools/check_portable.py): unpacked, started for the first time on a
 # library, the first administrator made, photographs, an iPhone photo and a
 # video indexed, the Control Panel drawn, ONNX Runtime installed from Extras
-# and an AI model downloaded and run; and two copies of it paired as Mugil's
+# and an AI model downloaded and run, and the build's one starter opened as a
+# double-click opens it (Ninaivu.exe, Ninaivu.app, the Linux folder's
+# ninaivu): the Control Panel with its tray icon, Ninaivu started and
+# serving; and two copies of it paired as Mugil's
 # two computers, every original checked where the Secondary keeps it. The
 # "pair-across" jobs do that between two systems (Mac and Linux, Windows and
 # Linux, Mac and Windows) over Tailscale, when its secrets are set
@@ -416,8 +419,9 @@ jobs:
         run: |
           python -m pip install -c requirements/build-tools.txt pip
           bash installers/linux/build.sh
-      # Xvfb, so the Control Panel can be drawn as on a desktop. Nothing else
-      # is installed: what the download needs, it carries.
+      # Xvfb, so the Control Panel can be drawn, and the folder's one starter
+      # opened, as on a desktop. Nothing else is installed: what the download
+      # needs, it carries.
       - name: Use the archive as a household would
         run: |
           tools/ci_apt_install.sh xvfb

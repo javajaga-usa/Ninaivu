@@ -49,16 +49,17 @@ Windows, a LaunchAgent on a Mac) when someone turns it on.
   hidden `.ninaivu-portable` file the zip has. Dragged on its own into
   Applications, it keeps to `~/.ninaivu` and
   `~/Library/Application Support/Ninaivu`, as an installed app would.
-  `open -a Ninaivu --args --tray` opens the menu-bar tray instead of the
-  Control Panel.
+  `open -a Ninaivu --args --tray` opens it minimised to its menu-bar icon.
 - **Linux.** One download, `linux-x64`, for a 64-bit PC running Debian 12
   or 13, Ubuntu or another current distribution; every release is opened on
   Debian 12 and 13 before it is published. There is no arm64 (Raspberry Pi)
   download.
   `./ninaivu --server [PHOTOS] [options]` runs the server alone in
-  the terminal, with the same folders; `./ninaivu --tray` opens the tray;
-  `./ninaivu --where` prints the folders. The script may be reached through a
-  symbolic link (`ln -s ~/Ninaivu-…/ninaivu ~/bin/ninaivu`).
+  the terminal, with the same folders; `./ninaivu --tray` opens Ninaivu
+  minimised to its tray icon; `./ninaivu --where` prints the folders.
+  `ninaivu` is the folder's one starter, a small program that runs
+  `app/ninaivu.sh`, and may be reached through a symbolic link
+  (`ln -s ~/Ninaivu-…/ninaivu ~/bin/ninaivu`).
 
 ### The Linux system service
 
@@ -125,7 +126,15 @@ bring their own).
 ```bash
 git clone https://github.com/javajaga-usa/Ninaivu.git
 cd Ninaivu
-start.cmd ~/Pictures                 # Windows: or double-click start.cmd
+python -m pip install -e . -r requirements/requirements-desktop.txt
+python -m ninaivu ~/Pictures         # the server
+python -m ninaivu.desktop.app        # the Control Panel, with its tray icon
+```
+
+Or let a starter in `launcher/` set it up:
+
+```bash
+launcher\start.cmd ~/Pictures        # Windows: or double-click it
 sh launcher/start.sh ~/Pictures      # macOS and Linux
 ```
 
@@ -136,22 +145,18 @@ same port every time — finds free ports and opens your browser. `python -m nin
 the server directly, on plain HTTP and port 80 (8080 without the right to
 use 80), unless given `--https`.
 
-On Windows, `start.cmd` needs no Python beforehand: when it finds no Python
+On Windows, `launcher\start.cmd` needs no Python beforehand: when it finds no Python
 3.12 or newer, it installs Python 3.12 for the current user first (with
 winget, or from python.org when winget is missing), then carries on. No
-administrator rights are needed. **Start - Ninaivu Control Panel.vbs** opens
-the Control Panel once `start.cmd` has run.
+administrator rights are needed. **launcher\Start - Ninaivu Control
+Panel.vbs** opens the Control Panel once `launcher\start.cmd` has run.
 
-On a Mac, double-click **Setup Ninaivu.command** in the Ninaivu folder once
-instead of using a terminal. It clears the download quarantine, installs
-Python 3.12 if the Mac has no Python 3.12 or newer (after asking: with
-Homebrew when the Mac has it, otherwise the installer from python.org, which
-is run only when it carries the Python Software Foundation's signature, and
-for which macOS asks your password), installs what Ninaivu needs, and puts
-two apps in Applications: **Ninaivu**, which starts the library in a Terminal
-window and asks once which folder holds your photos, and the **Ninaivu
-Control Panel**, which starts and stops it without one. `sh
-launcher/start.sh` offers the same Python install.
+On a Mac, `sh launcher/start.sh` installs Python 3.12 if the Mac has no
+Python 3.12 or newer (after asking: with Homebrew when the Mac has it,
+otherwise the installer from python.org, which is run only when it carries the
+Python Software Foundation's signature, and for which macOS asks your
+password). `launcher/Ninaivu.command` does the same from the Finder and asks
+once which folder holds your photos.
 [More on the Control Panel.](desktop-control.md)
 
 A checkout keeps its log in `.ninaivu-control/server.log` beside it.

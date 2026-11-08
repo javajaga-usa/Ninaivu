@@ -1,26 +1,53 @@
-"""Ninaivu in the system tray (Windows) or menu bar (macOS).
+"""Ninaivu's icon in the system tray (Windows, Linux) or menu bar (macOS).
 
-    python -m ninaivu.desktop.tray
+The tray is the Control Panel minimised, not a program of its own. The one
+desktop program (:mod:`ninaivu.desktop.app`) opens the window and puts the
+icon beside it; closing the window puts it away into the icon, and the icon
+brings it back. One process, one :class:`~ninaivu.desktop.control.Controller`,
+one Start button that knows what the other is doing.
 
-One small icon, one menu: whether Ninaivu is running, Start, Stop, Restart,
-Open the family app, Open the console, How to update, View the log,
-Start at sign-in, Trust the HTTPS certificate (while on HTTPS), Quit. The tray's job is to be
-there when the console is not. The Control Panel window
-(:mod:`ninaivu.desktop.app`) is the fuller view beside it — readings, the
-resource mode and the live log — and the two run together happily.
+    python -m ninaivu.desktop.app --tray      (the same, opened minimised)
+    python -m ninaivu.desktop.tray            (says the same thing)
 
-The tray needs ``pystray`` and ``Pillow`` (``requirements-desktop.txt``). The
-logic is in :class:`Tray`, which knows nothing about pystray, so it is
-tested without a display; :func:`main` puts a pystray icon on it. Every
-action runs on a worker thread, because a start can take half a minute and
-a menu must never freeze.
+:class:`PanelTray` is the icon's menu when the panel holds it, as data and
+with no toolkit in sight, so it is tested without a display: Show Ninaivu
+(what clicking the icon does), Open the family app, Start or Stop, and Quit.
+Everything else is in the window, one click away. Its actions are handed to
+the panel's own queue, so they run on Tk's thread like the window's buttons.
 
-The server itself is started and stopped by :class:`desktop.control.Controller`,
-exactly as the old panel did: never force-killed, always through the
-authenticated stop.
+:func:`attach` puts a pystray icon on it, arranged for each system, because
+pystray and Tk each want an event loop and macOS lets only the main thread
+run one:
+
+* **macOS**: Tk's loop is the main thread's, and it is an NSApplication's
+  loop underneath. The icon is made on that thread, joins that same
+  NSApplication (``run_detached``), and is shown and updated only from Tk's
+  thread; its menu's clicks arrive there too. Nothing of AppKit is touched
+  from another thread.
+* **Windows**: the icon runs its own message loop on a thread of its own
+  (what ``run_detached`` does there). A Windows message loop belongs to the
+  thread that made its window, so it and Tk's never meet.
+* **Linux**: the X11 tray (XEmbed, pystray's ``xorg`` backend), on a thread
+  of its own with its own connection to the display. The AppIndicator and
+  GTK backends need a GLib loop, which Tk does not run, and the portable
+  build's Python has no GTK bindings anyway. That backend has no menu: a
+  click shows the window, where everything is. A desktop with no XEmbed tray
+  (GNOME without an extension) shows no icon; :attr:`TrayIcon.shown` is then
+  False and closing the window closes it, as before, with Ninaivu still
+  running, and opening Ninaivu again brings it back.
+
+Without Tk (a Python built without it) there is no window to minimise, and
+:func:`run_alone` runs the older, fuller menu (:class:`Tray`) as the whole
+program, so the person is not left with nothing.
+
+The server itself is started and stopped by :class:`desktop.control.Controller`:
+never force-killed, always through the authenticated stop. Quitting leaves it
+running; the icon was never what kept it up.
 """
 from __future__ import annotations
 
+import logging
+import os
 import subprocess
 import sys
 import threading
@@ -36,9 +63,175 @@ ICON = Path(__file__).resolve().parents[1] / "static" / "icons" / "icon-192.png"
 #: How often the menu's first line ("Running" / "Stopped") is re-read.
 POLL_SECONDS = 5.0
 
+log = logging.getLogger(__name__)
+
+
+class PanelTray:
+    """The icon's menu when the Control Panel holds it: the panel minimised.
+
+    *host* is the panel. It has ``post(callable)``, which runs the callable
+    on Tk's thread, and the panel's own ``show_window``, ``start``, ``stop``,
+    ``open_family`` and ``quit``. The menu reads only what :meth:`update`
+    was last told, never the disk or the server: on Windows it is built on
+    the icon's thread, and a reading there could freeze the icon.
+    """
+
+    def __init__(self, host: Any) -> None:
+        self.host = host
+        self.running = False
+        self.busy: str | None = None
+
+    def update(self, running: bool, busy: str | None) -> bool:
+        """What the panel now shows; whether the menu changes with it."""
+        changed = (bool(running), busy or None) != (self.running, self.busy)
+        self.running, self.busy = bool(running), busy or None
+        return changed
+
+    def status_line(self) -> str:
+        if self.busy:
+            return f"{self.busy}…"
+        return "Ninaivu is running" if self.running else "Ninaivu is stopped"
+
+    def _on_tk(self, name: str) -> Callable[[], None]:
+        """The panel's *name*, to be run on Tk's thread when clicked."""
+        return lambda: self.host.post(getattr(self.host, name))
+
+    def menu(self) -> list[dict[str, Any]]:
+        """The menu as data: ``{"label", "action", "enabled", "default"}``.
+        A ``None`` action is a separator or a line of text. Start and Stop
+        are never both there: only the one that can be pressed."""
+        idle = self.busy is None
+        items: list[dict[str, Any]] = [
+            {"label": self.status_line(), "action": None, "enabled": False},
+            {"label": "-", "action": None},
+            {"label": "Show Ninaivu", "action": self._on_tk("show_window"), "enabled": True,
+             "default": True},
+            {"label": "Open the family app", "action": self._on_tk("open_family"), "enabled": idle},
+            {"label": "-", "action": None},
+        ]
+        if self.running:
+            items.append({"label": "Stop Ninaivu", "action": self._on_tk("stop"), "enabled": idle})
+        else:
+            items.append({"label": "Start Ninaivu", "action": self._on_tk("start"), "enabled": idle})
+        items += [{"label": "-", "action": None},
+                  {"label": "Quit (Ninaivu keeps running)" if self.running else "Quit",
+                   "action": self._on_tk("quit"), "enabled": True}]
+        return items
+
+
+class TrayIcon:
+    """The pystray icon :func:`attach` made, and what the panel does with it.
+
+    :meth:`refresh` and :meth:`close` are called on Tk's thread only.
+    """
+
+    def __init__(self, icon: Any, menu: PanelTray, *, shown: bool, platform: str) -> None:
+        self.icon = icon
+        self.menu = menu
+        #: Whether there is an icon to find the window in again. Closing the
+        #: window minimises it there only when there is.
+        self.shown = shown
+        self.platform = platform
+        self.told_once = False
+
+    def refresh(self, running: bool, busy: str | None) -> None:
+        if self.menu.update(running, busy):
+            try:
+                self.icon.update_menu()
+            except Exception:                              # noqa: BLE001 — a menu, not the window
+                log.debug("could not update the tray menu", exc_info=True)
+
+    def notify(self, message: str) -> None:
+        """A small notification, where the icon has them; never waited for
+        (on a Mac it is an osascript)."""
+        if not getattr(self.icon, "HAS_NOTIFICATION", False):
+            return
+
+        def say() -> None:
+            try:
+                self.icon.notify(message, "Ninaivu")
+            except Exception:                              # noqa: BLE001
+                log.debug("could not show a notification", exc_info=True)
+        threading.Thread(target=say, name="ninaivu-tray-notify", daemon=True).start()
+
+    def close(self) -> None:
+        """Take the icon away. The server is not touched."""
+        try:
+            if self.platform == "darwin":
+                self.icon.visible = False
+            self.icon.stop()
+        except Exception:                                  # noqa: BLE001
+            log.debug("could not take the tray icon away", exc_info=True)
+
+
+def pystray_items(pystray: Any, menu: PanelTray) -> tuple:
+    """*menu* as pystray's items, read afresh each time pystray asks."""
+    entries = []
+    for item in menu.menu():
+        if item["label"] == "-":
+            entries.append(pystray.Menu.SEPARATOR)
+            continue
+        action = item["action"]
+        entries.append(pystray.MenuItem(
+            item["label"], (lambda act: (lambda icon_, item_: act()))(action) if action else None,
+            enabled=item.get("enabled", True), default=item.get("default", False)))
+    return tuple(entries)
+
+
+def attach(host: Any, platform: str | None = None) -> TrayIcon | None:
+    """Put Ninaivu's icon in the tray for *host*, the panel, arranged for
+    this system (the module's docstring says how and why); None when this
+    computer has no tray Ninaivu can use. Called on Tk's thread, which on a
+    Mac is the main thread, after the window exists."""
+    platform = platform or sys.platform
+    if platform.startswith("linux"):
+        # Set before pystray is imported: it picks its backend then.
+        os.environ.setdefault("PYSTRAY_BACKEND", "xorg")
+    try:
+        import pystray
+        from PIL import Image
+    except Exception:                                      # noqa: BLE001 — ImportError, or no display
+        log.info("no tray icon: pystray cannot run here", exc_info=True)
+        return None
+    menu = PanelTray(host)
+    try:
+        icon = pystray.Icon("ninaivu", Image.open(ICON), "Ninaivu",
+                            menu=pystray.Menu(lambda: pystray_items(pystray, menu)))
+        if platform == "darwin":
+            # Joins the NSApplication Tk's loop already runs. The setup does
+            # nothing: shown here, on the main thread, and not on pystray's
+            # setup thread, which would touch AppKit from another thread.
+            icon.run_detached(setup=lambda _icon: None)
+            icon.visible = True
+            shown = True
+        else:
+            # Its own loop on its own thread, a daemon so a Ninaivu that
+            # ends without Quit is not kept alive by it (pystray's own
+            # run_detached makes one that is not, and on X11 starts two
+            # setup threads, one of which waits for ever).
+            threading.Thread(target=icon.run, name="ninaivu-tray", daemon=True).start()
+            shown = platform == "win32" or x_tray_present(icon)
+    except Exception:                                      # noqa: BLE001 — the window still works
+        log.warning("could not put Ninaivu in the tray", exc_info=True)
+        return None
+    return TrayIcon(icon, menu, shown=shown, platform=platform)
+
+
+def x_tray_present(icon: Any) -> bool:
+    """Whether this X display has a system tray to dock in (an owner of
+    ``_NET_SYSTEM_TRAY_S<screen>``). GNOME has none without an extension;
+    Cinnamon, MATE, Xfce and KDE do."""
+    try:
+        import Xlib.X
+        return icon._display.get_selection_owner(icon._net_system_tray_sx) != Xlib.X.NONE   # noqa: SLF001
+    except Exception:                                      # noqa: BLE001 — not sure: no tray
+        return False
+
 
 class Tray:
-    """The menu and its actions, with no toolkit in sight.
+    """The fuller menu and its actions, with no toolkit in sight: the whole
+    program where there is no Tk (:func:`run_alone`), and the steps of
+    trusting the certificate, which the panel's button runs too.
 
     *notify(title, message)* shows a small notification; *ask(title,
     question)* returns True when the person agrees; *open_url(url)* opens a
@@ -259,13 +452,25 @@ def open_file(path: Path) -> None:
                          stderr=subprocess.DEVNULL, start_new_session=True)
 
 
-# -- the pystray adapter --------------------------------------------------
+# -- without Tk: the menu as the whole program ---------------------------
 
 def main(argv: list[str] | None = None) -> int:
+    """``python -m ninaivu.desktop.tray``: Ninaivu opened minimised to its
+    icon, the one desktop program (:func:`ninaivu.desktop.app.main`)."""
+    from . import app
+    if app.tk is None:
+        return run_alone()
+    return app.main(["--tray", *(sys.argv[1:] if argv is None else argv)])
+
+
+def run_alone() -> int:
+    """The tray's fuller menu (:class:`Tray`) as the whole program, for a
+    Python without Tk: there is no window to minimise, and the person still
+    has Start, Stop and the rest from the icon."""
     try:
         import pystray
         from PIL import Image
-    except ImportError:
+    except Exception:                                      # noqa: BLE001 — ImportError, or no display
         print("The tray needs pystray and Pillow: pip install -r requirements/requirements-desktop.txt",
               file=sys.stderr)
         return 2
