@@ -1725,71 +1725,22 @@ def init_db(db_path: Path | str) -> sqlite3.Connection:
         # Version-independent: repairs a database whose recorded version is
         # already current but which predates a column added since.
         heal_schema(conn)
-        # Smart albums: searches kept under a name (storage/smart.py).
-        from .smart import SCHEMA as SMART_SCHEMA         # noqa: PLC0415
-        conn.executescript(SMART_SCHEMA)
-        # "Who is this?" links and the family tree (storage/ask_family.py,
-        # storage/family_tree.py).
-        from .ask_family import SCHEMA as ASK_SCHEMA      # noqa: PLC0415
-        from .family_tree import SCHEMA as TREE_SCHEMA    # noqa: PLC0415
-        conn.executescript(ASK_SCHEMA)
-        conn.executescript(TREE_SCHEMA)
-        # Photo books: the PDFs people have had made (storage/books.py).
-        from .books import SCHEMA as BOOKS_SCHEMA         # noqa: PLC0415
-        conn.executescript(BOOKS_SCHEMA)
-        # The handover plan and its claims (storage/handover.py).
-        from .handover import SCHEMA as HANDOVER_SCHEMA   # noqa: PLC0415
-        conn.executescript(HANDOVER_SCHEMA)
-        # Voice stories told about a photograph (storage/stories.py).
-        from .stories import SCHEMA as STORIES_SCHEMA     # noqa: PLC0415
-        conn.executescript(STORIES_SCHEMA)
-        # Time capsules: photographs and a letter sealed until a date
-        # (storage/capsules.py).
-        from .capsules import SCHEMA as CAPSULES_SCHEMA   # noqa: PLC0415
-        conn.executescript(CAPSULES_SCHEMA)
-        # Items family members sent for an administrator to screen
-        # (storage/screening.py).
-        from .screening import SCHEMA as SCREENING_SCHEMA  # noqa: PLC0415
-        conn.executescript(SCREENING_SCHEMA)
-        # A description of each photograph, written by the on-device AI
-        # engine (storage/descriptions.py).
-        from . import descriptions as descriptions_mod     # noqa: PLC0415
-        descriptions_mod.create(conn)
-        # Colour copies of black-and-white photographs, and their originals
-        # (storage/colour_copies.py).
-        from . import colour_copies as colour_copies_mod   # noqa: PLC0415
-        colour_copies_mod.create(conn)
-        # Moments inside long videos, as search vectors
-        # (storage/video_moments.py).
-        from . import video_moments as video_moments_mod   # noqa: PLC0415
-        video_moments_mod.create(conn)
         # What was said in videos, from before the household asked for that
         # feature gone (October 2026): dropped, with its trigger.
         conn.executescript(
             "DROP TRIGGER IF EXISTS video_words_follow_asset;"
             "DROP TABLE IF EXISTS video_words;"
             "DROP TABLE IF EXISTS video_words_done;")
-        # The year each person was born, for Then and now
-        # (storage/then_and_now.py).
-        from . import then_and_now as then_and_now_mod     # noqa: PLC0415
-        then_and_now_mod.create(conn)
-        # A life in photographs: the chapters' words the writing model wrote
-        # (storage/life_story.py).
-        from . import life_story as life_story_mod         # noqa: PLC0415
-        life_story_mod.create(conn)
-        # Letters read aloud: a photograph's words and the reading kept of
-        # them (storage/letters.py).
-        from . import letters as letters_mod               # noqa: PLC0415
-        letters_mod.create(conn)
-        # Photo stacks: who put which frame on top, and the triggers that
-        # loosen a stack when one of its photographs changes
-        # (storage/stacks.py).
-        from . import stacks as stacks_mod                 # noqa: PLC0415
-        stacks_mod.create(conn)
-        # The change journal's table (storage/journal.py). Its triggers are
-        # put in place only while the change_journal setting is on.
-        from . import journal as journal_mod               # noqa: PLC0415
-        journal_mod.create(conn)
+        # Every feature's tables, on or off, each from its own manifest and
+        # in the order they were always made: smart albums, "who is this?"
+        # links, the family tree, photo books, the handover plan, voice
+        # stories, time capsules, screening, descriptions, colour copies,
+        # moments inside videos, then and now, a life story, letters read
+        # aloud, photo stacks and the change journal (ninaivu/features).
+        # The journal's triggers are put in place only while the
+        # change_journal setting is on (storage/journal.py).
+        from .. import features                           # noqa: PLC0415
+        features.create_tables(conn)
         # Old links cannot prove which incarnation of a reused row ID they
         # referred to. Retire them once; new links are revoked on any deletion,
         # including scanner cleanup and direct SQL, before that ID can be reused.

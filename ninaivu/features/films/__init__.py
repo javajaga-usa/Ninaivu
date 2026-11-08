@@ -11,3 +11,10 @@ Its table has no place in the start: it is made the first time a film is
 Films are made from books' picks (``..books``) and narrate letters read
 aloud (``..letters``) where nobody recorded a story.
 """
+from .. import ON_THE_FAMILY_API, Feature
+
+MANIFEST = Feature(
+    name="films", title="Memory films",
+    blueprints=ON_THE_FAMILY_API, routes="ninaivu.features.films.routes",
+    tables=None, settings=("memory_films",), switch="memory_films",
+)

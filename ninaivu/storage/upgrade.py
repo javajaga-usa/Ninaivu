@@ -116,15 +116,18 @@ def index_shape() -> str:
     keeps the release's version while the index it builds changes. Only the
     parts that shape the databases go in, so most updates leave it alone.
     """
+    from .. import features                              # noqa: PLC0415
     from ..archive import database as archive_db         # noqa: PLC0415
-    from . import ask_family, books, db, family_tree, handover, migrations, smart, stories  # noqa: PLC0415
+    from . import db, migrations                         # noqa: PLC0415
 
     parts: list[Any] = [
         db.SCHEMA_VERSION, db._SCHEMA, db._INDEX_SCHEMA, db._FTS_SCHEMA,  # noqa: SLF001
         sorted((t, sorted(c.items())) for t, c in db.LATE_COLUMNS.items()),
         db._RETIRED_INDEXES,                              # noqa: SLF001
         archive_db.SCHEMA_VERSION, sorted(archive_db.FILE_COLUMNS.items()),
-        *(m.SCHEMA for m in (smart, ask_family, family_tree, books, handover, stories)),
+        # Each feature's tables, in the order they are made: their scripts,
+        # and the code of those made by a function (ninaivu/features).
+        features.shape(),
         migrations.shape(),
     ]
     for code in (db.init_db, db._migrate, db.heal_schema, archive_db.init_db):  # noqa: SLF001

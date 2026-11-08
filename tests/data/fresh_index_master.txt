@@ -1,0 +1,784 @@
+# A fresh index's sqlite_master, row by row: type | name | table | root page | sql.
+# Written by python tests/test_features.py --write; see tests/test_features.py.
+table | meta | meta | 2 | CREATE TABLE meta (
+    key   TEXT PRIMARY KEY,
+    value TEXT
+)
+index | sqlite_autoindex_meta_1 | meta | 3 | None
+table | pending_uploads | pending_uploads | 4 | CREATE TABLE pending_uploads (
+    id INTEGER PRIMARY KEY,
+    storage_key TEXT NOT NULL UNIQUE,
+    filename TEXT NOT NULL,
+    root TEXT NOT NULL,
+    scope TEXT NOT NULL DEFAULT '',
+    uploaded_by INTEGER,
+    uploaded_at REAL NOT NULL,
+    record TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    reviewed_by INTEGER,
+    reviewed_at REAL,
+    asset_id INTEGER
+)
+index | sqlite_autoindex_pending_uploads_1 | pending_uploads | 5 | None
+index | idx_pending_uploads_status | pending_uploads | 6 | CREATE INDEX idx_pending_uploads_status ON pending_uploads(status, id)
+table | assets | assets | 7 | CREATE TABLE assets (
+    id              INTEGER PRIMARY KEY,
+    root            TEXT NOT NULL,
+    rel_path        TEXT NOT NULL,
+    filename        TEXT NOT NULL,
+    folder          TEXT NOT NULL DEFAULT '',
+    ext             TEXT NOT NULL DEFAULT '',
+    kind            TEXT NOT NULL,
+    size            INTEGER NOT NULL DEFAULT 0,
+    mtime           REAL    NOT NULL DEFAULT 0,
+    captured_at     REAL,
+    date_key        TEXT NOT NULL DEFAULT '',
+    date_source     TEXT NOT NULL DEFAULT 'mtime',
+    width           INTEGER,
+    height          INTEGER,
+    duration        REAL,
+    orientation     INTEGER DEFAULT 1,
+    camera          TEXT,
+    lens            TEXT,
+    iso             INTEGER,
+    f_number        REAL,
+    exposure        TEXT,
+    focal_length    REAL,
+    gps_lat         REAL,
+    gps_lon         REAL,
+    country         TEXT,
+    city            TEXT,
+    thumb           TEXT,
+    blurhash        TEXT,
+    color           TEXT,
+    phash           TEXT,
+    dup_group       TEXT,
+    -- Focus and exposure, measured at a fixed size so one threshold holds
+    -- across cameras. NULL means never measured (video, audio, or a scan
+    -- with quality_scan off) -- distinct from a genuinely dark photograph.
+    sharpness       REAL,
+    brightness      REAL,
+    quality         TEXT NOT NULL DEFAULT '[]',
+    quality_version INTEGER NOT NULL DEFAULT 0,
+    -- Which pass of the video keyframe tagger judged this clip. Videos are
+    -- tagged from several moments rather than one poster frame, and that
+    -- sampling evolves independently of the image tagger's AI_VERSION.
+    keyframe_version INTEGER NOT NULL DEFAULT 0,
+    -- Words read out of the picture itself: a shop sign, a menu, the back of
+    -- a postcard. Indexed for search, never shown as a caption -- it is what
+    -- the photograph contains, not what it is about.
+    ocr_text        TEXT,
+    ocr_version     INTEGER NOT NULL DEFAULT 0,
+    -- Which pass of the place-name lookup filled `city` and `country`.
+    place_version   INTEGER NOT NULL DEFAULT 0,
+    -- The auto-album this belongs to, rebuilt after every scan. Not written
+    -- by the asset upsert: it is derived from the whole library at once, not
+    -- from one file, and a rescan must not blank it on the way past.
+    occasion_id     INTEGER,
+    tags            TEXT NOT NULL DEFAULT '[]',
+    caption         TEXT,
+    nsfw            INTEGER NOT NULL DEFAULT 0,
+    nsfw_score      REAL NOT NULL DEFAULT 0,
+    -- Who decided the three above: 'auto' (the scan or the AI pass) or
+    -- 'manual' (an admin, by hand). A manual value outlives every rescan and
+    -- re-tag, the way a manual rotation or date does.
+    tags_source     TEXT NOT NULL DEFAULT 'auto',
+    caption_source  TEXT NOT NULL DEFAULT 'auto',
+    nsfw_source     TEXT NOT NULL DEFAULT 'auto',
+    -- How much the picture looks like a screenshot, a document or a screen,
+    -- 0..1, and which version of that judgement made it (media/screens.py).
+    screen_score    REAL,
+    screen_version  INTEGER NOT NULL DEFAULT 0,
+    -- How much the picture looks like people in nothing but their underwear,
+    -- 0..1, and which version of that judgement made it (media/revealing.py).
+    revealing       REAL NOT NULL DEFAULT 0,
+    revealing_version INTEGER NOT NULL DEFAULT 0,
+    -- 0 public (guests too) · 1 family · 2 hidden (admins only)
+    visibility      INTEGER NOT NULL DEFAULT 1,
+    vis_source      TEXT NOT NULL DEFAULT 'default',
+    -- "Only to me": the profile that took this item out of everybody else's
+    -- view, and what its visibility was before, to put back when they bring
+    -- it back. While set, the item's visibility is held at hidden (2), so
+    -- every listing that already keeps hidden items from family members and
+    -- guests keeps this one from them too; only its owner reaches it, from
+    -- their own "Only to me" view (see :func:`private_owner_clause`).
+    private_to      INTEGER,
+    private_was     INTEGER,
+    private_was_src TEXT,
+    -- Clockwise turn applied to get this the right way up, and who decided:
+    -- exif · faces · ai · manual · none. Thumbnails are baked with it already
+    -- applied; this is what the browser needs to show the original to match.
+    rotation        INTEGER NOT NULL DEFAULT 0,
+    rot_source      TEXT NOT NULL DEFAULT 'none',
+    live_video_path TEXT,
+    is_live         INTEGER NOT NULL DEFAULT 0,
+    -- Set on the *clip* half of a live photo, so the pair counts as the one
+    -- thing the household took rather than as a photograph and a video.
+    live_clip       INTEGER NOT NULL DEFAULT 0,
+    -- A RAW taken together with a JPEG or HEIC of the same frame: the picture
+    -- carries the RAW's path, the RAW is marked as the twin. One shot, shown
+    -- once, with the RAW kept beside it to download.
+    raw_path        TEXT,
+    raw_twin        INTEGER NOT NULL DEFAULT 0,
+    -- Photo stacks (``photo_stacks``, storage/stacks.py): the frames of a
+    -- burst and a photograph's edited copies share a key; the one shown
+    -- carries how many there are, the rest are marked as stacked under it.
+    -- Written only by storage/stacks.py, never by a scan.
+    stack_key       TEXT,
+    stacked         INTEGER NOT NULL DEFAULT 0,
+    stack_count     INTEGER NOT NULL DEFAULT 0,
+    trashed         INTEGER NOT NULL DEFAULT 0,
+    ai_version      INTEGER NOT NULL DEFAULT 0,
+    face_version    INTEGER NOT NULL DEFAULT 0,
+    indexed_at      REAL NOT NULL DEFAULT 0,
+    -- Set the moment an admin says "keep" on the largest-files screen. NULL
+    -- forever means nobody has looked at this file there yet -- it is not a
+    -- judgement about the file, only about whether it still needs asking
+    -- about, so nothing else in Ninaivu ever reads or changes it.
+    large_file_reviewed_at REAL,
+    -- When this file was first indexed. Unlike indexed_at (the thumbnail's
+    -- version, moved by an edit, a turn or a redrawn tile) it never changes
+    -- on a rescan: "what is new" without the change journal reads it.
+    added_at        REAL, location_inferred INTEGER NOT NULL DEFAULT 0,
+    UNIQUE(root, rel_path)
+)
+index | sqlite_autoindex_assets_1 | assets | 8 | None
+table | embeddings | embeddings | 10 | CREATE TABLE embeddings (
+    asset_id INTEGER PRIMARY KEY REFERENCES assets(id) ON DELETE CASCADE,
+    model    TEXT NOT NULL,
+    dim      INTEGER NOT NULL,
+    vector   BLOB NOT NULL
+)
+table | occasions | occasions | 11 | CREATE TABLE occasions (
+    id         INTEGER PRIMARY KEY,
+    root       TEXT NOT NULL,
+    key        TEXT NOT NULL,
+    title      TEXT NOT NULL DEFAULT '',
+    place      TEXT,
+    started_at REAL NOT NULL DEFAULT 0,
+    ended_at   REAL NOT NULL DEFAULT 0,
+    days       INTEGER NOT NULL DEFAULT 1,
+    count      INTEGER NOT NULL DEFAULT 0,
+    UNIQUE(root, key)
+)
+index | sqlite_autoindex_occasions_1 | occasions | 12 | None
+table | albums | albums | 13 | CREATE TABLE albums (
+    id         INTEGER PRIMARY KEY,
+    name       TEXT NOT NULL UNIQUE,
+    created_at REAL NOT NULL,
+    cover_id   INTEGER REFERENCES assets(id) ON DELETE SET NULL,
+    -- Who made it. NULL means "made before Ninaivu recorded this", which is
+    -- treated as everyone's, so upgrading does not orphan existing albums.
+    created_by INTEGER
+)
+index | sqlite_autoindex_albums_1 | albums | 14 | None
+table | mugil_let_go | mugil_let_go | 16 | CREATE TABLE mugil_let_go (
+    root      TEXT NOT NULL,
+    rel_path  TEXT NOT NULL,
+    size      INTEGER NOT NULL,
+    mtime     REAL NOT NULL,
+    algo      TEXT NOT NULL,
+    digest    TEXT NOT NULL,
+    let_go_at REAL NOT NULL,
+    PRIMARY KEY (root, rel_path)
+)
+index | sqlite_autoindex_mugil_let_go_1 | mugil_let_go | 17 | None
+table | album_items | album_items | 19 | CREATE TABLE album_items (
+    album_id INTEGER NOT NULL REFERENCES albums(id) ON DELETE CASCADE,
+    asset_id INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+    added_at REAL NOT NULL,
+    PRIMARY KEY (album_id, asset_id)
+)
+index | sqlite_autoindex_album_items_1 | album_items | 20 | None
+table | visibility_batches | visibility_batches | 21 | CREATE TABLE visibility_batches (
+    id          INTEGER PRIMARY KEY,
+    created_at  REAL NOT NULL,
+    created_by  INTEGER,
+    scope       TEXT NOT NULL,          -- 'folder' | 'items'
+    root        TEXT,
+    folder      TEXT,
+    visibility  INTEGER NOT NULL,
+    affected    INTEGER NOT NULL DEFAULT 0,
+    exposed     INTEGER NOT NULL DEFAULT 0,   -- became visible to more people
+    had_rule    INTEGER NOT NULL DEFAULT 0,   -- was there a folder rule before?
+    prior_rule  INTEGER,                      -- …and what was it
+    undone_at   REAL
+)
+table | visibility_undo | visibility_undo | 22 | CREATE TABLE visibility_undo (
+    batch_id   INTEGER NOT NULL REFERENCES visibility_batches(id) ON DELETE CASCADE,
+    asset_id   INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+    visibility INTEGER NOT NULL,
+    vis_source TEXT NOT NULL,
+    PRIMARY KEY (batch_id, asset_id)
+)
+index | sqlite_autoindex_visibility_undo_1 | visibility_undo | 23 | None
+table | recycled | recycled | 24 | CREATE TABLE recycled (
+    id          INTEGER PRIMARY KEY,
+    asset_id    INTEGER,
+    root        TEXT NOT NULL,
+    rel_path    TEXT NOT NULL,
+    filename    TEXT NOT NULL,
+    size        INTEGER NOT NULL DEFAULT 0,
+    thumb       TEXT,
+    bin_path    TEXT NOT NULL,
+    deleted_at  REAL NOT NULL,
+    deleted_by  INTEGER,
+    restored_at REAL
+, metadata TEXT)
+table | erased | erased | 25 | CREATE TABLE erased (
+    root      TEXT NOT NULL,
+    rel_path  TEXT NOT NULL,
+    size      INTEGER NOT NULL DEFAULT 0,
+    erased_at REAL NOT NULL,
+    PRIMARY KEY (root, rel_path, size)
+)
+index | sqlite_autoindex_erased_1 | erased | 26 | None
+table | scan_runs | scan_runs | 27 | CREATE TABLE scan_runs (
+    id         INTEGER PRIMARY KEY,
+    root       TEXT NOT NULL,
+    started_at REAL NOT NULL,
+    ended_at   REAL,
+    total      INTEGER NOT NULL DEFAULT 0,
+    processed  INTEGER NOT NULL DEFAULT 0,
+    added      INTEGER NOT NULL DEFAULT 0,
+    updated    INTEGER NOT NULL DEFAULT 0,
+    removed    INTEGER NOT NULL DEFAULT 0,
+    errors     INTEGER NOT NULL DEFAULT 0,
+    status     TEXT NOT NULL DEFAULT 'running'
+)
+table | shares | shares | 28 | CREATE TABLE shares (
+    id          INTEGER PRIMARY KEY,
+    token       TEXT NOT NULL UNIQUE,
+    scope       TEXT NOT NULL DEFAULT 'album', -- 'album' | 'asset'
+    target_id   INTEGER NOT NULL,
+    created_at  REAL NOT NULL,
+    created_by  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    expires_at  REAL,
+    password    TEXT,
+    view_count  INTEGER NOT NULL DEFAULT 0
+)
+index | sqlite_autoindex_shares_1 | shares | 29 | None
+table | bitrot_records | bitrot_records | 30 | CREATE TABLE bitrot_records (
+    id            INTEGER PRIMARY KEY,
+    asset_id      INTEGER REFERENCES assets(id) ON DELETE CASCADE,
+    root          TEXT NOT NULL,
+    rel_path      TEXT NOT NULL,
+    expected_hash TEXT,
+    actual_hash   TEXT,
+    -- baseline   first sighting; nothing to compare against yet
+    -- verified   the bytes are the same as last time
+    -- changed    different bytes, but the file was edited (mtime/size moved)
+    -- corrupt    different bytes with the file otherwise untouched
+    -- missing    not on disk
+    -- unreadable on disk but could not be opened
+    status        TEXT NOT NULL,
+    -- What the file looked like when this fingerprint was taken. Without
+    -- these, a changed hash is ambiguous: an edit and bit rot produce exactly
+    -- the same evidence, and reporting an edit as corruption teaches people
+    -- to ignore the warning.
+    file_mtime    REAL,
+    file_size     INTEGER,
+    checked_at    REAL NOT NULL
+)
+table | people_clusters | people_clusters | 32 | CREATE TABLE people_clusters (
+    id              INTEGER PRIMARY KEY,
+    name            TEXT NOT NULL,
+    avatar_asset_id INTEGER REFERENCES assets(id) ON DELETE SET NULL,
+    created_at      REAL NOT NULL,
+    -- The mean of every *confirmed* face, re-normalised. Suggestions are
+    -- ranked against this, so it is rebuilt on every confirm and reject
+    -- rather than cached and left to drift.
+    centroid        BLOB,
+    face_count      INTEGER NOT NULL DEFAULT 0,
+    confirmed_count INTEGER NOT NULL DEFAULT 0,
+    cover_face_id   INTEGER,
+    updated_at      REAL NOT NULL DEFAULT 0
+)
+table | faces | faces | 33 | CREATE TABLE faces (
+    id          INTEGER PRIMARY KEY,
+    asset_id    INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+    person_id   INTEGER REFERENCES people_clusters(id) ON DELETE SET NULL,
+    -- How this face came to be attached to that person:
+    --   none      nobody yet
+    --   auto      the matcher was confident enough to decide alone
+    --   confirmed a person said yes
+    -- Only 'confirmed' rows build a centroid, so one bad automatic guess
+    -- cannot teach itself into the model of who somebody is.
+    source      TEXT NOT NULL DEFAULT 'none',
+    confidence  REAL NOT NULL DEFAULT 0,
+    cluster_key TEXT,
+    bbox        TEXT NOT NULL,
+    landmarks   TEXT,
+    det_score   REAL NOT NULL DEFAULT 0,
+    sharpness   REAL NOT NULL DEFAULT 0,
+    quality     REAL NOT NULL DEFAULT 0,
+    embedding   BLOB NOT NULL,
+    thumb       TEXT,
+    model       TEXT NOT NULL DEFAULT '',
+    created_at  REAL NOT NULL DEFAULT 0
+)
+table | face_rejections | face_rejections | 34 | CREATE TABLE face_rejections (
+    face_id    INTEGER NOT NULL REFERENCES faces(id) ON DELETE CASCADE,
+    person_id  INTEGER NOT NULL REFERENCES people_clusters(id) ON DELETE CASCADE,
+    created_at REAL NOT NULL DEFAULT 0,
+    PRIMARY KEY (face_id, person_id)
+)
+index | sqlite_autoindex_face_rejections_1 | face_rejections | 35 | None
+table | faces_ignored | faces_ignored | 36 | CREATE TABLE faces_ignored (
+    face_id    INTEGER PRIMARY KEY REFERENCES faces(id) ON DELETE CASCADE,
+    created_at REAL NOT NULL DEFAULT 0
+)
+trigger | assets_high_water | assets | 0 | CREATE TRIGGER assets_high_water AFTER DELETE ON assets
+WHEN OLD.id >= COALESCE((SELECT CAST(value AS INTEGER) FROM meta
+                         WHERE key='assets_high_water'), 0)
+BEGIN
+    INSERT OR REPLACE INTO meta(key, value) VALUES ('assets_high_water', OLD.id);
+END
+table | faces_not_carried | faces_not_carried | 37 | CREATE TABLE faces_not_carried (
+    id         INTEGER PRIMARY KEY,
+    asset_id   INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+    person_id  INTEGER NOT NULL REFERENCES people_clusters(id) ON DELETE CASCADE,
+    bbox       TEXT NOT NULL,
+    model      TEXT NOT NULL DEFAULT '',
+    created_at REAL NOT NULL DEFAULT 0
+)
+table | content_fingerprints | content_fingerprints | 38 | CREATE TABLE content_fingerprints (
+    asset_id INTEGER PRIMARY KEY REFERENCES assets(id) ON DELETE CASCADE,
+    algo     TEXT NOT NULL,
+    digest   TEXT NOT NULL,
+    size     INTEGER NOT NULL,
+    mtime    REAL NOT NULL,
+    taken_at REAL NOT NULL DEFAULT 0
+)
+table | smart_albums | smart_albums | 9 | CREATE TABLE smart_albums (
+    id          INTEGER PRIMARY KEY,
+    name        TEXT NOT NULL,
+    rules       TEXT NOT NULL DEFAULT '{}',
+    shared      INTEGER NOT NULL DEFAULT 1,
+    created_by  INTEGER,
+    created_at  REAL NOT NULL
+)
+table | ask_questions | ask_questions | 41 | CREATE TABLE ask_questions (
+    id          INTEGER PRIMARY KEY,
+    token       TEXT NOT NULL UNIQUE,
+    -- A profile id, without a foreign key: the index is also opened where
+    -- there is no users table, and a key to one made every delete of a
+    -- photograph fail there. auth.delete_user clears it instead, as it does
+    -- for share links, so a reused id cannot bring a link back to life.
+    created_by  INTEGER,
+    created_at  REAL NOT NULL,
+    expires_at  REAL,
+    show_photo  INTEGER NOT NULL DEFAULT 0,
+    revoked_at  REAL
+)
+index | sqlite_autoindex_ask_questions_1 | ask_questions | 42 | None
+table | ask_faces | ask_faces | 43 | CREATE TABLE ask_faces (
+    question_id      INTEGER NOT NULL REFERENCES ask_questions(id) ON DELETE CASCADE,
+    position         INTEGER NOT NULL,
+    face_id          INTEGER NOT NULL REFERENCES faces(id) ON DELETE CASCADE,
+    asked_visibility INTEGER NOT NULL,
+    PRIMARY KEY (question_id, position)
+)
+index | sqlite_autoindex_ask_faces_1 | ask_faces | 44 | None
+table | ask_answers | ask_answers | 45 | CREATE TABLE ask_answers (
+    id          INTEGER PRIMARY KEY,
+    question_id INTEGER NOT NULL REFERENCES ask_questions(id) ON DELETE CASCADE,
+    face_id     INTEGER NOT NULL REFERENCES faces(id) ON DELETE CASCADE,
+    name        TEXT NOT NULL,
+    note        TEXT NOT NULL DEFAULT '',
+    -- What the answerer called themselves, if anything. Not an account, and
+    -- not checked: it is there so the review can say "Paati says".
+    answered_by TEXT NOT NULL DEFAULT '',
+    created_at  REAL NOT NULL,
+    -- pending | accepted | rejected | closed (another answer for the same
+    -- face was accepted)
+    status      TEXT NOT NULL DEFAULT 'pending',
+    person_id   INTEGER REFERENCES people_clusters(id) ON DELETE SET NULL,
+    reviewed_by INTEGER,
+    reviewed_at REAL
+)
+index | idx_ask_answers_status | ask_answers | 46 | CREATE INDEX idx_ask_answers_status ON ask_answers(status, question_id)
+index | idx_ask_faces_face | ask_faces | 47 | CREATE INDEX idx_ask_faces_face ON ask_faces(face_id)
+table | person_relations | person_relations | 48 | CREATE TABLE person_relations (
+    id          INTEGER PRIMARY KEY,
+    person_a    INTEGER NOT NULL REFERENCES people_clusters(id) ON DELETE CASCADE,
+    person_b    INTEGER NOT NULL REFERENCES people_clusters(id) ON DELETE CASCADE,
+    kind        TEXT NOT NULL CHECK (kind IN ('parent', 'spouse')),
+    created_by  INTEGER,            -- a profile id; see ask_family.SCHEMA
+    created_at  REAL NOT NULL,
+    CHECK (person_a <> person_b),
+    UNIQUE (person_a, person_b, kind)
+)
+index | sqlite_autoindex_person_relations_1 | person_relations | 49 | None
+index | idx_person_relations_b | person_relations | 50 | CREATE INDEX idx_person_relations_b ON person_relations(person_b)
+table | photo_books | photo_books | 51 | CREATE TABLE photo_books (
+    id           INTEGER PRIMARY KEY,
+    owner_id     INTEGER NOT NULL,
+    title        TEXT NOT NULL DEFAULT '',
+    subtitle     TEXT NOT NULL DEFAULT '',
+    source_kind  TEXT NOT NULL DEFAULT '',
+    source_id    INTEGER,
+    template     TEXT NOT NULL DEFAULT 'plain',
+    size         TEXT NOT NULL DEFAULT 'a4-portrait',
+    bleed        INTEGER NOT NULL DEFAULT 0,
+    captions     INTEGER NOT NULL DEFAULT 0,
+    item_ids     TEXT NOT NULL DEFAULT '[]',
+    pages        INTEGER NOT NULL DEFAULT 0,
+    file         TEXT NOT NULL DEFAULT '',
+    bytes        INTEGER NOT NULL DEFAULT 0,
+    state        TEXT NOT NULL DEFAULT 'building',
+    error        TEXT NOT NULL DEFAULT '',
+    created_at   REAL NOT NULL,
+    finished_at  REAL
+)
+index | idx_photo_books_owner | photo_books | 53 | CREATE INDEX idx_photo_books_owner ON photo_books(owner_id, created_at DESC)
+table | handover_plan | handover_plan | 54 | CREATE TABLE handover_plan (
+    id            INTEGER PRIMARY KEY CHECK (id = 1),
+    plan          TEXT NOT NULL DEFAULT '{}',
+    wait_days     INTEGER NOT NULL DEFAULT 7,
+    reviewed_at   REAL NOT NULL DEFAULT 0,
+    reviewed_by   INTEGER,
+    destinations  TEXT NOT NULL DEFAULT '',
+    code_hash     TEXT NOT NULL DEFAULT '',
+    code_made_at  REAL NOT NULL DEFAULT 0,
+    code_made_by  INTEGER
+)
+table | handover_claims | handover_claims | 55 | CREATE TABLE handover_claims (
+    id            INTEGER PRIMARY KEY,
+    user_id       INTEGER NOT NULL,
+    requested_at  REAL NOT NULL,
+    due_at        REAL NOT NULL,
+    state         TEXT NOT NULL DEFAULT 'waiting',
+    ended_at      REAL NOT NULL DEFAULT 0,
+    ended_by      INTEGER
+)
+index | idx_handover_claims_state | handover_claims | 56 | CREATE INDEX idx_handover_claims_state ON handover_claims(state, due_at)
+table | stories | stories | 57 | CREATE TABLE stories (
+    id          INTEGER PRIMARY KEY,
+    asset_id    INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+    file        TEXT NOT NULL,
+    mime        TEXT NOT NULL,
+    duration    REAL,
+    size        INTEGER NOT NULL DEFAULT 0,
+    speaker     TEXT NOT NULL DEFAULT '',
+    text        TEXT NOT NULL DEFAULT '',
+    created_by  INTEGER,
+    created_at  REAL NOT NULL
+)
+index | idx_stories_asset | stories | 58 | CREATE INDEX idx_stories_asset ON stories(asset_id)
+table | stories_gone | stories_gone | 59 | CREATE TABLE stories_gone (
+    file     TEXT PRIMARY KEY,
+    gone_at  REAL NOT NULL
+)
+index | sqlite_autoindex_stories_gone_1 | stories_gone | 60 | None
+trigger | stories_follow_asset | assets | 0 | CREATE TRIGGER stories_follow_asset AFTER DELETE ON assets
+BEGIN DELETE FROM stories WHERE asset_id = OLD.id; END
+table | stories_left | stories_left | 61 | CREATE TABLE stories_left (
+    file        TEXT PRIMARY KEY,
+    root        TEXT NOT NULL DEFAULT '',
+    rel_path    TEXT NOT NULL DEFAULT '',
+    speaker     TEXT NOT NULL DEFAULT '',
+    text        TEXT NOT NULL DEFAULT '',
+    created_at  REAL
+)
+index | sqlite_autoindex_stories_left_1 | stories_left | 62 | None
+trigger | stories_note_asset | assets | 0 | CREATE TRIGGER stories_note_asset BEFORE DELETE ON assets
+BEGIN
+    INSERT OR REPLACE INTO stories_left(file, root, rel_path, speaker, text, created_at)
+    SELECT file, OLD.root, OLD.rel_path, speaker, text, created_at
+    FROM stories WHERE asset_id = OLD.id;
+END
+trigger | stories_leave_file | stories | 0 | CREATE TRIGGER stories_leave_file AFTER DELETE ON stories
+BEGIN
+    INSERT OR IGNORE INTO stories_gone(file, gone_at)
+    VALUES (OLD.file, CAST(strftime('%s', 'now') AS REAL));
+END
+table | story_words | story_words | 63 | CREATE TABLE story_words (
+    story_id   INTEGER PRIMARY KEY REFERENCES stories(id) ON DELETE CASCADE,
+    language   TEXT NOT NULL DEFAULT '',
+    words      TEXT NOT NULL DEFAULT '',
+    english    TEXT NOT NULL DEFAULT '',
+    segments   TEXT NOT NULL DEFAULT '[]',
+    model      TEXT NOT NULL DEFAULT '',
+    version    INTEGER NOT NULL DEFAULT 0,
+    failures   INTEGER NOT NULL DEFAULT 0,
+    tried      INTEGER NOT NULL DEFAULT 0,
+    error      TEXT NOT NULL DEFAULT '',
+    made_at    REAL NOT NULL
+)
+trigger | story_words_follow_story | stories | 0 | CREATE TRIGGER story_words_follow_story AFTER DELETE ON stories
+BEGIN DELETE FROM story_words WHERE story_id = OLD.id; END
+table | capsules | capsules | 65 | CREATE TABLE capsules (
+    id          INTEGER PRIMARY KEY,
+    title       TEXT NOT NULL DEFAULT '',
+    letter      TEXT NOT NULL DEFAULT '',
+    -- The local day it opens, YYYY-MM-DD.
+    opens_on    TEXT NOT NULL,
+    -- Who it is for; NULL is everybody in the family.
+    for_user    INTEGER,
+    created_by  INTEGER,
+    -- The name it was sealed under, as the household reads it.
+    from_name   TEXT NOT NULL DEFAULT '',
+    created_at  REAL NOT NULL,
+    -- When whoever it is for first opened it (for everybody: the first of
+    -- them). Until then the family app says it is waiting to be opened.
+    opened_at   REAL
+)
+index | idx_capsules_for | capsules | 66 | CREATE INDEX idx_capsules_for ON capsules(for_user, opens_on)
+table | capsule_items | capsule_items | 67 | CREATE TABLE capsule_items (
+    capsule_id  INTEGER NOT NULL REFERENCES capsules(id) ON DELETE CASCADE,
+    asset_id    INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+    position    INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (capsule_id, asset_id)
+)
+index | sqlite_autoindex_capsule_items_1 | capsule_items | 68 | None
+trigger | capsule_items_go_with_capsule | capsules | 0 | CREATE TRIGGER capsule_items_go_with_capsule AFTER DELETE ON capsules
+BEGIN DELETE FROM capsule_items WHERE capsule_id = OLD.id; END
+trigger | capsule_items_go_with_asset | assets | 0 | CREATE TRIGGER capsule_items_go_with_asset AFTER DELETE ON assets
+BEGIN DELETE FROM capsule_items WHERE asset_id = OLD.id; END
+table | screening_requests | screening_requests | 69 | CREATE TABLE screening_requests (
+    asset_id   INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+    -- A profile id, without a foreign key, as for ask_questions: the index is
+    -- also opened where there is no users table. auth.delete_user clears it,
+    -- and the request stays: what was asked about is still worth a look.
+    user_id    INTEGER,
+    note       TEXT NOT NULL DEFAULT '',
+    created_at REAL NOT NULL
+)
+index | idx_screening_asset_user | screening_requests | 70 | CREATE UNIQUE INDEX idx_screening_asset_user
+    ON screening_requests(asset_id, user_id)
+index | idx_screening_created | screening_requests | 71 | CREATE INDEX idx_screening_created
+    ON screening_requests(created_at)
+table | screening_holds | screening_holds | 72 | CREATE TABLE screening_holds (
+    asset_id       INTEGER PRIMARY KEY REFERENCES assets(id) ON DELETE CASCADE,
+    was_visibility INTEGER,
+    was_source     TEXT
+)
+table | descriptions | descriptions | 73 | CREATE TABLE descriptions (
+    asset_id   INTEGER PRIMARY KEY REFERENCES assets(id) ON DELETE CASCADE,
+    text       TEXT NOT NULL DEFAULT '',
+    model      TEXT NOT NULL DEFAULT '',
+    version    INTEGER NOT NULL DEFAULT 0,
+    failures   INTEGER NOT NULL DEFAULT 0,
+    tried      INTEGER NOT NULL DEFAULT 0,
+    error      TEXT NOT NULL DEFAULT '',
+    made_at    REAL NOT NULL
+)
+trigger | descriptions_follow_asset | assets | 0 | CREATE TRIGGER descriptions_follow_asset AFTER DELETE ON assets
+BEGIN DELETE FROM descriptions WHERE asset_id = OLD.id; END
+table | descriptions_fts | descriptions_fts | 0 | CREATE VIRTUAL TABLE descriptions_fts USING fts5(
+    text, content='descriptions', content_rowid='asset_id', tokenize='unicode61'
+)
+table | descriptions_fts_data | descriptions_fts_data | 74 | CREATE TABLE 'descriptions_fts_data'(id INTEGER PRIMARY KEY, block BLOB)
+table | descriptions_fts_idx | descriptions_fts_idx | 76 | CREATE TABLE 'descriptions_fts_idx'(segid, term, pgno, PRIMARY KEY(segid, term)) WITHOUT ROWID
+table | descriptions_fts_docsize | descriptions_fts_docsize | 77 | CREATE TABLE 'descriptions_fts_docsize'(id INTEGER PRIMARY KEY, sz BLOB)
+table | descriptions_fts_config | descriptions_fts_config | 78 | CREATE TABLE 'descriptions_fts_config'(k PRIMARY KEY, v) WITHOUT ROWID
+trigger | descriptions_ai | descriptions | 0 | CREATE TRIGGER descriptions_ai AFTER INSERT ON descriptions BEGIN
+    INSERT INTO descriptions_fts(rowid, text) VALUES (new.asset_id, new.text);
+END
+trigger | descriptions_ad | descriptions | 0 | CREATE TRIGGER descriptions_ad AFTER DELETE ON descriptions BEGIN
+    INSERT INTO descriptions_fts(descriptions_fts, rowid, text)
+    VALUES ('delete', old.asset_id, old.text);
+END
+trigger | descriptions_au | descriptions | 0 | CREATE TRIGGER descriptions_au AFTER UPDATE OF text ON descriptions BEGIN
+    INSERT INTO descriptions_fts(descriptions_fts, rowid, text)
+    VALUES ('delete', old.asset_id, old.text);
+    INSERT INTO descriptions_fts(rowid, text) VALUES (new.asset_id, new.text);
+END
+table | colour_copies | colour_copies | 79 | CREATE TABLE colour_copies (
+    asset_id   INTEGER PRIMARY KEY REFERENCES assets(id) ON DELETE CASCADE,
+    source_id  INTEGER NOT NULL,
+    version    INTEGER NOT NULL DEFAULT 0,
+    made_by    INTEGER,
+    made_at    REAL NOT NULL
+)
+index | idx_colour_copies_source | colour_copies | 80 | CREATE INDEX idx_colour_copies_source ON colour_copies(source_id)
+trigger | colour_copies_follow_asset | assets | 0 | CREATE TRIGGER colour_copies_follow_asset AFTER DELETE ON assets
+BEGIN DELETE FROM colour_copies WHERE asset_id = OLD.id OR source_id = OLD.id; END
+table | video_moments | video_moments | 81 | CREATE TABLE video_moments (
+    asset_id INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+    at       REAL NOT NULL,
+    vector   BLOB NOT NULL,
+    PRIMARY KEY (asset_id, at)
+)
+index | sqlite_autoindex_video_moments_1 | video_moments | 82 | None
+table | video_moments_done | video_moments_done | 83 | CREATE TABLE video_moments_done (
+    asset_id INTEGER PRIMARY KEY REFERENCES assets(id) ON DELETE CASCADE,
+    model    TEXT NOT NULL DEFAULT '',
+    version  INTEGER NOT NULL DEFAULT 0,
+    mtime    REAL NOT NULL DEFAULT 0,
+    moments  INTEGER NOT NULL DEFAULT 0,
+    failures INTEGER NOT NULL DEFAULT 0,
+    error    TEXT NOT NULL DEFAULT '',
+    made_at  REAL NOT NULL DEFAULT 0
+)
+trigger | video_moments_follow_asset | assets | 0 | CREATE TRIGGER video_moments_follow_asset AFTER DELETE ON assets
+BEGIN
+    DELETE FROM video_moments WHERE asset_id = OLD.id;
+    DELETE FROM video_moments_done WHERE asset_id = OLD.id;
+END
+table | person_born | person_born | 84 | CREATE TABLE person_born (
+    person_id  INTEGER PRIMARY KEY REFERENCES people_clusters(id) ON DELETE CASCADE,
+    year       INTEGER NOT NULL,
+    set_by     INTEGER,            -- a profile id
+    set_at     REAL NOT NULL
+)
+table | life_story_words | life_story_words | 85 | CREATE TABLE life_story_words (
+    person_id   INTEGER NOT NULL REFERENCES people_clusters(id) ON DELETE CASCADE,
+    language    TEXT NOT NULL,
+    facts       TEXT NOT NULL,      -- media.life_story.fingerprint
+    written     TEXT NOT NULL,      -- {"opening", "chapters": [{"title", "text"}]}
+    model       TEXT NOT NULL DEFAULT '',
+    written_at  REAL NOT NULL,
+    PRIMARY KEY (person_id, language, facts)
+)
+index | sqlite_autoindex_life_story_words_1 | life_story_words | 86 | None
+table | letter_words | letter_words | 87 | CREATE TABLE letter_words (
+    asset_id    INTEGER PRIMARY KEY REFERENCES assets(id) ON DELETE CASCADE,
+    words       TEXT NOT NULL,
+    language    TEXT NOT NULL DEFAULT 'ta',
+    source      TEXT NOT NULL DEFAULT 'typed',   -- 'read' by the text reader, or 'typed'
+    written_by  INTEGER,
+    written_at  REAL NOT NULL,
+    reading     TEXT NOT NULL DEFAULT ''         -- {"key", "duration", "segments", "voices"}
+)
+table | stack_choices | stack_choices | 89 | CREATE TABLE stack_choices (
+    key        TEXT PRIMARY KEY,
+    -- The photograph somebody put on top, or NULL for the sharpest.
+    cover      INTEGER,
+    -- 1: shown as separate photographs, as somebody asked.
+    apart      INTEGER NOT NULL DEFAULT 0,
+    chosen_by  INTEGER,
+    chosen_at  REAL NOT NULL
+)
+index | sqlite_autoindex_stack_choices_1 | stack_choices | 90 | None
+trigger | stacks_loosen_on_change | assets | 0 | CREATE TRIGGER stacks_loosen_on_change
+AFTER UPDATE OF trashed, visibility, nsfw, private_to, dup_group, root, folder, date_key, kind, live_clip, raw_twin ON assets
+WHEN OLD.stack_key IS NOT NULL AND (OLD.trashed IS NOT NEW.trashed OR OLD.visibility IS NOT NEW.visibility OR OLD.nsfw IS NOT NEW.nsfw OR OLD.private_to IS NOT NEW.private_to OR OLD.dup_group IS NOT NEW.dup_group OR OLD.root IS NOT NEW.root OR OLD.folder IS NOT NEW.folder OR OLD.date_key IS NOT NEW.date_key OR OLD.kind IS NOT NEW.kind OR OLD.live_clip IS NOT NEW.live_clip OR OLD.raw_twin IS NOT NEW.raw_twin)
+BEGIN UPDATE assets SET stacked = 0, stack_count = 0 WHERE stack_key = OLD.stack_key; END
+trigger | stacks_loosen_on_delete | assets | 0 | CREATE TRIGGER stacks_loosen_on_delete
+AFTER DELETE ON assets WHEN OLD.stack_key IS NOT NULL
+BEGIN UPDATE assets SET stacked = 0, stack_count = 0 WHERE stack_key = OLD.stack_key; END
+table | library_journal | library_journal | 91 | CREATE TABLE library_journal (
+    seq       INTEGER PRIMARY KEY AUTOINCREMENT,
+    at        REAL    NOT NULL,
+    kind      TEXT    NOT NULL,
+    asset_id  INTEGER,
+    root      TEXT    NOT NULL DEFAULT '',
+    rel_path  TEXT    NOT NULL DEFAULT '',
+    folder    TEXT    NOT NULL DEFAULT '',
+    old_path  TEXT    NOT NULL DEFAULT '',
+    item_kind TEXT    NOT NULL DEFAULT '',
+    size      INTEGER NOT NULL DEFAULT 0,
+    digest    TEXT    NOT NULL DEFAULT '',
+    visibility INTEGER NOT NULL DEFAULT 0
+)
+table | sqlite_sequence | sqlite_sequence | 92 | CREATE TABLE sqlite_sequence(name,seq)
+index | idx_journal_at | library_journal | 93 | CREATE INDEX idx_journal_at ON library_journal(at)
+index | idx_journal_asset | library_journal | 94 | CREATE INDEX idx_journal_asset ON library_journal(asset_id)
+trigger | revoke_asset_shares | assets | 0 | CREATE TRIGGER revoke_asset_shares AFTER DELETE ON assets
+            BEGIN UPDATE shares SET target_id=-1 WHERE scope='asset' AND target_id=OLD.id; END
+trigger | revoke_album_shares | albums | 0 | CREATE TRIGGER revoke_album_shares AFTER DELETE ON albums
+            BEGIN UPDATE shares SET target_id=-1 WHERE scope='album' AND target_id=OLD.id; END
+trigger | revoke_asset_shares_on_hide | assets | 0 | CREATE TRIGGER revoke_asset_shares_on_hide
+            AFTER UPDATE OF visibility, nsfw ON assets
+            WHEN (NEW.visibility >= 2 AND OLD.visibility < 2)
+              OR (COALESCE(NEW.nsfw, 0) <> 0 AND COALESCE(OLD.nsfw, 0) = 0)
+            BEGIN UPDATE shares SET target_id=-1 WHERE scope='asset' AND target_id=NEW.id; END
+trigger | keep_private_hidden | assets | 0 | CREATE TRIGGER keep_private_hidden
+            AFTER UPDATE OF visibility ON assets
+            WHEN NEW.private_to IS NOT NULL AND NEW.visibility < 2
+            BEGIN UPDATE assets SET visibility=2, vis_source='private' WHERE id=NEW.id; END
+trigger | assets_generation_insert | assets | 0 | CREATE TRIGGER assets_generation_insert AFTER INSERT ON assets BEGIN UPDATE meta SET value = CAST(value AS INTEGER) + 1 WHERE key = 'assets_generation'; END
+trigger | assets_generation_delete | assets | 0 | CREATE TRIGGER assets_generation_delete AFTER DELETE ON assets BEGIN UPDATE meta SET value = CAST(value AS INTEGER) + 1 WHERE key = 'assets_generation'; END
+trigger | assets_generation_update | assets | 0 | CREATE TRIGGER assets_generation_update AFTER UPDATE OF root, rel_path, folder, kind, size, visibility, trashed, nsfw, nsfw_source, revealing, date_key, camera, dup_group, is_live, live_clip, raw_twin, stacked, stack_count ON assets WHEN OLD.root IS NOT NEW.root OR OLD.rel_path IS NOT NEW.rel_path OR OLD.folder IS NOT NEW.folder OR OLD.kind IS NOT NEW.kind OR OLD.size IS NOT NEW.size OR OLD.visibility IS NOT NEW.visibility OR OLD.trashed IS NOT NEW.trashed OR OLD.nsfw IS NOT NEW.nsfw OR OLD.nsfw_source IS NOT NEW.nsfw_source OR OLD.revealing IS NOT NEW.revealing OR OLD.date_key IS NOT NEW.date_key OR OLD.camera IS NOT NEW.camera OR OLD.dup_group IS NOT NEW.dup_group OR OLD.is_live IS NOT NEW.is_live OR OLD.live_clip IS NOT NEW.live_clip OR OLD.raw_twin IS NOT NEW.raw_twin OR OLD.stacked IS NOT NEW.stacked OR OLD.stack_count IS NOT NEW.stack_count BEGIN UPDATE meta SET value = CAST(value AS INTEGER) + 1 WHERE key = 'assets_generation'; END
+trigger | assets_seen_generation_delete | assets | 0 | CREATE TRIGGER assets_seen_generation_delete AFTER DELETE ON assets BEGIN UPDATE meta SET value = CAST(value AS INTEGER) + 1 WHERE key = 'assets_seen_generation'; END
+trigger | assets_seen_generation_update | assets | 0 | CREATE TRIGGER assets_seen_generation_update AFTER UPDATE OF visibility, nsfw, trashed ON assets WHEN OLD.visibility IS NOT NEW.visibility OR OLD.nsfw IS NOT NEW.nsfw OR OLD.trashed IS NOT NEW.trashed BEGIN UPDATE meta SET value = CAST(value AS INTEGER) + 1 WHERE key = 'assets_seen_generation'; END
+trigger | assets_scan_generation_insert | assets | 0 | CREATE TRIGGER assets_scan_generation_insert AFTER INSERT ON assets BEGIN UPDATE meta SET value = CAST(value AS INTEGER) + 1 WHERE key = 'assets_scan_generation'; END
+trigger | assets_scan_generation_delete | assets | 0 | CREATE TRIGGER assets_scan_generation_delete AFTER DELETE ON assets BEGIN UPDATE meta SET value = CAST(value AS INTEGER) + 1 WHERE key = 'assets_scan_generation'; END
+trigger | assets_scan_generation_update | assets | 0 | CREATE TRIGGER assets_scan_generation_update AFTER UPDATE OF root, rel_path, kind, trashed, nsfw, visibility, vis_source, is_live, live_video_path, live_clip, raw_path, raw_twin, screen_score, screen_version, captured_at, mtime, gps_lat, gps_lon, city ON assets WHEN OLD.root IS NOT NEW.root OR OLD.rel_path IS NOT NEW.rel_path OR OLD.kind IS NOT NEW.kind OR OLD.trashed IS NOT NEW.trashed OR OLD.nsfw IS NOT NEW.nsfw OR OLD.visibility IS NOT NEW.visibility OR OLD.vis_source IS NOT NEW.vis_source OR OLD.is_live IS NOT NEW.is_live OR OLD.live_video_path IS NOT NEW.live_video_path OR OLD.live_clip IS NOT NEW.live_clip OR OLD.raw_path IS NOT NEW.raw_path OR OLD.raw_twin IS NOT NEW.raw_twin OR OLD.screen_score IS NOT NEW.screen_score OR OLD.screen_version IS NOT NEW.screen_version OR OLD.captured_at IS NOT NEW.captured_at OR OLD.mtime IS NOT NEW.mtime OR OLD.gps_lat IS NOT NEW.gps_lat OR OLD.gps_lon IS NOT NEW.gps_lon OR OLD.city IS NOT NEW.city BEGIN UPDATE meta SET value = CAST(value AS INTEGER) + 1 WHERE key = 'assets_scan_generation'; END
+trigger | assets_tags_generation_update | assets | 0 | CREATE TRIGGER assets_tags_generation_update AFTER UPDATE OF tags ON assets WHEN OLD.tags IS NOT NEW.tags BEGIN UPDATE meta SET value = CAST(value AS INTEGER) + 1 WHERE key = 'assets_tags_generation'; END
+trigger | faces_generation_insert | faces | 0 | CREATE TRIGGER faces_generation_insert AFTER INSERT ON faces BEGIN UPDATE meta SET value = CAST(value AS INTEGER) + 1 WHERE key = 'faces_generation'; END
+trigger | faces_generation_delete | faces | 0 | CREATE TRIGGER faces_generation_delete AFTER DELETE ON faces BEGIN UPDATE meta SET value = CAST(value AS INTEGER) + 1 WHERE key = 'faces_generation'; END
+trigger | faces_generation_update | faces | 0 | CREATE TRIGGER faces_generation_update AFTER UPDATE OF asset_id, person_id, quality, source ON faces WHEN OLD.asset_id IS NOT NEW.asset_id OR OLD.person_id IS NOT NEW.person_id OR OLD.quality IS NOT NEW.quality OR OLD.source IS NOT NEW.source BEGIN UPDATE meta SET value = CAST(value AS INTEGER) + 1 WHERE key = 'faces_generation'; END
+trigger | face_groups_generation_update | faces | 0 | CREATE TRIGGER face_groups_generation_update AFTER UPDATE OF cluster_key ON faces WHEN OLD.cluster_key IS NOT NEW.cluster_key BEGIN UPDATE meta SET value = CAST(value AS INTEGER) + 1 WHERE key = 'face_groups_generation'; END
+trigger | face_groups_generation_hide | faces_ignored | 0 | CREATE TRIGGER face_groups_generation_hide AFTER INSERT ON faces_ignored BEGIN UPDATE meta SET value = CAST(value AS INTEGER) + 1 WHERE key = 'face_groups_generation'; END
+trigger | face_groups_generation_show | faces_ignored | 0 | CREATE TRIGGER face_groups_generation_show AFTER DELETE ON faces_ignored BEGIN UPDATE meta SET value = CAST(value AS INTEGER) + 1 WHERE key = 'face_groups_generation'; END
+trigger | people_generation_insert | people_clusters | 0 | CREATE TRIGGER people_generation_insert AFTER INSERT ON people_clusters BEGIN UPDATE meta SET value = CAST(value AS INTEGER) + 1 WHERE key = 'faces_generation'; END
+trigger | people_generation_delete | people_clusters | 0 | CREATE TRIGGER people_generation_delete AFTER DELETE ON people_clusters BEGIN UPDATE meta SET value = CAST(value AS INTEGER) + 1 WHERE key = 'faces_generation'; END
+trigger | people_generation_update | people_clusters | 0 | CREATE TRIGGER people_generation_update AFTER UPDATE OF name, cover_face_id, avatar_asset_id ON people_clusters WHEN OLD.name IS NOT NEW.name OR OLD.cover_face_id IS NOT NEW.cover_face_id OR OLD.avatar_asset_id IS NOT NEW.avatar_asset_id BEGIN UPDATE meta SET value = CAST(value AS INTEGER) + 1 WHERE key = 'faces_generation'; END
+trigger | occasions_generation_insert | occasions | 0 | CREATE TRIGGER occasions_generation_insert AFTER INSERT ON occasions BEGIN UPDATE meta SET value = CAST(value AS INTEGER) + 1 WHERE key = 'occasions_generation'; END
+trigger | occasions_generation_delete | occasions | 0 | CREATE TRIGGER occasions_generation_delete AFTER DELETE ON occasions BEGIN UPDATE meta SET value = CAST(value AS INTEGER) + 1 WHERE key = 'occasions_generation'; END
+trigger | occasions_generation_update | occasions | 0 | CREATE TRIGGER occasions_generation_update AFTER UPDATE ON occasions WHEN OLD.id IS NOT NEW.id OR OLD.root IS NOT NEW.root OR OLD.key IS NOT NEW.key OR OLD.title IS NOT NEW.title OR OLD.place IS NOT NEW.place OR OLD.started_at IS NOT NEW.started_at OR OLD.ended_at IS NOT NEW.ended_at OR OLD.days IS NOT NEW.days OR OLD.count IS NOT NEW.count BEGIN UPDATE meta SET value = CAST(value AS INTEGER) + 1 WHERE key = 'occasions_generation'; END
+trigger | assets_occasions_generation_update | assets | 0 | CREATE TRIGGER assets_occasions_generation_update AFTER UPDATE OF occasion_id, thumb ON assets WHEN OLD.occasion_id IS NOT NEW.occasion_id OR (OLD.thumb IS NULL) <> (NEW.thumb IS NULL) BEGIN UPDATE meta SET value = CAST(value AS INTEGER) + 1 WHERE key = 'occasions_generation'; END
+trigger | assets_places_generation_update | assets | 0 | CREATE TRIGGER assets_places_generation_update AFTER UPDATE OF gps_lat, gps_lon, city, country, thumb ON assets WHEN OLD.gps_lat IS NOT NEW.gps_lat OR OLD.gps_lon IS NOT NEW.gps_lon OR OLD.city IS NOT NEW.city OR OLD.country IS NOT NEW.country OR (OLD.thumb IS NULL) <> (NEW.thumb IS NULL) BEGIN UPDATE meta SET value = CAST(value AS INTEGER) + 1 WHERE key = 'places_generation'; END
+trigger | embeddings_generation_insert | embeddings | 0 | CREATE TRIGGER embeddings_generation_insert AFTER INSERT ON embeddings BEGIN UPDATE meta SET value = CAST(value AS INTEGER) + 1 WHERE key = 'embeddings_generation'; END
+trigger | embeddings_generation_delete | embeddings | 0 | CREATE TRIGGER embeddings_generation_delete AFTER DELETE ON embeddings BEGIN UPDATE meta SET value = CAST(value AS INTEGER) + 1 WHERE key = 'embeddings_generation'; END
+trigger | assets_layout_generation_update | assets | 0 | CREATE TRIGGER assets_layout_generation_update AFTER UPDATE OF width, height, indexed_at, rotation, color, duration, thumb ON assets WHEN OLD.width IS NOT NEW.width OR OLD.height IS NOT NEW.height OR OLD.indexed_at IS NOT NEW.indexed_at OR OLD.rotation IS NOT NEW.rotation OR OLD.color IS NOT NEW.color OR OLD.duration IS NOT NEW.duration OR OLD.thumb IS NOT NEW.thumb BEGIN UPDATE meta SET value = CAST(value AS INTEGER) + 1 WHERE key = 'assets_layout_generation'; END
+trigger | album_items_generation_insert | album_items | 0 | CREATE TRIGGER album_items_generation_insert AFTER INSERT ON album_items BEGIN UPDATE meta SET value = CAST(value AS INTEGER) + 1 WHERE key = 'albums_generation'; END
+trigger | album_items_generation_delete | album_items | 0 | CREATE TRIGGER album_items_generation_delete AFTER DELETE ON album_items BEGIN UPDATE meta SET value = CAST(value AS INTEGER) + 1 WHERE key = 'albums_generation'; END
+trigger | album_items_generation_update | album_items | 0 | CREATE TRIGGER album_items_generation_update AFTER UPDATE ON album_items WHEN OLD.album_id IS NOT NEW.album_id OR OLD.asset_id IS NOT NEW.asset_id OR OLD.added_at IS NOT NEW.added_at BEGIN UPDATE meta SET value = CAST(value AS INTEGER) + 1 WHERE key = 'albums_generation'; END
+index | idx_assets_filter | assets | 98 | CREATE INDEX idx_assets_filter   ON assets(root, trashed, nsfw, visibility, kind, date_key, live_clip, raw_twin, stacked)
+index | idx_assets_gallery | assets | 99 | CREATE INDEX idx_assets_gallery  ON assets(root, COALESCE(captured_at, mtime) DESC, id DESC, trashed, nsfw, visibility, kind, date_key, live_clip, raw_twin, stacked)
+index | idx_assets_name | assets | 100 | CREATE INDEX idx_assets_name     ON assets(root, filename COLLATE NOCASE, id, trashed, nsfw, visibility, kind, date_key, live_clip, raw_twin, stacked)
+index | idx_assets_size | assets | 101 | CREATE INDEX idx_assets_size     ON assets(root, size, id, trashed, nsfw, visibility, kind, date_key, live_clip, raw_twin, stacked)
+index | idx_assets_date | assets | 102 | CREATE INDEX idx_assets_date     ON assets(root, date_key, trashed, nsfw, visibility, kind, live_clip, raw_twin, stacked)
+index | idx_assets_kind | assets | 103 | CREATE INDEX idx_assets_kind     ON assets(root, kind)
+index | idx_assets_vis | assets | 104 | CREATE INDEX idx_assets_vis      ON assets(root, visibility)
+index | idx_assets_private | assets | 105 | CREATE INDEX idx_assets_private  ON assets(private_to) WHERE private_to IS NOT NULL
+index | idx_assets_phash | assets | 106 | CREATE INDEX idx_assets_phash    ON assets(phash)
+index | idx_assets_dupgroup | assets | 107 | CREATE INDEX idx_assets_dupgroup ON assets(dup_group) WHERE dup_group IS NOT NULL
+index | idx_assets_stack | assets | 108 | CREATE INDEX idx_assets_stack    ON assets(stack_key) WHERE stack_key IS NOT NULL
+index | idx_assets_folder | assets | 109 | CREATE INDEX idx_assets_folder   ON assets(root, folder)
+index | idx_assets_aiver | assets | 110 | CREATE INDEX idx_assets_aiver    ON assets(ai_version)
+index | idx_assets_live | assets | 111 | CREATE INDEX idx_assets_live     ON assets(root, is_live)
+index | idx_assets_audio | assets | 112 | CREATE INDEX idx_assets_audio    ON assets(root, id) WHERE kind='audio'
+index | idx_assets_unread | assets | 113 | CREATE INDEX idx_assets_unread   ON assets(root, trashed) WHERE thumb IS NOT NULL AND width IS NULL
+index | idx_assets_quality | assets | 114 | CREATE INDEX idx_assets_quality  ON assets(quality_version) WHERE kind='picture'
+index | idx_assets_stills | assets | 115 | CREATE INDEX idx_assets_stills   ON assets(root) WHERE is_live=1
+index | idx_assets_raws | assets | 116 | CREATE INDEX idx_assets_raws     ON assets(root) WHERE COALESCE(raw_path,'')<>''
+index | idx_assets_gps | assets | 118 | CREATE INDEX idx_assets_gps      ON assets(root, gps_lat, gps_lon, trashed, nsfw, visibility, kind, date_key, (thumb IS NOT NULL))
+index | idx_recycled_when | recycled | 119 | CREATE INDEX idx_recycled_when   ON recycled(restored_at, deleted_at DESC)
+index | idx_bitrot_status | bitrot_records | 120 | CREATE INDEX idx_bitrot_status   ON bitrot_records(status, checked_at DESC)
+index | idx_bitrot_asset | bitrot_records | 121 | CREATE INDEX idx_bitrot_asset    ON bitrot_records(asset_id, id)
+index | idx_album_items_asset | album_items | 122 | CREATE INDEX idx_album_items_asset ON album_items(asset_id)
+index | idx_visundo_asset | visibility_undo | 123 | CREATE INDEX idx_visundo_asset   ON visibility_undo(asset_id)
+index | idx_shares_target | shares | 124 | CREATE INDEX idx_shares_target   ON shares(scope, target_id)
+index | idx_assets_occasion | assets | 125 | CREATE INDEX idx_assets_occasion ON assets(occasion_id)
+index | idx_embeddings_model | embeddings | 126 | CREATE INDEX idx_embeddings_model ON embeddings(model)
+index | idx_embeddings_asset | embeddings | 127 | CREATE INDEX idx_embeddings_asset ON embeddings(asset_id)
+index | idx_faces_asset | faces | 128 | CREATE INDEX idx_faces_asset    ON faces(asset_id)
+index | idx_faces_person | faces | 129 | CREATE INDEX idx_faces_person   ON faces(person_id, asset_id)
+index | idx_faces_cluster | faces | 130 | CREATE INDEX idx_faces_cluster  ON faces(cluster_key)
+index | idx_faces_unnamed | faces | 131 | CREATE INDEX idx_faces_unnamed  ON faces(person_id, quality DESC)
+index | idx_fingerprints_digest | content_fingerprints | 132 | CREATE INDEX idx_fingerprints_digest ON content_fingerprints(digest, size)
+table | assets_fts | assets_fts | 0 | CREATE VIRTUAL TABLE assets_fts USING fts5(
+    filename, folder, tags, caption, camera, ocr_text, city,
+    content='assets', content_rowid='id', tokenize='unicode61'
+)
+table | assets_fts_data | assets_fts_data | 134 | CREATE TABLE 'assets_fts_data'(id INTEGER PRIMARY KEY, block BLOB)
+table | assets_fts_idx | assets_fts_idx | 135 | CREATE TABLE 'assets_fts_idx'(segid, term, pgno, PRIMARY KEY(segid, term)) WITHOUT ROWID
+table | assets_fts_docsize | assets_fts_docsize | 136 | CREATE TABLE 'assets_fts_docsize'(id INTEGER PRIMARY KEY, sz BLOB)
+table | assets_fts_config | assets_fts_config | 137 | CREATE TABLE 'assets_fts_config'(k PRIMARY KEY, v) WITHOUT ROWID
+trigger | assets_ai | assets | 0 | CREATE TRIGGER assets_ai AFTER INSERT ON assets BEGIN
+    INSERT INTO assets_fts(rowid, filename, folder, tags, caption, camera, ocr_text, city)
+    VALUES (new.id, new.filename, new.folder, new.tags, new.caption, new.camera,
+            new.ocr_text, new.city);
+END
+trigger | assets_ad | assets | 0 | CREATE TRIGGER assets_ad AFTER DELETE ON assets BEGIN
+    INSERT INTO assets_fts(assets_fts, rowid, filename, folder, tags, caption,
+                           camera, ocr_text, city)
+    VALUES ('delete', old.id, old.filename, old.folder, old.tags, old.caption,
+            old.camera, old.ocr_text, old.city);
+END
+trigger | assets_au | assets | 0 | CREATE TRIGGER assets_au AFTER UPDATE OF
+    filename, folder, tags, caption, camera, ocr_text, city ON assets BEGIN
+    INSERT INTO assets_fts(assets_fts, rowid, filename, folder, tags, caption,
+                           camera, ocr_text, city)
+    VALUES ('delete', old.id, old.filename, old.folder, old.tags, old.caption,
+            old.camera, old.ocr_text, old.city);
+    INSERT INTO assets_fts(rowid, filename, folder, tags, caption, camera, ocr_text, city)
+    VALUES (new.id, new.filename, new.folder, new.tags, new.caption, new.camera,
+            new.ocr_text, new.city);
+END
+table | sqlite_stat1 | sqlite_stat1 | 133 | CREATE TABLE sqlite_stat1(tbl,idx,stat)
