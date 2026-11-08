@@ -516,3 +516,37 @@ def test_a_census_request_reaches_only_a_census_kept_here(tmp_path):
                  "/etc/passwd", "mugil-census-20261108-120001.jsonl.gz", "", None,
                  "mugil-topology.json"):
         assert census_file(state, name) is None, name
+
+
+# -- an unplugged drive's empty mount folder -----------------------------------------
+
+def test_an_empty_mount_folder_where_the_library_was_is_away(tmp_path):
+    """An unplugged N300 leaves its mount folder behind, empty. A census that
+    took it for the library would record nothing, and the proof would pass
+    having checked nothing."""
+    library = tmp_path / "N300" / "Ninaivu Archive"
+    put(library / "2019/beach.jpg", b"beach")
+    cfg = computer(tmp_path, "linux", [library])
+    shutil.rmtree(library)
+    library.mkdir()                                  # the drive is away; its folder is not
+    assert topology._library_away(cfg, str(library)) is True
+    assert [t["away"] for t in topology._tops(cfg)] == [True]
+
+
+def test_a_library_folder_without_the_id_it_is_known_by_is_away(tmp_path):
+    from ninaivu.storage import library_id
+    library = tmp_path / "Photos"
+    put(library / "a.jpg", b"a")
+    cfg = computer(tmp_path, "mac", [library])
+    known = library_id.ensure_marker(library)
+    library_id._save_known(Path(cfg.state_dir), {str(library): known})
+    assert topology._library_away(cfg, str(library)) is False
+    (library / library_id.MARKER).unlink()           # another disk mounted in its place
+    assert topology._library_away(cfg, str(library)) is True
+
+
+def test_an_empty_library_the_index_knows_nothing_of_is_not_away(tmp_path):
+    library = tmp_path / "New"
+    library.mkdir()
+    cfg = computer(tmp_path, "mac", [library])
+    assert topology._library_away(cfg, str(library)) is False

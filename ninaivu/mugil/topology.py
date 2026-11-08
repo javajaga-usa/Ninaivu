@@ -231,13 +231,55 @@ def _originals_away(folder: Path, state_dir: Path) -> bool:
     return isinstance(known, dict) and bool(known.get(str(folder)))
 
 
+def _library_away(cfg, root: str) -> bool:
+    """Whether a library folder's disk is away, not merely there.
+
+    An unplugged drive often leaves its mount folder behind, empty, and an
+    empty folder answers every "is it there?" a folder can be asked. A census
+    that took it for the library would record no photographs in it, and the
+    proof would then have nothing to miss: the switch would pass having
+    checked nothing. So a library folder is away when:
+
+    * it is not there or cannot be listed (``roots.available``);
+    * it does not carry the id this computer knows it by (``.ninaivu-library``,
+      storage/library_id.py): the empty mount folder has none;
+    * it holds nothing at all while the index says photographs are in it.
+    """
+    from ..storage import library_id, roots as roots_kit           # noqa: PLC0415
+    if not (os.path.isdir(root) and roots_kit.available(root)):
+        return True
+    known = library_id._load_known(Path(cfg.state_dir)).get(root)   # noqa: SLF001
+    if known and library_id.read_id(root) != known:
+        return True
+    try:
+        with os.scandir(root) as listing:
+            empty = next(listing, None) is None
+    except OSError:
+        return True
+    return empty and _index_holds(cfg, root)
+
+
+def _index_holds(cfg, root: str) -> bool:
+    """Whether the index records any photograph under *root* (read-only)."""
+    path = Path(getattr(cfg, "db_path", "") or "")
+    if not path.is_file():
+        return False
+    try:
+        conn = sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True, timeout=5)
+        try:
+            return conn.execute("SELECT 1 FROM assets WHERE root = ? LIMIT 1",
+                                (root,)).fetchone() is not None
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        return False
+
+
 def _tops(cfg) -> list[dict[str, Any]]:
     """Each folder a census walks: the libraries, then the originals folder."""
-    from ..storage import roots as roots_kit                       # noqa: PLC0415
     tops: list[dict[str, Any]] = []
     for root in list(getattr(cfg, "roots", None) or []):
-        tops.append({"top": str(root), "kind": LIBRARY,
-                     "away": not (os.path.isdir(root) and roots_kit.available(root))})
+        tops.append({"top": str(root), "kind": LIBRARY, "away": _library_away(cfg, str(root))})
     folder = str(getattr(cfg, "mugil_originals_dir", "") or "")
     if role(cfg) == SECONDARY and folder:
         place = Path(folder).expanduser()
