@@ -12,6 +12,7 @@ published while the walk runs, it is short enough for a status line, and it is
 cleared when the scan stops so a finished scan never looks like a stuck one.
 """
 
+from js_sources import family_app
 import re
 import time
 from pathlib import Path
@@ -175,7 +176,7 @@ def test_the_gallery_reaches_the_strip_it_no_longer_draws_itself():
     wired to it — a page that quietly stopped importing it would show no
     progress at all, which is the failure this whole file exists to catch.
     """
-    app = (SCRIPTS / "app.js").read_text(encoding="utf-8")
+    app = family_app()
     assert "from './activity.js'" in app, "app.js no longer imports the strip"
     assert "renderActivity" in app, "app.js no longer draws the strip"
 

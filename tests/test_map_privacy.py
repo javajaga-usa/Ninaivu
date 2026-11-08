@@ -13,6 +13,7 @@ reach a tile server, not in the script, not in the policy that would permit
 it, and not through a link a mis-click could follow.
 """
 
+from js_sources import family_app
 import json
 import re
 from pathlib import Path
@@ -20,7 +21,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-APP_JS = (ROOT / "ninaivu" / "static" / "js" / "app.js").read_text(encoding="utf-8")
+APP_JS = family_app()
 VIEWER_JS = (ROOT / "ninaivu" / "static" / "js" / "viewer.js").read_text(encoding="utf-8")
 INDEX = (ROOT / "ninaivu" / "templates" / "index.html").read_text(encoding="utf-8")
 WORLD = ROOT / "ninaivu" / "static" / "data" / "world.geojson"

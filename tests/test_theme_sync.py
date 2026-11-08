@@ -1,3 +1,4 @@
+from js_sources import console as console_js, family_app
 from pathlib import Path
 
 
@@ -42,8 +43,8 @@ def test_ai_playground_js_has_theme_toggle_and_shortcuts():
 
 
 def test_app_and_admin_sync_theme_storage():
-    app_js = (Path(__file__).parents[1] / 'ninaivu' / 'static' / 'js' / 'app.js').read_text(encoding='utf-8')
-    admin_js = (Path(__file__).parents[1] / 'ninaivu' / 'static' / 'js' / 'admin.js').read_text(encoding='utf-8')
+    app_js = family_app()
+    admin_js = console_js()
     assert 'window.cycleTheme = cycleTheme;' in app_js
     assert 'window.applyTheme = applyTheme;' in app_js
     assert 'ninaivu.theme' in app_js

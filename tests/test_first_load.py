@@ -15,6 +15,7 @@ request, and there is an index that lets the count walk something narrow.
 
 from __future__ import annotations
 
+from js_sources import family_app
 import re
 from pathlib import Path
 
@@ -109,7 +110,7 @@ def test_the_index_is_made_for_a_library_that_predates_it(tmp_path):
 # the source, and that is what must not come back.
 
 def app_js() -> str:
-    return (SCRIPTS / "app.js").read_text(encoding="utf-8")
+    return family_app()
 
 
 def test_the_status_is_asked_for_without_the_counts():

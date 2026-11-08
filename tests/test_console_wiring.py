@@ -12,6 +12,7 @@ Two things stop that recurring: templates now reload like everything else, and
 the bindings no longer depend on each other. These tests hold both.
 """
 
+from js_sources import console as console_js, family_app
 import re
 from pathlib import Path
 
@@ -87,7 +88,7 @@ def test_no_console_handler_can_abandon_the_ones_after_it():
     """Every id-based binding in the console goes through the always-returns-
     an-element helper, so a missing element skips one control instead of
     stopping the wiring."""
-    source = (SCRIPTS / "admin.js").read_text(encoding="utf-8")
+    source = console_js()
     body = source[source.index("function wireChrome() {"):source.index("\nfunction showTab(")]
 
     # Strip comments first: this very file quotes the broken pattern to
@@ -105,7 +106,7 @@ def test_no_console_handler_can_abandon_the_ones_after_it():
 def test_the_storage_integrity_button_exists_and_is_wired():
     """The button the mismatch actually broke."""
     markup = (TEMPLATES / "admin.html").read_text(encoding="utf-8")
-    script = (SCRIPTS / "admin.js").read_text(encoding="utf-8")
+    script = console_js()
 
     assert 'id="scrubber-start-btn"' in markup
     assert "#scrubber-start-btn" in script
@@ -121,7 +122,7 @@ def test_the_storage_integrity_button_exists_and_is_wired():
 def test_every_id_the_console_script_reaches_for_is_in_the_page(element_id):
     """Catches the mismatch at build time rather than in somebody's browser."""
     markup = (TEMPLATES / "admin.html").read_text(encoding="utf-8")
-    script = (SCRIPTS / "admin.js").read_text(encoding="utf-8")
+    script = console_js()
     if f"#{element_id}" not in script:
         pytest.skip(f"{element_id} is not referenced by admin.js")
     assert f'id="{element_id}"' in markup, (
@@ -133,7 +134,7 @@ def test_every_id_the_console_script_reaches_for_is_in_the_page(element_id):
 ])
 def test_every_id_the_family_script_reaches_for_is_in_the_page(element_id):
     markup = (TEMPLATES / "index.html").read_text(encoding="utf-8")
-    script = (SCRIPTS / "app.js").read_text(encoding="utf-8")
+    script = family_app()
     if f"#{element_id}" not in script:
         pytest.skip(f"{element_id} is not referenced by app.js")
     assert f'id="{element_id}"' in markup
@@ -157,7 +158,7 @@ def _help_keys() -> set[str]:
 
 
 def _bound_keys() -> set[str]:
-    app = (SCRIPTS / "app.js").read_text(encoding="utf-8")
+    app = family_app()
     viewer = (SCRIPTS / "viewer.js").read_text(encoding="utf-8")
     grid = set(re.findall(r"key === '([a-z0-9])'", app))
     inside = set(re.findall(r"case '([a-z0-9])':", viewer))
@@ -187,7 +188,7 @@ def test_the_help_does_not_claim_a_key_means_something_it_does_not():
 
 def test_shift_is_passed_to_the_grid_when_an_arrow_is_pressed():
     """Without this the range logic below is unreachable from the keyboard."""
-    app = (SCRIPTS / "app.js").read_text(encoding="utf-8")
+    app = family_app()
     assert "extend: event.shiftKey" in app
 
 
@@ -225,7 +226,7 @@ def test_every_page_the_server_points_at_opens_something():
 
     markup = (TEMPLATES / "admin.html").read_text(encoding="utf-8")
     pages = set(re.findall(r'data-tab="([a-z-]+)"', markup))
-    script = (SCRIPTS / "admin.js").read_text(encoding="utf-8")
+    script = console_js()
     block = script[script.index("const sectionPages = {"):script.index("\n};", script.index("const sectionPages = {"))]
     sections = dict(re.findall(r"(\w[\w-]*): \{ page: '([a-z-]+)', section: '#[\w-]+' \}", block))
     for page in sections.values():

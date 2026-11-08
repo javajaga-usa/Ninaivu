@@ -1,6 +1,7 @@
 """Tuning: Ninaivu's numbers sized to the machine it runs on, and the
 console page where an administrator sees them and sets them."""
 
+from js_sources import console as console_js
 import math
 
 import pytest
@@ -313,5 +314,5 @@ def test_the_page_is_in_the_console(name):
     root = Path(__file__).resolve().parent.parent / "ninaivu"
     text = (root / "templates" / name).read_text(encoding="utf-8")
     assert 'data-tab="tuning"' in text and 'data-panel="tuning"' in text
-    script = (root / "static" / "js" / "admin.js").read_text(encoding="utf-8")
+    script = console_js()
     assert "TuningPanel" in script and (root / "static" / "js" / "tuning.js").is_file()
