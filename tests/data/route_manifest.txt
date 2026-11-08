@@ -81,6 +81,7 @@ admin | POST                 | /api/admin/migration/recovery-cleanup | admin | w
 admin | POST                 | /api/admin/migration/reroot | admin | writes | same origin | migration.reroot
 admin | GET                  | /api/admin/mugil | admin | reads | - | mugil.mugil_status
 admin | POST                 | /api/admin/mugil/bring-back | admin | writes | same origin | mugil.mugil_bring_back
+admin | POST                 | /api/admin/mugil/census | admin | writes | same origin | mugil.mugil_census_take
 admin | GET                  | /api/admin/mugil/checklist | admin | reads | - | mugil.mugil_checklist
 admin | POST                 | /api/admin/mugil/code | admin | writes | same origin | mugil.mugil_code
 admin | GET                  | /api/admin/mugil/free | admin | reads | - | mugil.mugil_free_status
@@ -102,6 +103,10 @@ admin | POST                 | /api/admin/mugil/rebuild/stop | admin | writes | 
 admin | POST                 | /api/admin/mugil/role | admin | writes | same origin | mugil.mugil_role
 admin | POST                 | /api/admin/mugil/send | admin | writes | same origin | mugil.mugil_send
 admin | POST                 | /api/admin/mugil/stop | admin | writes | same origin | mugil.mugil_stop
+admin | GET                  | /api/admin/mugil/topology | admin | reads | - | mugil.mugil_topology_status
+admin | GET                  | /api/admin/mugil/topology/plan | admin | reads | - | mugil.mugil_topology_plan_read
+admin | POST                 | /api/admin/mugil/topology/plan | admin | writes | same origin | mugil.mugil_topology_plan
+admin | POST                 | /api/admin/mugil/topology/prove | admin | writes | same origin | mugil.mugil_topology_prove
 admin | POST                 | /api/admin/mugil/unpair | admin | writes | same origin | mugil.mugil_unpair
 admin | GET                  | /api/admin/mugil/update | admin | reads | - | mugil_update.mugil_update_status
 admin | POST                 | /api/admin/mugil/update | admin | writes | same origin | mugil_update.mugil_update_send
@@ -498,6 +503,12 @@ admin | GET                  | /api/moments/<int:asset_id>/frame | guest | reads
 home  | GET                  | /api/moments/<int:asset_id>/frame | guest | reads | - | api.moment_frame
 admin | PUT                  | /api/mugil/about-primary | peer | writes | same origin | mugil_peer.mugil_about_primary
 home  | PUT                  | /api/mugil/about-primary | peer | writes | same origin | mugil_peer.mugil_about_primary
+admin | GET                  | /api/mugil/census | peer | reads | - | mugil_peer.mugil_census_status
+home  | GET                  | /api/mugil/census | peer | reads | - | mugil_peer.mugil_census_status
+admin | POST                 | /api/mugil/census | peer | writes | same origin | mugil_peer.mugil_census_start
+home  | POST                 | /api/mugil/census | peer | writes | same origin | mugil_peer.mugil_census_start
+admin | GET                  | /api/mugil/census/file | peer | reads | - | mugil_peer.mugil_census_file
+home  | GET                  | /api/mugil/census/file | peer | reads | - | mugil_peer.mugil_census_file
 admin | PUT                  | /api/mugil/handover | peer | writes | same origin | mugil_peer.mugil_handover_receive
 home  | PUT                  | /api/mugil/handover | peer | writes | same origin | mugil_peer.mugil_handover_receive
 admin | POST                 | /api/mugil/handover/remove | peer | writes | same origin | mugil_peer.mugil_handover_remove
