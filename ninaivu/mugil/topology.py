@@ -38,10 +38,23 @@ either computer before is present on at least one of them after
 (:func:`prove`). The change is marked done only when the proof passes, and a
 proof that fails names each missing file by its path.
 
+**Moving the Primary and unpairing.** For ``move_primary`` the plan is made
+on the Primary the index leaves, from both censuses taken then: a file the
+Secondary also keeps is on both, one only this Primary holds has to be carried
+to the new Primary with the library (:func:`plan_apart`). The record and the
+two censuses go into ``mugil-move/`` in the state folder, which a full export
+carries (storage/backup.FULL_EXTRAS); the import puts them in place on the
+computer it lands on (:func:`arrive`), and that computer, the Primary now,
+proves that every fingerprint seen before is on it or on the Secondary. For
+``unpair`` the plan says what each computer keeps: nothing moves. Afterwards
+each proves its own side against the census it took while paired, since the
+two can no longer ask each other.
+
 Nothing here moves, changes or removes a file; it only reads, and writes its
 own files in the state folder (``mugil-census-*``, ``mugil-topology.json``,
-``mugil-plan-*``, ``mugil-missing-*``). The record is a JSON file rather than a
-table, so a 3.x index opens with nothing to do.
+``mugil-plan-*``, ``mugil-missing-*``, ``mugil-move/``, ``mugil-moved-*``).
+The record is a JSON file rather than a table, so a 3.x index opens with
+nothing to do.
 """
 
 from __future__ import annotations
@@ -52,6 +65,7 @@ import logging
 import os
 import re
 import secrets
+import shutil
 import sqlite3
 import threading
 import time
@@ -168,6 +182,8 @@ def after(transition: str, here: Standing, part: str | None = None) -> Standing:
 CENSUS_PREFIX = "mugil-census-"
 #: A copy of the other computer's census, fetched for a plan or a proof.
 PARTNER_PREFIX = "mugil-partner-"
+#: A census taken before the Primary moved, brought here by the import.
+MOVED_PREFIX = "mugil-moved-"
 _CENSUS_NAME = re.compile(r"^mugil-census-\d{8}-\d{6}(-\d+)?\.jsonl\.gz$")
 #: What each census taken here says about itself, for listing them quickly.
 CENSUS_LIST = "mugil-censuses.json"
@@ -547,9 +563,10 @@ def prune(state_dir: Path | str, keep: set[str]) -> None:
     for census in listed:
         if census["file"] not in newest_few and census["file"] not in keep:
             (state_dir / census["file"]).unlink(missing_ok=True)
-    for path in state_dir.glob(f"{PARTNER_PREFIX}*.jsonl.gz"):
-        if path.name not in keep:
-            path.unlink(missing_ok=True)
+    for prefix in (PARTNER_PREFIX, MOVED_PREFIX):
+        for path in state_dir.glob(f"{prefix}*.jsonl.gz"):
+            if path.name not in keep:
+                path.unlink(missing_ok=True)
     atomic_write(state_dir / CENSUS_LIST, json.dumps(
         [c for c in listed if (state_dir / c["file"]).is_file()], indent=2))
 
@@ -578,7 +595,10 @@ def _where(header: dict[str, Any], entry: dict[str, Any]) -> str:
 
 #: What happens to a file in a pairing.
 BOTH, BROUGHT_IN, BESIDE, SENT, LEFT_ALONE = "both", "brought_in", "beside", "sent", "left_alone"
-OUTCOMES = (BOTH, BROUGHT_IN, BESIDE, SENT, LEFT_ALONE)
+#: What happens to a file when the Primary moves or the two are unpaired:
+#: it stays where it is, or it goes to the new Primary with the library.
+KEPT, CARRIED = "kept", "carried"
+OUTCOMES = (BOTH, BROUGHT_IN, BESIDE, SENT, LEFT_ALONE, KEPT, CARRIED)
 
 #: Why a file is left alone, as the plan says it.
 REASONS: dict[str, dict[str, str]] = {
@@ -592,6 +612,12 @@ REASONS: dict[str, dict[str, str]] = {
     "replaced_by_primary": {"reason": "An older version the Primary itself replaced: kept set "
                                       "aside on the Secondary."},
     "phone_inbox": {"reason": "Waiting in the phone inbox: the Primary's next run files it."},
+    "carry_with_library": {"reason": "Only this Primary holds it: copy the library to the new "
+                                     "Primary as well as the index, or it is not there after "
+                                     "the move."},
+    "only_on_primary": {"reason": "Only the Primary holds it: it stays there after unpairing."},
+    "only_on_secondary": {"reason": "Only the Secondary holds it: it stays on the Secondary's "
+                                    "disk after unpairing."},
 }
 
 
@@ -736,6 +762,67 @@ def plan_pair(primary: Path, secondary: Path, out: Path, *,
     return totals
 
 
+def plan_apart(transition: str, primary: Path, secondary: Path, out: Path) -> dict[str, Any]:
+    """What moving the Primary or unpairing does with every file of the two
+    censuses; the totals, in the shape :func:`plan_pair` gives.
+
+    Neither moves a file by itself. A file whose content both computers hold
+    is on both. Moving the Primary: one only the Primary holds is carried to
+    the new Primary with the library (or it is not there afterwards); one
+    only the Secondary holds stays there, and the Secondary follows the new
+    Primary. Unpairing: each computer keeps what only it holds.
+    """
+    if transition not in (MOVE_PRIMARY, UNPAIR):
+        raise ValueError(NO_SUCH["reason"])
+    ph, sh = check_census(primary), check_census(secondary)
+    if ph.get("algo") != sh.get("algo"):
+        raise ValueError(PROOF_KINDS["reason"])
+    work = sqlite3.connect("")
+    work.executescript("CREATE TABLE p (digest TEXT PRIMARY KEY); CREATE TABLE s (digest TEXT PRIMARY KEY);")
+    totals: dict[str, Any] = {"secondary": {}, "primary": {}, "reasons": {},
+                              "who": str(sh.get("name") or "the Secondary")}
+    partial = out.with_name(f".{out.name}.partial-{secrets.token_hex(4)}")
+    try:
+        for table, path in (("p", primary), ("s", secondary)):
+            batch = []
+            for entry in entries(path):
+                if entry.get("d"):
+                    batch.append((entry["d"],))
+                if len(batch) >= 2000:
+                    work.executemany(f"INSERT OR IGNORE INTO {table} VALUES (?)", batch)
+                    batch = []
+            work.executemany(f"INSERT OR IGNORE INTO {table} VALUES (?)", batch)
+        alone = {("primary", MOVE_PRIMARY): (CARRIED, "carry_with_library"),
+                 ("primary", UNPAIR): (KEPT, "only_on_primary"),
+                 ("secondary", MOVE_PRIMARY): (KEPT, None),
+                 ("secondary", UNPAIR): (KEPT, "only_on_secondary")}
+        with gzip.open(partial, "wt", encoding="utf-8") as handle:
+            for side, header, path, other in (("secondary", sh, secondary, "p"),
+                                              ("primary", ph, primary, "s")):
+                for entry in entries(path):
+                    digest, size = entry.get("d"), int(entry["s"])
+                    there = bool(digest) and work.execute(
+                        f"SELECT 1 FROM {other} WHERE digest = ?", (digest,)).fetchone() is not None
+                    outcome, reason = (BOTH, None) if there else alone[(side, transition)]
+                    line: dict[str, Any] = {"on": side, "file": _where(header, entry),
+                                            "size": size, "outcome": outcome}
+                    if reason:
+                        line["reason"] = reason
+                    handle.write(json.dumps(line, ensure_ascii=False) + "\n")
+                    bucket = totals[side].setdefault(outcome, {"files": 0, "bytes": 0})
+                    bucket["files"] += 1
+                    bucket["bytes"] += size
+                    if reason:
+                        why = totals["reasons"].setdefault(reason, {"files": 0, "bytes": 0})
+                        why["files"] += 1
+                        why["bytes"] += size
+        os.replace(partial, out)
+    finally:
+        partial.unlink(missing_ok=True)
+        work.close()
+    return totals
+
+
 def read_plan(path: Path, *, outcome: str | None = None, side: str | None = None,
               after: int = 0, limit: int = 500) -> dict[str, Any]:
     """A page of a plan: the lines after line *after* that match."""
@@ -847,13 +934,11 @@ HISTORY = 20
 #: Planned, carried out by the household, then proved: done or failed.
 PLANNING, PLANNED, PROVING, DONE, FAILED = "planning", "planned", "proving", "done", "failed"
 
-#: The transitions the Primary plans and proves now. Moving the Primary and
-#: unpairing are checked against the standings only: after either one the
-#: computer that holds the record can no longer ask the Secondary.
-PLANNED_HERE = (PAIR, REPLACE_SECONDARY_DISK)
+#: The transitions the Primary plans. After moving the Primary the computer
+#: the index went to proves it; after unpairing each computer proves its own
+#: side, since the two can no longer ask each other.
+PLANNED_HERE = TRANSITIONS
 
-NOT_YET_PLANNED = {"reason": "A plan and a proof for this change are not made yet. Its steps "
-                             "are checked on their own."}
 ON_THE_PRIMARY = {"reason": "Make the plan on the Primary, once the two computers are paired: "
                             "it is the one that can ask the Secondary."}
 NO_CENSUS_BEFORE = {"reason": "Take a census on this computer before it is paired: it is what "
@@ -864,6 +949,8 @@ BUSY = {"reason": "A census, a plan or a proof is being made already. Wait for i
 NOTHING_TO_PROVE = {"reason": "Make a plan first: the proof compares against its census."}
 PROVED_ALREADY = {"reason": "That change is proved and done already."}
 NOT_CARRIED_OUT = {"reason": "Carry the change out first: this computer is not where it leaves it."}
+PROVE_ON_THE_NEW = {"reason": "Prove the move on the computer the index went to: it is the "
+                              "Primary now, and the export took the plan there."}
 
 
 def load_record(state_dir: Path | str) -> dict[str, Any]:
@@ -880,6 +967,83 @@ def _save_record(state_dir: Path | str, data: dict[str, Any]) -> None:
 
 class Refused(ValueError):
     """A census, plan or proof that cannot start; the message says why."""
+
+
+# -- the plan for moving the Primary, carried by the export ---------------------
+
+#: The plan for moving the Primary, with the censuses it compares against, in
+#: the state folder. A full export carries it (storage/backup.FULL_EXTRAS).
+MOVING = "mugil-move"
+_MOVING_RECORD = "record.json"
+_CARRIED_NAME = re.compile(r"^(mugil-partner-)?mugil-census-\d{8}-\d{6}(-\d+)?\.jsonl\.gz$"
+                           r"|^mugil-plan-[0-9a-f-]+\.jsonl\.gz$")
+
+
+def _drop_move(state_dir: Path) -> None:
+    shutil.rmtree(state_dir / MOVING, ignore_errors=True)
+
+
+def _pack_move(state_dir: Path, record: dict[str, Any], files: list[Path]) -> None:
+    """Put *record* and *files* in :data:`MOVING`, whole or not at all."""
+    partial = state_dir / f".{MOVING}.partial-{secrets.token_hex(4)}"
+    partial.mkdir()
+    try:
+        for path in files:
+            shutil.copy2(path, partial / path.name)
+        (partial / _MOVING_RECORD).write_text(json.dumps(record, indent=2), encoding="utf-8")
+        _drop_move(state_dir)
+        os.replace(partial, state_dir / MOVING)
+    finally:
+        shutil.rmtree(partial, ignore_errors=True)
+
+
+def moving(state_dir: Path | str) -> bool:
+    """Whether a plan for moving the Primary waits here for the export."""
+    return (Path(state_dir) / MOVING / _MOVING_RECORD).is_file()
+
+
+def arrive(state_dir: Path | str) -> dict[str, Any] | None:
+    """After an index export was imported here: when it carried a plan for
+    moving the Primary, put the plan and its censuses in place, so this
+    computer, the Primary now, can prove that nothing was lost. The record
+    it makes; None when the export carried no such plan."""
+    state_dir = Path(state_dir)
+    folder = state_dir / MOVING
+    try:
+        carried = json.loads((folder / _MOVING_RECORD).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if not isinstance(carried, dict) or carried.get("transition") != MOVE_PRIMARY \
+            or not isinstance(carried.get("before"), dict):
+        _drop_move(state_dir)
+        return None
+    names = {key: str(carried["before"].get(key) or "") for key in ("here", "partner")}
+    if carried.get("plan_file"):
+        names["plan"] = str(carried["plan_file"])
+    placed: dict[str, str] = {}
+    for key, name in names.items():
+        if not _CARRIED_NAME.match(name) or not (folder / name).is_file():
+            log.warning("The plan for moving the Primary came without %s", key)
+            return None
+        if key != "plan":
+            check_census(folder / name)
+        target = name if key == "plan" else f"{MOVED_PREFIX}{name}"
+        shutil.copy2(folder / name, state_dir / target)
+        placed[key] = target
+    record = {key: value for key, value in carried.items()
+              if key not in ("after", "proof", "missing_file", "error", "proved")}
+    record.update(part=PRIMARY, state=PLANNED, moved_in=time.time(),
+                  before={"here": placed["here"], "partner": placed["partner"]},
+                  plan_file=placed.get("plan"),
+                  **{"from": asdict(Standing(SINGLE, False)), "to": asdict(Standing(PRIMARY, True))})
+    data = load_record(state_dir)
+    if data.get("current"):
+        data["history"] = ([data["current"]] + list(data.get("history") or []))[:HISTORY]
+    data["current"] = record
+    _save_record(state_dir, data)
+    _drop_move(state_dir)
+    log.info("The plan for moving the Primary arrived with the index: prove it here")
+    return record
 
 
 class Topology:
@@ -910,9 +1074,14 @@ class Topology:
         here = standing(self.cfg)
         with self._lock:
             live = dict(self.live)
+        try:
+            can_prove = bool(self._to_prove(here))
+        except Refused:
+            can_prove = False
         return {**live, "running": self.running, "standing": asdict(here),
                 "censuses": censuses(self.state_dir),
-                "record": load_record(self.state_dir).get("current")}
+                "record": load_record(self.state_dir).get("current"),
+                "can_prove": can_prove, "moving": moving(self.state_dir)}
 
     def stop(self, join: bool = False) -> None:
         self._stop.set()
@@ -1047,8 +1216,6 @@ class Topology:
         """Start a plan for *transition*, made on the Primary of a pair."""
         if transition not in STARTS:
             raise Refused(NO_SUCH["reason"])
-        if transition not in PLANNED_HERE:
-            raise Refused(NOT_YET_PLANNED["reason"])
         here = standing(self.cfg)
         if here != Standing(PRIMARY, True):
             raise Refused(ON_THE_PRIMARY["reason"])
@@ -1070,6 +1237,7 @@ class Topology:
             record = {"id": ident, "transition": transition, "part": PRIMARY,
                       "from": asdict(start), "to": asdict(after(transition, start, PRIMARY)),
                       "state": PLANNING, "started": time.time()}
+            _drop_move(self.state_dir)                    # a newer plan takes its place
             self._put_record(record)
             partner = self._partner()
             if transition == PAIR:
@@ -1089,6 +1257,9 @@ class Topology:
                     if conn is not None and threading.current_thread() is self._thread:
                         conn.close()
                 record["plan_file"] = plan_file.name
+            elif transition in (MOVE_PRIMARY, UNPAIR):
+                record["plan"] = plan_apart(transition, mine, theirs, plan_file)
+                record["plan_file"] = plan_file.name
             else:
                 # What the Secondary's disk holds that this computer does not:
                 # lost with the old disk unless it is brought in first.
@@ -1099,6 +1270,9 @@ class Topology:
                 record["plan_file"] = plan_file.name if only["missing_count"] else None
             record["state"] = PLANNED
             record["planned"] = time.time()
+            if transition == MOVE_PRIMARY:
+                # For the export to carry to the computer that proves it.
+                _pack_move(self.state_dir, record, [mine, theirs, plan_file])
             self._put_record(record)
             self._tidy()
         return self._start("plan", work)
@@ -1114,28 +1288,55 @@ class Topology:
 
     # -- the proof ---------------------------------------------------------------
 
-    def prove(self) -> dict[str, Any]:
-        """Take both censuses again and compare them with the ones before."""
+    def _to_prove(self, here: Standing | None = None) -> dict[str, Any]:
+        """The record a proof now would be for; Refused saying why there is none."""
+        here = here or standing(self.cfg)
         current = load_record(self.state_dir).get("current") or {}
-        if not current.get("before") or current.get("state") not in (PLANNED, FAILED):
-            if current.get("state") == DONE:
-                raise Refused(PROVED_ALREADY["reason"])
-            raise Refused(NOTHING_TO_PROVE["reason"])
-        if asdict(standing(self.cfg)) != current.get("to"):
-            raise Refused(NOT_CARRIED_OUT["reason"])
+        if current.get("before") and current.get("state") in (PLANNED, FAILED):
+            if current.get("transition") == MOVE_PRIMARY and not current.get("moved_in"):
+                raise Refused(PROVE_ON_THE_NEW["reason"])
+            if asdict(here) != current.get("to"):
+                raise Refused(NOT_CARRIED_OUT["reason"])
+            return current
+        if not here.paired:
+            # Unpaired since a census taken while paired, with no plan here
+            # (the Secondary never has one): this computer proves its side.
+            census = newest(self.state_dir, lambda s: s.paired)
+            if census is not None and (current.get("before") or {}).get("here") != census["file"]:
+                return {"id": time.strftime("%Y%m%d-%H%M%S") + f"-{secrets.token_hex(2)}",
+                        "transition": UNPAIR, "part": here.role,
+                        "from": {"role": census.get("role"), "paired": True}, "to": asdict(here),
+                        "state": PLANNED, "started": time.time(),
+                        "before": {"here": census["file"]}}
+        if current.get("state") == DONE:
+            raise Refused(PROVED_ALREADY["reason"])
+        raise Refused(NOTHING_TO_PROVE["reason"])
+
+    def prove(self) -> dict[str, Any]:
+        """Take the censuses again and compare them with the ones before:
+        both computers' after a pairing, a move or a new disk; this one's own
+        after unpairing."""
+        current = self._to_prove()
 
         def work() -> None:
             record = dict(current, state=PROVING)
             record.pop("error", None)
             self._put_record(record)
-            partner = self._partner()
-            mine = self._census_here()
-            theirs = self._partner_census(partner, fresh=True)
-            record["after"] = {"here": mine.name, "partner": theirs.name}
-            before = [self.state_dir / record["before"]["here"],
-                      self.state_dir / record["before"]["partner"]]
+            if record["transition"] == UNPAIR:
+                mine = self._census_here()
+                record["after"] = {"here": mine.name}
+                before = [self.state_dir / record["before"]["here"]]
+                after_ = [mine]
+            else:
+                partner = self._partner()
+                mine = self._census_here()
+                theirs = self._partner_census(partner, fresh=True)
+                record["after"] = {"here": mine.name, "partner": theirs.name}
+                before = [self.state_dir / record["before"]["here"],
+                          self.state_dir / record["before"]["partner"]]
+                after_ = [mine, theirs]
             missing = self.state_dir / f"mugil-missing-{record['id']}.jsonl.gz"
-            record["proof"] = prove(before, [mine, theirs], missing_to=missing)
+            record["proof"] = prove(before, after_, missing_to=missing)
             record["missing_file"] = missing.name if record["proof"]["missing_count"] else None
             record["state"] = DONE if record["proof"]["passed"] else FAILED
             record["proved"] = time.time()
@@ -1177,5 +1378,5 @@ class Topology:
 
 __all__ = ["Standing", "TRANSITIONS", "PAIR", "MOVE_PRIMARY", "REPLACE_SECONDARY_DISK", "UNPAIR",
            "STARTS", "standing", "why_not", "after", "take_census", "check_census", "entries",
-           "censuses", "census_file", "newest", "plan_pair", "read_plan", "prove", "load_record", "Topology",
-           "Refused", "OUTCOMES", "REASONS"]
+           "censuses", "census_file", "newest", "plan_pair", "plan_apart", "read_plan", "prove",
+           "load_record", "Topology", "Refused", "OUTCOMES", "REASONS", "MOVING", "moving", "arrive"]

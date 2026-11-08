@@ -98,8 +98,11 @@ REPLACED_ONLY_IF_PRESENT = ("tls", "cloud-encryption.json", "google.json",
 #: working copies of pictures a browser cannot show, and the TV album's own
 #: thumbnails. Caches made again in seconds, half-sent uploads and what a
 #: page left behind for an hour are not in it.
+#: And, while the Primary is being moved, the plan for the move with the
+#: censuses it compares against (``mugil-move``, mugil/topology.py), so the
+#: computer the index goes to can prove that nothing was lost.
 FULL_EXTRAS = ("thumbs", "faces", "films", "letters", "books", "colour",
-               "renditions", "tv-album")
+               "renditions", "tv-album", "mugil-move")
 
 #: The ``kind`` a full export's manifest gives.
 FULL_KIND = "full"

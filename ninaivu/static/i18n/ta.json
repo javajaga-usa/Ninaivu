@@ -5388,7 +5388,6 @@
   "A test restore is already running.": "ஒரு சோதனை மீட்பு ஏற்கனவே நடந்துகொண்டிருக்கிறது.",
   "There is no test restore here.": "இங்கே சோதனை மீட்பு இல்லை.",
   "A census, a plan or a proof is being made already. Wait for it to finish.": "ஒரு கணக்கெடுப்போ, திட்டமோ, சான்றோ ஏற்கெனவே உருவாகிக்கொண்டிருக்கிறது. அது முடியும் வரை காத்திருங்கள்.",
-  "A plan and a proof for this change are not made yet. Its steps are checked on their own.": "இந்த மாற்றத்துக்கான திட்டமும் சான்றும் இன்னும் உருவாக்கப்படவில்லை. அதன் படிகள் தனித்தனியே சரிபார்க்கப்படுகின்றன.",
   "An older version the Primary itself replaced: kept set aside on the Secondary.": "முதன்மைக் கணினியே மாற்றிய பழைய பதிப்பு: இரண்டாம் கணினியில் ஒதுக்கி வைக்கப்பட்டுள்ளது.",
   "Carry the change out first: this computer is not where it leaves it.": "முதலில் மாற்றத்தைச் செய்து முடியுங்கள்: இந்தக் கணினி அந்த மாற்றம் விட்டுச்செல்லும் நிலையில் இன்னும் இல்லை.",
   "Give whole numbers.": "முழு எண்களைக் கொடுங்கள்.",
@@ -5415,5 +5414,9 @@
   "The two computers' fingerprints are of different kinds, so the files cannot be compared. Install the same Ninaivu on both and take the censuses again.": "இரண்டு கணினிகளின் கைரேகைகளும் வெவ்வேறு வகையானவை, அதனால் கோப்புகளை ஒப்பிட முடியாது. இரண்டிலும் ஒரே நினைவை நிறுவி, கணக்கெடுப்புகளை மீண்டும் எடுங்கள்.",
   "There is no such change.": "அப்படி ஒரு மாற்றம் இல்லை.",
   "This computer's part is chosen already: it pairs as that part.": "இந்தக் கணினியின் பங்கு ஏற்கெனவே தேர்ந்தெடுக்கப்பட்டுவிட்டது: அந்தப் பங்காகவே இணையும்.",
-  "Waiting in the phone inbox: the Primary's next run files it.": "தொலைபேசி உள்பெட்டியில் காத்திருக்கிறது: முதன்மைக் கணினியின் அடுத்த ஓட்டம் அதைச் சேர்த்துவைக்கும்."
+  "Waiting in the phone inbox: the Primary's next run files it.": "தொலைபேசி உள்பெட்டியில் காத்திருக்கிறது: முதன்மைக் கணினியின் அடுத்த ஓட்டம் அதைச் சேர்த்துவைக்கும்.",
+  "Only the Primary holds it: it stays there after unpairing.": "முதன்மைக் கணினியில் மட்டுமே இது உள்ளது: இணைப்பை நீக்கிய பிறகும் அங்கேயே இருக்கும்.",
+  "Only the Secondary holds it: it stays on the Secondary's disk after unpairing.": "இரண்டாம் கணினியில் மட்டுமே இது உள்ளது: இணைப்பை நீக்கிய பிறகும் இரண்டாம் கணினியின் வட்டிலேயே இருக்கும்.",
+  "Only this Primary holds it: copy the library to the new Primary as well as the index, or it is not there after the move.": "இந்த முதன்மைக் கணினியில் மட்டுமே இது உள்ளது: குறியீட்டுடன் நூலகத்தையும் புதிய முதன்மைக் கணினிக்கு நகலெடுங்கள், இல்லையெனில் நகர்த்திய பிறகு இது அங்கே இருக்காது.",
+  "Prove the move on the computer the index went to: it is the Primary now, and the export took the plan there.": "குறியீடு சென்ற கணினியில் நகர்த்தலுக்குச் சான்று காட்டுங்கள்: இப்போது அதுவே முதன்மைக் கணினி, ஏற்றுமதி திட்டத்தையும் அங்கே கொண்டுசென்றது."
 }
