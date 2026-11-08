@@ -561,12 +561,14 @@ def _semantic_ids(text: str, roots, conn) -> tuple[list[int] | None, dict[int, f
     # the matrix that is already in memory. It reads every vector's row, a
     # quarter of a second on a large library, so it is remembered until the
     # library or the set of vectors changes.
-    limits = _viewer_limits()
+    # *roots* are the caller's own (every caller passes the gate's): the
+    # candidates are the gate's, its SQL — folders, ceiling, date limit and
+    # sub-folder — the key they are remembered by.
+    viewer = visibility.current()
+    gate_sql, gate_params = viewer.sql("a")
     visible = db.cached_aggregate(
-        # The visibility clause carries this viewer's date policy.
-        conn, ("visible_embeddings", tuple(roots), limits["max_visibility"],
-               limits["scope"], db.visibility_clause("a", limits["max_visibility"])),
-        lambda: tuple(db.visible_embedding_ids(conn, roots, **limits)),
+        conn, ("visible_embeddings", gate_sql, tuple(gate_params), viewer.ranks_every_vector()),
+        lambda: tuple(db.visible_embedding_ids(conn, gate=viewer)),
         also=(db.EMBEDDINGS_GENERATION_KEY,), shared=True)
     rows = [index[i] for i in visible if i in index]
     ranked = ai_mod.semantic_search(vector, ids, buffer, dim, top_k=4000, rows=rows,

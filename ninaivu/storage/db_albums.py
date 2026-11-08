@@ -153,7 +153,8 @@ def list_occasions(conn: sqlite3.Connection, roots: Sequence[str] | str | None =
     """
     if gate is not None:
         gate_sql, gate_params = gate.sql("a")
-        guard = f"{gate_sql} AND a.trashed=0 AND a.nsfw=0 AND a.occasion_id IS NOT NULL"
+        guard = (f"{gate_sql} AND a.trashed=0 AND a.nsfw=0 AND a.occasion_id IS NOT NULL"
+                 + gate.occasion_halves_sql("a"))
         params = (*gate_params, int(limit))
     else:
         roots_sql, roots_params = roots_clause("a", roots if roots is not None else [])

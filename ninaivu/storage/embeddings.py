@@ -235,14 +235,24 @@ def forget_embeddings() -> None:
 def visible_embedding_ids(conn: sqlite3.Connection,
                           roots: Sequence[str] | str | None = None,
                           max_visibility: int | None = None,
-                          scope: str | None = None) -> list[int]:
+                          scope: str | None = None, *, gate: Any = None) -> list[int]:
     """Which embedded assets this viewer may see — ids only, no vectors.
 
     The ranking these ids narrow produces both the results *and* the reported
     total. Filtering only by root would leave the total counting hidden and
     out-of-scope photos — a per-query count of media the caller is not allowed
-    to know exists.
+    to know exists. *gate*, a ``server.visibility.Viewer``, is the caller's
+    limits when given (and ``Viewer.ranks_every_vector`` what a caller with no
+    folders is given).
     """
+    if gate is not None:
+        if gate.ranks_every_vector():
+            return [int(r["asset_id"]) for r in
+                    conn.execute("SELECT asset_id FROM embeddings")]
+        gate_sql, gate_params = gate.sql("a")
+        return [int(r["asset_id"]) for r in conn.execute(
+            f"SELECT e.asset_id FROM embeddings e JOIN assets a ON a.id = e.asset_id "
+            f"WHERE {gate_sql} AND a.trashed=0", gate_params)]
     if not roots:
         return [int(r["asset_id"]) for r in
                 conn.execute("SELECT asset_id FROM embeddings")]
