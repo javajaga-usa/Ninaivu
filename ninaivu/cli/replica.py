@@ -1,24 +1,25 @@
-"""The Pi as a read-only replica of the Mac's library: the commands.
+"""The family's read-only view on the Secondary: the commands.
 
-    ninaivu replica publish --to "/Volumes/Ninaivu/replica"     (on the Mac)
-    ninaivu replica status  --from /srv/ninaivu/replica          (anywhere)
-    ninaivu replica unit    --from /srv/ninaivu/replica \\
-                            --mirror /srv/ninaivu/current        (on the Pi)
+    ninaivu replica status --from ~ninaivu/.ninaivu/mugil-handover
+    ninaivu replica unit   --from ~ninaivu/.ninaivu/mugil-handover \\
+                           --map "<Primary's library folder>=<originals folder>/<name>"
 
-``publish`` writes one hand-over now, the same one the running server writes
-by itself when ``replica_dir`` is set. ``status`` says what a hand-over
-folder holds. ``unit`` prints the systemd service for the Pi, with each of
-the Mac's library folders mounted read-only at the Mac's own path from the
-Pi's mirror, found by the id in its ``.ninaivu-library`` marker.
+The Primary sends the hand-over over the pairing (mugil/handover.py), into
+``mugil-handover/`` in the Secondary's state folder. ``status`` says what a
+hand-over folder holds. ``unit`` prints the systemd service that serves it
+with ``ninaivu --replica-of``, each of the Primary's library folders mounted
+read-only at the Primary's own path from where the Secondary keeps it: given
+with ``--map``, or found under ``--mirror`` by the id in its
+``.ninaivu-library`` marker. See docs/two-computers.md.
 
-The server side is ``ninaivu --replica-of <folder>``; see docs/pi-replica.md.
+(Writing a hand-over into a shared folder for a Raspberry Pi, ``replica
+publish``, was retired in 4.0.)
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import os
 import shlex
 import sys
 import time
@@ -42,40 +43,14 @@ def _manifest(folder: Path) -> dict:
     try:
         data = json.loads((folder / MANIFEST).read_text(encoding="utf-8"))
     except FileNotFoundError:
-        raise SystemExit(f"{folder} holds no hand-over yet (no {MANIFEST}). Run "
-                         f"`ninaivu replica publish` on the Mac first.") from None
+        raise SystemExit(f"{folder} holds no hand-over yet (no {MANIFEST}). Tick \"Let "
+                         "the family browse on the Secondary\" on the Primary and wait "
+                         "for its first hand-over.") from None
     except (OSError, ValueError) as exc:
         raise SystemExit(f"{folder / MANIFEST} could not be read: {exc}") from None
     if not isinstance(data, dict):
         raise SystemExit(f"{folder / MANIFEST} is not a hand-over.")
     return data
-
-
-# -- publish -----------------------------------------------------------------
-
-def cmd_publish(args) -> int:
-    from ..replica.publish import publish                         # noqa: PLC0415
-    from ..server.config import Config                           # noqa: PLC0415
-
-    if args.state_dir:
-        # Through the environment, as the server does: config.json is read
-        # from the state folder before any override is applied.
-        os.environ["NINAIVU_STATE_DIR"] = str(Path(args.state_dir).expanduser())
-    cfg = Config.load()
-    target = args.to or cfg.replica_dir
-    if not target:
-        raise SystemExit("Say where to write it: --to <folder>, or set replica_dir.")
-    try:
-        manifest = publish(cfg, Path(target))
-    except (OSError, FileNotFoundError) as exc:
-        raise SystemExit(f"error: {exc}") from None
-    folders = manifest["folders"]
-    print(f"Handed the library over to {target}:")
-    print(f"  index    {manifest['index']['size']:,} bytes ({manifest['index']['file']})")
-    for name, counts in folders.items():
-        print(f"  {name:<8} {counts['files']:,} files, {counts['copied']:,} copied, "
-              f"{counts['removed']:,} removed")
-    return 0
 
 
 # -- status ------------------------------------------------------------------
@@ -136,7 +111,7 @@ def unit_text(*, python: str, source: str, state: str, binds: list[tuple[str, st
     lines = [
         "[Unit]",
         "Description=Ninaivu read-only replica (the Pi's copy of the Mac's library)",
-        "Documentation=https://github.com/javajaga-usa/Ninaivu/blob/main/docs/pi-replica.md",
+        "Documentation=https://github.com/javajaga-usa/Ninaivu/blob/main/docs/two-computers.md",
         "After=network-online.target local-fs.target",
         "Wants=network-online.target",
         f"RequiresMountsFor={systemd_quote(source)} {systemd_quote(state)}",
@@ -239,11 +214,6 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="ninaivu replica",
                                      description=__doc__.split("\n")[0])
     sub = parser.add_subparsers(dest="command", required=True)
-
-    pub = sub.add_parser("publish", help="write a hand-over for the Pi now (on the Mac)")
-    pub.add_argument("--to", default=None, help="the hand-over folder (default: replica_dir)")
-    pub.add_argument("--state-dir", default=None, help="Ninaivu's state folder")
-    pub.set_defaults(run=cmd_publish)
 
     st = sub.add_parser("status", help="what a hand-over folder holds")
     st.add_argument("--from", dest="source", required=True)

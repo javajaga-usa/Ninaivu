@@ -102,8 +102,6 @@ them; *runtime* ones say how this start was made and are never saved.
 | `keepsake_letter` |  |  | household | The letter written into the family archive on a USB drive (ninaivu/storage/keepsake.py), for whoever opens it. |
 | `keepsake_folder` |  |  | household | The drive or folder the family archive was last made in. |
 | `keepsake_made` | `0` |  | household | When the family archive was last made whole (seconds since 1970; 0 for never). |
-| `replica_dir` |  |  | household | On the Mac: the folder the hand-over for the Pi is written to (the Pi's share, or a folder a copy job carries there). Empty: none. |
-| `replica_every_minutes` | `30.0` |  | household | On the Mac: at most how often a changed library is handed over. |
 | `mugil_role` | `'single'` |  | household | single (everything on this computer, as always), primary (this computer runs the library and sends its originals to the Secondary) or secondary (this computer keeps the originals it is sent). |
 | `mugil_partner_url` |  |  | household | On the Primary: the Secondary's console address, e.g. http://linux-pc:3000. |
 | `mugil_originals_dir` |  |  | household | On the Secondary: the folder the originals are kept in, on the big disk. |
@@ -248,7 +246,7 @@ them; *runtime* ones say how this start was made and are never saved.
 | `trusted_proxies` | `0` | `NINAIVU_TRUSTED_PROXIES` (wins) | runtime | How many reverse proxies sit in front of Ninaivu, each adding one address to X-Forwarded-For on the way in. Set it to the number of proxies you run — 1 for Caddy, nginx or a Cloudflare tunnel alone — and never higher: Ninaivu counts that many addresses in from the right and believes the one it lands on, so every hop beyond your real proxies is an address the visitor wrote, and the rate limits, "home or the internet" and "this computer" would all be judged by it. Zero — the default — means the client address and the scheme are read from the connection itself, which is right for a machine in the house answering the household directly. Behind nginx or Caddy that address is always 127.0.0.1, which silently collapses the login rate limiter into one shared bucket for the whole world and leaves the session cookie without its Secure flag on an HTTPS site. Setting this to 1 makes Ninaivu read X-Forwarded-For and X-Forwarded-Proto instead, from a proxy on this computer; one elsewhere (another machine, another container) is listed in NINAIVU_TRUSTED_PROXY_ADDRESSES as well. It is off by default because on a directly-exposed port those headers are written by whoever is calling, and trusting them there would let an attacker forge a new address for every attempt and defeat the very limiter this is meant to protect. |
 | `max_upload_mb` | `512` | `NINAIVU_MAX_UPLOAD_MB` (wins) | runtime | Ceiling on a single request body, in megabytes. Covers /api/upload -- raise it if the household shoots video larger than this. |
 | `index_file` |  |  | runtime | The index file, when it is not index.db in the state folder: the replica serves each hand-over from a file of its own. |
-| `replica_from` |  |  | runtime | On the Pi, from the command line: the hand-over folder this process serves a read-only copy from (--replica-of). Empty: not a replica. |
-| `replica_primary_url` |  |  | runtime | On the Pi: the Mac mini's family app address, to send people to while it is awake (--replica-primary). |
-| `replica_wake_mac` |  |  | runtime | On the Pi: the Mac mini's network (MAC) address, to wake it with (--replica-wake). |
+| `replica_from` |  |  | runtime | From the command line: the hand-over folder this process serves a read-only copy from (--replica-of). Empty: not a replica. |
+| `replica_primary_url` |  |  | runtime | The Primary's family app address, to send people to while it is awake (--replica-primary). |
+| `replica_wake_mac` |  |  | runtime | The Primary's network (MAC) address, to wake it with (--replica-wake). |
 

@@ -1,18 +1,19 @@
 """The family app while the Primary is off: its read-only copy on the Secondary.
 
-Ninaivu 2.0 already lets an always-on computer serve the family app while the
-Mac sleeps (ninaivu/replica/): the Mac writes a *hand-over* (a slimmed
-snapshot of the index, the thumbnails, faces, profile pictures, stories and
-films, and ``replica.json`` last), and ``ninaivu --replica-of <folder>``
-serves it read-only. For the Pi, that folder was a share the Mac could write
-to. Two paired computers need no share: with ``mugil_family_copy`` on, the
-Primary sends the same hand-over to the Secondary over the pairing, every
-request signed, into ``mugil-handover/`` in the Secondary's state folder.
+The Primary is not always on; the Secondary is. With ``mugil_family_copy``
+on, the Primary sends the Secondary a *hand-over*: a slimmed snapshot of the
+index (:func:`slim`), the thumbnails, faces, profile pictures, stories and
+films, and ``replica.json`` last, over the pairing with every request signed,
+into ``mugil-handover/`` in the Secondary's state folder. There
+``ninaivu --replica-of <that folder>`` serves it read-only (ninaivu/replica/).
+
+(Until 4.0 the same hand-over could also be written into a shared folder for
+a Raspberry Pi to serve. That way is retired; this one is what is left of it,
+and the pieces both used live here now.)
 
 **On the Primary** (:class:`Handover`): the index snapshot is made and
-slimmed exactly as :func:`ninaivu.replica.publish.publish` does; each folder
-sends only the files that changed since they were last sent (the same
-record, ``replica-sent.db``, under a destination of its own), and removes on
+slimmed; each folder sends only the files that changed since they were last
+sent (the record, ``replica-sent.db``, keyed by destination), and removes on
 the Secondary what is gone here; ``replica.json`` goes last. Each file is
 fingerprinted and is kept by the Secondary only when the bytes match, written
 under a temporary name and renamed, so a hand-over half sent leaves the one
@@ -33,6 +34,7 @@ import logging
 import os
 import re
 import secrets
+import sqlite3
 import tempfile
 import threading
 import time
@@ -41,6 +43,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .. import __version__
+from ..storage import roots as roots_kit
 from . import PRIMARY, pairing, role
 from .courier import AWAY, Partner, PartnerError
 from .hold import clean_path, hasher
@@ -57,6 +60,129 @@ EVERY = 60 * 60.0
 RECORD = "mugil-handover.json"
 
 _INDEX = re.compile(r"^index-\d+\.db$")
+
+
+#: Beside the index on the Primary: which files were sent to which destination.
+SENT = "replica-sent.db"
+
+#: The settings the family view takes from the Primary: what the family sees
+#: and how, and nothing about this machine (its ports, its disks, its
+#: backups, its models) and no secret. A list of what goes rather than of
+#: what stays, so a setting added later stays on the Primary until somebody
+#: decides it belongs here.
+SETTINGS = (
+    "roots", "active_root", "lock_roots", "house_name", "open_browsing",
+    "lock_after_minutes", "thumb_sizes", "thumb_format", "thumb_quality",
+    "video_thumbs", "page_size", "max_page_size", "nsfw_filter", "hide_screens",
+    "strip_location", "home_lat", "home_lon", "home_radius_m", "index_hidden",
+    "southern_hemisphere", "date_phrase_search", "phrase_search", "map_tiles",
+    "place_names", "faces_enabled", "ocr_enabled", "min_media_bytes",
+    "ignore_dirs", "follow_symlinks",
+)
+
+def slim(index: Path) -> None:
+    """Take out of a snapshot what must not leave the Primary, and what the
+    family view has no use for.
+
+    Kept: everything the family app shows — photographs, faces and who they
+    are, albums, visibility, dates, captions, stories — and the accounts, so
+    the family signs in on the Pi with the passwords and PINs they use on the
+    mini. Taken out: sign-in sessions (keys to the Primary), the sign-in record
+    and counters (keyed by whatever was typed, a whole share link included),
+    share and "who is this?" tokens (each one *is* its link), the handover
+    code's hash, upload resume addresses, and the image-search vectors, which
+    are half the index and need a model the Pi does not run.
+    """
+    with closing(sqlite3.connect(str(index))) as conn:
+        tables = {r[0] for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'")}
+        for table in ("sessions", "audit", "auth_limits", "shares", "embeddings",
+                      "ask_answers", "ask_faces", "ask_questions"):
+            if table in tables:
+                conn.execute(f"DELETE FROM {table}")
+        if "handover_plan" in tables:
+            conn.execute("UPDATE handover_plan SET code_hash=''")
+        if "cloud_uploads" in tables:
+            conn.execute("UPDATE cloud_uploads SET resume_url=''")
+        if "pending_uploads" in tables:
+            # Their bytes are on the Primary, waiting to be looked at; not in
+            # the library, so not among the originals the Secondary keeps.
+            conn.execute("DELETE FROM pending_uploads WHERE status='pending'")
+        conn.commit()
+        conn.execute("VACUUM")
+
+
+def schema_version(index: Path) -> int:
+    with closing(sqlite3.connect(str(index))) as conn:
+        try:
+            row = conn.execute("SELECT value FROM meta WHERE key='schema_version'").fetchone()
+        except sqlite3.Error:
+            return 0
+    try:
+        return int(row[0]) if row else 0
+    except (TypeError, ValueError):
+        return 0
+
+
+def family_settings(cfg) -> dict[str, Any]:
+    """The settings in :data:`SETTINGS`, as JSON holds them."""
+    out: dict[str, Any] = {}
+    for key in SETTINGS:
+        value = getattr(cfg, key, None)
+        if isinstance(value, (set, frozenset)):
+            value = sorted(value)
+        elif isinstance(value, tuple):
+            value = list(value)
+        out[key] = value
+    return out
+
+
+def library_ids(cfg) -> dict[str, str]:
+    """The marker id of each library folder, from ``library-ids.json``."""
+    try:
+        known = json.loads((Path(cfg.state_dir) / roots_kit.KNOWN).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(known, dict):
+        return {}
+    return {root: known[root] for root in cfg.library_roots
+            if isinstance(known.get(root), str)}
+
+
+def open_sent(state_dir: Path) -> sqlite3.Connection:
+    conn = sqlite3.connect(str(Path(state_dir) / SENT), timeout=30.0)
+    conn.execute("""CREATE TABLE IF NOT EXISTS sent (
+        dest TEXT NOT NULL, folder TEXT NOT NULL, path TEXT NOT NULL,
+        size INTEGER NOT NULL, mtime_ns INTEGER NOT NULL,
+        PRIMARY KEY (dest, folder, path))""")
+    return conn
+
+
+def listing(folder: Path) -> dict[str, tuple[int, int]]:
+    """Every file under *folder*: relative path -> (size, mtime in ns)."""
+    found: dict[str, tuple[int, int]] = {}
+    if not folder.is_dir():
+        return found
+    stack = [folder]
+    while stack:
+        here = stack.pop()
+        try:
+            entries = list(os.scandir(here))
+        except OSError:
+            continue
+        for entry in entries:
+            if entry.name.startswith(".") and entry.name.endswith(".part"):
+                continue
+            try:
+                if entry.is_dir(follow_symlinks=False):
+                    stack.append(Path(entry.path))
+                elif entry.is_file(follow_symlinks=False):
+                    st = entry.stat(follow_symlinks=False)
+                    rel = Path(entry.path).relative_to(folder).as_posix()
+                    found[rel] = (st.st_size, st.st_mtime_ns)
+            except OSError:
+                continue
+    return found
 
 
 def wanted(cfg) -> bool:
@@ -181,8 +307,8 @@ class Handover:
     def run(self) -> dict[str, Any] | None:
         """Send one hand-over now; its manifest, or None when it did not go."""
         from ..replica import FOLDERS, FORMAT, MANIFEST          # noqa: PLC0415
-        from ..replica import publish as pub                     # noqa: PLC0415
         from ..storage import backup                             # noqa: PLC0415
+        from ..utils.files import sha256_file                    # noqa: PLC0415
         pair = pairing.load(self.cfg.state_dir) or {}
         partner = self.partner(self.cfg.mugil_partner_url, pair.get("key"))
         stamp = self._stamp()
@@ -195,21 +321,21 @@ class Handover:
                 staged = Path(tmp) / "index.db"
                 if not backup.hot_copy(Path(self.cfg.db_path), staged):
                     raise OSError("the index could not be snapshotted")
-                pub.slim(staged)
-                digest = pub.sha256_file(staged)
+                slim(staged)
+                digest = sha256_file(staged)
                 size = staged.stat().st_size
-                schema = pub._schema_version(staged)                      # noqa: SLF001
+                schema = schema_version(staged)
                 self._send(partner, staged, name)
             counts: dict[str, dict[str, int]] = {}
-            with closing(pub._open_sent(state)) as sent:                  # noqa: SLF001
+            with closing(open_sent(state)) as sent:
                 for folder in FOLDERS:
                     counts[folder] = self._send_folder(partner, sent, dest, state / folder, folder)
             manifest = {
                 "format": FORMAT, "generation": generation, "made_at": time.time(),
                 "version": __version__, "schema_version": schema,
                 "index": {"file": name, "size": size, "sha256": digest},
-                "libraries": pub._library_ids(self.cfg),                  # noqa: SLF001
-                "settings": pub.family_settings(self.cfg), "folders": counts,
+                "libraries": library_ids(self.cfg),
+                "settings": family_settings(self.cfg), "folders": counts,
             }
             with tempfile.NamedTemporaryFile("w", dir=state, suffix=".json", delete=False,
                                              encoding="utf-8") as out:
@@ -245,8 +371,7 @@ class Handover:
 
     def _send_folder(self, partner: Partner, sent, dest: str, source: Path,
                      folder: str) -> dict[str, int]:
-        from ..replica import publish as pub                     # noqa: PLC0415
-        here = pub._listing(source)                                       # noqa: SLF001
+        here = listing(source)
         before = {row[0]: (row[1], row[2]) for row in sent.execute(
             "SELECT path, size, mtime_ns FROM sent WHERE dest=? AND folder=?", (dest, folder))}
         copied = 0
@@ -372,4 +497,6 @@ def summary(state_dir: str | Path) -> dict[str, Any] | None:
             "generation": data.get("generation"), "version": data.get("version")}
 
 
-__all__ = ["Handover", "receive", "remove", "summary", "allowed_path", "wanted", "FOLDER"]
+__all__ = ["Handover", "receive", "remove", "summary", "allowed_path", "wanted", "FOLDER",
+           "SETTINGS", "SENT", "slim", "schema_version", "family_settings", "library_ids",
+           "open_sent", "listing"]

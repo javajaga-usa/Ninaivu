@@ -606,9 +606,6 @@ admin | GET                  | /api/recycle | admin | reads | - | api_admin.recy
 admin | POST                 | /api/recycle/purge | admin | writes | same origin | api_admin.recycle_purge
 admin | POST                 | /api/recycle/restore | admin | writes | same origin | api_admin.recycle_restore
 admin | GET                  | /api/recycle/thumb/<int:entry_id> | admin | reads | - | api_admin.recycle_thumbnail
-admin | GET                  | /api/replica/handover | admin | reads | - | cloud.replica_handover_status
-admin | POST                 | /api/replica/handover | admin | writes | same origin | cloud.replica_handover_start
-admin | POST                 | /api/replica/handover/settings | admin | writes | same origin | cloud.replica_handover_settings
 admin | POST                 | /api/rotate | admin | writes | same origin | api.rotate_originals
 home  | POST                 | /api/rotate | admin | writes | same origin | api.rotate_originals
 admin | POST                 | /api/scan | admin | writes | same origin | api_admin.rescan
