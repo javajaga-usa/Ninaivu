@@ -97,7 +97,7 @@ def test_the_linux_server_takes_its_arguments_whole(linux_folder, tmp_path):
                 record=record, home=tmp_path / "home")
     assert seen["ARG"] == ["-m", "ninaivu", photos, "--port", "8080"]
     seen = _run(linux_folder / "ninaivu", "--tray", record=record, home=tmp_path / "home")
-    assert seen["ARG"] == ["-m", "ninaivu.desktop.tray"]
+    assert seen["ARG"] == ["-m", "ninaivu.desktop.app", "--tray"], "the same program, minimised"
 
 
 def test_the_linux_folder_brings_a_library_across_without_a_desktop(linux_folder, tmp_path):
@@ -154,7 +154,7 @@ def test_the_mac_app_in_its_portable_folder_keeps_everything_there(tmp_path):
     assert seen["ARG"] == ["-m", "ninaivu.desktop.app"]
     assert not (tmp_path / "home").exists(), "nothing written outside the folder"
     seen = _run(launcher, "--tray", record=tmp_path / "record", home=tmp_path / "home")
-    assert seen["ARG"] == ["-m", "ninaivu.desktop.tray"]
+    assert seen["ARG"] == ["-m", "ninaivu.desktop.app", "--tray"], "the same program, minimised"
     older = str(tmp_path / AWKWARD / "Ninaivu-0.9.0-macos-arm64-portable")
     seen = _run(launcher, "--bring", older, record=tmp_path / "record", home=tmp_path / "home")
     assert seen["ARG"] == ["-m", "ninaivu.desktop.portable", "--bring", older]

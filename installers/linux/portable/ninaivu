@@ -1,8 +1,9 @@
 #!/bin/sh
 # Ninaivu, portable, for Linux: the one program at the top of the folder.
 #
-#   ./ninaivu                    opens the Ninaivu Control Panel
-#   ./ninaivu --tray             the small menu in the system tray instead
+#   ./ninaivu                    opens Ninaivu: the Control Panel, its tray
+#                                icon, and the server started
+#   ./ninaivu --tray             the same, opened minimised to its tray icon
 #   ./ninaivu --server [PHOTOS]  the server alone, in this terminal (a machine
 #                                with no desktop, or over ssh)
 #   ./ninaivu --where            says where it keeps everything, and ends
@@ -84,7 +85,6 @@ case "${1:-}" in
             "$NINAIVU_HOME" "$NINAIVU_STATE_DIR" "$NINAIVU_AI_MODELS_DIR" "$NINAIVU_LOG_DIR" "$NINAIVU_PYTHON"
         exit 0 ;;
     --autostart) shift; exec "$python" -m ninaivu.desktop.autostart --start "$@" ;;
-    --tray) shift; exec "$python" -m ninaivu.desktop.tray "$@" ;;
     --server) shift; exec "$python" -m ninaivu "$@" ;;
     --bring|--go-back) exec "$python" -m ninaivu.desktop.portable "$@" ;;
     --add-to-menu) exec "$python" -m ninaivu.desktop.linux_menu --add ;;

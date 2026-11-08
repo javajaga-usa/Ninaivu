@@ -77,7 +77,8 @@ def test_the_mac_app_opens_the_control_panel_and_keeps_its_files_in_its_folder_o
     assert '"$here/launcher.sh" "$app/Contents/MacOS/ninaivu"' in sh
     assert 'NINAIVU_HOME="$HOME/Library/Application Support/Ninaivu"' in launcher, "on its own, as an app"
     assert '"$folder/.ninaivu-portable"' in launcher and 'NINAIVU_STATE_DIR="$folder/data"' in launcher
-    assert "ninaivu.desktop.app" in launcher and "ninaivu.desktop.tray" in launcher
+    assert "ninaivu.desktop.app" in launcher and "ninaivu.desktop.tray" not in launcher, \
+        "the tray is the Control Panel minimised, not a second program"
     assert "notarytool submit" in sh and "stapler staple" in sh
     assert "ditto -c -k" in sh, "zipped with the bundle's links and attributes kept"
     assert (MACOS / "entitlements.plist").is_file()
@@ -192,11 +193,11 @@ def test_every_build_opens_the_control_panel():
     exe = (WINDOWS / "portable" / "Ninaivu.cs").read_text(encoding="utf-8")
     assert "-m ninaivu.desktop.app" in exe
     mac = (MACOS / "launcher.sh").read_text(encoding="utf-8")
-    assert "-m ninaivu.desktop.app" in mac and "--tray" in mac
+    assert "-m ninaivu.desktop.app" in mac and "desktop.tray" not in mac
     assert "<key>LSUIElement</key><false/>" in (MACOS / "build.sh").read_text(encoding="utf-8"), \
         "a window app shows in the Dock"
     linux = (ROOT / "installers" / "linux" / "portable" / "ninaivu").read_text(encoding="utf-8")
-    assert "-m ninaivu.desktop.app" in linux and "--tray" in linux and "--server" in linux
+    assert "-m ninaivu.desktop.app" in linux and "desktop.tray" not in linux and "--server" in linux
 
 
 def test_the_control_panel_falls_back_to_the_tray_without_tk(monkeypatch):
@@ -204,8 +205,8 @@ def test_the_control_panel_falls_back_to_the_tray_without_tk(monkeypatch):
     monkeypatch.setattr(app, "tk", None)
     called = []
     import ninaivu.desktop.tray as tray
-    monkeypatch.setattr(tray, "main", lambda: called.append(True) or 7)
-    assert app.main() == 7 and called == [True]
+    monkeypatch.setattr(tray, "run_alone", lambda: called.append(True) or 7)
+    assert app.main([]) == 7 and called == [True]
 
 
 def test_every_download_is_used_as_a_household_would_before_a_release():

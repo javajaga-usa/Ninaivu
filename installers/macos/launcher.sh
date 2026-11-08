@@ -1,8 +1,9 @@
 #!/bin/sh
 # Ninaivu.app/Contents/MacOS/ninaivu: what opening Ninaivu runs.
 #
-# Opens the Ninaivu Control Panel (--tray: the menu-bar tray instead) on the
-# app's own Python, in one of two ways:
+# Opens Ninaivu: the Control Panel, with its icon in the menu bar, and starts
+# the server (--tray: opened minimised to the icon; the same program either
+# way, ninaivu/desktop/app.py). On the app's own Python, in one of two ways:
 #
 #  * Portable, when the app sits in the folder of the portable zip — a
 #    `.ninaivu-portable` file beside Ninaivu.app. Everything Ninaivu keeps is
@@ -86,7 +87,6 @@ case "${1:-}" in
         printf 'NINAIVU_HOME=%s\nNINAIVU_STATE_DIR=%s\nNINAIVU_AI_MODELS_DIR=%s\nNINAIVU_LOG_DIR=%s\nNINAIVU_PYTHON=%s\n' \
             "$NINAIVU_HOME" "${NINAIVU_STATE_DIR:-}" "${NINAIVU_AI_MODELS_DIR:-}" "${NINAIVU_LOG_DIR:-}" "$NINAIVU_PYTHON"
         exit 0 ;;
-    --tray) shift; exec "$NINAIVU_PYTHON" -m ninaivu.desktop.tray "$@" ;;
     # From Terminal, what the Control Panel offers after an update:
     # Ninaivu.app/Contents/MacOS/ninaivu --bring <older folder> | --go-back
     --bring|--go-back) exec "$NINAIVU_PYTHON" -m ninaivu.desktop.portable "$@" ;;
