@@ -75,5 +75,19 @@ ok('Large files was fetched when opened, stamped',
   pageAsked('console/large-files.js').some((u) => /\?v=/.test(u)), pageAsked('console/large-files.js').join(' '));
 ok('and its Refresh is wired', await c.evaluate(() => typeof document.querySelector('#lf-refresh')?.onclick === 'function'));
 
+// The command bar opens a page and presses its button straight away, before
+// the page's module can have come: Health's "Back up now" must still work.
+await c.evaluate(() => {
+  document.querySelector('#tabs button[data-tab="health"]').click();
+  setTimeout(() => document.querySelector('#backup-now').click(), 0);
+});
+await c.waitForFunction(() => [...document.querySelectorAll('#toasts .toast')]
+  .some((t) => /copy of the index has been kept/.test(t.textContent)), null, { timeout: 15000 })
+  .then(() => ok('Back up now, pressed as the page opens, keeps a copy', true))
+  .catch(() => ok('Back up now, pressed as the page opens, keeps a copy', false));
+ok('Health was fetched when opened', pageAsked('console/health.js').length === 1);
+ok('and its problems Refresh is wired',
+  await c.evaluate(() => typeof document.querySelector('#problem-refresh')?.onclick === 'function'));
+
 ok('no script errors', errors.length === 0, errors.join(' | '));
 await done(b);

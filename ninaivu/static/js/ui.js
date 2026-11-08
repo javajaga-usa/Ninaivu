@@ -83,6 +83,20 @@ export function humanBytes(n) {
   return `${i === 0 ? value : value.toFixed(1)} ${units[i]}`;
 }
 
+/** When, said briefly: "today, 14:05", "yesterday", "3 days ago" or a date. */
+export function whenShort(seconds) {
+  if (!seconds) return '';
+  const then = new Date(seconds * 1000);
+  const days = Math.floor((Date.now() - then.getTime()) / 86400000);
+  if (days <= 0) {
+    return i18n.t('today, {time}',
+      { time: then.toLocaleTimeString(i18n.locale(), { hour: '2-digit', minute: '2-digit' }) });
+  }
+  if (days === 1) return i18n.t('yesterday');
+  if (days < 7) return i18n.t('{count} days ago', { count: days });
+  return then.toLocaleDateString(i18n.locale());
+}
+
 /* -- messages -------------------------------------------------------------- */
 
 /**
