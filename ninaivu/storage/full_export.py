@@ -642,6 +642,13 @@ def apply_pending(state_dir: Path | str) -> bool | None:
                       "Secondary.", flush=True)
         except OSError:
             log.exception("could not mark the pairing as moved")
+        from ..mugil import topology                        # noqa: PLC0415
+        try:
+            if topology.arrive(state_dir):
+                print("  • The plan for moving the Primary came with the index: prove "
+                      "nothing was lost on the Two computers page.", flush=True)
+        except (OSError, ValueError):
+            log.exception("could not put the plan for moving the Primary in place")
         starting.step("bringing in the index from the other computer: finding the library")
         from . import library_id                           # noqa: PLC0415
         try:
