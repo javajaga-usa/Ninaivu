@@ -168,23 +168,14 @@ def test_a_backup_not_yet_due_is_looked_at_again_soon(state, cfg_for, monkeypatc
     slept the whole interval. A server restarted every day never reached the
     second look: on the machine this was found on, a day's backup slid to two."""
     keeper = backup.BackupKeeper(cfg_for(state, every_hours=24))
-    waits, answers, ran = [], iter([False, True]), []
-
-    class Clock:
-        def wait(self, seconds):
-            waits.append(seconds)
-            return len(waits) > 3                 # stop after a few rounds
-
-        def set(self):
-            pass
-
-        def clear(self):
-            pass
-
-    keeper._stop = Clock()
+    answers, ran = iter([False, True]), []
     monkeypatch.setattr(keeper, "due", lambda: next(answers, False))
     monkeypatch.setattr(keeper, "run", lambda: ran.append(1))
-    keeper._loop()
+    # The supervisor waits gap() between looks, asked afresh each round.
+    waits = []
+    for _ in range(3):
+        waits.append(keeper.gap())
+        keeper._look()
     assert max(waits) <= 900, f"waited {max(waits) / 3600:.0f} h between looks"
     assert ran == [1], "a backup that fell due was not made at the next look"
 
@@ -195,23 +186,15 @@ def test_turning_it_off_while_it_runs_does_not_spin(state, cfg_for):
     cfg = cfg_for(state, every_hours=24)
     keeper = backup.BackupKeeper(cfg)
     cfg.backup_every_hours = 0
-    waits = []
-
-    class Clock:
-        def wait(self, seconds):
-            waits.append(seconds)
-            return len(waits) > 2
-
-    keeper._stop = Clock()
-    keeper._loop()
-    assert min(waits) >= 60, f"waited {min(waits)} s between looks"
+    assert keeper.gap() >= 60, f"waited {keeper.gap()} s between looks"
 
 
 def test_turning_it_off_means_off(state, cfg_for):
     keeper = backup.BackupKeeper(cfg_for(state, every_hours=0))
     assert keeper.due() is False
     keeper.start()
-    assert keeper._thread is None, "a disabled keeper started a thread"
+    assert keeper.supervisor is None or keeper.supervisor.state(keeper.JOB) is None, \
+        "a disabled keeper started a thread"
 
 
 def test_the_state_the_console_shows(state, cfg_for):

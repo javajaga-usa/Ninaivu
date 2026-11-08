@@ -438,6 +438,9 @@ class Services:
         self.supervisor = Supervisor(self.scanner)
         for keeper in (self.digest, self.library_drives, self.index_copy, self.restore_tests):
             keeper.supervisor = self.supervisor
+        # The backups, the drive watch and the archive guardian.
+        for keeper in (self.backups, self.disks, self.guardian):
+            keeper.supervisor = self.supervisor
         self.engine = None
         self._ai_mod = ai_mod
         self._started = False

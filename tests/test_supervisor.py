@@ -463,8 +463,13 @@ def _keepers(tmp_path):
 
 
 def test_the_keepers_keep_their_threads_and_schedules(tmp_path):
+    _keep_their_threads_and_schedules(_keepers(tmp_path))
+
+
+def _keep_their_threads_and_schedules(keepers):
+    """Each (keeper, thread, when): one thread by that name however often it
+    is started, on that schedule, gone after stop() and back after start()."""
     shared = Supervisor()
-    keepers = _keepers(tmp_path)
     try:
         for keeper, _, _ in keepers:
             keeper.supervisor = shared
@@ -509,3 +514,51 @@ def test_the_index_copy_stop_still_reaches_an_upload_under_way(tmp_path):
     keeper.start()
     assert not keeper._stop.is_set()
     keeper.stop(timeout=5)
+
+
+# -- the second slice, group 1: backups, drives, the archive guardian ------------
+
+def _group_1(tmp_path, monkeypatch):
+    from ninaivu.archive import guardian as guardian_mod
+    from ninaivu.storage.backup import BackupKeeper
+    from ninaivu.storage.disk_health import DiskWatch
+
+    monkeypatch.setattr(guardian_mod.db, "load_guardian_state", lambda: {})
+    cfg = SimpleNamespace(state_dir=str(tmp_path), backup_every_hours=24, backup_keep=7,
+                          backup_dir="")
+    return [
+        (BackupKeeper(cfg), "ninaivu-backup", "every 900 seconds"),
+        (DiskWatch(cfg, lambda: None, probe=lambda since: None), "ninaivu-disks",
+         "every 600 seconds"),
+        (guardian_mod.ArchiveGuardian(lambda: False), "archive-guardian",
+         "every 300 seconds"),
+    ]
+
+
+def test_group_1_keeps_its_threads_and_schedules(tmp_path, monkeypatch):
+    _keep_their_threads_and_schedules(_group_1(tmp_path, monkeypatch))
+
+
+def test_group_1_first_looks_come_when_they_did(tmp_path, monkeypatch, clock):
+    """The drive watch a minute in, the guardian five seconds in, and the
+    backup one quarter-hour in, never at start-up."""
+    shared = Supervisor(clock=clock)
+    keepers = _group_1(tmp_path, monkeypatch)
+    try:
+        for keeper, _, _ in keepers:
+            keeper.supervisor = shared
+            keeper.start()
+        clock.asleep_until("ninaivu-backup", 900)
+        clock.asleep_until("ninaivu-disks", 60)
+        clock.asleep_until("archive-guardian", 5)
+    finally:
+        assert shared.stop(timeout=5) == []
+
+
+def test_a_backup_switched_off_starts_no_job(tmp_path):
+    from ninaivu.storage.backup import BackupKeeper
+
+    keeper = BackupKeeper(SimpleNamespace(state_dir=str(tmp_path), backup_every_hours=0))
+    keeper.supervisor = Supervisor()
+    keeper.start()
+    assert keeper.supervisor.activity() == []
