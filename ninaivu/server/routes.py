@@ -52,6 +52,10 @@ ACCESS = ("admin", "family", "guest", "anyone", "link", "peer", "machine", "phon
 #: Methods that do not change anything.
 READS = frozenset({"GET", "HEAD", "OPTIONS", "PROPFIND"})
 
+#: Why a gallery read may be called by anybody: it answers only with what
+#: the caller may see, decided by the visibility gate.
+GATE = "what the caller may see, decided by server/visibility.Viewer"
+
 #: Routes with no ``require`` above them, by endpoint: who may call them and
 #: what stands in for the sign-in.
 OPEN: dict[str, tuple[str, str]] = {
@@ -81,11 +85,12 @@ OPEN: dict[str, tuple[str, str]] = {
     "api.healthz": ("anyone", "whether the server answers"),
     "api.readyz": ("anyone", "whether the server is ready"),
     "api.certificate_authority": ("anyone", "this computer's certificate authority, public by nature"),
-    # The gallery's reads. Each applies the caller's visibility itself; the
-    # one shared visibility gate (proposal 6, phase A) moves that here.
+    # The gallery's reads. Those marked GATE ask the one visibility gate
+    # (server/visibility.Viewer, proposal 6); the rest still apply the
+    # caller's visibility themselves until they are moved to it.
     "api.assets": ("guest", "the route applies the caller's visibility itself"),
-    "api.asset_detail": ("guest", "the route applies the caller's visibility itself"),
-    "api.asset_stories": ("guest", "the route applies the caller's visibility itself"),
+    "api.asset_detail": ("guest", GATE),
+    "api.asset_stories": ("guest", GATE),
     "api.facets": ("guest", "the route applies the caller's visibility itself"),
     "api.segments": ("guest", "the route applies the caller's visibility itself"),
     "api.timeline": ("guest", "the route applies the caller's visibility itself"),
@@ -93,28 +98,28 @@ OPEN: dict[str, tuple[str, str]] = {
     "api.similar": ("guest", "the route applies the caller's visibility itself"),
     "api.occasions": ("guest", "the route applies the caller's visibility itself"),
     "api.memories_on_this_day": ("guest", "the route applies the caller's visibility itself"),
-    "api.thumb": ("guest", "the route applies the caller's visibility itself"),
-    "api.still_preview": ("guest", "the route applies the caller's visibility itself"),
-    "api.original": ("guest", "the route applies the caller's visibility itself"),
-    "api.live_video": ("guest", "the route applies the caller's visibility itself"),
-    "api.story_audio": ("guest", "the route applies the caller's visibility itself"),
+    "api.thumb": ("guest", GATE),
+    "api.still_preview": ("guest", GATE),
+    "api.original": ("guest", GATE),
+    "api.live_video": ("guest", GATE),
+    "api.story_audio": ("guest", GATE),
     "api.status": ("guest", "what the server is doing; more for an administrator"),
     "api.activity": ("guest", "what the server is doing; more for an administrator"),
     "api.scan_progress": ("guest", "what the server is doing; more for an administrator"),
     "api.status_stats": ("guest", "the route applies the caller's visibility itself"),
     "api.frame_next": ("guest", "the route applies the caller's visibility itself"),
-    "api.frame_picture": ("guest", "the route applies the caller's visibility itself"),
+    "api.frame_picture": ("guest", GATE),
     "api.festivals_list": ("guest", "the route applies the caller's visibility itself"),
     "api.festivals_one": ("guest", "the route applies the caller's visibility itself"),
     "api.moments_search": ("guest", "the route applies the caller's visibility itself"),
-    "api.moments_of_clip": ("guest", "the route applies the caller's visibility itself"),
-    "api.moment_frame": ("guest", "the route applies the caller's visibility itself"),
+    "api.moments_of_clip": ("guest", GATE),
+    "api.moment_frame": ("guest", GATE),
     "api.our_year_list": ("guest", "the route applies the caller's visibility itself"),
     "api.our_year_one": ("guest", "the route applies the caller's visibility itself"),
     "api.our_year_words": ("guest", "refused for a guest; written from what the caller may see"),
     "api.then_and_now_all": ("guest", "the route applies the caller's visibility itself"),
     "api.then_and_now_today": ("guest", "the route applies the caller's visibility itself"),
-    "api.stack": ("guest", "the route applies the caller's visibility itself"),
+    "api.stack": ("guest", GATE),
     "api.stack_top": ("guest", "refused unless the caller may change it (_may_change)"),
     "api.stack_apart": ("guest", "refused unless the caller may change it (_may_change)"),
     # Links: the token is the permission.

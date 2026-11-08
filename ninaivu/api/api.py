@@ -42,6 +42,7 @@ from .. import __version__, about, ai as ai_mod
 from ..utils import phrase, proxies, query
 from ..server import features
 from ..server import activity as activity_kit, auth, turn as turn_file
+from ..server import visibility
 from ..storage import colour_copies, db, new_files, recycle
 from ..storage import stories as stories_mod
 from ..storage import descriptions as descriptions_mod
@@ -331,6 +332,15 @@ def _viewer_limits() -> dict[str, Any]:
 def _guard(asset: dict[str, Any] | None) -> dict[str, Any]:
     """404 unless the caller is allowed to see this asset."""
     if not _may_see(asset):
+        abort(404)
+    return asset  # type: ignore[return-value]
+
+
+def _gate(asset: dict[str, Any] | None) -> dict[str, Any]:
+    """404 unless the caller may see this asset, as the visibility gate
+    decides it (server/visibility.py): :func:`_guard`, for the routes that go
+    through the gate."""
+    if not visibility.current().may_see(asset):
         abort(404)
     return asset  # type: ignore[return-value]
 
@@ -1598,7 +1608,7 @@ def _public(row: dict[str, Any], scores: dict[int, float] | None = None) -> dict
 @bp.get("/api/asset/<int:asset_id>")
 def asset_detail(asset_id: int):
     conn = _conn()
-    row = _guard(db.get_asset(conn, asset_id, current_user().id))
+    row = _gate(db.get_asset(conn, asset_id, current_user().id))
     out = _public(row)
     # How many voice stories it has, for the viewer's Stories button. Past
     # the guard, so only ever said about an item this viewer may open.
@@ -1618,7 +1628,7 @@ def thumb(asset_id: int):
     cfg = _cfg()
     # The guard columns only: a grid asks for hundreds of these at a time,
     # and each fetched the whole row, caption and OCR text included.
-    row = _guard(db.get_asset_brief(_conn(), asset_id))
+    row = _gate(db.get_asset_brief(_conn(), asset_id))
     if not row.get("thumb"):
         abort(404)
     size = _int_arg("s", cfg.thumb_sizes[0])
@@ -1797,7 +1807,7 @@ def _leaving(row: dict[str, Any], path: Path) -> tuple[Path, str]:
 
 @bp.get("/api/file/<int:asset_id>")
 def original(asset_id: int):
-    row = _guard(db.get_asset(_conn(), asset_id))
+    row = _gate(db.get_asset(_conn(), asset_id))
     path = _asset_file(row, viewing=True)
     row = _as_file(row, path)
     etag = None
@@ -1884,7 +1894,7 @@ def still_preview(asset_id: int):
     not open it. The original is still behind ``/api/file``, for family
     members and admins; a guest is given this same copy there too.
     """
-    row = _guard(db.get_asset(_conn(), asset_id))
+    row = _gate(db.get_asset(_conn(), asset_id))
     if (row.get("kind") or "") != "picture":
         abort(404)
     path = _asset_file(row, viewing=True)
@@ -2291,7 +2301,7 @@ def converted_stream(asset_id: int):
 def live_video(asset_id: int):
     """Stream companion live photo video clip."""
     conn = _conn()
-    row = _guard(db.get_asset(conn, asset_id))
+    row = _gate(db.get_asset(conn, asset_id))
     live_path = row.get("live_video_path")
     if not live_path:
         abort(404, description="No companion live video for this item")
@@ -2299,7 +2309,7 @@ def live_video(asset_id: int):
     # (hidden, flagged, in the bin): whoever may see the still is not
     # thereby given a clip they could not open by its own id.
     clip = db.live_clip_of(conn, row)
-    if clip is not None and not _may_see(clip):
+    if clip is not None and not visibility.current().may_see(clip):
         abort(404, description="Companion video file not found")
     if request.args.get("convert") == "1":
         return _live_converted(clip)

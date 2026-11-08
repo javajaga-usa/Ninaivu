@@ -13,7 +13,7 @@ from flask import abort, jsonify, request
 from ..media import frame
 from ..server.auth import current_user
 from ..storage import db
-from .api import (_asset_file, _cfg, _conn, _guard, _ids_from_csv, _int_arg,
+from .api import (_asset_file, _cfg, _conn, _gate, _ids_from_csv, _int_arg,
                   _roots, _viewer, _viewing_copy, bp)
 
 
@@ -47,7 +47,7 @@ def frame_picture(asset_id: int):
     """One photograph at the size a screen needs, upright and with no
     metadata in it: the viewing copy the share page shows (at most 2560 px)."""
     _switched_on()
-    row = _guard(db.get_asset(_conn(), asset_id))
+    row = _gate(db.get_asset(_conn(), asset_id))
     if (row.get("kind") or "") != "picture":
         abort(404)
     response = _viewing_copy(row, _asset_file(row), max_age=86400, turned=True)
