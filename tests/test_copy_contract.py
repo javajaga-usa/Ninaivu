@@ -350,3 +350,18 @@ def test_the_ledger_is_filled_at_most_every_few_minutes(recorded, monkeypatch):
 def test_an_in_memory_index_has_no_state_folder():
     conn = sqlite3.connect(":memory:")
     assert ledger.state_dir_of(conn) is None
+
+
+# --- Audit A-04, carried to the Secondary's hand-over ------------------------------
+
+def test_a_family_setting_changed_alone_makes_the_secondary_hand_over_due(cfg, monkeypatch):
+    """A setting the family app obeys (the content filter) writes nothing to the
+    index; the hand-over must still go, or the Secondary keeps the old one."""
+    import time as _time
+    from ninaivu.mugil import handover
+    monkeypatch.setattr(handover, "wanted", lambda _cfg: True)
+    keeper = handover.Handover(cfg)
+    keeper._remember(at=_time.time() - handover.EVERY - 5, stamp=keeper._stamp(), error="")
+    assert keeper.due() is False                      # nothing changed
+    cfg.nsfw_filter = not cfg.nsfw_filter
+    assert keeper.due() is True

@@ -29,6 +29,7 @@ Nothing here changes the library, or runs with one computer.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 import os
@@ -246,14 +247,25 @@ class Handover:
         except OSError as exc:
             log.debug("could not note the hand-over: %s", exc)
 
-    def _stamp(self) -> list[int]:
-        out = []
+    def _stamp(self) -> list[int | str]:
+        """What changes whenever the index or the family's settings do, read
+        without opening the index.
+
+        The settings travel in the hand-over's manifest (:func:`family_settings`),
+        not in the index: one changed on its own (the content filter, open
+        browsing) writes nothing to the index, and the Secondary kept the old
+        one until something else changed the index (audit A-04, which the Pi's
+        hand-over had and this one did not).
+        """
+        out: list[int | str] = []
         for suffix in ("", "-wal"):
             try:
                 st = os.stat(f"{self.cfg.db_path}{suffix}")
                 out += [st.st_mtime_ns, st.st_size]
             except OSError:
                 out += [0, 0]
+        settings = json.dumps(family_settings(self.cfg), sort_keys=True, default=str)
+        out.append(hashlib.sha256(settings.encode("utf-8")).hexdigest()[:16])
         return out
 
     def due(self, now: float | None = None) -> bool:
