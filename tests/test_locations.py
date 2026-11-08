@@ -105,7 +105,7 @@ def test_a_37_index_migrates_with_locations_filled_and_ids_unchanged(tmp_path):
 
     conn = _reopen(path)
     try:
-        assert migrations.recorded(conn) == 2
+        assert migrations.recorded(conn) == migrations.latest(migrations.INDEX)
         after = {r[0]: (r[1], r[2]) for r in conn.execute("SELECT id, root, rel_path FROM assets")}
         assert after == before
         have = _in_step(conn)
@@ -283,7 +283,7 @@ def test_a_3x_index_is_backfilled_by_the_fingerprint_pass(cfg):
     _as_37(conn)
     ids = {r[0]: r[1] for r in conn.execute("SELECT id, rel_path FROM assets")}
     conn = _reopen(cfg.db_path)
-    assert migrations.recorded(conn) == 2
+    assert migrations.recorded(conn) == migrations.latest(migrations.INDEX)
     assert all(fp is None for _, _, fp in _in_step(conn).values())
 
     cfg.content_fingerprints = True

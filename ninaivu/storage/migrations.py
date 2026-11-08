@@ -101,7 +101,7 @@ _NOW = "((julianday('now') - 2440587.5) * 86400.0)"
 LOCATIONS = (
     """CREATE TABLE IF NOT EXISTS locations (
     id          INTEGER PRIMARY KEY,
-    asset_id    INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+    asset_id    INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE ON UPDATE CASCADE,
     fingerprint TEXT,
     root        TEXT NOT NULL,
     rel_path    TEXT NOT NULL,

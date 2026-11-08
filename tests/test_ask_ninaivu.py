@@ -350,6 +350,11 @@ def test_without_the_journal_an_edited_old_photo_is_not_new(as_family, family_al
 def test_an_older_index_takes_its_added_times_from_indexed_at(tmp_path):
     conn = db.init_db(tmp_path / "index.db")
     with db._write_lock:
+        # An index from before added_at had none of 4.0's locations triggers
+        # either (migration 2), and they read the column.
+        for trigger in ("locations_follow_insert", "locations_follow_update",
+                        "locations_follow_delete"):
+            conn.execute(f"DROP TRIGGER IF EXISTS {trigger}")
         conn.execute("ALTER TABLE assets DROP COLUMN added_at")
         conn.execute("INSERT INTO assets(root, rel_path, filename, folder, ext, kind, size, "
                      "mtime, date_key, indexed_at) VALUES ('r', 'a.jpg', 'a.jpg', '', '.jpg', "

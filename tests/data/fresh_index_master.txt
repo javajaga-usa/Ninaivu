@@ -783,7 +783,7 @@ trigger | assets_au | assets | 0 | CREATE TRIGGER assets_au AFTER UPDATE OF
 END
 table | locations | locations | 133 | CREATE TABLE locations (
     id          INTEGER PRIMARY KEY,
-    asset_id    INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+    asset_id    INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE ON UPDATE CASCADE,
     fingerprint TEXT,
     root        TEXT NOT NULL,
     rel_path    TEXT NOT NULL,

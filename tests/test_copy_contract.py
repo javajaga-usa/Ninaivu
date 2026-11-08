@@ -89,9 +89,9 @@ def _ledger(conn) -> dict[tuple[str, str], str]:
 
 # -- the migrations --------------------------------------------------------------
 
-def test_two_is_held_for_the_locations_table_and_three_is_the_ledger():
+def test_two_is_the_locations_table_and_three_is_the_ledger():
     names = [m.name for m in migrations.INDEX]
-    assert names[1] == "reserved: locations (fingerprints workstream)"
+    assert names[1] == "where each photograph is"
     assert names[2] == "the copies ledger" and migrations.latest(migrations.INDEX) == 3
 
 
