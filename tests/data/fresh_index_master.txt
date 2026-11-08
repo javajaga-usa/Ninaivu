@@ -781,4 +781,66 @@ trigger | assets_au | assets | 0 | CREATE TRIGGER assets_au AFTER UPDATE OF
     VALUES (new.id, new.filename, new.folder, new.tags, new.caption, new.camera,
             new.ocr_text, new.city);
 END
-table | sqlite_stat1 | sqlite_stat1 | 133 | CREATE TABLE sqlite_stat1(tbl,idx,stat)
+table | locations | locations | 133 | CREATE TABLE locations (
+    id          INTEGER PRIMARY KEY,
+    asset_id    INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+    fingerprint TEXT,
+    root        TEXT NOT NULL,
+    rel_path    TEXT NOT NULL,
+    place       TEXT NOT NULL DEFAULT 'library',
+    seen_at     REAL NOT NULL DEFAULT 0,
+    UNIQUE (root, rel_path)
+)
+index | sqlite_autoindex_locations_1 | locations | 138 | None
+index | idx_locations_fingerprint | locations | 140 | CREATE INDEX idx_locations_fingerprint ON locations(fingerprint)
+index | idx_locations_asset | locations | 141 | CREATE INDEX idx_locations_asset ON locations(asset_id, place)
+trigger | locations_follow_insert | assets | 0 | CREATE TRIGGER locations_follow_insert AFTER INSERT ON assets
+BEGIN
+    DELETE FROM locations WHERE root = NEW.root AND rel_path = NEW.rel_path;
+    DELETE FROM locations WHERE asset_id = NEW.id AND place = 'library';
+    INSERT INTO locations(asset_id, fingerprint, root, rel_path, place, seen_at)
+    VALUES (NEW.id, (SELECT f.algo || ':' || f.digest FROM content_fingerprints f WHERE f.asset_id = NEW.id AND f.size = NEW.size AND f.mtime = NEW.mtime), NEW.root, NEW.rel_path, 'library',
+            COALESCE(NEW.added_at, NULLIF(NEW.indexed_at, 0), ((julianday('now') - 2440587.5) * 86400.0)));
+END
+trigger | locations_follow_update | assets | 0 | CREATE TRIGGER locations_follow_update
+AFTER UPDATE OF root, rel_path, size, mtime ON assets
+WHEN OLD.root IS NOT NEW.root OR OLD.rel_path IS NOT NEW.rel_path
+  OR OLD.size IS NOT NEW.size OR OLD.mtime IS NOT NEW.mtime
+BEGIN
+    DELETE FROM locations
+     WHERE root = NEW.root AND rel_path = NEW.rel_path AND asset_id <> NEW.id;
+    UPDATE locations SET root = NEW.root, rel_path = NEW.rel_path,
+           fingerprint = (SELECT f.algo || ':' || f.digest FROM content_fingerprints f WHERE f.asset_id = NEW.id AND f.size = NEW.size AND f.mtime = NEW.mtime),
+           seen_at = CASE WHEN root IS NOT NEW.root OR rel_path IS NOT NEW.rel_path
+                          THEN ((julianday('now') - 2440587.5) * 86400.0) ELSE seen_at END
+     WHERE asset_id = NEW.id AND place = 'library';
+    INSERT INTO locations(asset_id, fingerprint, root, rel_path, place, seen_at)
+    SELECT NEW.id, (SELECT f.algo || ':' || f.digest FROM content_fingerprints f WHERE f.asset_id = NEW.id AND f.size = NEW.size AND f.mtime = NEW.mtime), NEW.root, NEW.rel_path, 'library', ((julianday('now') - 2440587.5) * 86400.0)
+     WHERE NOT EXISTS (SELECT 1 FROM locations
+                        WHERE asset_id = NEW.id AND place = 'library');
+END
+trigger | locations_follow_delete | assets | 0 | CREATE TRIGGER locations_follow_delete AFTER DELETE ON assets
+BEGIN
+    DELETE FROM locations WHERE asset_id = OLD.id;
+END
+trigger | locations_fingerprint_insert | content_fingerprints | 0 | CREATE TRIGGER locations_fingerprint_insert
+AFTER INSERT ON content_fingerprints
+BEGIN
+    UPDATE locations SET fingerprint = (SELECT f.algo || ':' || f.digest FROM content_fingerprints f JOIN assets a ON a.id = f.asset_id WHERE f.asset_id = locations.asset_id AND f.size = a.size AND f.mtime = a.mtime)
+     WHERE asset_id = NEW.asset_id AND place = 'library';
+END
+trigger | locations_fingerprint_update | content_fingerprints | 0 | CREATE TRIGGER locations_fingerprint_update
+AFTER UPDATE ON content_fingerprints
+BEGIN
+    UPDATE locations SET fingerprint = (SELECT f.algo || ':' || f.digest FROM content_fingerprints f JOIN assets a ON a.id = f.asset_id WHERE f.asset_id = locations.asset_id AND f.size = a.size AND f.mtime = a.mtime)
+     WHERE asset_id IN (OLD.asset_id, NEW.asset_id) AND place = 'library';
+END
+trigger | locations_fingerprint_delete | content_fingerprints | 0 | CREATE TRIGGER locations_fingerprint_delete
+AFTER DELETE ON content_fingerprints
+BEGIN
+    UPDATE locations SET fingerprint = NULL
+     WHERE asset_id = OLD.asset_id AND place = 'library';
+END
+table | copies | copies | 143 | CREATE TABLE copies ( fingerprint TEXT NOT NULL, destination TEXT NOT NULL, state       TEXT NOT NULL, verified_at REAL NOT NULL DEFAULT 0, size        INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (fingerprint, destination)) WITHOUT ROWID
+index | idx_copies_destination | copies | 144 | CREATE INDEX idx_copies_destination ON copies(destination, state)
+table | sqlite_stat1 | sqlite_stat1 | 145 | CREATE TABLE sqlite_stat1(tbl,idx,stat)
