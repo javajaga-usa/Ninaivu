@@ -365,7 +365,7 @@ class Holding:
         if row is None:
             base = clean_path(name) or "Library"
             base = base.split("/")[-1]
-            folder = base
+            folder = self._marked_folder(conn, library) or base
             # Two libraries with the same folder name on the Primary each get
             # a folder of their own here.
             while conn.execute("SELECT 1 FROM libraries WHERE folder=?", (folder,)).fetchone():
@@ -378,6 +378,27 @@ class Holding:
         else:
             folder = row["folder"]
         return self.folder / folder
+
+    def _marked_folder(self, conn: sqlite3.Connection, library: str) -> str | None:
+        """The top folder here carrying *library*'s own id (``.ninaivu-library``),
+        when no other library has it: the Primary's library folder copied over
+        by hand, or a library this computer kept as the originals, under
+        another name. Its files are then found where they are."""
+        from ..storage import library_id                          # noqa: PLC0415
+        if not _LIBRARY_ID.match(str(library or "")):
+            return None
+        try:
+            tops = sorted(p for p in self.folder.iterdir()
+                          if p.is_dir() and not p.is_symlink() and not p.name.startswith("."))
+        except OSError:
+            return None
+        for top in tops:
+            if library_id.read_id(top) != library:
+                continue
+            if conn.execute("SELECT 1 FROM libraries WHERE folder=?", (top.name,)).fetchone():
+                return None
+            return top.name
+        return None
 
     def have(self, library: str, items: list[dict[str, Any]], name: str = "") -> list[bool]:
         """For each ``{path, size, algo, digest}``, whether that very file is

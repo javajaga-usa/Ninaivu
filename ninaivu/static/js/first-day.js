@@ -485,7 +485,7 @@ export class FirstDay {
       ['primary', i18n.t('Two computers: this one is the Primary'),
         i18n.t('The fast one, a Mac mini for example. It runs the library the family browses and sends every original to the Secondary.')],
       ['secondary', i18n.t('Two computers: this one is the Secondary'),
-        i18n.t('The one that is always on with the big disk, a Linux PC for example. It keeps the originals, never changes them, and has no library of its own.')],
+        i18n.t('The one that is always on with the big disk, a Linux PC for example. It keeps the originals, never changes them, and does not show them as a library. A library already on its disk can be kept as the originals.')],
     ];
     const group = el('div', 'fd-choices');
     group.setAttribute('role', 'radiogroup');
@@ -520,7 +520,7 @@ export class FirstDay {
   render_originals(body) {
     $('#fd-title').textContent = i18n.t('Where should the originals be kept?');
     body.append(el('p', 'lede',
-      i18n.t('Choose a folder on the big disk. This computer has no library of its own: leave Library settings empty here, and never add this disk as a library.')));
+      i18n.t('Choose a folder on the big disk. If this computer’s library is already on it, choose the library folder itself: its photographs are kept as the originals where they are, checked once, and the Primary sends only what is missing. This computer then stops showing it as a library.')));
     const folder = this.mugil?.originals_dir || '';
     body.append(el('div', 'fd-chosen', folder || i18n.t('No folder chosen yet')));
     const keeping = this.mugil?.keeping || {};

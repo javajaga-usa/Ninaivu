@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 from pathlib import Path
 
@@ -128,6 +129,46 @@ def _libraries_inside(folder: str, cfg) -> list[str]:
     return inside
 
 
+def _library_folder_chosen(folder: str, cfg) -> str | None:
+    """The folder that keeps the originals when *folder* is a library folder
+    itself: its parent, so the library is ``<originals>/<its name>``, the
+    layout the Primary sends into. A library folder is one of this
+    computer's library folders, or a folder carrying a library's id
+    (``.ninaivu-library``: the Primary's library copied over by hand). None
+    when *folder* is not one; empty when it is the top of its disk, so the
+    folder above it is on another disk."""
+    from ..storage import library_id                              # noqa: PLC0415
+    try:
+        target = Path(folder).expanduser()
+        if not target.is_absolute():
+            return None
+        target = target.resolve()
+        roots = {Path(r).expanduser().resolve() for r in cfg.roots}
+    except OSError:
+        return None
+    if target not in roots and library_id.read_id(target) is None:
+        return None
+    parent = target.parent
+    if parent == target or os.path.ismount(target):
+        # The top of a disk: the folder above it is on another disk.
+        return ""
+    return str(parent)
+
+
+def _holds_files(folder: str, holding: Holding | None = None) -> bool:
+    """Whether *folder* already holds photographs or videos not yet known as
+    kept: a library copied, or kept, there before pairing."""
+    from ..mugil.adopt import walk                                # noqa: PLC0415
+    try:
+        kept = (holding or Holding(folder)).kept_paths()
+    except Exception:                                    # noqa: BLE001 - nothing known kept
+        kept = set()
+    try:
+        return any(rel not in kept for rel, _full in walk(Path(folder)))
+    except OSError:
+        return False
+
+
 def _audit(what: str) -> None:
     auth.audit(db.connect(_cfg().db_path), current_user().id, "two_computers", what)
 
@@ -217,6 +258,18 @@ def mugil_role():
     if not isinstance(folder, str):
         return jsonify({**refusal("Give the whole path to the folder."), "status": 400}), 400
     folder = folder.strip()
+    check_found = False
+    if wanted == SECONDARY and folder and folder != (cfg.mugil_originals_dir or ""):
+        # The library folder itself chosen: its files are kept where they
+        # are, and the folder above it keeps the originals.
+        above = _library_folder_chosen(folder, cfg)
+        if above == "":
+            return jsonify({**refusal(
+                "That library is the whole disk. Make a folder on the disk, move the library "
+                "folders into it, and choose that folder: the originals are kept as "
+                "<that folder>/<library folder name>."), "status": 400}), 400
+        if above is not None:
+            folder = above
     if wanted == SECONDARY and (folder or "originals_dir" in data) \
             and folder != (cfg.mugil_originals_dir or ""):
         problem = folder_problem(folder, list(cfg.roots), cfg.state_dir)
@@ -227,7 +280,8 @@ def mugil_role():
             # Done only when asked, and with the sidecars written first, so the
             # names and albums go with the photographs (storage/xmp_read.py).
             if data.get("library_into_originals") is not True:
-                return jsonify({"error": problem, "status": 409, "library_inside": inside}), 409
+                return jsonify({"error": problem, "status": 409, "library_inside": inside,
+                                "originals_dir": folder}), 409
             writer = getattr(current_app.config["MV_SERVICES"], "xmp", None)
             if writer is not None and writer.running:
                 return jsonify({**refusal("The sidecars are still being written. Wait for them "
@@ -241,6 +295,11 @@ def mugil_role():
                 _audit(f"this computer's library {', '.join(inside)} is kept as originals in {folder}")
         if problem:
             return jsonify({"error": problem, "status": 400}), 400
+        # Photographs already in the folder (the library kept as the
+        # originals, or a copy made before this) are checked at once, so the
+        # Primary sends only what is missing or different: those already
+        # here are marked as in sync without crossing the network.
+        check_found = bool(folder) and "copy_mode" not in data and _holds_files(folder)
     if wanted != PRIMARY and _courier() is not None:
         _courier().stop()
     if wanted == SECONDARY and role(cfg) != SECONDARY:
@@ -264,6 +323,12 @@ def mugil_role():
             _adopter().copying()
         elif _adopter() is not None:
             _adopter().stop()
+    if check_found:
+        cfg.mugil_copy_mode = "manual"
+        cfg.save()
+        if _adopter() is not None:
+            _adopter().copying()                 # a check of another folder stops first
+            _adopter().finished_copying()
     cfg.save()
     _audit(f"this computer is {wanted}; originals folder {folder or '(none)'}; "
            f"first copy {cfg.mugil_copy_mode}")
@@ -333,7 +398,7 @@ def _pair_by_tap(cfg, ident: str):
                         "status": 409}), 409
     key = pairing.tap_key(met["private"], met["theirs"], met["half"], met["theirs"])
     try:
-        answer = Partner(met["url"], timeout=10).request(
+        answer = Partner(met["url"], timeout=10, ca=met.get("ca")).request(
             "POST", "/api/mugil/pair",
             body={"tap": True, "public": met["half"].hex(), "proof": pairing.tap_proof(key)},
             signed=False)
@@ -343,7 +408,8 @@ def _pair_by_tap(cfg, ident: str):
                         "status": 409}), 409
     pairing.save(cfg.state_dir, {
         "key": key, "role": PRIMARY, "partner_name": str(answer.get("name") or met["name"]),
-        "partner_url": met["url"], "number": met["number"], "paired_at": time.time()})
+        "partner_url": met["url"], "number": met["number"], "paired_at": time.time(),
+        **({"partner_ca": met["ca"]} if met.get("ca") else {})})
     _introductions().clear()
     cfg.mugil_partner_url = met["url"]
     cfg.save()
@@ -399,9 +465,11 @@ def mugil_join():
     url = partner_address(data["url"], int(getattr(cfg, "port", 0) or 0))
     try:
         partner = Partner(url, timeout=15)
-        private, hello = pairing.primary_hello(code)
+        https, ca = _own_tls(cfg)
+        private, hello = pairing.primary_hello(code, ca)
         answer = partner.request("POST", "/api/mugil/join", signed=False, body={
-            **hello, "name": _name(cfg), "port": int(getattr(cfg, "port", 0) or 0)})
+            **hello, "name": _name(cfg), "port": int(getattr(cfg, "port", 0) or 0),
+            **({"https": True} if https else {})})
     except PartnerError as exc:
         log.warning("Pairing with the Primary at %s did not work: %s", url, exc)
         if exc.status == 403:
@@ -496,10 +564,14 @@ def mugil_look():
     for other in meeting.discover():
         item = {k: other[k] for k in ("id", "name", "address", "waiting")}
         if other["waiting"]:
-            url = f"http://{_host(other['address'])}:{other['port']}"
+            # A Secondary with Use HTTPS on says so, and hands over the
+            # authority its certificate comes from: the number covers it.
+            scheme = "https" if other.get("https") else "http"
+            ca = other.get("ca") if other.get("https") else None
+            url = f"{scheme}://{_host(other['address'])}:{other['port']}"
             private, half = pairing.new_half()
             try:
-                answer = Partner(url, timeout=5).request(
+                answer = Partner(url, timeout=5, ca=ca).request(
                     "POST", "/api/mugil/introduce",
                     body={"public": half.hex(), "name": _name(cfg)}, signed=False)
                 theirs = bytes.fromhex(str(answer.get("public", "")))
@@ -511,13 +583,22 @@ def mugil_look():
                 item["unreachable"] = True
             else:
                 item["number"] = _introductions().keep(other["id"], private, half, theirs,
-                                                       url, other["name"])
+                                                       url, other["name"], ca=ca)
         found.append(item)
     return jsonify({"found": found})
 
 
 def _host(address: str) -> str:
     return f"[{address}]" if ":" in address else address
+
+
+def _own_tls(cfg) -> tuple[bool, str | None]:
+    """Whether this computer's family app speaks HTTPS (set at start,
+    __main__), and the home authority its certificate comes from, when it is
+    Ninaivu's own (not one given with --cert)."""
+    https = bool(current_app.config.get("MV_HTTPS"))
+    ca = meeting.own_ca(cfg) if https and current_app.config.get("MV_SERVE_LOCAL_CA") else None
+    return https, ca
 
 
 @mugil_bp.post("/api/admin/mugil/unpair")
@@ -696,7 +777,9 @@ def mugil_move_answer():
         port = 0
     if 0 < port < 65536 and request.remote_addr:
         # Where the Primary is now, for what this computer asks of it.
-        moved["partner_url"] = f"http://{_host(request.remote_addr)}:{port}"
+        old = str(pair.get("partner_url") or "")
+        scheme = "https" if old.startswith("https://") else "http"
+        moved["partner_url"] = f"{scheme}://{_host(request.remote_addr)}:{port}"
     pairing.save(cfg.state_dir, moved)
     machines.remember(cfg.state_dir, {
         "machine": {"name": name, "role": PRIMARY},
@@ -1101,8 +1184,9 @@ def mugil_introduce():
     hello = json_body()
     if not isinstance(hello, dict):
         return jsonify({"refused": "Send the introduction as JSON.", "status": 400}), 400
+    _, ca = _own_tls(cfg)
     answer = _welcome().introduce(str(hello.get("public", "")), str(hello.get("name", "")),
-                                  request.remote_addr or "")
+                                  request.remote_addr or "", pairing.ca_fingerprint(ca))
     if answer is None:
         return jsonify({"refused": "This computer is not waiting for a Primary.", "status": 403}), 403
     return jsonify({**answer, "name": _name(cfg)})
@@ -1518,11 +1602,14 @@ def mugil_join_answer():
         return jsonify({"refused": "That code is not the one this computer is showing, or it has expired.",
                         "status": 403}), 403
     key, answer = found
-    # The address it came from: the one this computer can reach it at.
-    url = f"http://{_host(request.remote_addr or '')}:{port}"
+    # The address it came from: the one this computer can reach it at, in
+    # the scheme its family app speaks. Its authority was in the proof.
+    scheme = "https" if hello.get("https") else "http"
+    url = f"{scheme}://{_host(request.remote_addr or '')}:{port}"
+    ca = hello.get("ca") if hello.get("https") and pairing.ca_fingerprint(hello.get("ca")) else None
     pairing.save(cfg.state_dir, {
         "key": key, "role": PRIMARY, "partner_name": str(hello.get("name") or "")[:200],
-        "partner_url": url, "paired_at": time.time()})
+        "partner_url": url, "paired_at": time.time(), **({"partner_ca": ca} if ca else {})})
     cfg.mugil_partner_url = url
     cfg.save()
     auth.audit(db.connect(cfg.db_path), None, "two_computers",

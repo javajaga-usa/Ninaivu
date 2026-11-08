@@ -342,7 +342,11 @@ steps again later):
 - **Two computers: this one is the Secondary**: no library steps. Instead:
   1. **Where should the originals be kept?** A folder on the big disk. A disk
      that already keeps originals (the computer it was in was replaced) says
-     how many, and they are used as they are.
+     how many, and they are used as they are. When the library is already on
+     the disk (this computer's own, or the Primary's copied over), choose the
+     library folder itself: the folder above it keeps the originals, the
+     photographs in it are checked at once, and the Primary marks those as in
+     sync and sends only what is missing (below).
   2. **How should the originals first arrive?** *Automatically* or *I will
      copy them myself* (below).
   3. **Pair with the Primary.** Type the Primary's address (`mac-mini`,
@@ -390,6 +394,15 @@ myself** the household copies the library instead:
    `.ninaivu-set-aside/`, never written over.
 
 **Copy more first** makes the Primary wait again, for a copy in several goes.
+
+When the library is on the disk before the originals folder is chosen, choose
+the library folder itself, for example `/media/jaga/N300/NinaivuMaster/Ninaivu
+Archive`. The folder above it (`NinaivuMaster`) becomes the originals folder,
+and the check of step 3 starts at once, with no *I have finished copying*. A
+copy of the Primary's library carries its id (`.ninaivu-library`), so it is
+found under any folder name; any other library folder must have the Primary's
+library folder's name. A library that is a whole disk cannot be chosen: make a
+folder on the disk and move the library folder into it first.
 Nothing in the originals folder is changed by the check except the modified
 times put back.
 
@@ -403,15 +416,16 @@ import more on one than the other. Pairing them later loses nothing:
    sidecars setting) and let them be written. Each photograph gets a small
    file beside it with what the household told that Ninaivu: names on faces,
    albums, stars, written descriptions, corrected dates, places.
-2. **Make it the Secondary**, choosing as the originals folder the folder that
-   holds its library, for example `/media/jaga/Toshiba/NinaivuMaster` for
-   `NinaivuMaster/Ninaivu Archive`. The library folder's name must be the
+2. **Make it the Secondary**, choosing as the originals folder its library
+   folder or the folder that holds it, for example `NinaivuMaster/Ninaivu
+   Archive` or `/media/jaga/Toshiba/NinaivuMaster`; either way the originals
+   folder is `NinaivuMaster`. The library folder's name must be the
    Primary's library folder's name. Ninaivu asks before it keeps its own
    library as the originals, then stops showing it as a library. No file is
    moved, changed or removed; its index stays where it was.
-3. **Choose *I will copy them myself*, then *I have finished copying*.** The
-   Secondary reads every file once and writes down its fingerprint, so
-   nothing the two already share crosses the network.
+3. **The Secondary reads every file once and writes down its fingerprint**,
+   by itself once the folder is chosen, so nothing the two already share
+   crosses the network.
 4. **Pair**, and let the Primary's first run finish. It sends only what the
    Secondary lacks. A file at the same path with different content is set
    aside on the Secondary, never written over.
@@ -501,6 +515,12 @@ and `GET /api/admin/mugil` for the state.
   proves it knows the code, whichever computer shows it: an administrator at
   the computer that shows the code, and one at the computer it is typed on,
   both take part.
+- A Secondary with Use HTTPS on says so when it is found, and hands over the
+  home authority its certificate comes from. The six-digit number covers that
+  authority too, and so does the code's proof when the code is typed on the
+  Secondary. The Primary keeps it with the pairing and trusts it alone for the
+  Secondary: a certificate it did not issue is refused. Both computers need
+  Ninaivu newer than 3.7.0 for this; on plain HTTP nothing changes.
 - After pairing, every request between them is signed with the key. A request
   that is unsigned, signed by another key, more than five minutes old or a
   replay is refused.

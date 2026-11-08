@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Two computers with HTTPS on the Secondary
+
+- **A Secondary with Use HTTPS on can be paired.** The Primary always knocked at `http://`, so a Secondary on HTTPS hung up and the Mugil page said it "answers, but its family app cannot be reached". It now says it speaks HTTPS when the Primary looks for it, and the Primary uses `https://`.
+- **The Primary trusts the Secondary's own certificate, and only that one.** A Secondary on HTTPS serves a certificate from its own home authority, which no other computer knew, so even `https://` was refused. The Secondary now hands over that authority when it is found. The six-digit number both screens show covers it, so a computer in between would show another number. When pairing with a code typed on the Secondary, the authority is part of the code's proof. From then on the Primary trusts that authority alone for the Secondary. The system's authorities are not used for it, and a certificate from anyone else is refused.
+- Both computers need this version for a Secondary on HTTPS. A Secondary on plain HTTP pairs as before, with the same numbers.
+
+### Two computers: the Secondary keeps the originals in its library folder
+
+- **The library folder itself can be chosen as the place for the originals.** On the Secondary, *Where should the originals be kept?* used to refuse a library folder ("Keep the originals in a folder of their own"). Choosing it now keeps the originals there: the folder above it becomes the originals folder, so the library is `<originals folder>/<library folder name>`, the layout the Primary sends into. It works for the Secondary's own library (asked first, as before; that computer then stops showing it as a library) and for the Primary's library copied onto the big disk by hand, even under another folder name: the copy carries the library's id (`.ninaivu-library`) and is known by it. A library that is a whole disk is refused with what to do instead.
+- **Photographs already in the chosen folder are checked at once, and the Primary marks them as in sync.** Each is read and fingerprinted on the Secondary; the Primary then sends nothing for a file at the same path with the same size and fingerprint, only puts back its modified time, and sends what is missing or different (a different file is set aside, never written over). No *I have finished copying* is needed for a folder that already holds the library.
+
 ## 3.7.0 — 5 November 2026
 
 ### Searching and the gallery, quicker (sweep of 5 November)
