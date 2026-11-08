@@ -3471,23 +3471,30 @@ def timeline(conn: sqlite3.Connection, roots: Sequence[str] | str | None = None,
     return cached_aggregate(conn, ("timeline", guard, params), days)
 
 
-def picture_years(conn: sqlite3.Connection, roots: Sequence[str] | str, *,
+def picture_years(conn: sqlite3.Connection, roots: Sequence[str] | str | None = None, *,
                   max_visibility: int = 1,
-                  scope: str | None = None) -> list[dict[str, Any]]:
+                  scope: str | None = None, gate: Any = None) -> list[dict[str, Any]]:
     """How many photographs this viewer can see in each year, newest first.
 
     The same limits as :func:`timeline`, for photographs only: what the
     ready-made books (api/api_books.py) offer a "best of the year" for.
+    *gate*, a ``server.visibility.Viewer``, is the caller's limits when given.
     """
-    roots_sql, roots_params = roots_clause("assets", roots)
-    scope_sql, scope_params = scope_clause("assets", scope)
-    guard = (roots_sql.replace("assets.", "")
-             + " AND trashed=0 AND nsfw=0 AND live_clip=0 AND raw_twin=0 AND "
-             + "kind='picture' AND "
-             + visibility_clause("", max_visibility) + " AND date_key != ''")
-    if scope_sql:
-        guard += " AND " + scope_sql.replace("assets.", "")
-    params = (*roots_params, int(max_visibility), *scope_params)
+    if gate is not None:
+        gate_sql, gate_params = gate.sql("")
+        guard = (gate_sql + " AND trashed=0 AND nsfw=0 AND live_clip=0 AND raw_twin=0"
+                 " AND kind='picture' AND date_key != ''")
+        params = tuple(gate_params)
+    else:
+        roots_sql, roots_params = roots_clause("assets", roots if roots is not None else [])
+        scope_sql, scope_params = scope_clause("assets", scope)
+        guard = (roots_sql.replace("assets.", "")
+                 + " AND trashed=0 AND nsfw=0 AND live_clip=0 AND raw_twin=0 AND "
+                 + "kind='picture' AND "
+                 + visibility_clause("", max_visibility) + " AND date_key != ''")
+        if scope_sql:
+            guard += " AND " + scope_sql.replace("assets.", "")
+        params = (*roots_params, int(max_visibility), *scope_params)
 
     def years() -> list[dict[str, Any]]:
         rows = conn.execute(

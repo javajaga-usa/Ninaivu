@@ -28,7 +28,7 @@ from flask import abort, current_app, jsonify, make_response, request, send_file
 
 from ..server.auth import current_user, require_family
 from ..storage import db, stories, story_words
-from .api import _cfg, _conn, _gate, _guard, bp
+from .api import _cfg, _conn, _gate, bp
 from .api_share import _share_asset_or_404
 
 
@@ -125,7 +125,7 @@ def add_story(asset_id: int):
     """Keep one recording about an item: multipart, the sound as ``audio``,
     with ``text``, ``speaker`` and ``duration`` beside it, each optional."""
     conn = _conn()
-    _guard(db.get_asset(conn, asset_id, current_user().id))
+    _gate(db.get_asset(conn, asset_id, current_user().id))
     # Refused before the body is read where the browser said how big it is.
     if (request.content_length or 0) > stories.MAX_BYTES + 256 * 1024:
         abort(413, description="A story can be at most 25 MB.")

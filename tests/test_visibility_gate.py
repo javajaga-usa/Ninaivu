@@ -383,3 +383,16 @@ def test_places_count_through_the_gate_as_before(app, furnished, policy):
             assert db.query_geo_points(conn, gate=viewer) == \
                 db.query_geo_points(conn, viewer.roots, **old), name
 
+
+@pytest.mark.parametrize("policy", DOMAIN_POLICIES)
+def test_the_books_years_count_through_the_gate_as_before(app, furnished, policy):
+    conn, _, members = furnished
+    if policy:
+        db.set_meta(conn, date_policy.KEY, json.dumps(policy))
+    for name, user in members.items():
+        with app.test_request_context("/api/books/ideas"):
+            g.user = user
+            viewer = visibility.current()
+            assert db.picture_years(conn, gate=viewer) == db.picture_years(
+                conn, viewer.roots, max_visibility=viewer.max_visibility,
+                scope=viewer.scope), name

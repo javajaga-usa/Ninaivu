@@ -28,12 +28,13 @@ from typing import Any
 from flask import abort, jsonify, send_file
 
 from ...media import taste as taste_mod
+from ...server import visibility
 from ...server.auth import current_user, require_family
 from ...storage import db
 from . import media as maker, storage as store
 from ...api._body import json_object
-from ...api.api import _cfg, _conn, _engine, _roots, _safe_under, _search_shield, _semantic_ids, \
-    _thumb_version, _viewer, _viewer_limits, _visible_ids, bp
+from ...api.api import _cfg, _conn, _engine, _safe_under, _search_shield, _semantic_ids, \
+    _thumb_version, _visible_ids, bp
 
 #: Rows a pick looks at. A person can be in twenty thousand photographs; a
 #: book is thirty-six. Past this, an even sample across the whole run is read,
@@ -71,16 +72,16 @@ def _source() -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
             abort(404)
         meta["name"] = str(sid)
     elif kind == "album":
-        from ...server import date_policy                     # noqa: PLC0415
+        viewer = visibility.current()
         album = db.get_album(conn, sid)
-        if not album or not date_policy.allows(album):
+        if not album or not viewer.in_dates(album):
             abort(404)
         filters["album"] = sid
         # The same rule as opening the album (api.album_get): one with nothing
         # this viewer can see is somebody else's, and its name is theirs too.
         user = current_user()
         if not _query(filters, columns=("id",), limit=1) and (
-                date_policy.restricted()
+                viewer.restricted
                 or (album.get("created_by") != user.id and not user.is_admin)):
             abort(404)
         meta["name"] = album["name"]
@@ -111,7 +112,7 @@ def _source() -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
         # read straight from the table would say who is in the photographs
         # they may not see.
         known = {int(p["id"]): p["name"] for p in
-                 db.list_people(conn, _roots(), **_viewer_limits())}
+                 db.list_people(conn, gate=visibility.current())}
         if sid not in known:
             abort(404)
         filters["person"] = sid
@@ -127,7 +128,7 @@ def _source() -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
         if rules["kinds"] and "picture" not in rules["kinds"]:
             abort(400, description="That smart album has no photographs in it.")
         rules.pop("kinds", None)
-        ranked, _ = _semantic_ids(rules["text"], _roots(), conn)
+        ranked, _ = _semantic_ids(rules["text"], visibility.current().roots, conn)
         if ranked is not None:
             rules["text"] = ""
         searched = bool(rules["text"] or rules["tag"] or ranked is not None)
@@ -153,9 +154,9 @@ def _query(filters: dict[str, Any], ids: list[int] | None = None, *,
             ids = [i for i in ids if i in allowed]
         wanted["ids"] = ids
         limit = len(ids) or 1
-    rows, _ = db.query_assets(_conn(), _roots(), kinds=["picture"], sort="date_asc",
-                              limit=limit, offset=0, columns=columns, with_total=False,
-                              **_viewer(), **wanted)
+    rows, _ = db.query_assets(_conn(), gate=visibility.current(), kinds=["picture"],
+                              sort="date_asc", limit=limit, offset=0, columns=columns,
+                              with_total=False, **wanted)
     return rows
 
 
@@ -198,7 +199,7 @@ def _screens(ids: list[int]) -> set[int]:
 def _names(ids: list[int]) -> dict[int, list[str]]:
     """Who is in each photograph, among the people this viewer may see."""
     visible = {int(p["id"]): p["name"] for p in
-               db.list_people(_conn(), _roots(), **_viewer_limits()) if p.get("name")}
+               db.list_people(_conn(), gate=visibility.current()) if p.get("name")}
     names: dict[int, list[str]] = {}
     for asset_id, person_id in _in_chunks(
             "SELECT DISTINCT asset_id, person_id FROM faces "
@@ -221,7 +222,7 @@ def _signals(ids: list[int]) -> dict[int, dict[str, Any]]:
     if not ids:
         return {}
     signals: dict[int, dict[str, Any]] = {}
-    visible = {int(p["id"]) for p in db.list_people(_conn(), _roots(), **_viewer_limits())
+    visible = {int(p["id"]) for p in db.list_people(_conn(), gate=visibility.current())
                if p.get("name")}
     for asset_id, best in _in_chunks(
             "SELECT asset_id, MAX(quality) FROM faces WHERE asset_id IN ({marks}) "
@@ -416,21 +417,18 @@ def book_ideas():
     a person they could not have found themselves. The photographs are only
     chosen when one is opened (``/api/books/pick``), so this stays cheap.
     """
-    conn, limits = _conn(), _viewer_limits()
+    conn, viewer = _conn(), visibility.current()
     years = [{"kind": "year", "id": y["year"], "name": str(y["year"]), "photos": y["count"]}
-             for y in db.picture_years(conn, _roots(), **limits)
+             for y in db.picture_years(conn, gate=viewer)
              if y["count"] >= IDEA_MIN_PHOTOS and _YEARS[0] <= y["year"] <= _YEARS[1]]
-    viewer = _viewer()
     trips = [{"kind": "occasion", "id": o["id"], "name": o.get("place") or o.get("title") or "",
               "place": o.get("place") or "", "started_at": o["started_at"],
               "ended_at": o["ended_at"], "photos": o["count"], "cover_id": o.get("cover_id")}
-             for o in db.list_occasions(conn, _roots(), viewer_id=viewer["viewer_id"],
-                                        max_visibility=viewer["max_visibility"],
-                                        scope=viewer["scope"])
+             for o in db.list_occasions(conn, gate=viewer)
              if o["count"] >= IDEA_MIN_PHOTOS]
     people = [{"kind": "person", "id": p["id"], "name": p["name"], "photos": p["photo_count"],
                "cover_face_id": p.get("cover_face_id")}
-              for p in db.list_people(conn, _roots(), **limits)
+              for p in db.list_people(conn, gate=viewer)
               if p.get("name") and p["photo_count"] >= IDEA_MIN_PHOTOS]
     return jsonify({"ideas": [*years[:IDEA_LIMIT], *trips[:IDEA_LIMIT], *people[:IDEA_LIMIT]],
                     "count": maker.DEFAULT_COUNT, "busy": maker.building()})

@@ -36,7 +36,7 @@ from flask import abort, current_app, jsonify, send_file
 from ... import runtime
 from ...api import _long_calls
 from ...api._body import json_object
-from ...api.api import _asset_file, _cfg, _conn, _guard, bp
+from ...api.api import _asset_file, _cfg, _conn, _gate, bp
 from ...media import media, upright
 from ...runtime import voice as voice_mod
 from ...server.auth import current_user, require_family
@@ -67,7 +67,7 @@ def _switched_on() -> None:
 
 
 def _picture(asset_id: int) -> dict[str, Any]:
-    row = _guard(db.get_asset(_conn(), asset_id, current_user().id))
+    row = _gate(db.get_asset(_conn(), asset_id, current_user().id))
     if row.get("kind") != "picture" or row.get("trashed"):
         abort(404)
     return row
