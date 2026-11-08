@@ -368,10 +368,15 @@ def test_the_services_start_and_stop_it(cfg):
     services = Services(cfg)
     assert isinstance(services.catchup, catchup_mod.DailyCatchUp)
     assert services.straightener._hold == services.workload.catchup_hold
+    import threading
+    from ninaivu.server import supervisor as sup
+
     services.catchup.keep()
-    assert services.catchup._thread.is_alive()
+    assert services.catchup.supervisor is services.supervisor
+    assert "ninaivu-daily-catchup" in [t.name for t in threading.enumerate()]
     services.catchup.stop(join=True)
-    assert not services.catchup._thread.is_alive()
+    assert services.supervisor.state("ninaivu-daily-catchup") == sup.STOPPED
+    assert "ninaivu-daily-catchup" not in [t.name for t in threading.enumerate()]
 
 
 def test_it_is_a_setting_on_the_advanced_page():

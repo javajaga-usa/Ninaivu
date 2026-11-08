@@ -22,9 +22,11 @@ what it needs of the machine) and hands it to the :class:`Supervisor`, which:
 * keeps one list of what every job is doing, for the console
   (``GET /api/admin/jobs/background``).
 
-The scan itself, the archive job, the job engine (ninaivu/engine) and the
-model host (ninaivu/runtime/host.py) are not jobs here yet. They are moving
-over one at a time, each with its behaviour unchanged.
+The scan itself, the archive job and the cloud upload are not jobs here
+yet. They are moving over one at a time, each with its behaviour unchanged.
+The job engine (ninaivu/engine) works through a run on its caller's thread
+with its caller's connection, and the model host (ninaivu/runtime/host.py)
+has no thread of its own to keep: background-work.md says why each stays.
 """
 from __future__ import annotations
 
@@ -498,11 +500,13 @@ class Supervisor:
             return True
         while True:
             with self._claim_lock:
-                others = self._moving_files(job.reason) if job.moves_files else []
+                others = self._moving_files(job.name) if job.moves_files else []
                 if not others:
                     # The scan's own rules: a running scan stands down, and
-                    # one asked for meanwhile is queued, not lost.
-                    scanner.defer(job.reason)
+                    # one asked for meanwhile is queued, not lost. Held in
+                    # the job's name as well as its reason, so another
+                    # holder giving the same reason cannot let go of it.
+                    scanner.defer(job.reason, holder=job.name)
                     record.holding = True
                     return True
             self._set(record, WAITING)
@@ -517,17 +521,17 @@ class Supervisor:
         if record.holding:
             record.holding = False
             try:
-                self.scanner.resume(record.job.reason)
+                self.scanner.resume(record.job.reason, holder=record.job.name)
             except Exception:                                # noqa: BLE001
                 log.exception("%s could not let go of the scan", record.job.name)
 
-    def _moving_files(self, own: str) -> list[str]:
-        """The claims on the scan, other than *own*, of something moving files:
-        everything not known to only read (Scanner's READ_ONLY_CLAIMS)."""
+    def _moving_files(self, job: str) -> list[str]:
+        """The claims on the scan, other than the job *job*'s own, of something
+        moving files: everything not known to only read (READ_ONLY_CLAIMS).
+        Another job moving files for the same reason counts: it is not this one."""
         from ..media.scanner import READ_ONLY_CLAIMS                 # noqa: PLC0415
-        held = getattr(self.scanner, "deferred", None) or ""
-        return [claim for claim in held.split("; ")
-                if claim and claim != own and claim not in READ_ONLY_CLAIMS]
+        return [reason for reason, holder in self.scanner.holding()
+                if reason and holder != job and reason not in READ_ONLY_CLAIMS]
 
 
 def supervisor_of(keeper: Any) -> Supervisor:

@@ -292,11 +292,11 @@ class Offsite:
         self._clock = clock
         self._lock = threading.Lock()
         self._stop = threading.Event()
-        #: The schedule's own stop. Apart from the run's: stopping one run
+        #: The supervisor its schedule runs on; Ninaivu gives it its own.
+        #: The schedule's stop is apart from the run's: stopping one run
         #: from the console used to end the schedule too, until a restart.
-        self._asleep = threading.Event()
+        self.supervisor = None
         self._thread: threading.Thread | None = None
-        self._timer: threading.Thread | None = None
         self._state: dict[str, Any] = {"running": False, "job": "", "current": "", "sent": 0,
                                        "sent_bytes": 0, "failed": 0, "message": "", "error": "",
                                        "waiting": "", "problems": []}
@@ -550,32 +550,35 @@ class Offsite:
         """Stop the run in progress; with *join*, at shutdown, the schedule too."""
         self._stop.set()
         if join:
-            self._asleep.set()
-            for thread in (self._thread, self._timer):
-                if thread is not None and thread is not threading.current_thread():
-                    thread.join(15)
+            from ..server.supervisor import supervisor_of        # noqa: PLC0415
+            supervisor_of(self).stop_job(self.SCHEDULE, timeout=15)
+            thread = self._thread
+            if thread is not None and thread is not threading.current_thread():
+                thread.join(15)
 
     def join(self, timeout: float | None = None) -> None:
         if self._thread:
             self._thread.join(timeout)
 
+    #: The schedule's thread, as before it moved to the supervisor.
+    SCHEDULE = "ninaivu-offsite-schedule"
+
     def keep(self) -> None:
-        if self._timer is not None and self._timer.is_alive():
-            return
-        self._asleep.clear()
+        # A look every ten minutes, kept by the supervisor
+        # (server/supervisor.py); retry_most=0: one that fails is tried again
+        # at the next look, as before.
+        from ..server.supervisor import NETWORK, Job, every, supervisor_of  # noqa: PLC0415
+        supervisor_of(self).add(Job(
+            self.SCHEDULE, self._look, every(600), claims={NETWORK}, log=log,
+            failure="the off-site copy's schedule", retry_most=0,
+            progress=lambda: {"running": self.running}))
 
-        def loop() -> None:
-            while not self._asleep.wait(600):
-                try:
-                    if self.due() and not self.running:
-                        self.start()
-                except ValueError:
-                    pass
-                except Exception:                           # noqa: BLE001
-                    log.exception("the off-site copy's schedule")
-
-        self._timer = threading.Thread(target=loop, name="ninaivu-offsite-schedule", daemon=True)
-        self._timer.start()
+    def _look(self) -> None:
+        try:
+            if self.due() and not self.running:
+                self.start()
+        except ValueError:
+            pass
 
     def due(self) -> bool:
         """A day (by default) since the last run that finished, and not

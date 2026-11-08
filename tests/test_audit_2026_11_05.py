@@ -227,18 +227,12 @@ def test_the_archive_guardian_outlives_an_unexpected_error(tmp_path, monkeypatch
         return True
 
     guardian = ArchiveGuardian(is_running)
-    waits = []
-
-    class QuickStop(threading.Event):
-        def wait(self, timeout=None):
-            waits.append(timeout)
-            if len(waits) >= 3:
-                self.set()
-            return self.is_set()
-
-    guardian._stop = QuickStop()
     guardian._state = {"checked_at": 0}
-    guardian._loop()
+    # Two looks, as the supervisor makes them: the first meets the error,
+    # keeps it to itself and asks for the next look in five minutes.
+    guardian._look()
+    assert guardian._next_look == 300
+    guardian._look()
     assert len(asked) == 2                 # asked again after the error
     assert guardian._state.get("retry_soon") is True
 

@@ -201,18 +201,7 @@ def _loop_once(guardian):
     whether that check read files back."""
     ran = []
     guardian.run_once = lambda sample=True: ran.append(sample)
-    calls = {"n": 0}
-
-    class OneWait:
-        def wait(self, seconds):
-            calls["n"] += 1
-            return calls["n"] == 1 and False
-
-        def is_set(self):
-            return calls["n"] >= 2
-
-    guardian._stop = OneWait()
-    guardian._loop()
+    guardian._look()
     return ran[0] if ran else None
 
 

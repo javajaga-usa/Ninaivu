@@ -442,6 +442,19 @@ class Services:
         self.supervisor = Supervisor(self.scanner)
         for keeper in (self.digest, self.library_drives, self.index_copy, self.restore_tests):
             keeper.supervisor = self.supervisor
+        # The backups, the drive watch and the archive guardian.
+        for keeper in (self.backups, self.disks, self.guardian):
+            keeper.supervisor = self.supervisor
+        # The second copy, the off-site copy, the sidecars and the catch-up.
+        for keeper in (self.mirror, self.offsite, self.xmp, self.xmp_reader, self.catchup):
+            keeper.supervisor = self.supervisor
+        # The two computers' keepers: sending the originals, waking the
+        # Primary, and the display copies.
+        for keeper in (self.mugil_courier, self.mugil_waker, self.mugil_display):
+            keeper.supervisor = self.supervisor
+        # The AI passes: descriptions, voice stories and moments in videos.
+        for keeper in (self.describer, self.transcriber, self.moment_finder):
+            keeper.supervisor = self.supervisor
         self.engine = None
         self._ai_mod = ai_mod
         self._started = False

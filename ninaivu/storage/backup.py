@@ -1062,8 +1062,8 @@ class BackupKeeper:
 
     def __init__(self, cfg) -> None:
         self.cfg = cfg
-        self._stop = threading.Event()
-        self._thread: threading.Thread | None = None
+        #: The supervisor its loop runs on; Ninaivu gives it its own.
+        self.supervisor = None
         self._running = threading.Lock()
         self.last_error: str | None = None
         self._tidied_at = 0.0
@@ -1098,41 +1098,50 @@ class BackupKeeper:
         return self._running.locked()
 
     # -- the loop ----------------------------------------------------------
+    #: The thread it runs on, as before it moved to the supervisor.
+    JOB = "ninaivu-backup"
+
     def start(self) -> None:
-        if self.every <= 0 or (self._thread and self._thread.is_alive()):
+        if self.every <= 0:
             return
-        self._stop.clear()
-        self._thread = threading.Thread(target=self._loop, name="ninaivu-backup",
-                                        daemon=True)
-        self._thread.start()
-
-    def stop(self, timeout: float = 5.0) -> None:
-        self._stop.set()
-        thread = self._thread
-        if thread and thread.is_alive():
-            thread.join(timeout=timeout)
-
-    def _loop(self) -> None:
         # Not at start-up: the first minutes after a restart are the busiest
         # the machine gets, and a backup is the least urgent thing in them.
         # Then every quarter of an hour, asking `due()` — which is what keeps
-        # it to one bundle per interval. Sleeping the whole interval after a
-        # look that found nothing due meant a server restarted every day never
-        # looked a second time, and a day's backup slid to two or more.
-        #
-        # The interval is read afresh each round, and the console can set it to
-        # 0 (off) while this runs: a wait of 0 then returned at once, forever,
-        # and held a CPU core until the next restart. Off still looks every
-        # quarter-hour, in case it is switched back on.
-        while not self._stop.wait(min(self.every, 900) if self.every > 0 else 900):
-            self._tidy_daily()
-            try:
-                if self.due():
-                    self.run()
-            except Exception as exc:                    # noqa: BLE001
-                self.last_error = str(exc)
-                self._failed()
-                log.exception("the scheduled backup failed")
+        # it to one bundle per interval. The supervisor (server/supervisor.py)
+        # keeps the loop; retry_most=0: a failed bundle is tried again at the
+        # next look, as before, and _failed() spaces out the bundles.
+        from ..server.supervisor import Job, every, supervisor_of  # noqa: PLC0415
+        supervisor_of(self).add(Job(
+            self.JOB, self._look, every(self.gap), log=log,
+            failure="the scheduled backup failed", retry_most=0,
+            progress=lambda: {"bundling": self.busy}))
+
+    def stop(self, timeout: float = 5.0) -> None:
+        from ..server.supervisor import supervisor_of            # noqa: PLC0415
+        supervisor_of(self).stop_job(self.JOB, timeout)
+
+    def gap(self) -> float:
+        """The wait between looks, read afresh each round.
+
+        Sleeping the whole interval after a look that found nothing due meant
+        a server restarted every day never looked a second time, and a day's
+        backup slid to two or more. And the console can set the interval to
+        0 (off) while this runs: a wait of 0 then returned at once, forever,
+        and held a CPU core until the next restart. Off still looks every
+        quarter-hour, in case it is switched back on.
+        """
+        return min(self.every, 900) if self.every > 0 else 900
+
+    def _look(self) -> None:
+        """One look: tidy the records once a day, and bundle if it is due."""
+        self._tidy_daily()
+        try:
+            if self.due():
+                self.run()
+        except Exception as exc:
+            self.last_error = str(exc)
+            self._failed()
+            raise
 
     def _tidy_daily(self) -> None:
         """Run :func:`tidy_records` at most once a day, on this loop's thread.
