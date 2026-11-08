@@ -23,7 +23,7 @@ from typing import Any
 
 from PIL import Image
 from flask import abort, current_app, jsonify, render_template, request, send_file
-from ..server import auth
+from ..server import auth, visibility
 from ..storage import db
 from ..media import media, stills
 from ..server.auth import current_user, require_family
@@ -50,13 +50,7 @@ def memories_on_this_day():
     month = _int_arg("month", now.month)
     day = _int_arg("day", now.day)
     conn = _conn()
-    result = db.query_on_this_day(
-        conn,
-        _roots(),
-        month=month,
-        day=day,
-        **_viewer(),
-    )
+    result = db.query_on_this_day(conn, gate=visibility.current(), month=month, day=day)
     result["items"] = [_public(item) for item in result["items"]]
     formatted_years = {}
     for yr, items in result["years"].items():

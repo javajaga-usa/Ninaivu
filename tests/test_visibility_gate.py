@@ -147,6 +147,28 @@ def test_the_gate_lists_what_the_helpers_before_it_listed(app, house, mine):
         assert [r["id"] for r in after] == [r["id"] for r in before], (name, mine)
 
 
+@pytest.mark.parametrize("restricted", [False, True])
+def test_the_lists_count_through_the_gate_as_they_did_before(app, house, restricted):
+    conn, _, members = house
+    if restricted:
+        db.set_meta(conn, date_policy.KEY, json.dumps(
+            {"cutoff": "2023-07-01", "admin": "after", "family": "before", "guest": "after"}))
+    for name, user in members.items():
+        with app.test_request_context("/api/timeline"):
+            g.user = user
+            viewer = visibility.current()
+            old = {"max_visibility": viewer.max_visibility, "scope": viewer.scope}
+            assert db.facets(conn, gate=viewer, limit=200) == \
+                db.facets(conn, viewer.roots, limit=200, **old), name
+            assert db.timeline(conn, gate=viewer) == db.timeline(conn, viewer.roots, **old), name
+            assert db.list_occasions(conn, gate=viewer) == db.list_occasions(
+                conn, viewer.roots, viewer_id=viewer.viewer_id, **old), name
+            for month, day in ((5, 12), (7, 11), (9, 13)):
+                assert db.query_on_this_day(conn, gate=viewer, month=month, day=day) == \
+                    db.query_on_this_day(conn, viewer.roots, month=month, day=day,
+                                         **viewer.limits()), name
+
+
 def test_only_mine_is_nothing_for_nobody(app, house):
     _, _, members = house
     assert viewer_for(app, members["anon"]).sql("a", mine="only")[0].endswith("0=1")
