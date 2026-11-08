@@ -635,3 +635,91 @@ def test_the_sidecar_schedule_outlives_an_unexpected_error(tmp_path, clock, capl
         assert any("brought up to date by themselves" in r.getMessage() for r in caplog.records)
     finally:
         assert writer.supervisor.stop(timeout=5) == []
+
+
+# -- group 3: the two computers' keepers ------------------------------------------
+
+def _group_3(tmp_path):
+    from ninaivu.mugil.courier import Courier
+    from ninaivu.mugil.display import DisplayCopies
+    from ninaivu.mugil.wake import Waker
+
+    cfg = SimpleNamespace(state_dir=str(tmp_path), mugil_role="", mugil_partner_url="")
+    display = DisplayCopies(cfg, lambda: None)
+    display.wanted = lambda: False
+    return [
+        (Courier(cfg, lambda: None), "mugil-keeper", "every 600 seconds"),
+        (Waker(cfg), "mugil-wake", "every 30 seconds"),
+        (display, "mugil-display", "every 600 seconds"),
+    ]
+
+
+def test_group_3_keeps_its_threads_and_schedules(tmp_path):
+    shared = Supervisor()
+    keepers = _group_3(tmp_path)
+    try:
+        for keeper, _, _ in keepers:
+            keeper.supervisor = shared
+            keeper.keep()
+            keeper.keep()                       # a second keep is no second loop
+        names = [t.name for t in threading.enumerate()]
+        rows = {r["name"]: r for r in shared.activity()}
+        for _, thread, when in keepers:
+            assert names.count(thread) == 1
+            assert rows[thread]["when"] == when
+        for keeper, thread, _ in keepers:
+            keeper.stop(join=True)
+            assert shared.state(thread) == sup.STOPPED
+        for keeper, thread, _ in keepers:
+            keeper.keep()                       # and kept again after a stop
+            until(lambda thread=thread: shared.state(thread) == sup.IDLE)
+    finally:
+        assert shared.stop(timeout=5) == []
+
+
+def test_the_first_copy_after_pairing_only_looks_for_itself(tmp_path, monkeypatch):
+    """soon() wakes the keeper for the first copy; the owed copy and the
+    look after the Secondary keep to the ten minutes."""
+    from ninaivu.mugil import courier as courier_mod
+
+    courier, _, _ = _group_3(tmp_path)[0]
+    courier.supervisor = Supervisor()
+    started, looked = threading.Event(), []
+    monkeypatch.setattr(courier, "ready", lambda: None)
+    monkeypatch.setattr(courier, "start", lambda: started.set())
+    monkeypatch.setattr(courier, "owed", lambda now=None: looked.append("owed") or False)
+    monkeypatch.setattr(courier, "look_after_the_secondary", lambda now=None: [])
+    # The look soon() asks for, before the first copy is due, only waits for it.
+    courier._first_copy_at, courier._nudged = time.time() + 60, True
+    courier._look()
+    assert looked == [] and not started.is_set() and courier._wait() <= 60
+    courier.keep()
+    try:
+        courier.soon(after=0.2)
+        assert started.wait(5)
+        until(lambda: courier._wait() == courier_mod.LOOK_EVERY)
+    finally:
+        courier.stop(join=True)
+
+
+def test_display_copies_start_at_once_and_a_stop_cuts_a_round_short(tmp_path):
+    display = _group_3(tmp_path)[2][0]
+    display.supervisor = Supervisor()
+    inside = threading.Event()
+    display.wanted = lambda: True
+
+    def run_once() -> int:
+        inside.set()
+        display._stop.wait(5)
+        return 0
+
+    display.run_once = run_once
+    display.keep()
+    try:
+        assert inside.wait(5)                   # no wait before the first round
+        began = time.monotonic()
+        display.stop(join=True)
+        assert time.monotonic() - began < 2
+        assert display.supervisor.state("mugil-display") == sup.STOPPED
+    finally:
+        assert display.supervisor.stop(timeout=5) == []

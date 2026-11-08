@@ -444,6 +444,10 @@ class Services:
         # The second copy, the off-site copy, the sidecars and the catch-up.
         for keeper in (self.mirror, self.offsite, self.xmp, self.xmp_reader, self.catchup):
             keeper.supervisor = self.supervisor
+        # The two computers' keepers: sending the originals, waking the
+        # Primary, and the display copies.
+        for keeper in (self.mugil_courier, self.mugil_waker, self.mugil_display):
+            keeper.supervisor = self.supervisor
         self.engine = None
         self._ai_mod = ai_mod
         self._started = False
