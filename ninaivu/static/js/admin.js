@@ -9,7 +9,9 @@
 import {
   accountsApi, askSecret, avatarNode, Gate, hideSecret, ProfileSheet, roleBadge, upgradeSecret,
 } from './accounts.js';
-import { onUnauthorized, reportUnauthorized, sessionRestored, subscribeProgress, thumbUrl, SCAN_COUNTS, timeLeft } from './api.js';
+import {
+  consoleJson as json, onUnauthorized, sessionRestored, subscribeProgress, thumbUrl, SCAN_COUNTS, timeLeft,
+} from './api.js';
 import { renderActivity, subscribeActivity } from './activity.js';
 import { ArchivePanel } from './archive.js';
 import { enterPressesTheButton } from './enter-key.js';
@@ -39,50 +41,11 @@ import { DrivePrompt } from './drives.js';
 import * as i18n from './i18n.js';
 import { consoleCommands, initPalette } from './palette.js';
 import { hideScrollBarsUntilUsed } from './scrollbars.js';
-
-const $ = (sel) => document.querySelector(sel);
-
-/* Like $, but never null.
- *
- * admin.html is compiled once and cached by Flask, while this file is served
- * with no-cache and updates immediately, so between an edit and a restart the
- * browser runs new JavaScript against old markup. A bare
- * `$('#missing').onclick =` throws there and abandons the rest of the function
- * it is in — which is how adding a sign-out button silently killed the
- * storage-integrity button wired forty lines below it. Handlers bound to the
- * stub simply never fire.
- */
-const DETACHED = document.createElement('div');
-const $$ = (sel) => document.querySelector(sel) || DETACHED;
-const el = (tag, className, text) => {
-  const node = document.createElement(tag);
-  if (className) node.className = className;
-  if (text != null) node.textContent = text;
-  return node;
-};
-
-async function json(url, options = {}) {
-  const response = await fetch(url, {
-    headers: {
-      Accept: 'application/json',
-      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
-    },
-    ...options,
-    body: options.body ? JSON.stringify(options.body) : undefined,
-  });
-  const text = await response.text();
-  const data = text ? JSON.parse(text) : null;
-  if (!response.ok) {
-    // A 401 carrying `needs_password` is a request asking you to confirm
-    // who you are before something irreversible — not a session that has
-    // ended. See api.js: the same 401 means two different things, and
-    // only one of them should raise the sign-in screen.
-    if (response.status === 401 && !data?.needs_password) reportUnauthorized(url);
-    throw Object.assign(new Error(i18n.fromServer(data, response.statusText)),
-      { status: response.status, data });
-  }
-  return data;
-}
+import { consoleState as state } from './store.js';
+import {
+  $, $$, askPasswordToDelete, bytesShort, consoleToast as toast, el, emphasised, lfDescribe, plural, span,
+  strong,
+} from './ui.js';
 
 const adminApi = {
   locations: (hours) => json(`/api/admin/locations?hours=${encodeURIComponent(hours)}`),
@@ -163,10 +126,6 @@ const adminApi = {
     json('/api/delete', { method: 'POST', body: { ids, password } }),
 };
 
-const state = {
-  user: null, overview: null, people: [], roles: [], folders: [],
-  libraries: [], assignable: [],
-};
 let currentPreview = 'guest';
 let gate;
 let profileSheet;
@@ -2673,15 +2632,6 @@ const FOLD_FILTERS = [
 const FOLDER_ICON =
   '<svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>';
 
-function bytesShort(n) {
-  if (!n) return '';
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  let value = n;
-  let unit = 0;
-  while (value >= 1024 && unit < units.length - 1) { value /= 1024; unit += 1; }
-  return `${value >= 10 || unit === 0 ? Math.round(value) : value.toFixed(1)} ${units[unit]}`;
-}
-
 /** Open *path*. With `keep`, read the same folder again as far down as it
  *  had been shown, so an action on page three does not snap back to page one. */
 async function loadFolderScreen(path = '', { keep = false } = {}) {
@@ -2947,8 +2897,6 @@ async function clearFolderRule(path) {
     await loadFolderScreen(foldState.path, { keep: true });
   } catch (exc) { toast(exc.message, true); }
 }
-
-function span(text) { return el('span', '', text); }
 
 function folderCard(child) {
   const card = el('button', 'fold-card');
@@ -3892,14 +3840,6 @@ function lfChooseAll() {
 }
 
 /** "IMG_3165.MOV" (5.7 GB) for one file, "3 files, 17.5 GB together" for more. */
-function lfDescribe(items) {
-  if (items.length === 1) return `"${items[0].filename}" (${bytesShort(items[0].size)})`;
-  return i18n.t('{files}, {size} together', {
-    files: plural(items.length, i18n.key('1 file'), i18n.key('{count} files')),
-    size: bytesShort(items.reduce((sum, item) => sum + (item.size || 0), 0)),
-  });
-}
-
 async function lfStartCompress(item, mode, password) {
   try {
     const { job } = await adminApi.compressVideo(item.id, mode, password);
@@ -4220,66 +4160,6 @@ function lfDeleteChosen() {
  *  server's answer. Shared by Large files and Folders. With `password` off
  *  (the Folders screen) it only asks to confirm: the files go to the bin,
  *  where Recently deleted puts them back. */
-function askPasswordToDelete(items, done, { password = true } = {}) {
-  const modal = $('#lf-delete-modal');
-  const input = $('#lf-delete-password');
-  const error = $('#lf-delete-error');
-  const confirm = $('#lf-delete-confirm');
-  input.closest('.field').hidden = !password;
-
-  $('#lf-delete-title').textContent = items.length === 1
-    ? i18n.t('Delete this file?')
-    : i18n.t('Delete these files?');
-  $('#lf-delete-what').textContent = lfDescribe(items);
-  error.hidden = true;
-  input.value = '';
-  hideSecret(input);
-  modal.hidden = false;
-  (password ? input : confirm).focus();
-
-  const close = () => {
-    modal.hidden = true;
-    input.onkeydown = null;
-    modal.onkeydown = null;
-    confirm.onclick = null;
-    $('#lf-delete-cancel').onclick = null;
-  };
-
-  const attempt = async () => {
-    if (password && !input.value) { input.focus(); return; }
-    confirm.disabled = true;
-    try {
-      const ids = items.map((item) => item.id);
-      const result = password ? await adminApi.deleteAssets(ids, input.value)
-        : await adminApi.deleteFromFolders(ids);
-      close();
-      await done(result);
-    } catch (exc) {
-      if (exc.status === 401 && exc.data?.needs_password) {
-        error.textContent = i18n.fromServer(exc.data, exc.message);
-        error.hidden = false;
-        input.value = '';
-        input.focus();
-        return;
-      }
-      close();
-      toast(exc.message, true);
-    } finally {
-      confirm.disabled = false;
-    }
-  };
-
-  confirm.onclick = attempt;
-  $('#lf-delete-cancel').onclick = close;
-  input.onkeydown = (event) => {
-    if (event.key === 'Enter') { event.preventDefault(); attempt(); }
-    if (event.key === 'Escape') close();
-  };
-  modal.onkeydown = password ? null : (event) => {
-    if (event.key === 'Escape') close();
-  };
-}
-
 /* --- anything that went wrong ------------------------------------------- */
 /*
  * The log file has everything and nobody will open it. This is the short
@@ -4589,32 +4469,6 @@ const VIS_WORDS = { public: i18n.key('everyone, guests included'),
                     family: i18n.key('family members and admins'),
                     hidden: i18n.key('admins only') };
 
-function strong(text) {
-  const node = document.createElement('strong');
-  node.textContent = text;
-  return node;
-}
-
-/* A translated sentence with nodes in it — a name in bold, say. The sentence
-   is translated whole and the nodes are put where its placeholders fall, since
-   the words either side of them are in a different order in another language.
-   Plain values fill in as text. */
-function emphasised(key, parts) {
-  return i18n.t(key).split(/(\{\w+\})/).filter(Boolean).map((piece) => {
-    const name = /^\{(\w+)\}$/.exec(piece)?.[1];
-    if (!name || !(name in parts)) return piece;
-    const part = parts[name];
-    return part instanceof Node ? part : String(part);
-  });
-}
-
-/* A count in a sentence, in the current language. `one` and `many` are keys
-   marked with i18n.key() where they are written — "1 file" and "{count}
-   files" — because the words around a number move with the language. */
-function plural(n, one, many) {
-  return n === 1 ? i18n.t(one) : i18n.t(many, { count: n.toLocaleString() });
-}
-
 /**
  * Apply a folder rule, stopping first if it would reveal anything.
  *
@@ -4743,20 +4597,6 @@ async function undoLastVisibility() {
     await refreshUndo();
     renderPreview(currentPreview);
   } catch (exc) { toast(exc.message, true); }
-}
-
-function toast(message, isError = false) {
-  // Nothing to say while the screen is locked: nobody is there to read it,
-  // and requests refused behind the lock would pile their errors up here.
-  if (document.body.classList.contains('screen-locked')) return;
-  const node = el('div', `toast${isError ? ' error' : ''}`, message);
-  $('#toasts').appendChild(node);
-  setTimeout(() => {
-    // Fades and sinks a little on its way out (premium.css, `leaving`).
-    node.classList.add('leaving');
-    node.style.opacity = '0';
-    setTimeout(() => node.remove(), 250);
-  }, isError ? 5200 : 3200);
 }
 
 /**

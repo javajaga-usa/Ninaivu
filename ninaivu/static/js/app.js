@@ -35,34 +35,8 @@ import { announceCapsules, openCapsules, openSealSheet } from './capsules.js';
 import { openAsk } from './ask-ninaivu.js';
 import { VoiceSearch } from './voice-search.js';
 import { VideoMoments } from './video-moments.js';
-
-const $ = (sel) => document.querySelector(sel);
-const store = {
-  get(key, fallback) {
-    try {
-      const raw = localStorage.getItem(`mv.${key}`);
-      return raw === null ? fallback : JSON.parse(raw);
-    } catch { return fallback; }
-  },
-  set(key, value) {
-    try { localStorage.setItem(`mv.${key}`, JSON.stringify(value)); } catch { /* private mode */ }
-  },
-};
-
-const state = {
-  user: null,
-  view: 'all',
-  filters: { q: '', kinds: [], favorites: false, duplicates: false,
-             tag: '', folder: '', camera: '', from: '', to: '', person: 0,
-             occasion: 0, album: 0, near: 0, sort: 'date_desc' },
-  people: [],
-  occasions: [],
-  albums: [],
-  status: null,
-  facets: null,
-  semantic: false,
-  loading: false,
-};
+import { state, store } from './store.js';
+import { $, closeMenus, humanBytes, toast, wireMenu } from './ui.js';
 
 let grid;
 let viewer;
@@ -1434,67 +1408,6 @@ function showLayout(mode) {
   const icon = $('#view-btn-icon');
   const svg = current?.querySelector('svg');
   if (icon && svg) icon.replaceChildren(svg.cloneNode(true));
-}
-
-/* -- small menus ---------------------------------------------------------- */
-
-//: The topbar's drop-down menus (view, profile), so Escape can close
-//: whichever is open.
-const menus = [];
-
-/**
- * A button that opens a small menu under it.
- *
- * The same behaviour as the "More" menus: the button toggles it, a click
- * outside or on an item closes it, Escape closes it and gives focus back to
- * the button. Opened from the keyboard, focus goes to the first item and the
- * arrow keys move between items. An item marked `data-keep-open` (the theme
- * and the language, which somebody may press twice to get where they want)
- * leaves the menu open.
- */
-function wireMenu(button, menu) {
-  if (!button || !menu) return;
-  const items = () => [...menu.querySelectorAll('button')]
-    .filter((item) => !item.hidden && item.offsetParent !== null);
-  const close = (returnFocus = false) => {
-    if (!menu.classList.contains('open')) return false;
-    const hadFocus = menu.contains(document.activeElement);
-    menu.classList.remove('open');
-    button.setAttribute('aria-expanded', 'false');
-    if (returnFocus && hadFocus) button.focus();
-    return true;
-  };
-  menus.push(close);
-  button.addEventListener('click', (event) => {
-    event.stopPropagation();
-    const open = !menu.classList.contains('open');
-    menus.forEach((other) => other !== close && other());
-    menu.classList.toggle('open', open);
-    button.setAttribute('aria-expanded', String(open));
-    if (open && event.detail === 0) items()[0]?.focus();
-  });
-  menu.addEventListener('click', (event) => {
-    const item = event.target.closest('button');
-    if (item && !item.hasAttribute('data-keep-open')) close();
-  });
-  menu.addEventListener('keydown', (event) => {
-    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
-    event.preventDefault();
-    event.stopPropagation();          // not the gallery's own arrow keys
-    const list = items();
-    const at = list.indexOf(document.activeElement);
-    const next = at < 0 ? 0 : (at + (event.key === 'ArrowDown' ? 1 : -1) + list.length) % list.length;
-    list[next]?.focus();
-  });
-  document.addEventListener('click', (event) => {
-    if (menu.contains(event.target) || button.contains(event.target)) return;
-    close();
-  });
-}
-
-/** Close whichever topbar menu is open. True if one was. */
-function closeMenus() {
-  return menus.map((close) => close(true)).some(Boolean);
 }
 
 /** Save the language on the profile, so every device of theirs follows. */
@@ -3979,34 +3892,6 @@ function onActivity(activity) {
   } else if (scan.status === 'tagging' && scan.tagged && scan.tagged % 200 === 0) {
     refreshFacets();
   }
-}
-
-function toast(message, isError = false) {
-  // Nothing to say while the screen is locked: nobody is there to read it,
-  // and requests refused behind the lock would pile their errors up here.
-  if (document.body.classList.contains('screen-locked')) return;
-  const node = document.createElement('div');
-  node.className = `toast${isError ? ' error' : ''}`;
-  node.textContent = message;
-  $('#toasts').appendChild(node);
-  setTimeout(() => {
-    // Fades and sinks a little on its way out (premium.css, `leaving`).
-    node.classList.add('leaving');
-    node.style.opacity = '0';
-    setTimeout(() => node.remove(), 250);
-  }, isError ? 5200 : 2800);
-}
-
-function humanBytes(n) {
-  if (!n) return '0 B';
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  let i = 0;
-  let value = n;
-  while (value >= 1024 && i < units.length - 1) {
-    value /= 1024;
-    i++;
-  }
-  return `${i === 0 ? value : value.toFixed(1)} ${units[i]}`;
 }
 
 /* ========================================================================
