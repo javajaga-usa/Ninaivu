@@ -70,11 +70,52 @@ lands in `mugil-handover/` in the state folder.
 Raspberry Pi to serve. That way is retired: the Secondary is the always-on
 computer now.)
 
-To serve it, the Secondary runs a second, read-only Ninaivu as a service of
-its own. The originals there are under `<originals folder>/<library folder
-name>`, so name each of the Primary's library folders with `--map`, and Ninaivu
-writes the service for you. It mounts each one read-only at the Primary's own
-path, so every path in the index fits as it is:
+The Secondary serves it from its own Ninaivu, on its own family app (port
+80). There is nothing to set up on the Secondary: no service of its own, no
+`--map` and no sudo. As soon as it is paired and the first hand-over has
+arrived:
+
+- **While the Primary does not answer**, the Secondary's family app is the
+  family's view, read-only, as the Primary last sent it, and says so at the
+  top. The family signs in and out there as usual; every other change is
+  refused with a sentence saying it is made on the Primary.
+- **While the Primary is awake**, a page opened on the Secondary is sent to
+  the same page on the Primary. The Secondary looks every 20 seconds, at the
+  address the pairing last saw the Primary at and the port its family app
+  answers on.
+- **The photographs are the Secondary's own originals.** Each library's paths
+  are re-rooted onto the folder the Secondary keeps it in, through its own
+  record of which library is in which folder. Nothing is mounted, and nothing
+  on the originals disk is written. The view's own copy of the index, and the
+  family's sign-ins there, are in `mugil-family-view/` in the state folder.
+- **What stays the Secondary's own** on its family port: the routes between
+  the two computers, the phone inbox (`/dav`) and the health check.
+
+A newer hand-over is taken up within a minute of arriving, without signing
+anybody out.
+
+**Untick it and it is withdrawn.** The Primary tells the Secondary over the
+pairing, and the Secondary stops serving the view and removes its copy: the
+`mugil-handover/` and `mugil-family-view/` folders in its state folder. The
+originals are never touched. If the Secondary is away, the Primary asks again
+every five minutes until it answers. As a second guard, the Secondary serves
+the view only while the newest hand-over says it is on, and only while the
+Primary was heard from in the last **7 days** (a hand-over made, or any
+signed request between the two). After 7 days without a word from the
+Primary, the Secondary's family app is its own again until the Primary is
+back.
+
+The page and a refused change name the two computers as the pairing knows
+them: the Primary by the name it paired with ("the main computer" when it
+gave none), this one by the house name or the computer's name. A photograph of a library the Secondary does not keep yet opens
+once its originals have arrived.
+
+### The old way: a service of its own
+
+Before 4.0 a second, read-only Ninaivu served the hand-over as a service of
+its own, with each of the Primary's library folders mounted read-only at the
+Primary's own path. It still works, for a Pi or a Secondary already set up
+so, but a paired Secondary does not need it:
 
 ```bash
 cd /opt/ninaivu
@@ -83,22 +124,16 @@ sudo -u ninaivu .venv/bin/python -m ninaivu replica unit \
     --map "/Volumes/JApple Extreme SSD/NinaivuMaster/Ninaivu Archive=/srv/n300/originals/Ninaivu Archive" \
     --primary http://<mac>.<tailnet>.ts.net \
     --output /tmp/ninaivu-replica.service
-```
-
-It prints the few commands to run once as root before the first start (the
-empty folders the library is mounted on, and the service's own state folder).
-Run them, then:
-
-```bash
 sudo cp /tmp/ninaivu-replica.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now ninaivu-replica
 ```
 
-`--primary` is the Primary's family app address as the family's phones reach
-it: while the Primary is awake, pages go to it; while it is off, the Secondary
-shows what the Primary last sent, read-only, and says so at the top. Add
-`--wake <network address>` to let a change asked for there wake the Primary.
+It prints the few commands to run once as root before the first start.
+`--primary` is the Primary's family app address; `--wake <network address>`
+lets a change asked for there wake the Primary. If you used this way, stop the
+service (`sudo systemctl disable --now ninaivu-replica`) once the Secondary
+serves the view itself: both answering on port 80 would clash.
 `ninaivu replica status --from <folder>` says what a hand-over holds.
 
 ## Phone uploads while the Primary sleeps

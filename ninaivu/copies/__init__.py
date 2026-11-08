@@ -21,10 +21,12 @@ This module is the one way to ask. A :class:`Destination` says:
   **ledger** says it keeps (ninaivu/copies/ledger.py), and a
   **restore_test** hook that proves a copy can be read back.
 
-In this stage the adapters wrap the engines as they are and change nothing
-about what any of them does: every call goes to an engine's own public
-method, or reads what it already records. Moving the engines onto the
-contract, so that each writes the ledger itself, is later work.
+The adapters wrap the engines as they are: every call goes to an engine's
+own public method, or reads what it already records. Each engine writes its
+own ledger row as it confirms a copy (ledger.confirm); what was copied
+before that, and what an engine no longer confirms, is brought in by a
+supervisor job (:func:`fill_job`) every :data:`FILL_EVERY` seconds. The
+console's read (``GET /api/admin/copies``) only reads.
 """
 
 from __future__ import annotations
@@ -36,7 +38,8 @@ from . import ledger
 
 __all__ = ["Destination", "MirrorDestination", "SecondaryDestination", "OffsiteDestination",
            "DriveDestination", "KINDS", "KEEPS", "MUST_ENCRYPT", "ORIGINALS", "INDEX",
-           "FAMILY_VIEW", "FILL_EVERY", "problems", "destinations", "refresh", "report"]
+           "FAMILY_VIEW", "FILL_EVERY", "problems", "destinations", "refresh", "report",
+           "fill_job"]
 
 #: What a destination may be.
 KINDS = ("folder", "secondary", "s3", "drive")
@@ -193,9 +196,11 @@ class SecondaryDestination(_Adapter):
                            error=str(last.get("error") or ""), **extra)
 
     def restore_test(self) -> dict[str, Any]:
-        return {"started": False, "test": "",
-                "reason": "A test restore from the Secondary is not written yet; every file "
-                          "it keeps was checked against its fingerprint as it arrived."}
+        """A few originals the Secondary confirmed, read back there end to
+        end over the signed pairing, their fingerprints compared with the
+        ones it confirmed (courier.read_back)."""
+        return {"test": "a sample read back on the Secondary and compared",
+                **self.engine.read_back(3)}
 
 
 class OffsiteDestination(_Adapter):
@@ -231,13 +236,15 @@ class OffsiteDestination(_Adapter):
                            last_finished=s["last_run"], error=s["error"], where=s["where"])
 
     def restore_test(self) -> dict[str, Any]:
-        """A small file written there, read back and compared. Not yet a
-        sample of the photographs restored, as Drive's is."""
+        """A small random sample of the photographs restored from there into
+        a temporary folder, decrypted, and their fingerprints compared
+        (offsite.restore_sample)."""
+        test = "a sample restored and compared"
         try:
-            done = self.engine.test()
+            done = self.engine.restore_sample(3)
         except (ValueError, OSError) as exc:
-            return {"started": False, "reason": str(exc), "test": "write and read back"}
-        return {"started": True, "ok": bool(done.get("ok")), "test": "write and read back"}
+            return {"started": False, "reason": str(exc), "test": test}
+        return {"started": True, "test": test, **done}
 
 
 class DriveDestination(_Adapter):
@@ -302,10 +309,11 @@ def destinations(services) -> list[Destination]:
     ]
 
 
-#: How long the ledger is taken as it was filled before the console's read
-#: fills it again from the engines' records, in seconds. Filling reads every
-#: record once (about a second at 200,000 photographs), so not on every look.
-FILL_EVERY = 5 * 60.0
+#: Seconds between two fills of the ledger from the engines' records, by the
+#: supervisor (:func:`fill_job`). Filling reads every record once (about a
+#: second at 200,000 photographs). The engines write what they confirm as they
+#: go, so this only brings in history and what they no longer confirm.
+FILL_EVERY = 30 * 60.0
 
 _filled: dict[str, float] = {}
 
@@ -315,12 +323,33 @@ def refresh(conn: sqlite3.Connection, dests: list[Destination], state_dir, *,
     """Fill the ledger again from the engines' records, if it was not filled
     in the last :data:`FILL_EVERY` seconds by this process. Returns whether it was."""
     key = str(ledger.state_dir_of(conn) or id(conn))
-    if not force and now - _filled.get(key, 0.0) < FILL_EVERY:
+    last = _filled.get(key)
+    if not force and last is not None and now - last < FILL_EVERY:
         return False
     where = next((d.where() for d in dests if isinstance(d, OffsiteDestination)), None)
     ledger.refresh(conn, state_dir=state_dir, offsite_where=where)
     _filled[key] = now
     return True
+
+
+def fill_job(services):
+    """The supervisor's job that fills the ledger from the engines' records
+    (server/supervisor.py), first a minute after start, then every
+    :data:`FILL_EVERY` seconds."""
+    import logging                                                  # noqa: PLC0415
+    import time                                                     # noqa: PLC0415
+
+    from ..server.supervisor import INDEX_WRITE, Job, every         # noqa: PLC0415
+    from ..storage import db                                        # noqa: PLC0415
+
+    cfg = services.cfg
+
+    def fill() -> None:
+        refresh(db.connect(cfg.db_path), destinations(services), cfg.state_dir,
+                now=time.time(), force=True)
+
+    return Job("copies-ledger", fill, every(FILL_EVERY, first=60.0), claims={INDEX_WRITE},
+               log=logging.getLogger(__name__), failure="could not fill the copies ledger")
 
 
 def report(conn: sqlite3.Connection, roots: list[str], dests: list[Destination]) -> dict[str, Any]:

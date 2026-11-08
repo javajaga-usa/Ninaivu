@@ -486,12 +486,13 @@
       <span class="offline-banner-text" id="away-banner-text"></span>
     </div>
 
-    {# The Pi serving its read-only copy while the Mac mini sleeps
-       (ninaivu/replica/front.py). Rendered here, not by a script, so it is
+    {# The read-only copy served while the Primary is off, named after the
+       household's two computers (ninaivu/replica/front.py). Rendered here, not by a script, so it is
        there before anything loads, the sign-in page included. #}
     {% if replica_notice %}
     <div class="offline-banner" id="replica-banner" role="status">
-      <span class="offline-banner-text"><span data-i18n="The Mac mini is asleep, so this is the copy kept on the Pi. You can look at everything; changes wait for the mini.">The Mac mini is asleep, so this is the copy kept on the Pi. You can look at everything; changes wait for the mini.</span>{% if replica_notice.as_of %} <time id="replica-as-of">{{ replica_notice.as_of }}</time>{% endif %}</span>
+      {% set names = replica_notice.names or {"primary": "the main computer", "here": "this computer"} %}
+      <span class="offline-banner-text"><span data-i18n="This is the copy kept on {here} while {primary} is off. You can look at everything; changes wait for {primary}." data-i18n-vars='{{ names|tojson }}'>This is the copy kept on {{ names.here }} while {{ names.primary }} is off. You can look at everything; changes wait for {{ names.primary }}.</span>{% if replica_notice.as_of %} <time id="replica-as-of">{{ replica_notice.as_of }}</time>{% endif %}</span>
     </div>
     {% endif %}
 

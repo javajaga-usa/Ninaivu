@@ -46,6 +46,9 @@ log = logging.getLogger(__name__)
 
 __all__ = ["Front", "install", "magic_packet", "OPEN_WRITES", "PROBE_EVERY", "STAY_COOKIE"]
 
+#: What the Primary is called when nobody said.
+MAIN_COMPUTER = "the main computer"
+
 #: Changes the Pi does make: they are its own sign-ins, not the library.
 OPEN_WRITES = frozenset({
     "/api/auth/login", "/api/auth/enter", "/api/auth/active", "/api/auth/lock",
@@ -84,9 +87,15 @@ def magic_packet(mac: str) -> bytes:
 class Front:
     """Whether the mini is awake, and waking it."""
 
-    def __init__(self, cfg, replica=None, *, opener=None, sender=None) -> None:
+    def __init__(self, cfg, replica=None, *, opener=None, sender=None,
+                 primary_name: str = "", here_name: str = "") -> None:
         self.cfg = cfg
         self.replica = replica
+        #: What the family calls the two computers, for the words on the page
+        #: and in a refusal: from the pairing on a Secondary
+        #: (mugil/family_view.py); the old way knows neither.
+        self.primary_name = primary_name.strip() or MAIN_COMPUTER
+        self._here_name = here_name.strip()
         self._open = opener or urllib.request.urlopen
         self._send = sender or self._broadcast
         self._awake: bool | None = None
@@ -178,6 +187,16 @@ class Front:
             return True
 
     # -- what the page is told ---------------------------------------------
+    @property
+    def here_name(self) -> str:
+        if not self._here_name:
+            from ..mugil import display_name                       # noqa: PLC0415
+            self._here_name = display_name(self.cfg) or "this computer"
+        return self._here_name
+
+    def names(self) -> dict[str, str]:
+        return {"primary": self.primary_name, "here": self.here_name}
+
     def status(self) -> dict[str, Any]:
         out: dict[str, Any] = {"replica": True, "primary_awake": self.awake,
                                "primary_url": self.primary, "can_wake": self.can_wake}
@@ -208,10 +227,12 @@ def install(app: Flask, front: Front) -> None:
     def replica_wake():
         user = auth.current_user()
         if not user.id or user.is_guest:
-            return jsonify({"error": "Sign in to wake the Mac mini.", "status": 403}), 403
+            return jsonify({**refusal("Sign in to wake {primary}.", **front.names()),
+                            "status": 403}), 403
         if not front.can_wake:
-            return jsonify({"woken": False, "error": "The Pi was not given the Mac mini's "
-                            "network address (--replica-wake)."}), 409
+            return jsonify({"woken": False, **refusal(
+                "{here} does not know the network address to wake {primary} with.",
+                **front.names())}), 409
         return jsonify({"woken": front.wake()})
 
     app.register_blueprint(bp)
@@ -246,13 +267,16 @@ def install(app: Flask, front: Front) -> None:
     def _change_nothing():
         if request.method in ("GET", "HEAD", "OPTIONS") or request.path in OPEN_WRITES:
             return None
-        body = refusal("This is the copy of the library kept on the Pi while the Mac mini "
-                       "sleeps. You can look at everything here; changes are made on the "
-                       "mini.")
         user = auth.current_user()
         woken = bool(user.id) and not user.is_guest and front.wake()
         if woken:
-            body["error"] += " The mini has been asked to wake up; try again in a minute."
+            body = refusal("This is the copy of the library kept on {here} while {primary} "
+                           "is off. {primary} has been asked to wake up; try again in a "
+                           "minute.", **front.names())
+        else:
+            body = refusal("This is the copy of the library kept on {here} while {primary} "
+                           "is off. You can look at everything here; changes are made on "
+                           "{primary}.", **front.names())
         body.update({"status": 503, "replica": True, "waking": woken})
         response = jsonify(body)
         response.status_code = 503
@@ -265,4 +289,5 @@ def install(app: Flask, front: Front) -> None:
         return {"replica_notice": {
             "as_of": time.strftime("%Y-%m-%d %H:%M", time.localtime(made)) if made else "",
             "primary": front.primary,
+            "names": front.names(),
         }}

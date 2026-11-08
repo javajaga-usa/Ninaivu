@@ -1319,6 +1319,40 @@ def mugil_verify():
     return jsonify({"same": same})
 
 
+#: The most files one test restore asks the Secondary to read back.
+READ_BACK_MOST = 10
+
+
+@mugil_peer_bp.post("/api/mugil/originals/read-back")
+def mugil_read_back():
+    """On the Secondary: read a few kept originals again, end to end, and
+    report the fingerprint of what was read, for the Primary's test restore
+    (copies.SecondaryDestination.restore_test). Changes nothing."""
+    cfg = _cfg()
+    if role(cfg) != SECONDARY:
+        return _not_here()
+    raw = read_at_most(JSON_MAX_BYTES)
+    if _signed(pairing.body_digest(raw)) is None:
+        return _unsigned()
+    try:
+        items = json.loads(raw)["items"]
+    except (ValueError, TypeError, KeyError):
+        items = None
+    if not isinstance(items, list) or len(items) > READ_BACK_MOST:
+        return jsonify({"refused": f"Name at most {READ_BACK_MOST} files.", "status": 400}), 400
+    holding = _holding(cfg)
+    if holding is None or folder_problem(str(holding.folder), list(cfg.roots), cfg.state_dir):
+        return jsonify({"refused": "This computer has no originals folder it can read.",
+                        "status": 503}), 503
+    read = []
+    for item in items:
+        item = item if isinstance(item, dict) else {}
+        library, rel = str(item.get("library", "")), str(item.get("path", ""))
+        read.append({"library": library, "path": rel, **(holding.read_back(library, rel)
+                                                          or {"missing": True})})
+    return jsonify({"read": read})
+
+
 def _inbox(cfg):
     from ..mugil.inbox import Inbox                              # noqa: PLC0415
     holding = _holding(cfg)
@@ -1537,6 +1571,24 @@ def mugil_handover_remove():
     if not isinstance(paths, list):
         return jsonify({"refused": "Send the paths.", "status": 400}), 400
     return jsonify({"removed": handover.remove(cfg.state_dir, [str(p) for p in paths])})
+
+
+@mugil_peer_bp.post("/api/mugil/handover/withdraw")
+def mugil_handover_withdraw():
+    """On the Secondary: the family view was unticked on the Primary. Stop
+    serving it and remove the hand-over and the view's copy of it; the
+    originals are not touched (mugil/family_view.py)."""
+    from ..mugil import handover                                 # noqa: PLC0415
+    cfg = _cfg()
+    if role(cfg) != SECONDARY:
+        return _not_here()
+    raw = read_at_most(JSON_MAX_BYTES)
+    if _signed(pairing.body_digest(raw)) is None:
+        return _unsigned()
+    view = getattr(current_app.config.get("MV_SERVICES"), "mugil_family_view", None)
+    if view is not None:
+        return jsonify({"removed": view.withdraw()})
+    return jsonify({"removed": handover.clear_copy(cfg.state_dir)})
 
 
 @mugil_peer_bp.put("/api/mugil/originals")

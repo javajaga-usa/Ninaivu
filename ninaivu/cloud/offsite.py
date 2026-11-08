@@ -61,6 +61,7 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
+from ..copies import ledger
 from ..utils.files import same_bytes, sha256_file, stays_inside
 from .tempfiles import create_new
 
@@ -634,6 +635,66 @@ class Offsite:
             raise OSError("what was read back was not what was written")
         return {"ok": True, "where": target.describe()}
 
+    #: A test restore takes files up to this size first, so three of them
+    #: are minutes at most, not three films.
+    SAMPLE_SIZE_UP_TO = 64 * 1024 * 1024
+
+    def restore_sample(self, count: int = 3, *,
+                       pick: Callable[[list, int], list] | None = None) -> dict[str, Any]:
+        """A test restore: *count* files chosen at random brought back from the
+        copy into a temporary folder, decrypted, and their fingerprints
+        compared with the library's (``content_fingerprints``), or with the
+        SHA-256 the manifest carries when the library has none for it. The
+        temporary folder is removed after; nothing in the library or at the
+        destination changes."""
+        from ..mugil.hold import hasher                     # noqa: PLC0415
+        problem = self.problem()
+        if problem:
+            raise ValueError(problem)
+        key, _ = self._key()
+        target = self.target()
+        state = Path(self.cfg.state_dir)
+        staging = state / "offsite-staging"
+        staging.mkdir(parents=True, exist_ok=True)
+        entries = latest(read_manifest(target, key, staging))
+        if not entries:
+            return {"ok": False, "checked": 0, "files": [],
+                    "reason": "Nothing has been sent to the off-site copy yet."}
+        small = [e for e in entries if int(e.get("size") or 0) <= self.SAMPLE_SIZE_UP_TO]
+        pool = small if len(small) >= min(count, len(entries)) else entries
+        sample = (pick or random.sample)(pool, min(int(count), len(pool)))
+        conn = self._connect()
+        files = []
+        with tempfile.TemporaryDirectory(prefix="ninaivu_offsite_test_", dir=state) as tmp:
+            for number, entry in enumerate(sample):
+                rel = str(entry.get("path", ""))
+                out = Path(tmp) / f"{number}{Path(rel).suffix}"
+                try:
+                    fetch_one(target, entry, key, out)
+                except (OSError, ValueError, KeyError) as exc:
+                    files.append({"path": rel, "ok": False, "why": str(exc)})
+                    continue
+                known = conn.execute(
+                    "SELECT f.algo, f.digest FROM assets a JOIN content_fingerprints f "
+                    "ON f.asset_id = a.id WHERE a.root = ? AND a.rel_path = ? AND f.size = ?",
+                    (str(entry.get("root", "")), rel, int(entry["size"]))).fetchone() \
+                    if ledger._has_table(conn, "content_fingerprints") else None  # noqa: SLF001
+                if known is None:
+                    # fetch_one compared the manifest's SHA-256 already.
+                    files.append({"path": rel, "ok": True, "checked": "sha256"})
+                    continue
+                fresh = hasher(str(known[0]))
+                if fresh is None:
+                    files.append({"path": rel, "ok": True, "checked": "sha256"})
+                    continue
+                with open(out, "rb") as handle:
+                    for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                        fresh.update(chunk)
+                same = fresh.hexdigest() == str(known[1])
+                files.append({"path": rel, "ok": same, "checked": str(known[0]),
+                              **({} if same else {"why": "the fingerprint differs"})})
+        return {"ok": all(f["ok"] for f in files), "checked": len(files), "files": files}
+
     # -- the work -------------------------------------------------------------
 
     def _update(self, **fields: Any) -> None:
@@ -756,6 +817,11 @@ class Offsite:
                     "ELSE offsite_copies.uploaded_at END, digest=excluded.digest",
                     (row["root"], rel, before.st_size, before.st_mtime, name, stored,
                      self._clock() if stored else 0, digest))
+                if stored:
+                    # And the ledger, in the same transaction (ninaivu/copies/ledger.py).
+                    ledger.confirm(conn, "offsite",
+                                   [(row["root"], rel, before.st_size, before.st_mtime)],
+                                   at=self._clock())
                 conn.commit()
                 if not stored:
                     continue

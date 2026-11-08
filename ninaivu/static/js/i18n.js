@@ -81,10 +81,20 @@ export function t(key, vars) {
   let text = table[key] || key;
   if (vars) {
     for (const [name, value] of Object.entries(vars)) {
-      text = text.split(`{${name}}`).join(String(value));
+      // A name the server put in when it had none to give ("the main
+      // computer") is said in this language too; a real name never is.
+      const said = typeof value === 'string' && NAMES.has(value) ? (table[value] || value) : value;
+      text = text.split(`{${name}}`).join(String(said));
     }
   }
   return text;
+}
+
+/** Words the server puts into a sentence in place of a name it does not know. */
+const NAMES = new Set();
+
+export function translateNames(names) {
+  for (const name of names) NAMES.add(name);
 }
 
 /**
@@ -404,7 +414,11 @@ function applyRich(node, key) {
 export function apply(root = document) {
   for (const node of root.querySelectorAll('[data-i18n]')) {
     const key = node.dataset.i18n;
-    if (key) put(node, '', node.textContent, t(key), (text) => { node.textContent = text; });
+    // `data-i18n-vars`: the `{name}`s of a sentence the server filled in,
+    // as JSON, so a translation can put them where its grammar wants.
+    let vars;
+    try { vars = node.dataset.i18nVars ? JSON.parse(node.dataset.i18nVars) : undefined; } catch { vars = undefined; }
+    if (key) put(node, '', node.textContent, t(key, vars), (text) => { node.textContent = text; });
   }
   for (const node of root.querySelectorAll('[data-i18n-rich]')) {
     const key = node.getAttribute('data-i18n-rich');

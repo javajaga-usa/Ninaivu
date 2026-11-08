@@ -4,8 +4,8 @@ The Primary is not always on; the Secondary is. With ``mugil_family_copy``
 on, the Primary sends the Secondary a *hand-over*: a slimmed snapshot of the
 index (:func:`slim`), the thumbnails, faces, profile pictures, stories and
 films, and ``replica.json`` last, over the pairing with every request signed,
-into ``mugil-handover/`` in the Secondary's state folder. There
-``ninaivu --replica-of <that folder>`` serves it read-only (ninaivu/replica/).
+into ``mugil-handover/`` in the Secondary's state folder. There the
+Secondary's own Ninaivu serves it read-only (mugil/family_view.py).
 
 (Until 4.0 the same hand-over could also be written into a shared folder for
 a Raspberry Pi to serve. That way is retired; this one is what is left of it,
@@ -19,10 +19,14 @@ fingerprinted and is kept by the Secondary only when the bytes match, written
 under a temporary name and renamed, so a hand-over half sent leaves the one
 before whole.
 
-**On the Secondary** (:func:`receive`): the files land where
-``ninaivu --replica-of`` reads them. The photographs themselves are the
-originals the Secondary keeps; the replica finds them at the Primary's paths
-through a read-only bind mount (docs/two-computers.md shows the unit).
+**On the Secondary** (:func:`receive`): the files land in
+``mugil-handover/``, and the Secondary's own Ninaivu serves them on its
+family app while the Primary does not answer (mugil/family_view.py). The
+photographs themselves are the originals the Secondary keeps; each library's
+paths are re-rooted onto its folder there, through the Secondary's own record
+of which library is in which folder (mugil/hold.py). The old way,
+``ninaivu --replica-of`` as a service of its own with the originals bind
+mounted at the Primary's paths, still works.
 
 Nothing here changes the library, or runs with one computer.
 """
@@ -303,6 +307,8 @@ class Handover:
             try:
                 if self.due():
                     self.run()
+                elif self.withdraw_due():
+                    self.withdraw()
             except Exception:                                    # noqa: BLE001 - keep looking
                 log.exception("The family app's copy could not be sent")
 
@@ -347,6 +353,12 @@ class Handover:
                 "version": __version__, "schema_version": schema,
                 "index": {"file": name, "size": size, "sha256": digest},
                 "libraries": library_ids(self.cfg),
+                # Where the family app answers here, so the Secondary can send
+                # visitors to it while this computer is awake (family_view.py).
+                "family_port": int(getattr(self.cfg, "port", 80) or 80),
+                # Said in every hand-over, so a Secondary serves the view only
+                # while the newest one says it is on (family_view.wanted).
+                "family_view": True,
                 "settings": family_settings(self.cfg), "folders": counts,
             }
             with tempfile.NamedTemporaryFile("w", dir=state, suffix=".json", delete=False,
@@ -368,8 +380,37 @@ class Handover:
         finally:
             self.live = {}
         self._remember(at=time.time(), stamp=stamp, error="", away=False,
-                       generation=generation, index_bytes=size)
+                       generation=generation, index_bytes=size, withdrawn=False)
         return manifest
+
+    # -- taking it back ------------------------------------------------------
+    def withdraw_due(self) -> bool:
+        """Whether the Secondary still has a hand-over the household no longer
+        wants shared: one was sent, and the family view is unticked here."""
+        if role(self.cfg) != PRIMARY or bool(getattr(self.cfg, "mugil_family_copy", False)):
+            return False
+        if pairing.load(self.cfg.state_dir) is None or not self.cfg.mugil_partner_url:
+            return False
+        last = self.last()
+        return bool(last.get("at") or last.get("generation")) and not last.get("withdrawn")
+
+    def withdraw(self) -> bool:
+        """Tell the Secondary, over the pairing, to stop serving the family
+        view and remove its copy (its ``mugil-handover/`` and
+        ``mugil-family-view/``, never the originals). Returns whether it did;
+        one that is away is asked again at the next look."""
+        pair = pairing.load(self.cfg.state_dir) or {}
+        try:
+            partner = self.partner(self.cfg.mugil_partner_url, pair.get("key"))
+            partner.request("POST", "/api/mugil/handover/withdraw", body={})
+        except PartnerError as exc:
+            away = exc.status in AWAY
+            log.info("The Secondary was not told to take the family view down: %s", exc)
+            self._remember(withdraw_error="" if away else str(exc), withdraw_tried_at=time.time())
+            return False
+        self._remember(withdrawn=True, withdrawn_at=time.time(), withdraw_error="")
+        log.info("The Secondary took the family view down and removed its copy")
+        return True
 
     def _send(self, partner: Partner, path: Path, rel: str) -> None:
         if self._stop.is_set():
@@ -498,6 +539,33 @@ def _prune(base: Path) -> None:
             path.unlink(missing_ok=True)
 
 
+#: In the Secondary's state folder: the family view's own state
+#: (mugil/family_view.py STATE), removed with the hand-over.
+VIEW_STATE = "mugil-family-view"
+
+
+def clear_copy(state_dir: str | Path) -> list[str]:
+    """On the Secondary: remove the hand-over and the family view's own copy
+    of it, as the Primary asked. Only those two folders in the state folder,
+    and only when each is a folder of its own there, never a link to
+    somewhere else: the originals are never touched. Returns what went."""
+    import shutil                                                # noqa: PLC0415
+    state = Path(state_dir)
+    gone = []
+    for name in (FOLDER, VIEW_STATE):
+        path = state / name
+        if path.is_symlink() or not path.is_dir() or path.resolve().parent != state.resolve():
+            continue
+        # A link inside (the view's thumbs, faces …) is removed as a link;
+        # rmtree never follows one into the folder it points at.
+        shutil.rmtree(path, ignore_errors=True)
+        if not path.exists():
+            gone.append(name)
+        else:
+            log.warning("could not remove all of %s", path)
+    return gone
+
+
 def summary(state_dir: str | Path) -> dict[str, Any] | None:
     """On the Secondary: the hand-over it holds, or None."""
     from ..replica import MANIFEST                               # noqa: PLC0415
@@ -509,6 +577,6 @@ def summary(state_dir: str | Path) -> dict[str, Any] | None:
             "generation": data.get("generation"), "version": data.get("version")}
 
 
-__all__ = ["Handover", "receive", "remove", "summary", "allowed_path", "wanted", "FOLDER",
+__all__ = ["Handover", "receive", "remove", "summary", "clear_copy", "VIEW_STATE", "allowed_path", "wanted", "FOLDER",
            "SETTINGS", "SENT", "slim", "schema_version", "family_settings", "library_ids",
            "open_sent", "listing"]

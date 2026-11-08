@@ -38,6 +38,10 @@ import { VideoMoments } from './video-moments.js';
 import { state, store } from './store.js';
 import { $, closeMenus, humanBytes, toast, wireMenu } from './ui.js';
 
+// What the Primary is called on the Secondary's copy when the pairing does
+// not name it (replica/front.py), so a Tamil page says it in Tamil.
+i18n.translateNames([i18n.key('the main computer')]);
+
 let grid;
 let viewer;
 let searchController = null;

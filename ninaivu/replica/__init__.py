@@ -9,7 +9,9 @@ what the family sees, and last of all ``replica.json``, which names the
 snapshot and its checksum. A reader that finds the folder half-written sees
 the previous ``replica.json`` and the previous snapshot, both whole.
 
-This package serves it. ``ninaivu --replica-of <that folder>``
+This package serves it. Since 4.0 the Secondary's own Ninaivu does, on its
+own family app, with each library re-rooted onto its originals folder
+(mugil/family_view.py). The old way, still kept: ``ninaivu --replica-of <that folder>``
 (:mod:`.receive`) serves the family app from the newest snapshot that checks
 out, and takes up a newer one while it runs. It never writes to the library:
 the service mounts the originals read-only at the Primary's own library path

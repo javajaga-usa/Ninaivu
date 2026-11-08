@@ -4025,7 +4025,6 @@
   "This is no longer available.": "This is no longer available.",
   "Too many requests. Wait a moment and try again.": "Too many requests. Wait a moment and try again.",
   "You are not allowed to do that.": "You are not allowed to do that.",
-  "The Mac mini is asleep, so this is the copy kept on the Pi. You can look at everything; changes wait for the mini.": "The Mac mini is asleep, so this is the copy kept on the Pi. You can look at everything; changes wait for the mini.",
   "1 minute": "1 minute",
   "30 seconds": "30 seconds",
   "5 minutes": "5 minutes",
@@ -5164,5 +5163,7 @@
   "sent to the Secondary": "sent to the Secondary",
   "left alone": "left alone",
   "kept where it is": "kept where it is",
-  "to carry to the new Primary": "to carry to the new Primary"
+  "to carry to the new Primary": "to carry to the new Primary",
+  "This is the copy kept on {here} while {primary} is off. You can look at everything; changes wait for {primary}.": "This is the copy kept on {here} while {primary} is off. You can look at everything; changes wait for {primary}.",
+  "the main computer": "the main computer"
 }

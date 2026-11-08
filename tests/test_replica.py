@@ -217,7 +217,8 @@ def test_the_family_signs_in_on_the_pi_and_changes_are_refused(pi):
     refused = client.post("/api/albums", json={"name": "Madurai trip"})
     assert refused.status_code == 503
     body = refused.get_json()
-    assert body["replica"] is True and "Pi" in body["error"]
+    assert body["replica"] is True and "the main computer is off" in body["error"]
+    assert body["said"].startswith("This is the copy of the library kept on {here}")
     assert refused.headers["Retry-After"] == "60"
     assert client.post("/api/auth/logout").status_code == 200
 
