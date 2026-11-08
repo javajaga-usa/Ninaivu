@@ -18,11 +18,11 @@ marked as trusted so it opens with one click, with Ninaivu's icon:
     python3 ninaivu/desktop/linux_menu.py --remove
 
 From a portable folder there is one entry, *Ninaivu*, which opens the
-Control Panel. From a checkout there are two: *Ninaivu* and *Ninaivu Control Panel*. Both open
-the app without a terminal after "Setup Ninaivu.sh" has prepared its Python. Each
-runs "Start - Ninaivu Control Panel.sh" at the top of the checkout (the .venv
-that made, or a message saying to run start.sh first). Moving the folder
-needs ``--add-to-menu`` again.
+Control Panel. From a checkout there are two: *Ninaivu* and *Ninaivu Control
+Panel*. Both open the app without a terminal once ``sh launcher/start.sh``
+has prepared its Python: each runs launcher/"Start - Ninaivu Control
+Panel.sh" (with that .venv, or a message saying to run start.sh first).
+Moving the folder needs ``--add-to-menu`` again.
 
 Standard library only: a checkout runs it with the system's Python, before
 anything is installed.
@@ -45,7 +45,7 @@ CHECKOUT_ID = "local.ninaivu.checkout"
 PANEL_ID = "local.ninaivu.control-panel"
 ICON_NAME = "ninaivu"
 #: A checkout's double-click for the Control Panel, at its top.
-PANEL_SCRIPT = "Start - Ninaivu Control Panel.sh"
+PANEL_SCRIPT = "launcher/Start - Ninaivu Control Panel.sh"
 
 HERE = Path(__file__).resolve().parent
 

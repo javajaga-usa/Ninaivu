@@ -67,9 +67,9 @@ PANEL = ROOT / linux_menu.PANEL_SCRIPT
 
 
 def _checkout(folder: Path) -> Path:
-    """A checkout's top: the Control Panel script, and nothing set up yet."""
-    folder.mkdir(parents=True)
-    shutil.copyfile(PANEL, folder / PANEL.name)
+    """A checkout: the Control Panel script in launcher/, and nothing set up yet."""
+    (folder / "launcher").mkdir(parents=True)
+    shutil.copyfile(PANEL, folder / linux_menu.PANEL_SCRIPT)
     return folder
 
 
@@ -81,20 +81,20 @@ def test_the_control_panel_script_runs_the_venv_from_anywhere(tmp_path):
     venv.mkdir(parents=True)
     (venv / "python").write_text(f'#!/bin/sh\nprintf "%s|%s" "$1" "$PWD" > "{marker}"\n')
     (venv / "python").chmod(0o755)
-    subprocess.run(["sh", str(folder / PANEL.name)], check=True, cwd="/", timeout=30)
-    assert marker.read_text() == f"{folder / 'ninaivu_control.pyw'}|{folder}"
+    subprocess.run(["sh", str(folder / linux_menu.PANEL_SCRIPT)], check=True, cwd="/", timeout=30)
+    assert marker.read_text() == f"{folder / 'launcher' / 'ninaivu_control.pyw'}|{folder}"
 
 
 def test_the_control_panel_script_says_to_set_up_first(tmp_path):
     folder = _checkout(tmp_path / "Ninaivu")
-    done = subprocess.run(["sh", str(folder / PANEL.name)], cwd="/", capture_output=True, text=True,
+    done = subprocess.run(["sh", str(folder / linux_menu.PANEL_SCRIPT)], cwd="/", capture_output=True, text=True,
                           timeout=30, env={"PATH": "/usr/bin:/bin", "NINAIVU_NO_DIALOG": "1"})
     assert done.returncode == 1
     assert "not set up in this folder yet" in done.stderr and "sh launcher/start.sh" in done.stderr
 
 
 def test_the_control_panel_script_sits_beside_the_windows_one():
-    assert (ROOT / "Start - Ninaivu Control Panel.vbs").is_file()
+    assert (ROOT / "launcher" / "Start - Ninaivu Control Panel.vbs").is_file()
     assert PANEL.read_bytes().startswith(b"#!/bin/sh\n"), "LF line endings, or sh cannot run it"
     assert "ninaivu_control.pyw" in PANEL.read_text()
 

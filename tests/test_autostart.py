@@ -52,7 +52,8 @@ def test_windows_starts_it_without_a_console_window(tmp_path):
 def test_linux_sign_in_entry_is_app_specific_and_can_be_disabled(tmp_path, monkeypatch):
     root = tmp_path / "Ninaivu's app 50%"
     root.mkdir()
-    (root / 'Start - Ninaivu Control Panel.sh').touch()
+    (root / 'launcher').mkdir()
+    (root / 'launcher' / 'Start - Ninaivu Control Panel.sh').touch()
     monkeypatch.delenv('NINAIVU_LAUNCHER', raising=False)
     monkeypatch.delenv('XDG_CONFIG_HOME', raising=False)
     monkeypatch.setattr(autostart, 'ninaivu_root', lambda: root)
@@ -63,7 +64,8 @@ def test_linux_sign_in_entry_is_app_specific_and_can_be_disabled(tmp_path, monke
     assert '--autostart' in text and 'Terminal=false' in text and '50%%' in text
     other = tmp_path / 'Other'
     other.mkdir()
-    (other / 'Start - Ninaivu Control Panel.sh').touch()
+    (other / 'launcher').mkdir()
+    (other / 'launcher' / 'Start - Ninaivu Control Panel.sh').touch()
     monkeypatch.setattr(autostart, 'ninaivu_root', lambda: other)
     autostart.disable(tmp_path, 'linux')
     assert autostart.desktop_path(tmp_path).exists(), 'another app cannot disable this one'

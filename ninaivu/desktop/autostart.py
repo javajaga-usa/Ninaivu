@@ -96,9 +96,9 @@ def command(root: Path, platform: str | None = None) -> list[str]:
                            "Ninaivu from its own Ninaivu.exe and try again.")
     if platform == 'linux':
         told = os.environ.get('NINAIVU_LAUNCHER')
-        launcher = Path(told) if told else root / 'Start - Ninaivu Control Panel.sh'
+        launcher = Path(told) if told else root / 'launcher' / 'Start - Ninaivu Control Panel.sh'
         if not launcher.is_file():
-            raise RuntimeError('Ninaivu’s launcher is missing. Run Setup Ninaivu.sh again.')
+            raise RuntimeError('Ninaivu’s launcher is missing. Run sh launcher/start.sh once, then try again.')
         carried = [f'{name}={os.environ[name]}' for name in (
             'NINAIVU_STATE_DIR', 'NINAIVU_HOME', 'NINAIVU_PYTHON',
             'NINAIVU_AI_MODELS_DIR', 'NINAIVU_LOG_DIR') if os.environ.get(name)]

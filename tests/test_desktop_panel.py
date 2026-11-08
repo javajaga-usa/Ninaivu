@@ -311,14 +311,15 @@ def test_hiding_the_logs_gives_the_height_back(tmp_path, monkeypatch, look):
 # The Windows launcher and the entry point
 # ---------------------------------------------------------------------------
 
-VBS = ROOT / "Start - Ninaivu Control Panel.vbs"
-PYW = ROOT / "ninaivu_control.pyw"
+VBS = ROOT / "launcher" / "Start - Ninaivu Control Panel.vbs"
+PYW = ROOT / "launcher" / "ninaivu_control.pyw"
 
 
 def test_the_windows_launcher_runs_the_panel_with_the_venvs_pythonw():
     text = VBS.read_text(encoding="utf-8")
     assert r".venv\Scripts\pythonw.exe" in text
-    assert "ninaivu_control.pyw" in text
+    assert "launcher\\ninaivu_control.pyw" in text
+    assert "GetParentFolderName(files.GetParentFolderName(" in text, "the checkout, one folder up"
     assert "MsgBox" in text, "a missing .venv must be said, not a silent failure"
 
 

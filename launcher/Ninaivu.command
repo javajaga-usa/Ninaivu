@@ -1,21 +1,21 @@
 #!/bin/bash
 # ---------------------------------------------------------------------------
-#  Ninaivu — double-click launcher for macOS.
+#  Ninaivu from a checkout — double-click launcher for macOS.
 #
-#  Double-click this file in Finder. It sets everything up the first time and
-#  starts the library; after that it just starts it.
+#  Double-click launcher/Ninaivu.command in Finder. It sets everything up the
+#  first time and starts the library in this Terminal window; after that it
+#  just starts it. The portable download has Ninaivu.app instead, and needs
+#  none of this. If macOS refuses to open this file because it was
+#  downloaded, run it once from Terminal: bash launcher/Ninaivu.command
 #
-#  If macOS refuses to open this file, you have not run "Setup Ninaivu" yet —
-#  do that once and this becomes an ordinary double-click, along with a
-#  Ninaivu icon and the Ninaivu Control Panel in your Applications folder.
-#
-#  Everything it installs lives in a .venv folder beside this file, apart from
+#  Everything it installs lives in a .venv folder in the checkout, apart from
 #  Python itself when the Mac has none new enough. Deleting the Ninaivu folder
 #  removes the rest.
 # ---------------------------------------------------------------------------
 set -uo pipefail
 
-HERE="$(cd "$(dirname "$0")" && pwd)"
+# The checkout, one folder up from launcher/.
+HERE="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$HERE" || exit 1
 # The folder Ninaivu keeps its index and settings in, where the server
 # looks for it too; the remembered library goes in there, and so into its

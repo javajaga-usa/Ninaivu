@@ -347,16 +347,13 @@ def test_a_silent_connection_does_not_stop_https_answering(tmp_path, cfg):
 # The root of the repository
 # ---------------------------------------------------------------------------
 
-def test_the_root_holds_the_launcher_and_only_what_tooling_needs_there():
-    """The launchers to double-click, and the files Git, GitHub, pip and mkdocs
-    look for by name. Everything else is in a folder for what it is."""
+def test_the_root_holds_only_what_tooling_looks_for_there():
+    """The files Git, GitHub, pip and mkdocs look for by name. Every starter
+    is in launcher/ (a checkout starts with python -m ninaivu), and each
+    portable download carries its own one starter."""
     root = Path(__file__).resolve().parents[1]
-    allowed = {"start.cmd", "README.md", "LICENSE", "pyproject.toml", "mkdocs.yml", ".gitignore",
-               ".gitattributes", ".editorconfig", ".pre-commit-config.yaml", ".dockerignore",
-               # The double-click launchers and the Control Panel they open.
-               "Ninaivu.command", "Setup Ninaivu.command",
-               "Start - Ninaivu Control Panel.vbs", "Start - Ninaivu Control Panel.sh",
-               "Setup Ninaivu.sh", "ninaivu_control.pyw"}
+    allowed = {"README.md", "LICENSE", "pyproject.toml", "mkdocs.yml", ".gitignore",
+               ".gitattributes", ".editorconfig", ".pre-commit-config.yaml", ".dockerignore"}
     # What the repository holds there, not whatever else is lying in this
     # checkout (a zip the person put there, a picture made from it): those
     # are theirs, and never reach anybody else. Read from disk where there is
@@ -370,14 +367,16 @@ def test_the_root_holds_the_launcher_and_only_what_tooling_needs_there():
         files = {p.name for p in root.iterdir() if p.is_file()}
     files -= {".DS_Store"}                                  # Finder's, and gitignored
     assert files <= allowed, f"loose at the root: {sorted(files - allowed)}"
-    assert "start.cmd" in files
+    for retired in ("Setup Ninaivu.command", "Setup Ninaivu.sh"):
+        assert not (root / retired).exists() and not (root / "launcher" / retired).exists()
 
 
 def test_start_cmd_runs_the_launcher_with_windows_line_endings():
     root = Path(__file__).resolve().parents[1]
-    raw = (root / "start.cmd").read_bytes()
+    raw = (root / "launcher" / "start.cmd").read_bytes()
     assert b"\r\n" in raw and raw.replace(b"\r\n", b"").count(b"\n") == 0, "start.cmd mixes line endings"
-    assert b"launcher\\start.py" in raw
+    assert b'cd /d "%~dp0.."' in raw, "it runs from the checkout, one folder up"
+    assert b"launcher\\start.py" in raw and b'"%~dp0install-python.ps1"' in raw
     assert (root / "launcher" / "start.py").is_file()
     assert b"launcher/start.py" in (root / "launcher" / "start.sh").read_bytes()
 

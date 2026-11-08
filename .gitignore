@@ -56,9 +56,7 @@ installers/windows/wheels/
 installers/windows/installer.built.cfg
 site-build/
 
-# Generated on each Mac by Setup Ninaivu, with this checkout's paths in it
+# Built apps (installers/macos/build.sh), never checked in
 *.app/
 installers/linux/build/
 
-# Native Linux checkout launcher, built locally by Setup Ninaivu.sh
-/Open Ninaivu

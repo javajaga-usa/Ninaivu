@@ -16,4 +16,4 @@ export NINAIVU_STATE_DIR
 export NINAIVU_HOME="${NINAIVU_HOME:-$PWD}"
 export NINAIVU_PYTHON="${NINAIVU_PYTHON:-$PWD/.venv/bin/python}"
 export NINAIVU_LOG_DIR="${NINAIVU_LOG_DIR:-$PWD/logs}"
-export NINAIVU_LAUNCHER="$PWD/Start - Ninaivu Control Panel.sh"
+export NINAIVU_LAUNCHER="$PWD/launcher/Start - Ninaivu Control Panel.sh"
