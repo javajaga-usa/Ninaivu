@@ -37,7 +37,8 @@ from ..storage import db, family_tree, life_story as words_store, then_and_now a
 from ..words import Said
 from . import _long_calls
 from ._body import json_object
-from .api import _cfg, _conn, _roots, _thumb_version, _viewer, _viewer_limits, bp
+from ..server import visibility
+from .api import _cfg, _conn, _thumb_version, bp
 
 log = logging.getLogger(__name__)
 
@@ -71,12 +72,13 @@ def _host():
 
 
 def _people() -> dict[int, dict[str, Any]]:
-    return {int(p["id"]): p for p in db.list_people(_conn(), _roots(), **_viewer_limits())
+    return {int(p["id"]): p for p in db.list_people(_conn(), gate=visibility.current())
             if p.get("name")}
 
 
 def _life(person_id: int) -> dict[str, Any]:
-    conn, roots, viewer = _conn(), _roots(), _viewer()
+    gate = visibility.current()
+    conn, roots, viewer = _conn(), gate.roots, gate.limits()
     people = _people()
     if person_id not in people:
         abort(404)
@@ -85,11 +87,9 @@ def _life(person_id: int) -> dict[str, Any]:
     links = [r for r in family_tree.relations(conn)
              if int(r["person_a"]) in names and int(r["person_b"]) in names]
     born = born_store.born(conn, names)
-    # The visibility clause carries the date limit the household set, which
-    # moves no library counter: a narrower limit is in force at once.
-    key = ("life_story", int(person_id), int(viewer["viewer_id"] or 0),
-           int(viewer["max_visibility"]), viewer["scope"] or "", tuple(roots),
-           db.visibility_clause("a", viewer["max_visibility"]),
+    # The gate's key carries the date limit the household set, which moves
+    # no library counter: a narrower limit is in force at once.
+    key = ("life_story", int(person_id), *gate.cache_key(),
            tuple(sorted(names.items())), tuple(sorted(faces.items(), key=lambda kv: kv[0])),
            tuple(sorted(born.items())),
            tuple(sorted((int(r["person_a"]), int(r["person_b"]), r["kind"]) for r in links)))
@@ -116,13 +116,12 @@ def life_people():
     _switched_on()
     writes, why = _writer()
     people = _people()
-    conn, roots, viewer = _conn(), _roots(), _viewer()
+    gate = visibility.current()
+    conn, roots, viewer = _conn(), gate.roots, gate.limits()
     names = {pid: str(p["name"]) for pid, p in people.items()}
     # Counting everybody's photographs reads every face in the library: kept
     # until faces or the library change, as the People page's own list is.
-    key = ("life_people", int(viewer["viewer_id"] or 0), int(viewer["max_visibility"]),
-           viewer["scope"] or "", tuple(roots), db.visibility_clause("a", viewer["max_visibility"]),
-           tuple(sorted(names.items())))
+    key = ("life_people", *gate.cache_key(), tuple(sorted(names.items())))
     found = db.cached_aggregate(conn, key,
                                 lambda: life_story.people(conn, roots, viewer, names),
                                 also=(db.FACES_GENERATION_KEY,))

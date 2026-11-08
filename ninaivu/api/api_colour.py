@@ -41,7 +41,7 @@ from ..server import features
 from ..server.auth import current_user, require_family
 from ..storage import colour_copies, db
 from ..words import said
-from .api import _asset_file, _cfg, _conn, _guard, _viewing_copy, bp
+from .api import _asset_file, _cfg, _conn, _gate, _viewing_copy, bp
 
 log = logging.getLogger(__name__)
 
@@ -66,7 +66,7 @@ def _switched_on() -> None:
 
 
 def _picture(asset_id: int) -> dict:
-    row = _guard(db.get_asset(_conn(), asset_id, current_user().id))
+    row = _gate(db.get_asset(_conn(), asset_id, current_user().id))
     if row.get("kind") != "picture" or row.get("trashed"):
         abort(404)
     return row
@@ -77,7 +77,7 @@ def _visible(asset_id: int | None) -> int | None:
     if not asset_id:
         return None
     try:
-        _guard(db.get_asset(_conn(), asset_id, current_user().id))
+        _gate(db.get_asset(_conn(), asset_id, current_user().id))
     except Exception:                                           # noqa: BLE001 - a 404 or 403
         return None
     return int(asset_id)

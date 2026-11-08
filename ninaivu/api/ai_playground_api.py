@@ -38,10 +38,10 @@ def _hidden(data: dict) -> bool:
     if media_id is None:
         return False
     from ..storage import db
-    from .api import _conn, _guard
+    from .api import _conn, _gate
     if isinstance(media_id, bool) or not isinstance(media_id, (int, str)):
         raise ValueError('Invalid media_id.')
-    row = _guard(db.get_asset(_conn(), int(media_id)))
+    row = _gate(db.get_asset(_conn(), int(media_id)))
     return int(row.get('visibility') or 0) >= 2
 
 

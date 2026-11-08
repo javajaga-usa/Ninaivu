@@ -17,8 +17,9 @@ from flask import abort, jsonify
 from ..server.auth import current_user, require_family
 from ..storage import db, smart
 from ._body import json_object
-from .api import (_conn, _filters_from_request, _roots, _search_shield, _semantic_ids,
-                  _thumb_version, _viewer, _viewer_limits, bp)
+from ..server import visibility
+from .api import (_conn, _filters_from_request, _search_shield, _semantic_ids,
+                  _thumb_version, bp)
 
 
 def apply_rules(filters: dict[str, Any], album_id: int) -> None:
@@ -68,14 +69,15 @@ def _rules_from_request() -> dict[str, Any]:
 def _describe(album: dict[str, Any]) -> dict[str, Any]:
     """An album as the sidebar needs it: how many this viewer would see, a cover."""
     conn = _conn()
-    roots = _roots()
+    viewer = visibility.current()
+    roots = viewer.roots
     rules = album["rules"]
     text = rules.get("text", "")
     # Words go to the picture search where there is one, the way the gallery
     # sends them, so the count beside the name is the count it will show.
     ranked, _ = _semantic_ids(text, roots, conn)
     rows, total = db.query_assets(
-        conn, roots, limit=1, offset=0, **_viewer(),
+        conn, gate=viewer, limit=1, offset=0,
         text="" if ranked is not None else text, ids=ranked,
         people=rules.get("people") or None,
         place=rules.get("place", ""), kinds=rules.get("kinds") or None,
@@ -92,7 +94,7 @@ def _describe(album: dict[str, Any]) -> dict[str, Any]:
         # the table told a family member who was in the hidden photographs.
         wanted = set(rules["people"])
         known = {int(p["id"]): p["name"] for p in
-                 db.list_people(conn, roots, **_viewer_limits())
+                 db.list_people(conn, gate=viewer)
                  if int(p["id"]) in wanted}
         names = [known[p] for p in rules["people"] if p in known]
     return {

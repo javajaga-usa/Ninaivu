@@ -153,7 +153,8 @@ def list_occasions(conn: sqlite3.Connection, roots: Sequence[str] | str | None =
     """
     if gate is not None:
         gate_sql, gate_params = gate.sql("a")
-        guard = f"{gate_sql} AND a.trashed=0 AND a.nsfw=0 AND a.occasion_id IS NOT NULL"
+        guard = (f"{gate_sql} AND a.trashed=0 AND a.nsfw=0 AND a.occasion_id IS NOT NULL"
+                 + gate.occasion_halves_sql("a"))
         params = (*gate_params, int(limit))
     else:
         roots_sql, roots_params = roots_clause("a", roots if roots is not None else [])
@@ -228,15 +229,16 @@ def list_albums(conn: sqlite3.Connection,
                 max_visibility: int = 0,
                 scope: str | None = None,
                 viewer_id: int | None = None,
-                is_admin: bool = False) -> list[dict[str, Any]]:
+                is_admin: bool = False, *, gate: Any = None) -> list[dict[str, Any]]:
     """Albums the viewer can actually open, counted as the viewer sees them.
 
     An album's *name* is family-authored free text and its size is a fact
     about folders the viewer may have no access to, so neither may be returned
     for an album whose contents are entirely out of their reach. Passing no
-    roots keeps the old unfiltered behaviour for internal callers.
+    roots keeps the old unfiltered behaviour for internal callers. *gate*, a
+    ``server.visibility.Viewer``, is the caller's limits when given.
     """
-    if roots is None:
+    if roots is None and gate is None:
         rows = conn.execute(
             "SELECT al.id, al.name, al.created_at, al.cover_id, al.created_by, "
             "(SELECT COUNT(*) FROM album_items ai WHERE ai.album_id=al.id) n, "
@@ -252,17 +254,22 @@ def list_albums(conn: sqlite3.Connection,
             result.append(d)
         return result
 
-    roots_sql, params = roots_clause("a", roots)
-    scope_sql, scope_params = scope_clause("a", scope)
     # Counted as the album lists its contents: a pair's other half is not
     # listed there, so counted it promised photographs the album never showed.
-    where = [roots_sql, visibility_clause("a", max_visibility), "a.trashed = 0", "a.nsfw = 0",
-             "a.live_clip = 0", "a.raw_twin = 0"]
-    visible = list(params) + [int(max_visibility)]
-    if scope_sql:
-        where.append(scope_sql)
-        visible += scope_params
-    seen = " AND ".join(w for w in where if w)
+    if gate is not None:
+        gate_sql, visible = gate.sql("a")
+        seen = (f"{gate_sql} AND a.trashed = 0 AND a.nsfw = 0 AND a.live_clip = 0"
+                " AND a.raw_twin = 0")
+    else:
+        roots_sql, params = roots_clause("a", roots)
+        scope_sql, scope_params = scope_clause("a", scope)
+        where = [roots_sql, visibility_clause("a", max_visibility), "a.trashed = 0",
+                 "a.nsfw = 0", "a.live_clip = 0", "a.raw_twin = 0"]
+        visible = list(params) + [int(max_visibility)]
+        if scope_sql:
+            where.append(scope_sql)
+            visible += scope_params
+        seen = " AND ".join(w for w in where if w)
 
     # Two grouped passes over the album items for every album at once: what
     # the viewer sees of each (count, newest addition for a cover, earliest
@@ -307,6 +314,18 @@ def list_albums(conn: sqlite3.Connection,
             "SELECT id, root, folder, kind, visibility, date_key, trashed, nsfw "
             "FROM assets WHERE id IN (%s)" % ",".join("?" * len(piece)), piece)})
     root_list = [roots] if isinstance(roots, str) else roots
+    if gate is not None:
+        in_dates, restricted = gate.in_dates, gate.restricted
+
+        def cover_seen(cover: dict[str, Any]) -> bool:
+            # Chosen once for everybody who opens the album: asked as for
+            # somebody else with these limits, so not their own private item.
+            return gate.may_see(cover, own=False)
+    else:
+        in_dates, restricted = date_policy.allows, date_policy.restricted()
+
+        def cover_seen(cover: dict[str, Any]) -> bool:
+            return visible_to(cover, max_visibility, scope) and cover["root"] in root_list
     # An album with nothing visible in it is not the viewer's business, but an
     # empty album they made themselves still is.
     out = []
@@ -316,16 +335,15 @@ def list_albums(conn: sqlite3.Connection,
         # date shown is the earliest of what this viewer can see. Shown whole,
         # it told a family member the date of a photograph only an
         # administrator may see.
-        if not date_policy.allows(d):
+        if not in_dates(d):
             continue
         d["date_key"] = d.pop("shown_date")
         cover = covers.get(int(d["cover_id"])) if d.get("cover_id") else None
-        if not (cover and visible_to(cover, max_visibility, scope)
-                and cover["root"] in root_list and not cover.get("trashed")
+        if not (cover and cover_seen(cover) and not cover.get("trashed")
                 and not cover.get("nsfw")):
             d["cover_id"] = d.get("effective_cover_id")
         d.pop("effective_cover_id", None)
-        if d["n"] > 0 or (not date_policy.restricted() and ((viewer_id is not None and d["created_by"] == viewer_id) or is_admin)):
+        if d["n"] > 0 or (not restricted and ((viewer_id is not None and d["created_by"] == viewer_id) or is_admin)):
             out.append(d)
     return out
 

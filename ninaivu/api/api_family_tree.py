@@ -17,14 +17,15 @@ from flask import abort, jsonify
 from ..server.auth import current_user, require_family
 from ..storage import db, family_tree
 from ._body import json_object
-from .api import bp, _conn, _roots, _viewer_limits
+from ..server import visibility
+from .api import bp, _conn
 
 #: What the person page offers, and the stored relation each one is.
 RELATIONS = ("parent", "child", "spouse")
 
 
 def _people() -> dict[int, dict[str, Any]]:
-    return {int(p["id"]): p for p in db.list_people(_conn(), _roots(), **_viewer_limits())}
+    return {int(p["id"]): p for p in db.list_people(_conn(), gate=visibility.current())}
 
 
 def _seen(relations: list[dict[str, Any]], people: dict[int, Any]) -> list[dict[str, Any]]:

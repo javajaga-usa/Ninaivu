@@ -40,10 +40,17 @@ from .db import (  # noqa: F401
 #: Applied to every family-facing face query. Kept as one fragment for the
 #: same reason :func:`visibility_clause` is: so a later query cannot remember
 #: three of the four rules.
-def _face_visibility_sql(alias: str, max_visibility: int,
-                         scope: str | None,
-                         roots: "Sequence[str] | str") -> tuple[str, list[Any]]:
-    roots_sql, params = roots_clause(alias, roots)
+def _face_visibility_sql(alias: str, max_visibility: int = 1,
+                         scope: str | None = None,
+                         roots: "Sequence[str] | str | None" = None, *,
+                         gate: Any = None) -> tuple[str, list[Any]]:
+    """The photographs a face may be shown from: *gate*'s (a
+    ``server.visibility.Viewer``) when it is given, with the bin and explicit
+    content left out for everybody."""
+    if gate is not None:
+        gate_sql, gate_params = gate.sql(alias)
+        return f"{gate_sql} AND {alias}.trashed = 0 AND {alias}.nsfw = 0", list(gate_params)
+    roots_sql, params = roots_clause(alias, roots if roots is not None else [])
     where = [roots_sql, visibility_clause(alias, max_visibility)]
     params = [*params, int(max_visibility)]
     scope_sql, scope_params = scope_clause(alias, scope)
@@ -397,28 +404,29 @@ def load_faces(conn: sqlite3.Connection, *, person_id: int | None = None,
     return [dict(r) for r in conn.execute(sql, params).fetchall()]
 
 
-def list_people(conn: sqlite3.Connection, roots: "Sequence[str] | str", *,
+def list_people(conn: sqlite3.Connection, roots: "Sequence[str] | str | None" = None, *,
                 max_visibility: int = 1, scope: str | None = None,
-                min_faces: int = 1) -> list[dict[str, Any]]:
+                min_faces: int = 1, gate: Any = None) -> list[dict[str, Any]]:
     """Named people, counted as *this viewer* can see them.
 
     A person whose every appearance is in hidden photographs does not appear
     in the list at all for a family member — not as a name with a zero beside
     it, which would leak the fact that they are in the library somewhere.
+    *gate*, a ``server.visibility.Viewer``, is the caller's limits when given.
     """
-    guard, params = _face_visibility_sql("a", max_visibility, scope, roots)
+    guard, params = _face_visibility_sql("a", max_visibility, scope, roots, gate=gate)
     # A group over every face in the library, asked for on every visit to
     # People: remembered until faces, names or what this viewer may see change.
     return cached_aggregate(
         conn, ("people", guard, tuple(params), int(min_faces)),
         lambda: _list_people(conn, roots, guard, params, max_visibility, scope,
-                             min_faces),
+                             min_faces, gate),
         also=(FACES_GENERATION_KEY,))
 
 
-def _list_people(conn: sqlite3.Connection, roots: "Sequence[str] | str",
+def _list_people(conn: sqlite3.Connection, roots: "Sequence[str] | str | None",
                  guard: str, params: list[Any], max_visibility: int,
-                 scope: str | None, min_faces: int) -> list[dict[str, Any]]:
+                 scope: str | None, min_faces: int, gate: Any = None) -> list[dict[str, Any]]:
     rows = conn.execute(
         "SELECT p.id, p.name, p.cover_face_id, p.avatar_asset_id, "
         "       COUNT(DISTINCT f.asset_id) AS photo_count, "
@@ -444,7 +452,7 @@ def _list_people(conn: sqlite3.Connection, roots: "Sequence[str] | str",
         if not person.pop("cover_seen"):
             best = person_face_ids(conn, person["id"], roots,
                                    max_visibility=max_visibility, scope=scope,
-                                   limit=1)
+                                   limit=1, gate=gate)
             person["cover_face_id"] = best[0]["id"] if best else None
         if person.get("avatar_asset_id") is not None:
             # The chosen avatar photograph, named only to someone who may open
@@ -459,10 +467,12 @@ def _list_people(conn: sqlite3.Connection, roots: "Sequence[str] | str",
 
 
 def person_face_ids(conn: sqlite3.Connection, person_id: int,
-                    roots: "Sequence[str] | str", *, max_visibility: int = 1,
-                    scope: str | None = None, limit: int = 500) -> list[dict[str, Any]]:
-    """This person's faces, filtered to what the viewer may see."""
-    guard, params = _face_visibility_sql("a", max_visibility, scope, roots)
+                    roots: "Sequence[str] | str | None" = None, *, max_visibility: int = 1,
+                    scope: str | None = None, limit: int = 500,
+                    gate: Any = None) -> list[dict[str, Any]]:
+    """This person's faces, filtered to what the viewer may see (*gate*'s,
+    a ``server.visibility.Viewer``, when it is given)."""
+    guard, params = _face_visibility_sql("a", max_visibility, scope, roots, gate=gate)
     rows = conn.execute(
         "SELECT f.id, f.asset_id, f.bbox, f.quality, f.source, f.confidence, f.thumb "
         "FROM faces f JOIN assets a ON a.id = f.asset_id "
@@ -622,18 +632,19 @@ def save_cluster_keys(conn: sqlite3.Connection,
 _IGNORED = "EXISTS (SELECT 1 FROM faces_ignored i WHERE i.face_id = f.id)"
 
 
-def list_unnamed_clusters(conn: sqlite3.Connection, roots: "Sequence[str] | str",
+def list_unnamed_clusters(conn: sqlite3.Connection, roots: "Sequence[str] | str | None" = None,
                           *, max_visibility: int = 2, scope: str | None = None,
                           min_size: int = 3, limit: int = 60, offset: int = 0,
-                          hidden: bool = False) -> list[dict[str, Any]]:
+                          hidden: bool = False, gate: Any = None) -> list[dict[str, Any]]:
     """Groups the matcher formed that nobody has named yet, largest first.
 
     The faces somebody hid from naming are left out of the count and the
     cover, and a group with nothing else in it is left out altogether.
     *hidden* lists those instead, for showing them again; *offset* pages
     through either, since a large library has far more than one page of
-    groups and the person you are looking for is often not in the first."""
-    guard, params = _face_visibility_sql("a", max_visibility, scope, roots)
+    groups and the person you are looking for is often not in the first.
+    *gate*, a ``server.visibility.Viewer``, is the caller's limits when given."""
+    guard, params = _face_visibility_sql("a", max_visibility, scope, roots, gate=gate)
     # A group over every unnamed face (about 0.6 s on a family library),
     # asked for on every visit to Faces and every page of it: kept until a
     # face, a name, a group or what is hidden from naming moves.

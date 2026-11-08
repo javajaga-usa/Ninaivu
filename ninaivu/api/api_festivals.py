@@ -27,9 +27,9 @@ from flask import abort, jsonify
 
 from .. import ai as ai_mod
 from ..media import festival_calendar, festivals
-from ..server.auth import current_user
 from ..storage import db
-from .api import _cfg, _conn, _engine, _roots, _text_vector, _thumb_version, _viewer, bp
+from ..server import visibility
+from .api import _cfg, _conn, _engine, _text_vector, _thumb_version, bp
 
 log = logging.getLogger(__name__)
 
@@ -92,15 +92,13 @@ def _check(conn) -> festivals.Check | None:  # noqa: ANN001
 
 
 def _albums() -> dict[str, Any]:
-    conn, roots, viewer = _conn(), _roots(), _viewer()
-    user = current_user()
-    explicit = bool(user.is_admin)
+    gate = visibility.current()
+    conn, roots, viewer = _conn(), gate.roots, gate.limits()
+    explicit = gate.is_admin
     engine = _engine()
-    # The visibility clause carries the household's date limit, which moves no
+    # The gate's key carries the household's date limit, which moves no
     # library counter: a narrower limit is in force at once, not in an hour.
-    key = ("festival_albums", int(viewer["viewer_id"] or 0), int(viewer["max_visibility"]),
-           viewer["scope"] or "", tuple(roots), db.visibility_clause("a", viewer["max_visibility"]),
-           explicit, getattr(engine, "model_id", "") or "",
+    key = ("festival_albums", *gate.cache_key(), explicit, getattr(engine, "model_id", "") or "",
            bool(getattr(engine, "semantic", False)), festival_calendar.FESTIVALS)
     return db.cached_aggregate(
         conn, key,

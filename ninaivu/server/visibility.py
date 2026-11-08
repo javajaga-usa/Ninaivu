@@ -35,6 +35,52 @@ class Viewer:
     """Everything that limits what one caller sees. Never read from a request
     parameter: a guest cannot see more by changing the query string."""
 
+    # -- three answers kept as they were, pending the maintainer ----------------
+    #
+    # Each is an inconsistency found while moving the routes to the gate and
+    # kept, so that moving them changed nothing. Each is decided here and
+    # nowhere else: flipping one is a one-line change, pinned by a test in
+    # tests/test_visibility_gate.py.
+
+    #: The occasions list counts a live photograph's clip and a RAW+JPEG
+    #: pair's RAW twin as items of their own (``db_albums.list_occasions``),
+    #: while every other list — the gallery, albums, on this day — shows and
+    #: counts a pair once. False would count each pair once there too.
+    OCCASIONS_COUNT_BOTH_HALVES = True
+
+    #: A profile whose library folder is gone has no folders at all, and the
+    #: picture search's candidate vectors (``embeddings.visible_embedding_ids``)
+    #: then are every vector in the library: "no folders" reads there as an
+    #: internal caller's "no limit", whoever is asking and whatever their
+    #: ceiling. Nothing reaches them — every id is narrowed to what they may
+    #: see afterwards, which is nothing — but the search is ranked over
+    #: everything. False would give such a profile no candidates.
+    NO_FOLDER_RANKS_EVERY_VECTOR = True
+
+    #: The stack route (api_stacks) leaves out an item in the bin for the
+    #: administrator too, who may open that same item by id and list the bin
+    #: everywhere else. False would show the administrator their stacks' binned
+    #: frames as the gallery's bin view does.
+    STACK_HIDES_THE_BIN_FROM_ADMIN = True
+
+    def occasion_halves_sql(self, alias: str = "a") -> str:
+        """What the occasions list adds to its WHERE for a pair's other half:
+        nothing, while :attr:`OCCASIONS_COUNT_BOTH_HALVES` holds."""
+        if self.OCCASIONS_COUNT_BOTH_HALVES:
+            return ""
+        dot = f"{alias}." if alias else ""
+        return f" AND {dot}live_clip = 0 AND {dot}raw_twin = 0"
+
+    def ranks_every_vector(self) -> bool:
+        """Whether the picture search ranks every vector for this caller
+        (:attr:`NO_FOLDER_RANKS_EVERY_VECTOR`, for a caller with no folders)."""
+        return self.NO_FOLDER_RANKS_EVERY_VECTOR and not self.roots
+
+    def stack_shows_bin(self) -> bool:
+        """Whether the stack route lists frames in the bin for this caller
+        (never, while :attr:`STACK_HIDES_THE_BIN_FROM_ADMIN` holds)."""
+        return self.is_admin and not self.STACK_HIDES_THE_BIN_FROM_ADMIN
+
     def __init__(self, *, viewer_id: int, role: str, roots: Sequence[str] | None,
                  scope: str | None, policy: tuple[str, str, str] | None) -> None:
         #: Who is asking; 0 for nobody signed in.
@@ -99,6 +145,19 @@ class Viewer:
             self._shield = {"search_shield": True, "near_explicit": near, "revealing": bare}
         return dict(self._shield)
 
+    # -- the date limit ----------------------------------------------------------
+
+    @property
+    def restricted(self) -> bool:
+        """Whether a date limit is in force for this caller
+        (``date_policy.restricted`` for them)."""
+        return self.policy is not None and self.policy[1] != "all"
+
+    def in_dates(self, row: dict[str, Any]) -> bool:
+        """Whether *row* — an item, or an album by its whole date — is inside
+        this caller's date limit (``date_policy.allows`` for them)."""
+        return self.policy is None or date_policy.allows(row, self.policy)
+
     # -- a listing -------------------------------------------------------------
 
     def _dates(self, alias: str) -> str:
@@ -148,16 +207,27 @@ class Viewer:
             params += scope_params
         return " AND ".join(parts), params
 
+    def cache_key(self) -> tuple[Any, ...]:
+        """What an answer remembered for this caller depends on: who they are
+        and everything that limits them, the date limit included — the same
+        caller, or one with the same limits, gets the same key."""
+        clause, params = self.sql("a")
+        return (self.viewer_id, self.max_visibility, clause, tuple(params))
+
     # -- one item --------------------------------------------------------------
 
-    def may_see(self, asset: dict[str, Any] | None) -> bool:
-        """Whether this caller may be served *asset* (a row fetched by id)."""
+    def may_see(self, asset: dict[str, Any] | None, *, own: bool = True) -> bool:
+        """Whether this caller may be served *asset* (a row fetched by id).
+
+        *own* False asks it as for somebody else with the same limits: their
+        own "Only to me" item is held hidden like anybody's (an album's
+        cover, chosen once for everybody who opens it)."""
         if not asset:
             return False
         if self.policy is not None and not date_policy.allows(asset, self.policy):
             return False
         owner = asset.get("private_to")
-        if self.viewer_id and owner is not None and int(owner) == self.viewer_id:
+        if own and self.viewer_id and owner is not None and int(owner) == self.viewer_id:
             ceiling = max(self.max_visibility, 2)       # their own "Only to me" item
         else:
             ceiling = self.max_visibility

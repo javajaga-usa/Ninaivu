@@ -22,8 +22,8 @@ from typing import Any
 
 from flask import abort, current_app, jsonify, make_response, request, send_file
 
-from ...api.api import _cfg, _conn, _roots, _safe_under, _thumb_version, _viewer, _visible_ids, bp
-from ...server import features
+from ...api.api import _cfg, _conn, _safe_under, _thumb_version, _visible_ids, bp
+from ...server import features, visibility
 from ...server.auth import current_user, require_family
 from ...storage import db, stories as story_store
 from ...words import Said, refusal
@@ -74,9 +74,9 @@ def _query(filters: dict[str, Any], ids: list[int] | None = None, *,
             ids = [i for i in ids if i in allowed]
         wanted["ids"] = ids
         limit = len(ids) or 1
-    rows, _ = db.query_assets(_conn(), _roots(), kinds=list(kinds), sort="date_asc",
-                              limit=limit, offset=0, columns=columns, with_total=False,
-                              **_viewer(), **wanted)
+    rows, _ = db.query_assets(_conn(), gate=visibility.current(), kinds=list(kinds),
+                              sort="date_asc", limit=limit, offset=0, columns=columns,
+                              with_total=False, **wanted)
     return rows
 
 
@@ -120,8 +120,8 @@ def _songs() -> list[dict[str, Any]]:
     memos, calls or audiobooks (media/audio_art.py)."""
     from ...media import audio_art                         # noqa: PLC0415
 
-    rows, _ = db.query_assets(_conn(), _roots(), kinds=["audio"], sort="date_desc",
-                              limit=MAX_SONGS * 3, offset=0, with_total=False, **_viewer())
+    rows, _ = db.query_assets(_conn(), gate=visibility.current(), kinds=["audio"],
+                              sort="date_desc", limit=MAX_SONGS * 3, offset=0, with_total=False)
     songs = []
     for row in rows:
         if audio_art.classify(row.get("rel_path") or "", duration=row.get("duration")) \
@@ -166,8 +166,8 @@ def _music(choice: Any, *, pace: str = "steady",
     song_id = choice.get("id")
     if isinstance(song_id, bool) or not isinstance(song_id, int) or not 0 < song_id < 2 ** 63:
         abort(400, description="That song cannot be used.")
-    rows, _ = db.query_assets(_conn(), _roots(), kinds=["audio"], ids=[song_id], limit=1,
-                              offset=0, with_total=False, **_viewer())
+    rows, _ = db.query_assets(_conn(), gate=visibility.current(), kinds=["audio"],
+                              ids=[song_id], limit=1, offset=0, with_total=False)
     if not rows:
         abort(400, description="That song cannot be used.")
     root = Path(rows[0]["root"]).resolve()
