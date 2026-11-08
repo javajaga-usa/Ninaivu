@@ -1,5 +1,6 @@
 """Where each photograph is (4.0, proposal 3): the ``locations`` table that
-migration 2 adds beside ``assets``, and the triggers that keep it in step."""
+migration 2 adds beside ``assets``, the triggers that keep it in step, and
+fingerprints taken as files are indexed rather than in a pass afterwards."""
 from __future__ import annotations
 
 import os
@@ -231,6 +232,41 @@ def test_a_writer_that_goes_round_the_triggers_is_set_right_by_the_next_write(tm
 
 # -- the scanner -------------------------------------------------------------
 
+def test_fingerprints_are_taken_as_files_are_indexed(cfg, monkeypatch):
+    cfg.content_fingerprints = True
+    conn = _open(cfg)
+    # The last pass does nothing here: whatever has a fingerprint got it
+    # while it was being indexed.
+    monkeypatch.setattr(Scanner, "_fingerprint", lambda self, conn, root: None)
+    _rescan(cfg)
+    files = conn.execute("SELECT COUNT(*) FROM assets WHERE trashed=0").fetchone()[0]
+    assert files > 0
+    assert scanner_mod.owed(conn, cfg.active_root, "fingerprints").startswith("0:")
+    have = _in_step(conn)
+    assert all(fp and fp.startswith(f"{fingerprints.ALGO}:") for _, _, fp in have.values())
+    # The two byte-identical copies in the fixture library are one fingerprint.
+    shots = {rel: fp for _, rel, fp in have.values() if rel.startswith("2023/05/12/shot0")}
+    assert len(shots) == 2 and len(set(shots.values())) == 1
+    digest = fingerprints.fingerprint_file(Path(cfg.active_root) / "2023/05/12/shot0.jpg")[0]
+    assert set(shots.values()) == {f"{fingerprints.ALGO}:{digest}"}
+
+
+def test_a_file_too_big_to_take_at_index_time_is_left_to_the_last_pass(cfg, monkeypatch):
+    cfg.content_fingerprints = True
+    conn = _open(cfg)
+    monkeypatch.setattr(fingerprints, "AT_INDEX_UP_TO", 1000)
+    monkeypatch.setattr(Scanner, "_fingerprint", lambda self, conn, root: None)
+    _rescan(cfg)
+    sizes = dict(conn.execute("SELECT rel_path, size FROM assets"))
+    have = {rel: fp for _, rel, fp in _in_step(conn).values()}
+    assert any(size > 1000 for size in sizes.values())
+    assert all((fp is None) == (sizes[rel] > 1000) for rel, fp in have.items())
+
+    monkeypatch.undo()
+    fingerprints.fill(conn, cfg.active_root)
+    assert all(fp is not None for _, _, fp in _in_step(conn).values())
+
+
 def test_with_fingerprints_off_none_are_taken_at_index_time(cfg):
     conn = _open(cfg)
     assert not cfg.content_fingerprints
@@ -251,7 +287,14 @@ def test_a_3x_index_is_backfilled_by_the_fingerprint_pass(cfg):
     assert all(fp is None for _, _, fp in _in_step(conn).values())
 
     cfg.content_fingerprints = True
-    _rescan(cfg)
+    read: list[str] = []
+    real = fingerprints.at_index
+    fingerprints.at_index = lambda path, st: read.append(str(path)) or real(path, st)
+    try:
+        _rescan(cfg)
+    finally:
+        fingerprints.at_index = real
+    assert read == []                                     # nothing new to index
     assert {r[0]: r[1] for r in conn.execute("SELECT id, rel_path FROM assets")} == ids
     have = _in_step(conn)
     assert set(have) == set(ids)

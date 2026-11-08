@@ -589,13 +589,20 @@ def _rule_reaches_inside(rule_folder: str, folder: str, root: Path | str) -> boo
 def build_record(root: Path, rel_path: str, st: os.stat_result, cfg: Config,
                  rules: list[dict[str, Any]] | None = None,
                  engine: Any | None = None,
-                 manual_turn: int | None = None) -> dict[str, Any]:
+                 manual_turn: int | None = None,
+                 fingerprint: bool = False) -> dict[str, Any]:
     """Probe one file and produce its database record (plus derivatives).
 
     *manual_turn* is a turn somebody set by hand for this file. The index
     keeps it over a rescan (``db.upsert_asset``); it is applied here as well,
     in place of what the scan would decide, so the thumbnails and the
     width and height written now agree with it instead of quietly undoing it.
+
+    With *fingerprint* (the scan, with content fingerprints kept), the
+    record also carries ``"fingerprint"``, ``(algo, digest)``, taken once the
+    file has been read for its thumbnails, so the bytes come from memory
+    (fingerprints.at_index). The scan writes it beside the row
+    (fingerprints.keep_from_index); the other callers leave it to the scan.
     """
     abs_path = root / rel_path
     kind = media_kind(abs_path)
@@ -829,6 +836,10 @@ def build_record(root: Path, rel_path: str, st: os.stat_result, cfg: Config,
                 record["gps_lat"], record["gps_lon"] = extra["lat"], extra["lon"]
             if not record.get("caption") and extra.get("description"):
                 record["caption"] = extra["description"]
+    if fingerprint:
+        taken = fingerprints.at_index(abs_path, st)
+        if taken is not None:
+            record["fingerprint"] = taken
     return record
 
 
@@ -2378,6 +2389,9 @@ class Scanner:
         if cfg.orientation_ai:
             self._wait_for_the_model()
         engine = getattr(self.ai, "engine", self.ai)
+        # Taken while each file's bytes are still in memory (4.0, proposal 3),
+        # so the last pass has nothing left to read for the files indexed now.
+        fingerprint = fingerprints.enabled(cfg)
         futures: dict[Any, tuple[int, str, Any, int, bool]] = {}
         failed = 0
 
@@ -2408,14 +2422,14 @@ class Scanner:
                     if not futures:
                         position, (rel, st) = again.popleft()
                         sent = pool.submit(build_record, root, rel, st, sent_cfg, rules,
-                                           None, manual_turns.get(rel))
+                                           None, manual_turns.get(rel), fingerprint)
                         futures[sent] = (position, rel, st, pool.restarts, True)
                 else:
                     for position, (rel, st) in itertools.islice(
                             queue, workers * 4 - len(futures)):
                         sent = pool.submit(build_record, root, rel, st, sent_cfg, rules,
                                            None if processes else engine,
-                                           manual_turns.get(rel))
+                                           manual_turns.get(rel), fingerprint)
                         futures[sent] = (position, rel, st,
                                          getattr(pool, "restarts", 0), False)
                 if not futures:
@@ -2471,7 +2485,7 @@ class Scanner:
                     self.progress.bump(**{"updated" if rel in known else "added": 1})
 
                     if len(batch) >= batch_size:
-                        db.bulk_upsert(conn, batch)
+                        self._write_batch(conn, root, batch)
                         batch.clear()
                         rules = self._rules_now(conn, root, rules)
                         self._notify({"phase": "progress"})
@@ -2483,7 +2497,7 @@ class Scanner:
             self._end_index_pool(pool, processes)
 
         if batch:
-            db.bulk_upsert(conn, batch)
+            self._write_batch(conn, root, batch)
         self._rules_now(conn, root, rules)
         if failed > FAILED_FILES_NAMED:
             log.warning("%s more files in %s could not be fully read; the first "
@@ -2500,6 +2514,16 @@ class Scanner:
         log.info("indexed %s files in %s (%.1f a second), %s errors",
                  f"{indexed:,}", took(started), indexed / elapsed,
                  f"{self.progress.errors:,}")
+
+    @staticmethod
+    def _write_batch(conn, root: Path, batch: list[dict[str, Any]]) -> None:
+        """Write a batch of records, then the fingerprints taken with them.
+
+        Two commits: a stop between them leaves the fingerprints owed, and
+        the last pass takes them, as it took every one before 4.0.
+        """
+        db.bulk_upsert(conn, batch)
+        fingerprints.keep_from_index(conn, str(root), batch)
 
     def _end_index_pool(self, pool: Any, processes: bool) -> None:
         """Close the indexing pool. After a stop, without waiting for a
@@ -2667,6 +2691,12 @@ class Scanner:
         new name (db.respell_asset, as for a name respelled by another
         computer) and it is not indexed again. Only new files the size of a
         gone, fingerprinted one are read. Returns how many moved.
+
+        The pairing still reads ``content_fingerprints`` (fingerprints.
+        fingerprinted), not ``locations`` (4.0, migration 2): the two give the
+        same answer (tests/test_locations.py), and the table the triggers
+        copy from stays the one a move is judged by. The row's move carries
+        its place in ``locations`` with it, fingerprint and all.
         """
         if not fingerprints.enabled(self.cfg):
             return 0
