@@ -1,0 +1,304 @@
+"""Where each photograph is (4.0, proposal 3): the ``locations`` table that
+migration 2 adds beside ``assets``, and the triggers that keep it in step."""
+from __future__ import annotations
+
+import os
+import shutil
+import time
+from pathlib import Path
+
+from PIL import Image
+
+from ninaivu.media import scanner as scanner_mod
+from ninaivu.media.scanner import Scanner
+from ninaivu.server import auth
+from ninaivu.storage import db, fingerprints, migrations
+
+
+# -- helpers -----------------------------------------------------------------
+
+def _record(rel: str, size: int = 100, mtime: float = 1_700_000_000.0) -> dict:
+    folder, _, name = rel.rpartition("/")
+    return {"root": "/library", "rel_path": rel, "filename": name, "folder": folder,
+            "ext": "jpg", "kind": "picture", "size": size, "mtime": mtime}
+
+
+def _expected(conn) -> dict[int, tuple]:
+    """What ``locations`` should say, worked out from the tables 3.7 has."""
+    return {r[0]: (r[1], r[2], r[3]) for r in conn.execute(
+        "SELECT a.id, a.root, a.rel_path, "
+        "CASE WHEN f.asset_id IS NULL THEN NULL ELSE f.algo || ':' || f.digest END "
+        "FROM assets a LEFT JOIN content_fingerprints f "
+        "ON f.asset_id=a.id AND f.size=a.size AND f.mtime=a.mtime")}
+
+
+def _locations(conn) -> dict[int, tuple]:
+    rows = conn.execute("SELECT asset_id, root, rel_path, fingerprint FROM locations "
+                        "WHERE place='library'").fetchall()
+    found = {r[0]: (r[1], r[2], r[3]) for r in rows}
+    assert len(found) == len(rows), "one place in the library per photograph"
+    return found
+
+
+def _in_step(conn) -> dict[int, tuple]:
+    have = _locations(conn)
+    assert have == _expected(conn)
+    assert conn.execute("SELECT COUNT(*) FROM locations").fetchone()[0] == len(have)
+    return have
+
+
+def _fingerprint(conn, asset_id: int, digest: str, size: int = 100,
+                 mtime: float = 1_700_000_000.0) -> None:
+    fingerprints.store(conn, [(asset_id, digest, size, mtime)])
+
+
+def _schema(conn) -> dict[tuple[str, str], tuple]:
+    return {(r[0], r[1]): (r[2], r[3]) for r in conn.execute(
+        "SELECT type, name, tbl_name, sql FROM sqlite_master")}
+
+
+def _as_37(conn) -> None:
+    """Make an index made by this version into one as 3.7 leaves it."""
+    for (name,) in conn.execute("SELECT name FROM sqlite_master WHERE type='trigger' "
+                                "AND name LIKE 'locations_%'").fetchall():
+        conn.execute(f"DROP TRIGGER {name}")
+    conn.execute("DROP TABLE locations")
+    conn.execute("PRAGMA user_version = 1")
+    conn.commit()
+
+
+def _reopen(path) -> object:
+    db.close(path)
+    db._READY.discard(str(path))                          # noqa: SLF001
+    return db.init_db(path)
+
+
+def _open(cfg):
+    """The index of the fixture library, as the server opens it."""
+    conn = db.init_db(cfg.db_path)
+    auth.init_auth_schema(conn)
+    return conn
+
+
+def _rescan(cfg) -> Scanner:
+    scanner = Scanner(cfg)
+    scanner._run(Path(cfg.active_root), full=False)       # noqa: SLF001
+    assert scanner.progress.status == "done", scanner.progress.message
+    return scanner
+
+
+# -- the migration -----------------------------------------------------------
+
+def test_a_37_index_migrates_with_locations_filled_and_ids_unchanged(tmp_path):
+    path = tmp_path / "index.db"
+    conn = db.init_db(path)
+    ids = [db.upsert_asset(conn, _record(f"2024/0{n}/photo{n}.jpg")) for n in range(1, 5)]
+    _fingerprint(conn, ids[0], "aa" * 32)
+    _fingerprint(conn, ids[1], "bb" * 32)
+    with db._write_lock:                                  # noqa: SLF001
+        # Edited since its fingerprint was taken: that one describes nothing now.
+        conn.execute("UPDATE assets SET size=101 WHERE id=?", (ids[1],))
+        conn.commit()
+    _as_37(conn)
+    before = {r[0]: (r[1], r[2]) for r in conn.execute("SELECT id, root, rel_path FROM assets")}
+
+    conn = _reopen(path)
+    try:
+        assert migrations.recorded(conn) == 2
+        after = {r[0]: (r[1], r[2]) for r in conn.execute("SELECT id, root, rel_path FROM assets")}
+        assert after == before
+        have = _in_step(conn)
+        assert set(have) == set(ids)
+        assert have[ids[0]][2] == f"{fingerprints.ALGO}:{'aa' * 32}"
+        assert have[ids[1]][2] is None and have[ids[2]][2] is None
+        assert {r[0] for r in conn.execute("SELECT place FROM locations")} == {"library"}
+    finally:
+        db.close(path)
+
+
+def test_the_migration_only_adds(tmp_path):
+    path = tmp_path / "index.db"
+    conn = db.init_db(path)
+    db.upsert_asset(conn, _record("a/one.jpg"))
+    _as_37(conn)
+    before = _schema(conn)
+    assert not [key for key in before if "locations" in key[1]]
+
+    conn = _reopen(path)
+    try:
+        after = _schema(conn)
+        assert {key: after.get(key) for key in before} == before
+        added = {key: value for key, value in after.items() if key not in before}
+        assert added and all(value[0] == "locations" or key[1].startswith("locations_")
+                             for key, value in added.items())
+        # The triggers watch the tables 3.7 has, and write only the new one.
+        assert {value[0] for key, value in added.items() if key[0] == "trigger"} == {
+            "assets", "content_fingerprints"}
+    finally:
+        db.close(path)
+
+
+def test_the_triggers_outlive_every_start(tmp_path):
+    path = tmp_path / "index.db"
+    conn = db.init_db(path)
+    names = {r[0] for r in conn.execute("SELECT name FROM sqlite_master "
+                                        "WHERE name LIKE 'locations_%'")}
+    assert len(names) == 6
+    for _ in range(2):
+        conn = _reopen(path)
+    try:
+        assert {r[0] for r in conn.execute("SELECT name FROM sqlite_master "
+                                           "WHERE name LIKE 'locations_%'")} == names
+        db.upsert_asset(conn, _record("after/restart.jpg"))
+        assert len(_in_step(conn)) == 1
+    finally:
+        db.close(path)
+
+
+# -- the triggers ------------------------------------------------------------
+
+def test_locations_follow_insert_rename_respell_and_delete(tmp_path):
+    path = tmp_path / "index.db"
+    conn = db.init_db(path)
+    try:
+        one = db.upsert_asset(conn, _record("2024/01/one.jpg"))
+        two = db.upsert_asset(conn, _record("2024/01/two.jpg"))
+        assert _in_step(conn)[one] == ("/library", "2024/01/one.jpg", None)
+        seen = conn.execute("SELECT seen_at FROM locations WHERE asset_id=?",
+                            (one,)).fetchone()[0]
+        assert seen > 0
+
+        # A fingerprint arriving, and a rescan writing the same values again.
+        _fingerprint(conn, one, "11" * 32)
+        db.bulk_upsert(conn, [_record("2024/01/one.jpg")])
+        assert _in_step(conn)[one][2] == f"{fingerprints.ALGO}:{'11' * 32}"
+
+        # Renamed in place.
+        with db._write_lock:                              # noqa: SLF001
+            conn.execute("UPDATE assets SET rel_path='2024/02/one.jpg' WHERE id=?", (one,))
+            conn.commit()
+        have = _in_step(conn)
+        assert have[one] == ("/library", "2024/02/one.jpg", f"{fingerprints.ALGO}:{'11' * 32}")
+
+        # Respelled onto a path a first scan had already indexed again: the
+        # duplicate's row and place go, the older row takes the path.
+        dup = db.upsert_asset(conn, _record("2024/03/Café.jpg"))
+        db.upsert_asset(conn, _record("2024/03/Café.jpg"))
+        db.respell_asset(conn, "/library", "2024/02/one.jpg", "2024/03/Café.jpg")
+        have = _in_step(conn)
+        assert dup not in have
+        assert have[one][1] == "2024/03/Café.jpg" and have[one][2] is not None
+
+        # The file changed: its fingerprint no longer describes it.
+        db.bulk_upsert(conn, [_record("2024/03/Café.jpg", size=200)])
+        assert _in_step(conn)[one][2] is None
+        _fingerprint(conn, one, "22" * 32, size=200)
+        assert _in_step(conn)[one][2] == f"{fingerprints.ALGO}:{'22' * 32}"
+        with db._write_lock:                              # noqa: SLF001
+            conn.execute("DELETE FROM content_fingerprints WHERE asset_id=?", (one,))
+            conn.commit()
+        assert _in_step(conn)[one][2] is None
+
+        # Deleted, by hand and by a scan that found it gone.
+        with db._write_lock:                              # noqa: SLF001
+            conn.execute("DELETE FROM assets WHERE id=?", (two,))
+            conn.commit()
+        assert two not in _in_step(conn)
+        db.delete_missing(conn, "/library", set(), complete=True, force=True)
+        assert _in_step(conn) == {}
+    finally:
+        db.close(path)
+
+
+def test_a_writer_that_goes_round_the_triggers_is_set_right_by_the_next_write(tmp_path):
+    """A place left behind (a tool with the triggers dropped, a repair) never
+    stops a photograph being indexed at that path."""
+    path = tmp_path / "index.db"
+    conn = db.init_db(path)
+    # The foreign key would refuse a place for a photograph that is not
+    # there; a tool's connection without it would not.
+    conn.execute("PRAGMA foreign_keys=OFF")
+    conn.execute("INSERT INTO locations(asset_id, root, rel_path) "
+                 "VALUES (999, '/library', 'stale.jpg')")
+    conn.commit()
+    conn.execute("PRAGMA foreign_keys=ON")
+    try:
+        new = db.upsert_asset(conn, _record("stale.jpg"))
+        assert _in_step(conn) == {new: ("/library", "stale.jpg", None)}
+    finally:
+        db.close(path)
+
+
+# -- the scanner -------------------------------------------------------------
+
+def test_with_fingerprints_off_none_are_taken_at_index_time(cfg):
+    conn = _open(cfg)
+    assert not cfg.content_fingerprints
+    _rescan(cfg)
+    assert conn.execute("SELECT COUNT(*) FROM content_fingerprints").fetchone()[0] == 0
+    assert all(fp is None for _, _, fp in _in_step(conn).values())
+
+
+def test_a_3x_index_is_backfilled_by_the_fingerprint_pass(cfg):
+    """An index made before 4.0: migrated with its places and no fingerprints;
+    the last pass of the next scan takes them, and the triggers carry them."""
+    conn = _open(cfg)
+    _rescan(cfg)                                          # fingerprints off, as many 3.x were
+    _as_37(conn)
+    ids = {r[0]: r[1] for r in conn.execute("SELECT id, rel_path FROM assets")}
+    conn = _reopen(cfg.db_path)
+    assert migrations.recorded(conn) == 2
+    assert all(fp is None for _, _, fp in _in_step(conn).values())
+
+    cfg.content_fingerprints = True
+    _rescan(cfg)
+    assert {r[0]: r[1] for r in conn.execute("SELECT id, rel_path FROM assets")} == ids
+    have = _in_step(conn)
+    assert set(have) == set(ids)
+    assert all(fp and fp.startswith(f"{fingerprints.ALGO}:") for _, _, fp in have.values())
+    assert scanner_mod.owed(conn, cfg.active_root, "fingerprints").startswith("0:")
+
+
+def test_a_moved_photograph_keeps_its_id_and_its_place_follows(cfg):
+    cfg.content_fingerprints = True
+    conn = _open(cfg)
+    _rescan(cfg)
+    old = conn.execute("SELECT id FROM assets WHERE rel_path='shared/holiday/beach1.jpg'"
+                       ).fetchone()[0]
+    fp = _in_step(conn)[old][2]
+    assert fp is not None
+
+    root = Path(cfg.active_root)
+    (root / "trips/2024").mkdir(parents=True)
+    shutil.move(root / "shared/holiday/beach1.jpg", root / "trips/2024/renamed.jpg")
+    _rescan(cfg)
+
+    have = _in_step(conn)
+    assert have[old] == (str(root), "trips/2024/renamed.jpg", fp)
+    assert conn.execute("SELECT COUNT(*) FROM locations WHERE rel_path="
+                        "'shared/holiday/beach1.jpg'").fetchone()[0] == 0
+    assert [r[0] for r in conn.execute("SELECT asset_id FROM locations WHERE fingerprint=?",
+                                       (fp,))] == [old]
+
+
+def test_locations_answer_what_the_move_finder_asks(cfg):
+    """``fingerprints.fingerprinted`` (what _follow_moves pairs by) and
+    ``locations`` agree on every file, before and after one is edited."""
+    cfg.content_fingerprints = True
+    conn = _open(cfg)
+    _rescan(cfg)
+    root = Path(cfg.active_root)
+    path = root / "misc/plain.png"
+    Image.new("RGB", (210, 200), (200, 10, 10)).save(path)
+    later = time.time() + 5
+    os.utime(path, (later, later))
+    db.bulk_upsert(conn, [scanner_mod.build_record(root, "misc/plain.png", path.stat(), cfg)])
+
+    rels = [r[0] for r in conn.execute("SELECT rel_path FROM assets")]
+    asked = fingerprints.fingerprinted(conn, str(root), rels)
+    assert "misc/plain.png" not in asked
+    from_locations = {r[0]: (r[1].partition(":")[2], r[2]) for r in conn.execute(
+        "SELECT l.rel_path, l.fingerprint, a.size FROM locations l "
+        "JOIN assets a ON a.id=l.asset_id WHERE l.root=? AND l.fingerprint LIKE ?",
+        (str(root), f"{fingerprints.ALGO}:%"))}
+    assert from_locations == asked
