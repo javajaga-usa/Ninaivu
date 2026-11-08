@@ -39,7 +39,7 @@ from ..storage import descriptions as descriptions_mod
 from ..words import Said, said
 from . import _long_calls
 from ._body import json_object
-from .api import _asset_file, _cfg, _conn, _guard, bp
+from .api import _asset_file, _cfg, _conn, _gate, bp
 
 log = logging.getLogger(__name__)
 
@@ -64,7 +64,7 @@ def _switched_on() -> None:
 
 
 def _picture(asset_id: int) -> dict:
-    row = _guard(db.get_asset(_conn(), asset_id, current_user().id))
+    row = _gate(db.get_asset(_conn(), asset_id, current_user().id))
     if row.get("kind") != "picture" or row.get("trashed"):
         abort(404)
     return row

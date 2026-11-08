@@ -424,3 +424,25 @@ def test_every_open_read_of_photographs_is_the_gates():
         assert routes.OPEN[endpoint] == ("guest", routes.GATE), endpoint
     assert not [e for e, (_, why) in routes.OPEN.items()
                 if why == "the route applies the caller's visibility itself"]
+
+
+@pytest.mark.parametrize("policy", DOMAIN_POLICIES)
+def test_young_faces_reads_the_photographs_the_gate_lets_through(app, furnished, policy):
+    """The young-faces guard (api_young_faces._guard_sql) is the gate's listing:
+    every picture the caller may open (explicit ones for the administrator
+    only), not in the bin, not a screenshot."""
+    from ninaivu.api import api_young_faces
+    conn, _, members = furnished
+    if policy:
+        db.set_meta(conn, date_policy.KEY, json.dumps(policy))
+    rows = [dict(r) for r in conn.execute("SELECT * FROM assets")]
+    for name, user in members.items():
+        with app.test_request_context("/api/young-faces"):
+            g.user = user
+            viewer = visibility.current()
+            guard, params = api_young_faces._guard_sql()
+            listed = {r[0] for r in conn.execute(
+                f"SELECT a.id FROM assets a WHERE {guard}", params)}
+            expected = {r["id"] for r in rows if r["kind"] == "picture" and not r["trashed"]
+                        and viewer.may_see(r, own=False)}
+            assert listed == expected, name
