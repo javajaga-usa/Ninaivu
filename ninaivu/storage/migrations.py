@@ -59,9 +59,44 @@ def _nothing(conn: sqlite3.Connection) -> None:
     """Migration 1: the database as 3.7 leaves it, which the schema script made."""
 
 
+def _reserved_locations(conn: sqlite3.Connection) -> None:
+    """Migration 2: kept for the ``locations`` table of the fingerprints work.
+
+    Written as a step that does nothing so that the ledger below can be number
+    3 on a branch of its own; the two are put together before any release, and
+    this placeholder is replaced by the real step then.
+    """
+
+
+def _copies_ledger(conn: sqlite3.Connection) -> None:
+    """Migration 3: the ledger of which photograph is kept where (ninaivu/copies/).
+
+    A new table only: nothing 3.7 reads is changed, so *Go back* finds the
+    index as it left it, with one table it does not know. Filled from what the
+    copies already record (the second disk, the off-site copy, Google Drive,
+    the Secondary), read only: nothing is sent again and no engine is told
+    anything.
+    """
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS copies ("
+        " fingerprint TEXT NOT NULL,"
+        " destination TEXT NOT NULL,"
+        " state       TEXT NOT NULL,"
+        " verified_at REAL NOT NULL DEFAULT 0,"
+        " size        INTEGER NOT NULL DEFAULT 0,"
+        " PRIMARY KEY (fingerprint, destination)"
+        ") WITHOUT ROWID")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_copies_destination "
+                 "ON copies(destination, state)")
+    from ..copies import ledger                            # noqa: PLC0415
+    ledger.fill(conn)
+
+
 #: The index (``index.db``).
 INDEX: tuple[Migration, ...] = (
     Migration(1, "what 3.7 has", _nothing),
+    Migration(2, "reserved: locations (fingerprints workstream)", _reserved_locations),
+    Migration(3, "the copies ledger", _copies_ledger),
 )
 
 #: The archive's record of every file it copied (``archive.db``).

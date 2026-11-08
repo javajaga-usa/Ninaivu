@@ -12,6 +12,7 @@ admin | POST                 | /api/admin/backups/now | admin | writes | same or
 admin | POST                 | /api/admin/backups/verify | admin | writes | same origin | admin.verify_backup
 admin | GET                  | /api/admin/components | admin | reads | - | components.listing
 admin | POST                 | /api/admin/components/<component_id>/install | admin | writes | same origin | components.install
+admin | GET                  | /api/admin/copies | admin | reads | - | cloud.admin_copies
 admin | GET                  | /api/admin/date-policy | admin | reads | - | admin.date_policy_get
 admin | POST                 | /api/admin/date-policy | admin | writes | same origin | admin.date_policy_save
 admin | GET                  | /api/admin/digest | admin | reads | - | admin.digest_settings

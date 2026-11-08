@@ -991,6 +991,27 @@ def copies_single():
 
 
 # ---------------------------------------------------------------------------
+# Every copy in one shape (ninaivu/copies/, 4.0 proposal 4)
+# ---------------------------------------------------------------------------
+
+@cloud_bp.get("/api/admin/copies")
+@require_admin
+def admin_copies():
+    """Each destination's status and what the ledger says it keeps, and the
+    headline: photographs in at least two places, of all of them. The ledger
+    is filled again from the engines' records first, at most every few
+    minutes; nothing is sent by asking."""
+    import time                                            # noqa: PLC0415
+    from .. import copies                                  # noqa: PLC0415
+
+    cfg = _cfg()
+    conn = db.connect(cfg.db_path)
+    dests = copies.destinations(current_app.config["MV_SERVICES"])
+    copies.refresh(conn, dests, cfg.state_dir, now=time.time())
+    return jsonify(copies.report(conn, _library_roots(), dests))
+
+
+# ---------------------------------------------------------------------------
 # The off-site copy: encrypted, somewhere else (ninaivu/cloud/offsite.py)
 # ---------------------------------------------------------------------------
 
