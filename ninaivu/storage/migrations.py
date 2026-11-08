@@ -59,9 +59,150 @@ def _nothing(conn: sqlite3.Connection) -> None:
     """Migration 1: the database as 3.7 leaves it, which the schema script made."""
 
 
+# -- 2: where each photograph is ---------------------------------------------
+#
+# A photograph has been known by its place, the ``(root, rel_path)`` of its
+# row in ``assets``. Proposal 3 of 4.0 turns that round: what the file *is*,
+# its fingerprint, is the photograph, and a path is only where it is now.
+# ``locations`` is that second half, one row per place a file is known to be:
+# for now only its place in the library, so exactly one row for each row of
+# ``assets``.
+#
+# ``assets.root`` and ``rel_path`` stay as they are, because 3.7 reads them
+# and every writer writes them. The triggers below keep ``locations`` in step
+# with them, and with ``content_fingerprints``, inside the statement that made
+# the change, so no writer in 4.0 or in 3.7 (after Go back) has to know the
+# table is there. They live in the file, made once by this step: the schema
+# scripts init_db runs at every start create only what is missing and drop
+# only their own triggers by name, so these are left alone.
+#
+# The fingerprint is written ``algo:digest`` ("blake3:9f…"), so one made the
+# slower way without BLAKE3 can never be taken for one made with it. It is
+# the fingerprint of the file *as it is now*: one taken at another size or
+# modified time describes an earlier version, and is NULL here until the
+# file is fingerprinted again, the test ``fingerprints.UP_TO_DATE`` makes.
+
+#: The fingerprint the row of ``locations`` being written should carry.
+_FINGERPRINT_OF_ROW = (
+    "(SELECT f.algo || ':' || f.digest FROM content_fingerprints f "
+    "JOIN assets a ON a.id = f.asset_id "
+    "WHERE f.asset_id = locations.asset_id AND f.size = a.size AND f.mtime = a.mtime)")
+
+#: The same, for a row of ``assets`` just written (``NEW`` in its triggers).
+_FINGERPRINT_OF_NEW = (
+    "(SELECT f.algo || ':' || f.digest FROM content_fingerprints f "
+    "WHERE f.asset_id = NEW.id AND f.size = NEW.size AND f.mtime = NEW.mtime)")
+
+#: Now, in seconds, as ``time.time()`` gives it.
+_NOW = "((julianday('now') - 2440587.5) * 86400.0)"
+
+#: Migration 2, statement by statement: ``executescript`` would commit the
+#: transaction :func:`run` holds before it began.
+LOCATIONS = (
+    """CREATE TABLE IF NOT EXISTS locations (
+    id          INTEGER PRIMARY KEY,
+    asset_id    INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+    fingerprint TEXT,
+    root        TEXT NOT NULL,
+    rel_path    TEXT NOT NULL,
+    place       TEXT NOT NULL DEFAULT 'library',
+    seen_at     REAL NOT NULL DEFAULT 0,
+    UNIQUE (root, rel_path)
+)""",
+    "CREATE INDEX IF NOT EXISTS idx_locations_fingerprint ON locations(fingerprint)",
+    # The triggers find a photograph's place by its id, and deleting a row of
+    # assets looks here for rows that point at it (the foreign key).
+    "CREATE INDEX IF NOT EXISTS idx_locations_asset ON locations(asset_id, place)",
+    # A new row of assets: its place. Anything left at that path, or under
+    # that id, by a writer that went round the triggers is the past.
+    f"""CREATE TRIGGER IF NOT EXISTS locations_follow_insert AFTER INSERT ON assets
+BEGIN
+    DELETE FROM locations WHERE root = NEW.root AND rel_path = NEW.rel_path;
+    DELETE FROM locations WHERE asset_id = NEW.id AND place = 'library';
+    INSERT INTO locations(asset_id, fingerprint, root, rel_path, place, seen_at)
+    VALUES (NEW.id, {_FINGERPRINT_OF_NEW}, NEW.root, NEW.rel_path, 'library',
+            COALESCE(NEW.added_at, NULLIF(NEW.indexed_at, 0), {_NOW}));
+END""",
+    # Moved or renamed (respell_asset, a library folder put somewhere else),
+    # or the file changed under it, which leaves its fingerprint out of date.
+    # A rescan rewrites these columns with the values they had, so only a
+    # real change does anything.
+    f"""CREATE TRIGGER IF NOT EXISTS locations_follow_update
+AFTER UPDATE OF root, rel_path, size, mtime ON assets
+WHEN OLD.root IS NOT NEW.root OR OLD.rel_path IS NOT NEW.rel_path
+  OR OLD.size IS NOT NEW.size OR OLD.mtime IS NOT NEW.mtime
+BEGIN
+    DELETE FROM locations
+     WHERE root = NEW.root AND rel_path = NEW.rel_path AND asset_id <> NEW.id;
+    UPDATE locations SET root = NEW.root, rel_path = NEW.rel_path,
+           fingerprint = {_FINGERPRINT_OF_NEW},
+           seen_at = CASE WHEN root IS NOT NEW.root OR rel_path IS NOT NEW.rel_path
+                          THEN {_NOW} ELSE seen_at END
+     WHERE asset_id = NEW.id AND place = 'library';
+    INSERT INTO locations(asset_id, fingerprint, root, rel_path, place, seen_at)
+    SELECT NEW.id, {_FINGERPRINT_OF_NEW}, NEW.root, NEW.rel_path, 'library', {_NOW}
+     WHERE NOT EXISTS (SELECT 1 FROM locations
+                        WHERE asset_id = NEW.id AND place = 'library');
+END""",
+    # The foreign key does this too, but only on a connection that has
+    # foreign keys switched on, and a tool's connection may not.
+    """CREATE TRIGGER IF NOT EXISTS locations_follow_delete AFTER DELETE ON assets
+BEGIN
+    DELETE FROM locations WHERE asset_id = OLD.id;
+END""",
+    # A fingerprint arriving, taken again, or gone with its photograph.
+    f"""CREATE TRIGGER IF NOT EXISTS locations_fingerprint_insert
+AFTER INSERT ON content_fingerprints
+BEGIN
+    UPDATE locations SET fingerprint = {_FINGERPRINT_OF_ROW}
+     WHERE asset_id = NEW.asset_id AND place = 'library';
+END""",
+    f"""CREATE TRIGGER IF NOT EXISTS locations_fingerprint_update
+AFTER UPDATE ON content_fingerprints
+BEGIN
+    UPDATE locations SET fingerprint = {_FINGERPRINT_OF_ROW}
+     WHERE asset_id IN (OLD.asset_id, NEW.asset_id) AND place = 'library';
+END""",
+    """CREATE TRIGGER IF NOT EXISTS locations_fingerprint_delete
+AFTER DELETE ON content_fingerprints
+BEGIN
+    UPDATE locations SET fingerprint = NULL
+     WHERE asset_id = OLD.asset_id AND place = 'library';
+END""",
+)
+
+#: Every photograph already in the index, at its place, with the fingerprint
+#: it has if that still describes the file.
+_FILL_LOCATIONS = (
+    "INSERT INTO locations(asset_id, fingerprint, root, rel_path, place, seen_at) "
+    "SELECT a.id, CASE WHEN f.asset_id IS NULL THEN NULL "
+    "ELSE f.algo || ':' || f.digest END, a.root, a.rel_path, 'library', "
+    "COALESCE(a.added_at, NULLIF(a.indexed_at, 0), 0) "
+    "FROM assets a LEFT JOIN content_fingerprints f "
+    "ON f.asset_id = a.id AND f.size = a.size AND f.mtime = a.mtime "
+    "ORDER BY a.id")
+
+
+def _locations(conn: sqlite3.Connection) -> None:
+    """Migration 2: the ``locations`` table, filled, and the triggers that keep it.
+
+    Only adds: no table 3.7 reads is changed, and no photograph's id. Files
+    without a fingerprint yet get one from the fingerprint pass of the next
+    scan, and the triggers carry it here.
+    """
+    for statement in LOCATIONS:
+        conn.execute(statement)
+    # Empty unless the record of this step was lost (a copy of the index
+    # with user_version cleared): filled afresh rather than twice.
+    conn.execute("DELETE FROM locations WHERE place = 'library'")
+    filled = conn.execute(_FILL_LOCATIONS).rowcount
+    log.info("index: %s photographs given their place in locations", f"{filled:,}")
+
+
 #: The index (``index.db``).
 INDEX: tuple[Migration, ...] = (
     Migration(1, "what 3.7 has", _nothing),
+    Migration(2, "where each photograph is", _locations),
 )
 
 #: The archive's record of every file it copied (``archive.db``).

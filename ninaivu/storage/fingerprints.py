@@ -23,7 +23,12 @@ place to keep them. With it:
 Filling them in reads every byte once, the cost of a storage check, as the
 last pass of a scan (``Scanner._fingerprint``); it carries on where it was
 after a stop or a restart, since a fingerprint is only owed while it is
-missing or the file has changed since it was taken.
+missing or the file has changed since it was taken. Since 4.0 a file up to
+:data:`AT_INDEX_UP_TO` is fingerprinted as it is indexed, while its bytes are
+still in memory (:func:`at_index`), so the last pass is left with the large
+videos and the files of an index made before 4.0. The table ``locations``
+(storage/migrations.py, migration 2) carries each fingerprint beside the
+place the file is, kept in step by triggers.
 
 The hashing itself is :func:`fingerprint_file`: a plain function of a path,
 with nothing of the server's in it, so the job engine's worker processes
@@ -67,6 +72,15 @@ THREADED_FROM = 64 * 1024 * 1024
 
 #: Fingerprints written to the index in one go.
 GROUP = 200
+
+#: Files up to this size are fingerprinted as they are indexed (4.0, proposal
+#: 3), by the worker that has just read them to make their thumbnails, so the
+#: bytes come from memory rather than the drive a second time: every
+#: photograph, RAWs included, and short clips. Larger files, nearly all
+#: videos, of which indexing reads only the start, wait for the last pass of
+#: the scan as before: reading two gigabytes there would hold up the new
+#: photographs behind them, which nothing a family member sees should.
+AT_INDEX_UP_TO = THREADED_FROM
 
 #: What a fingerprint owes nothing for, as SQL on ``assets``: one in this
 #: algorithm, taken at the file's present size and modified time. The ``?`` is
@@ -141,6 +155,60 @@ def store(conn: sqlite3.Connection, found: Sequence[tuple[int, str, int, float]]
             [(item, ALGO, digest, size, mtime, now, item)
              for item, digest, size, mtime in found])
         conn.commit()
+
+
+def at_index(path: str | os.PathLike[str], st: Any) -> tuple[str, str] | None:
+    """``(algo, digest)`` of a file being indexed, or None to leave it to the
+    last pass.
+
+    *st* is what the scan's walk saw. A file bigger than :data:`AT_INDEX_UP_TO`,
+    one that is not as the walk saw it, or one that cannot be read is left:
+    the record is written at the walk's size and time, and a fingerprint taken
+    of any other version would describe nothing in the index.
+    """
+    size = int(getattr(st, "st_size", -1))
+    if size < 0 or size > AT_INDEX_UP_TO:
+        return None
+    try:
+        taken = fingerprint_file(path)
+    except (OSError, Unchanged):
+        return None
+    if taken is None:
+        return None
+    digest, read_size, mtime = taken
+    if read_size != size or abs(mtime - float(st.st_mtime)) > 1e-6:
+        return None
+    return ALGO, digest
+
+
+def keep_from_index(conn: sqlite3.Connection, root: str,
+                    records: Iterable[dict[str, Any]]) -> int:
+    """Write the fingerprints indexing took (:func:`at_index`, carried in each
+    record as ``"fingerprint"``) for the rows just written. Returns how many.
+
+    Stored at the row's own size and modified time, as :func:`fill` stores
+    them, and only where the row has the size and time the fingerprint was
+    taken at: the test :data:`UP_TO_DATE` makes is then passed, and the last
+    pass of the scan finds nothing to do for these files.
+    """
+    taken = {r["rel_path"]: (r["fingerprint"][1], int(r["size"]), float(r["mtime"]))
+             for r in records
+             if r.get("fingerprint") and r["fingerprint"][0] == ALGO}
+    if not taken:
+        return 0
+    found: list[tuple[int, str, int, float]] = []
+    rels = list(taken)
+    for start in range(0, len(rels), 500):
+        chunk = rels[start:start + 500]
+        for row in conn.execute(
+                "SELECT id, rel_path, size, mtime FROM assets "
+                f"WHERE root=? AND rel_path IN ({','.join('?' * len(chunk))})",
+                (str(root), *chunk)):
+            digest, size, mtime = taken[row["rel_path"]]
+            if row["size"] == size and abs(float(row["mtime"]) - mtime) <= 1e-6:
+                found.append((int(row["id"]), digest, int(row["size"]), float(row["mtime"])))
+    store(conn, found)
+    return len(found)
 
 
 def fill(conn: sqlite3.Connection, root: str, *,

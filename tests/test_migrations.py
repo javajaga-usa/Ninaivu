@@ -60,7 +60,7 @@ def test_a_37_index_is_up_to_date_and_unchanged(tmp_path):
             "SELECT type, name, sql FROM sqlite_master ORDER BY type, name").fetchall()
         assert [tuple(r) for r in after] == [tuple(r) for r in before]
         assert db.get_meta(conn, "marker") == "kept"
-        assert migrations.recorded(conn) == 1
+        assert migrations.recorded(conn) == migrations.latest(migrations.INDEX)
     finally:
         db.close(path)
 

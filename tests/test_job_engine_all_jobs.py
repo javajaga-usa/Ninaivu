@@ -100,6 +100,10 @@ def test_a_whole_scan_on_processes_leaves_the_same_index_as_on_threads(cfg, tmp_
     cfg.ai_enabled = True
     cfg.video_keyframes = 3
     cfg.content_fingerprints = True
+    # Since 4.0 a small file is fingerprinted as it is indexed; the ones kept
+    # that way are dropped here, so the fingerprint job still runs on both.
+    from ninaivu.storage import fingerprints
+    monkeypatch.setattr(fingerprints, "keep_from_index", lambda *args, **kwargs: 0)
 
     from ninaivu.media import scanner as scanner_mod
 
