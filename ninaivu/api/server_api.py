@@ -759,6 +759,18 @@ def jobs_status():
     return response
 
 
+@server_bp.get("/api/admin/jobs/background")
+@require_admin
+def background_jobs():
+    """What every loop on the supervisor is doing (server/supervisor.py):
+    its state and since when, how far it has got, and its last error.
+    Read only, and never cached: it is the answer to "is that still going?"."""
+    supervisor = getattr(current_app.config["MV_SERVICES"], "supervisor", None)
+    response = jsonify({"jobs": supervisor.activity() if supervisor is not None else []})
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 @server_bp.post("/api/admin/workload")
 @require_admin
 def workload_settings():

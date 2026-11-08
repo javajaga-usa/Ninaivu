@@ -45,6 +45,7 @@ admin | POST                 | /api/admin/handover/code | admin | writes | same 
 admin | GET                  | /api/admin/handover/sheet | admin | reads | - | api_admin.handover_sheet
 admin | POST                 | /api/admin/handover/sheet | admin | writes | same origin | api_admin.handover_sheet_with_code
 admin | GET                  | /api/admin/jobs | admin | reads | - | server.jobs_status
+admin | GET                  | /api/admin/jobs/background | admin | reads | - | server.background_jobs
 admin | GET                  | /api/admin/journal | admin | reads | - | admin.journal_status
 admin | GET                  | /api/admin/journal/changes | admin | reads | - | admin.journal_changes
 admin | GET                  | /api/admin/journal/item/<int:asset_id> | admin | reads | - | admin.journal_item
