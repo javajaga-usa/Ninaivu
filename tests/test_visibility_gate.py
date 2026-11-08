@@ -357,3 +357,29 @@ def test_albums_and_people_count_through_the_gate_as_before(app, furnished, poli
                 conn, viewer.roots, **old), name
             assert db.list_unnamed_clusters(conn, gate=viewer, min_size=1) == \
                 db.list_unnamed_clusters(conn, viewer.roots, min_size=1, **old), name
+
+
+@pytest.mark.parametrize("policy", DOMAIN_POLICIES)
+def test_places_count_through_the_gate_as_before(app, furnished, policy):
+    from ninaivu.storage import geo
+    conn, _, members = furnished
+    if policy:
+        db.set_meta(conn, date_policy.KEY, json.dumps(policy))
+    world = (-90.0, 90.0, -180.0, 180.0)
+    for name, user in members.items():
+        with app.test_request_context("/api/geo/places"):
+            g.user = user
+            viewer = visibility.current()
+            old = viewer.limits()
+            for extra in ({}, {"year": 2023}, {"person": 1}):
+                assert geo.places(conn, None, gate=viewer, **extra) == \
+                    geo.places(conn, viewer.roots, **old, **extra), name
+                assert geo.clusters(conn, None, zoom=3, gate=viewer, **extra) == \
+                    geo.clusters(conn, viewer.roots, zoom=3, **old, **extra), name
+                assert geo.photo_ids(conn, None, bounds=world, gate=viewer, **extra) == \
+                    geo.photo_ids(conn, viewer.roots, bounds=world, **old, **extra), name
+            assert geo.trail(conn, None, year=2023, gate=viewer) == \
+                geo.trail(conn, viewer.roots, year=2023, **old), name
+            assert db.query_geo_points(conn, gate=viewer) == \
+                db.query_geo_points(conn, viewer.roots, **old), name
+

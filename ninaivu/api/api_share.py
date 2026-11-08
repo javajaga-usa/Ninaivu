@@ -33,7 +33,7 @@ from ._body import json_body
 # The blueprints and the shared helpers stay in api.py: these routes
 # are registered on the same two blueprints they always were, so every
 # path and every endpoint name is unchanged.
-from .api import bp, _asset_file, _cfg, _conn, _guard, _int_arg, _own_album, _public, _roots, _safe_under, _viewer
+from .api import bp, _asset_file, _cfg, _conn, _gate, _int_arg, _own_album, _public, _safe_under
 from .api import (INLINE_TYPES, UPLOAD_EXTENSIONS, _location_may_ride_along,
                   _stripped_video, _viewing_copy, download_name)
 
@@ -68,14 +68,7 @@ def geo_points():
     west = request.args.get("west", type=float)
     conn = _conn()
     points = db.query_geo_points(
-        conn,
-        _roots(),
-        north=north,
-        south=south,
-        east=east,
-        west=west,
-        **_viewer(),
-    )
+        conn, north=north, south=south, east=east, west=west, gate=visibility.current())
     return jsonify({"points": points, "total": len(points)})
 
 
@@ -85,8 +78,9 @@ def geo_points():
 # tests/test_location_privacy.py), so the map is for family members and admins.
 
 def _geo_limits() -> dict[str, Any]:
-    """The viewer's limits, and the map's own filters: a year, a person."""
-    limits = {**_viewer()}
+    """The viewer's limits (the visibility gate), and the map's own filters:
+    a year, a person."""
+    limits: dict[str, Any] = {"gate": visibility.current()}
     if year := _int_arg("year"):
         limits["year"] = year
     if person := _int_arg("person"):
@@ -107,7 +101,7 @@ def geo_clusters():
     """What is on screen, grouped a pin's width at a time (storage/geo.py)."""
     from ..storage import geo
 
-    found = geo.clusters(_conn(), _roots(), zoom=_int_arg("zoom", 2),
+    found = geo.clusters(_conn(), None, zoom=_int_arg("zoom", 2),
                          bounds=_geo_bounds(), **_geo_limits())
     return jsonify({"clusters": found, "total": sum(c["count"] for c in found)})
 
@@ -118,7 +112,7 @@ def geo_places():
     """Every place there are photographs from, with the years there are any for."""
     from ..storage import geo
 
-    return jsonify(geo.places(_conn(), _roots(), **_geo_limits()))
+    return jsonify(geo.places(_conn(), None, **_geo_limits()))
 
 
 @bp.get("/api/geo/photos")
@@ -133,7 +127,7 @@ def geo_photos():
     bounds = _geo_bounds()
     if place is None and bounds is None:
         abort(400, description="Say which place: its bounds, or its country and city")
-    ids, total = geo.photo_ids(_conn(), _roots(), bounds=bounds, place=place, **_geo_limits())
+    ids, total = geo.photo_ids(_conn(), None, bounds=bounds, place=place, **_geo_limits())
     return jsonify({"ids": ids, "total": total})
 
 
@@ -146,7 +140,7 @@ def geo_trail():
     limits = _geo_limits()
     if "year" not in limits:
         abort(400, description="Choose a year to see its trips")
-    stops = geo.trail(_conn(), _roots(), **limits)
+    stops = geo.trail(_conn(), None, **limits)
     return jsonify({"stops": stops, "total": sum(s["count"] for s in stops)})
 
 
@@ -162,14 +156,15 @@ def upload_files():
         abort(400, description="No valid files selected")
 
     cfg = _cfg()
-    roots = _roots()
+    viewer = visibility.current()
+    roots = viewer.roots
     if not roots:
         abort(403, description="Your assigned library is no longer available")
     root_str = cfg.active_root if cfg.active_root in roots else roots[0]
     root_path = Path(root_str)
     if not root_path.is_dir():
         abort(409, description="The library folder is unavailable")
-    scope = _viewer()["scope"] or ""
+    scope = viewer.scope or ""
     if not _safe_under(root_path / scope, root_path):
         abort(403, description="Upload folder must stay inside your library")
     from ..media import upload_review
@@ -266,7 +261,7 @@ def create_share():
     if scope == "album":
         _own_album(target_id)
     else:
-        _guard(db.get_asset(conn, target_id))
+        _gate(db.get_asset(conn, target_id))
 
     pwd_hash = auth.hash_password(password) if password else None
     token = secrets.token_urlsafe(16)

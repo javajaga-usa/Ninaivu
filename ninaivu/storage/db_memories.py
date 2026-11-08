@@ -331,7 +331,7 @@ def _pick_score(item: dict[str, Any]) -> float | None:
 
 def query_geo_points(
     conn: sqlite3.Connection,
-    roots: Sequence[str] | str,
+    roots: Sequence[str] | str | None = None,
     *,
     viewer_id: int = 0,
     max_visibility: int = 1,
@@ -341,25 +341,34 @@ def query_geo_points(
     east: float | None = None,
     west: float | None = None,
     limit: int = 1500,
+    gate: Any = None,
 ) -> list[dict[str, Any]]:
-    """Return assets with GPS coordinates for map exploration."""
-    roots_sql, roots_params = roots_clause("a", roots)
-    where = [
-        roots_sql,
-        "a.trashed = 0",
-        "a.nsfw = 0",
-        "a.gps_lat IS NOT NULL",
-        "a.gps_lon IS NOT NULL",
-        visibility_clause("a", max_visibility),
-        # Shown once on the map, as in the gallery.
-        "a.live_clip = 0 AND a.raw_twin = 0",
-    ]
-    params: list[Any] = [*roots_params, int(max_visibility)]
+    """Return assets with GPS coordinates for map exploration.
 
-    scope_sql, scope_params = scope_clause("a", scope)
-    if scope_sql:
-        where.append(scope_sql)
-        params.extend(scope_params)
+    *gate*, a ``server.visibility.Viewer``, is the caller's limits when given.
+    """
+    if gate is not None:
+        gate_sql, gate_params = gate.sql("a")
+        where = [gate_sql, "a.trashed = 0", "a.nsfw = 0", "a.gps_lat IS NOT NULL",
+                 "a.gps_lon IS NOT NULL", "a.live_clip = 0 AND a.raw_twin = 0"]
+        params: list[Any] = list(gate_params)
+    else:
+        roots_sql, roots_params = roots_clause("a", roots if roots is not None else [])
+        where = [
+            roots_sql,
+            "a.trashed = 0",
+            "a.nsfw = 0",
+            "a.gps_lat IS NOT NULL",
+            "a.gps_lon IS NOT NULL",
+            visibility_clause("a", max_visibility),
+            # Shown once on the map, as in the gallery.
+            "a.live_clip = 0 AND a.raw_twin = 0",
+        ]
+        params = [*roots_params, int(max_visibility)]
+        scope_sql, scope_params = scope_clause("a", scope)
+        if scope_sql:
+            where.append(scope_sql)
+            params.extend(scope_params)
 
     if north is not None and south is not None:
         where.append("a.gps_lat BETWEEN ? AND ?")
