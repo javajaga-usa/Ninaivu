@@ -20,6 +20,7 @@ import pytest
 
 from ninaivu.mugil import pairing, topology
 from ninaivu.mugil.courier import PartnerError
+from test_mugil_two_computers import two_apps  # noqa: F401
 from ninaivu.mugil.topology import (MOVE_PRIMARY, PAIR, REPLACE_SECONDARY_DISK, UNPAIR, Standing,
                                     Topology, after, why_not)
 
@@ -343,3 +344,43 @@ def test_replacing_the_secondary_disk_lists_what_only_it_holds(apart):
     only = sorted(Path(m["file"]).name for m in record["plan"]["named"])
     assert only == ["IMG_1.jpg", "IMG_9.jpg", "deleted-on-mac.jpg", "linux-only.jpg",
                     "linux-only.jpg.xmp", "old.jpg"]
+
+
+# -- the routes, between two whole Ninaivus ----------------------------------------------
+
+def test_the_console_plans_and_proves_a_pairing_over_the_signed_api(two_apps, tmp_path):  # noqa: F811
+    from conftest import ADMIN, login
+    from test_mugil_two_computers import _paired
+    primary_app, secondary_app, _ = two_apps
+    for application in (primary_app, secondary_app):
+        admin = login(application.test_client(), *ADMIN)
+        assert admin.post("/api/admin/mugil/census", json={}).status_code == 200
+        application.config["MV_SERVICES"].mugil_topology._thread.join(timeout=60)
+        assert admin.get("/api/admin/mugil/topology").get_json()["censuses"][0]["role"] == "single"
+    # Only the paired Primary may ask, and only signed.
+    assert secondary_app.test_client().get("/api/mugil/census").status_code == 404
+    first, services, _ = _paired(two_apps, tmp_path)
+    assert secondary_app.test_client().get("/api/mugil/census").status_code == 401
+    assert secondary_app.test_client().get(
+        "/api/mugil/census/file?name=../mugil-pair.json").status_code == 401
+    services.mugil_topology.wait = 0.05
+
+    assert first.post("/api/admin/mugil/topology/plan", json={"transition": "unpair"}).status_code == 409
+    assert first.post("/api/admin/mugil/topology/plan", json={"transition": "pair"}).status_code == 200
+    services.mugil_topology._thread.join(timeout=60)
+    status = first.get("/api/admin/mugil/topology").get_json()
+    assert status["record"]["state"] == "planned", status
+    page = first.get("/api/admin/mugil/topology/plan?on=primary&limit=5").get_json()
+    assert page["items"] and all(i["on"] == "primary" for i in page["items"])
+    assert page["record"]["plan"]["primary"]
+
+    assert first.post("/api/admin/mugil/topology/prove").status_code == 200
+    services.mugil_topology._thread.join(timeout=120)
+    record = first.get("/api/admin/mugil/topology").get_json()["record"]
+    assert record["state"] == "done" and record["proof"]["passed"] is True, record
+    assert first.post("/api/admin/mugil/topology/prove").status_code == 409
+
+
+def test_only_an_admin_takes_a_census(app, people, as_family):
+    assert as_family.post("/api/admin/mugil/census", json={}).status_code in (401, 403)
+    assert as_family.get("/api/admin/mugil/topology").status_code in (401, 403)

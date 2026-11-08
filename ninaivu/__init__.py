@@ -1587,6 +1587,7 @@ class Services:
                             ("mugil_rebuild", "rebuilding the library"),
                             ("mugil_bring_in", "bringing in the Secondary's files"),
                             ("mugil_survey", "looking for the Secondary's own files"),
+                            ("mugil_topology", "the census and the proof"),
                             ("mugil_adopter", "checking the copy made by hand"),
                             ("repairer", "the repair"), ("xmp", "the sidecars"),
                             ("xmp_reader", "reading the sidecars"),

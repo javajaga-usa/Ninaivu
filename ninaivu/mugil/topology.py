@@ -457,6 +457,13 @@ def take_census(cfg, *, connect_db: Callable[[], sqlite3.Connection] | None = No
     return state_dir / name
 
 
+def census_file(state_dir: Path | str, name: str) -> Path | None:
+    """The census taken here called *name*, or None: only a name a census is
+    given, so a request cannot reach any other file."""
+    path = Path(state_dir) / str(name or "")
+    return path if _CENSUS_NAME.match(str(name or "")) and path.is_file() else None
+
+
 def read_header(path: Path) -> dict[str, Any]:
     with gzip.open(path, "rt", encoding="utf-8") as handle:
         header = json.loads(handle.readline() or "null")
@@ -1161,5 +1168,5 @@ class Topology:
 
 __all__ = ["Standing", "TRANSITIONS", "PAIR", "MOVE_PRIMARY", "REPLACE_SECONDARY_DISK", "UNPAIR",
            "STARTS", "standing", "why_not", "after", "take_census", "check_census", "entries",
-           "censuses", "newest", "plan_pair", "read_plan", "prove", "load_record", "Topology",
+           "censuses", "census_file", "newest", "plan_pair", "read_plan", "prove", "load_record", "Topology",
            "Refused", "OUTCOMES", "REASONS"]
