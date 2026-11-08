@@ -122,13 +122,11 @@ def _engine():
 
 
 def _roots() -> list[str]:
-    """Library folders the caller may query — never more than they're assigned."""
-    cfg = _cfg()
-    libraries = cfg.libraries or ([cfg.active_root] if cfg.active_root else [])
-    if not libraries:
-        abort(409, description="No library folder has been set up yet.")
-    roots, _ = auth.resolve_library(current_user().assigned_library, libraries)
-    return roots
+    """Library folders the caller may query — never more than they're assigned.
+
+    The visibility gate's (``Viewer.roots``): a 409 when no library folder has
+    been set up yet."""
+    return visibility.current().roots
 
 
 def _root() -> str:
@@ -280,17 +278,9 @@ def _viewer() -> dict[str, Any]:
     Never from a request parameter — a guest cannot ask to see more by
     changing the query string. Three limits stack: which library folders they
     were assigned, how deep inside one, and what visibility they may see.
+    They are the visibility gate's (``Viewer.limits``): one copy of the rules.
     """
-    cfg = _cfg()
-    user = current_user()
-    libraries = cfg.libraries or ([cfg.active_root] if cfg.active_root else [])
-    _, sub = auth.resolve_library(user.assigned_library, libraries)
-    return {
-        "viewer_id": user.id,
-        "max_visibility": user.max_visibility,
-        # An explicit assignment wins; the legacy scope column is the fallback.
-        "scope": sub or (user.effective_scope or None),
-    }
+    return visibility.current().limits()
 
 
 #: A family member's search leaves out what the explicit check scored at this
@@ -311,43 +301,25 @@ def _viewer_limits() -> dict[str, Any]:
 
 
 def _guard(asset: dict[str, Any] | None) -> dict[str, Any]:
-    """404 unless the caller is allowed to see this asset."""
-    if not _may_see(asset):
-        abort(404)
-    return asset  # type: ignore[return-value]
+    """404 unless the caller is allowed to see this asset, as the visibility
+    gate decides it (``Viewer.may_see``)."""
+    return _gate(asset)
 
 
 def _gate(asset: dict[str, Any] | None) -> dict[str, Any]:
     """404 unless the caller may see this asset, as the visibility gate
-    decides it (server/visibility.py): :func:`_guard`, for the routes that go
-    through the gate."""
+    decides it (server/visibility.py)."""
     if not visibility.current().may_see(asset):
         abort(404)
     return asset  # type: ignore[return-value]
 
 
 def _may_see(asset: dict[str, Any] | None) -> bool:
-    """Whether the caller is allowed to see this asset: :func:`_guard`'s test."""
-    if not asset:
-        return False
-    limits = _viewer()
-    if not db.visible_to(asset, limits["max_visibility"], limits["scope"],
-                         viewer_id=limits["viewer_id"]):
-        return False
-    # …and it must live in a library folder they were assigned.
-    if asset.get("root") not in _roots():
-        return False
-    # Trash is not a display hint. Every listing withholds trashed rows and
-    # only an admin may opt back into them, so fetching one by id has to
-    # answer the same way — otherwise a photo the admin removed from every
-    # family-facing view is still served in full to anyone holding its id.
-    if asset.get("trashed") and not current_user().is_admin:
-        return False
-    # Explicit / adult / NSFW content must never be served in the family app
-    # or to non-admin users. Only admins may view and control it.
-    if asset.get("nsfw") and not current_user().is_admin:
-        return False
-    return True
+    """Whether the caller is allowed to see this asset: :func:`_guard`'s test,
+    the visibility gate's (``Viewer.may_see``). Trash and explicit content are
+    an administrator's alone, and the item must live in a library folder the
+    caller was given."""
+    return visibility.current().may_see(asset)
 
 
 def _dates_from_phrase(text: str) -> tuple[str, str, str]:

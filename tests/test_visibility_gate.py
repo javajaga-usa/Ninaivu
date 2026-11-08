@@ -194,3 +194,49 @@ def test_built_once_per_request_and_again_for_somebody_else(app, house):
         g.user = members["guest"]
         assert visibility.current() is not first
         assert visibility.current().max_visibility == 0
+
+
+def _before_the_gate(asset, user, cfg):
+    """What ``api._may_see`` answered before it asked the gate (3.x)."""
+    libraries = cfg.libraries or ([cfg.active_root] if cfg.active_root else [])
+    roots, sub = auth.resolve_library(user.assigned_library, libraries)
+    scope = sub or (user.effective_scope or None)
+    if not db.visible_to(asset, user.max_visibility, scope, viewer_id=user.id):
+        return False
+    if asset.get("root") not in roots:
+        return False
+    return not ((asset.get("trashed") or asset.get("nsfw")) and not user.is_admin)
+
+
+@pytest.mark.parametrize("restricted", [False, True])
+def test_the_routes_helpers_are_the_gates(app, house, restricted):
+    """``_viewer``, ``_roots``, ``_may_see`` and ``_guard`` ask the Viewer, and
+    answer as the helpers that kept their own copy of the rules did."""
+    from werkzeug.exceptions import NotFound
+
+    from ninaivu.api import api
+    conn, _, members = house
+    cfg = app.config["MV_CONFIG"]
+    if restricted:
+        db.set_meta(conn, date_policy.KEY, json.dumps(
+            {"cutoff": "2023-07-01", "admin": "after", "family": "before", "guest": "after"}))
+    rows = [dict(r) for r in conn.execute("SELECT * FROM assets")]
+    for name, user in members.items():
+        with app.test_request_context("/api/assets"):
+            g.user = user
+            viewer = visibility.current()
+            libraries = cfg.libraries or [cfg.active_root]
+            assert api._roots() == auth.resolve_library(user.assigned_library, libraries)[0]
+            assert api._viewer() == viewer.limits() == {
+                "viewer_id": user.id, "max_visibility": user.max_visibility,
+                "scope": viewer.scope}
+            assert api._viewer_limits() == {"max_visibility": user.max_visibility,
+                                            "scope": viewer.scope}
+            for row in rows:
+                expected = _before_the_gate(row, user, cfg)
+                assert api._may_see(row) is expected, (name, row["rel_path"])
+                if expected:
+                    assert api._guard(row) is row
+                else:
+                    with pytest.raises(NotFound):
+                        api._guard(row)
