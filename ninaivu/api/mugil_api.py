@@ -1662,7 +1662,7 @@ def mugil_census_start():
     try:
         return jsonify(_topology().take_census())
     except Refused as exc:
-        return jsonify({"refused": str(exc), "status": 409}), 409
+        return _refused(exc)
 
 
 @mugil_peer_bp.get("/api/mugil/census")

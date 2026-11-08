@@ -384,3 +384,17 @@ def test_the_console_plans_and_proves_a_pairing_over_the_signed_api(two_apps, tm
 def test_only_an_admin_takes_a_census(app, people, as_family):
     assert as_family.post("/api/admin/mugil/census", json={}).status_code in (401, 403)
     assert as_family.get("/api/admin/mugil/topology").status_code in (401, 403)
+
+
+def test_a_census_request_reaches_only_a_census_kept_here(tmp_path):
+    from ninaivu.mugil.topology import census_file
+    state = tmp_path / "state"
+    state.mkdir()
+    kept = state / "mugil-census-20261108-120000.jsonl.gz"
+    kept.write_bytes(b"x")
+    (tmp_path / "secret.txt").write_text("no")
+    assert census_file(state, kept.name) == kept
+    for name in ("../secret.txt", "mugil-census-20261108-120000.jsonl.gz/../../secret.txt",
+                 "/etc/passwd", "mugil-census-20261108-120001.jsonl.gz", "", None,
+                 "mugil-topology.json"):
+        assert census_file(state, name) is None, name

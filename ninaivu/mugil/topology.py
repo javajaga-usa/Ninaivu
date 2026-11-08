@@ -458,10 +458,19 @@ def take_census(cfg, *, connect_db: Callable[[], sqlite3.Connection] | None = No
 
 
 def census_file(state_dir: Path | str, name: str) -> Path | None:
-    """The census taken here called *name*, or None: only a name a census is
-    given, so a request cannot reach any other file."""
-    path = Path(state_dir) / str(name or "")
-    return path if _CENSUS_NAME.match(str(name or "")) and path.is_file() else None
+    """The census taken here called *name*, or None.
+
+    The name a request gives is only compared, never joined into a path: the
+    file returned is one found by listing this computer's own censuses, so no
+    name, however it is spelled, can reach any other file.
+    """
+    wanted = str(name or "")
+    if not _CENSUS_NAME.fullmatch(wanted):
+        return None
+    for path in Path(state_dir).glob(f"{CENSUS_PREFIX}*"):
+        if path.name == wanted and path.is_file():
+            return path
+    return None
 
 
 def read_header(path: Path) -> dict[str, Any]:
