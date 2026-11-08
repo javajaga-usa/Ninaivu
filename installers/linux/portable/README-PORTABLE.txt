@@ -1,8 +1,7 @@
 Ninaivu, portable, for Linux
 ============================
 
-Open Ninaivu, the ninaivu script and app/ carry the program and its own
-Python and packages, so the computer needs none. The default library data
+ninaivu and app/ carry the program and its own Python and packages, so the computer needs none. The default library data
 lives in ~/.ninaivu in your home folder and stays when the program is deleted
 or replaced. For a 64-bit PC (x86-64) running Debian 12 or 13, Ubuntu or
 another current distribution. There is no download for arm64 computers such
@@ -11,8 +10,10 @@ as a Raspberry Pi.
 To start
   1. Extract the archive somewhere you can write to (your home folder, or a
      USB drive):   tar -xzf Ninaivu-*-linux-*-portable.tar.gz
-  2. Double-click "Open Ninaivu" in the folder it makes (or run ./ninaivu in
-     a terminal). The Ninaivu Control Panel opens; press Start.
+  2. Double-click "ninaivu" in the folder it makes (or run ./ninaivu in a
+     terminal). The Ninaivu Control Panel opens and starts Ninaivu, and its
+     icon goes in the tray. Closing the window puts it there; Ninaivu keeps
+     running. Opening ninaivu again brings the window back.
   3. For one click from the application menu and the Desktop from then on:
         ./ninaivu --add-to-menu
      (./ninaivu --remove-from-menu takes them out; after moving the folder,
@@ -23,10 +24,11 @@ To start
   runs Ninaivu in that terminal with ~/Pictures as the library.
 
 Where things are
-  Open Ninaivu    the double-click: runs ninaivu, below.
-  ninaivu         opens the Control Panel (--tray for the tray menu,
-                  --server for the server alone, --where to see the folders).
-  app/            the program and its private Python.
+  ninaivu         the one thing to open: the Control Panel, its tray icon,
+                  and Ninaivu started (--tray opens it minimised, --server
+                  runs the server alone, --where shows the folders).
+  app/            the program and its private Python (app/ninaivu.sh is
+                  what ninaivu runs).
   ~/.ninaivu/     what Ninaivu keeps, made the first time it opens: the
                   index of your library, settings, people, thumbnails;
                   ~/.ninaivu/ai-models (the AI models, once you download them);

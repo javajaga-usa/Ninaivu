@@ -19,7 +19,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-LINUX = ROOT / "installers" / "linux" / "portable" / "ninaivu"
+LINUX = ROOT / "installers" / "linux" / "portable" / "ninaivu.sh"
 MAC = ROOT / "installers" / "macos" / "launcher.sh"
 
 pytestmark = pytest.mark.skipif(sys.platform == "win32" or not shutil.which("sh"),
@@ -65,14 +65,15 @@ def _run(program: Path, *args: str, record: Path, home: Path) -> dict[str, list[
 def linux_folder(tmp_path):
     folder = tmp_path / AWKWARD / "Ninaivu-1.0.0-linux-x64-portable"
     _fake_python(folder / "app" / "python" / "bin" / "python3")
-    shutil.copy(LINUX, folder / "ninaivu")
-    (folder / "ninaivu").chmod(0o755)
+    # The script the folder's one starter, ninaivu, runs (installers/linux/portable/ninaivu.c).
+    shutil.copy(LINUX, folder / "app" / "ninaivu.sh")
+    (folder / "app" / "ninaivu.sh").chmod(0o755)
     return folder
 
 
 def test_the_linux_folder_keeps_everything_in_itself(linux_folder, tmp_path):
     record = tmp_path / "record"
-    seen = _run(linux_folder / "ninaivu", record=record, home=tmp_path / "home")
+    seen = _run(linux_folder / "app" / "ninaivu.sh", record=record, home=tmp_path / "home")
     app = linux_folder.resolve() / "app"
     data = tmp_path / "home/.ninaivu"
     # What it keeps is apart from the program (desktop/portable.py).
@@ -93,21 +94,21 @@ def test_the_linux_folder_keeps_everything_in_itself(linux_folder, tmp_path):
 def test_the_linux_server_takes_its_arguments_whole(linux_folder, tmp_path):
     record = tmp_path / "record"
     photos = str(tmp_path / AWKWARD / "Family photos")
-    seen = _run(linux_folder / "ninaivu", "--server", photos, "--port", "8080",
+    seen = _run(linux_folder / "app" / "ninaivu.sh", "--server", photos, "--port", "8080",
                 record=record, home=tmp_path / "home")
     assert seen["ARG"] == ["-m", "ninaivu", photos, "--port", "8080"]
-    seen = _run(linux_folder / "ninaivu", "--tray", record=record, home=tmp_path / "home")
+    seen = _run(linux_folder / "app" / "ninaivu.sh", "--tray", record=record, home=tmp_path / "home")
     assert seen["ARG"] == ["-m", "ninaivu.desktop.app", "--tray"], "the same program, minimised"
 
 
 def test_the_linux_folder_brings_a_library_across_without_a_desktop(linux_folder, tmp_path):
     """What the Control Panel offers after an update, for a machine over ssh."""
     older = str(tmp_path / AWKWARD / "Ninaivu-0.9.0-linux-x64-portable")
-    seen = _run(linux_folder / "ninaivu", "--bring", older, record=tmp_path / "record",
+    seen = _run(linux_folder / "app" / "ninaivu.sh", "--bring", older, record=tmp_path / "record",
                 home=tmp_path / "home")
     assert seen["ARG"] == ["-m", "ninaivu.desktop.portable", "--bring", older]
     assert seen["NINAIVU_PORTABLE"] == "1"
-    seen = _run(linux_folder / "ninaivu", "--go-back", record=tmp_path / "record",
+    seen = _run(linux_folder / "app" / "ninaivu.sh", "--go-back", record=tmp_path / "record",
                 home=tmp_path / "home")
     assert seen["ARG"] == ["-m", "ninaivu.desktop.portable", "--go-back"]
 
@@ -115,16 +116,16 @@ def test_the_linux_folder_brings_a_library_across_without_a_desktop(linux_folder
 def test_the_linux_folder_works_through_a_link_to_its_script(linux_folder, tmp_path):
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
-    (bin_dir / "ninaivu").symlink_to(linux_folder / "ninaivu")
+    (bin_dir / "ninaivu").symlink_to(linux_folder / "app" / "ninaivu.sh")
     seen = _run(bin_dir / "ninaivu", record=tmp_path / "record", home=tmp_path / "home")
     assert seen["NINAIVU_STATE_DIR"] == str(tmp_path / "home/.ninaivu")
 
 
 def test_the_linux_folder_says_so_when_its_program_is_missing(tmp_path):
     folder = tmp_path / "lonely"
-    folder.mkdir()
-    shutil.copy(LINUX, folder / "ninaivu")
-    done = subprocess.run(["sh", str(folder / "ninaivu")], capture_output=True, text=True, timeout=60,
+    (folder / "app").mkdir(parents=True)
+    shutil.copy(LINUX, folder / "app" / "ninaivu.sh")
+    done = subprocess.run(["sh", str(folder / "app" / "ninaivu.sh")], capture_output=True, text=True, timeout=60,
                           env={"NINAIVU_NO_DIALOG": "1", "PATH": os.environ.get("PATH", "/usr/bin:/bin"), "HOME": str(tmp_path)})
     assert done.returncode == 1
     assert "Extract the whole archive" in done.stderr
@@ -220,7 +221,7 @@ def test_the_mac_helper_answers_for_a_folder_that_was_not_translocated(tmp_path)
 
 
 def test_linux_sign_in_start_uses_the_same_portable_environment(linux_folder, tmp_path):
-    seen = _run(linux_folder / 'ninaivu', '--autostart', record=tmp_path / 'record',
+    seen = _run(linux_folder / 'app' / 'ninaivu.sh', '--autostart', record=tmp_path / 'record',
                 home=tmp_path / 'home')
     assert seen['ARG'] == ['-m', 'ninaivu.desktop.autostart', '--start']
     assert seen['NINAIVU_STATE_DIR'] == str(tmp_path / 'home/.ninaivu')
@@ -230,5 +231,5 @@ def test_linux_sign_in_start_uses_the_same_portable_environment(linux_folder, tm
 def test_linux_preserves_a_previous_data_folder(linux_folder, tmp_path, marker):
     (linux_folder / 'data').mkdir()
     (linux_folder / 'data' / marker).touch()
-    seen = _run(linux_folder / 'ninaivu', record=tmp_path / 'record', home=tmp_path / 'home')
+    seen = _run(linux_folder / 'app' / 'ninaivu.sh', record=tmp_path / 'record', home=tmp_path / 'home')
     assert seen['NINAIVU_STATE_DIR'] == str(linux_folder.resolve() / 'data')

@@ -14,7 +14,7 @@ deleting the folder removes everything it made:
 | --- | --- |
 | `windows/` | `build.ps1` (the private Python, the python-build-standalone build `python-version.txt` names, with Ninaivu and every wheel installed into it) and `build-portable.ps1` (→ the zip, with `Ninaivu.exe` from `portable/Ninaivu.cs`); `install-service.ps1` for running Ninaivu as a Windows service |
 | `macos/` | `build.sh` (→ `Ninaivu.app` in the portable folder, zipped; signed and notarised when the signing secrets are set) and `launcher.sh`, the app's launcher |
-| `linux/` | `build.sh` (→ the `.tar.gz`: the `ninaivu` script from `portable/ninaivu`, `app/` with the Python and every package installed, `logs/`) |
+| `linux/` | `build.sh` (→ the `.tar.gz`: `ninaivu`, the one starter, built from `portable/ninaivu.c`; `app/` with the Python, every package installed and `app/ninaivu.sh` from `portable/ninaivu.sh`; `logs/`) |
 | `strip_sources.py` | Run by every build on the Ninaivu and extension wheels: the Python is compiled to bytecode and the source dropped, so no download carries source |
 | `docker/` | `Dockerfile`, `docker-compose.yml` (x64). Build context is the repository root: `docker compose -f installers/docker/docker-compose.yml up -d` |
 | `systemd/` | `ninaivu.service` for Linux, for a checkout or the portable folder |
@@ -36,11 +36,11 @@ starts it again within a minute. `-Action Stop` disables the task until
 
 For any Windows computer, including one where nothing may be installed, or to
 carry Ninaivu on a USB drive. Extract the zip anywhere that can be written to
-and open `Ninaivu.exe`. It holds three things at its top and nothing else:
+and open `Ninaivu.exe`, its one starter. It holds three things at its top and nothing else:
 
 | Entry | What it is |
 | --- | --- |
-| `Ninaivu.exe` | A small launcher (`windows/portable/Ninaivu.cs`, built with the `csc.exe` that ships with Windows). It opens the Control Panel with `NINAIVU_HOME`, `NINAIVU_STATE_DIR`, `NINAIVU_AI_MODELS_DIR` and `NINAIVU_LOG_DIR` pointed into the folder, and ends. On first open it makes `data\` beside `app\`: the library's index and settings, `data\ai-models` and `data\control`, apart from the program so a newer folder can take them over (`ninaivu/desktop/portable.py`). |
+| `Ninaivu.exe` | A small launcher (`windows/portable/Ninaivu.cs`, built with the `csc.exe` that ships with Windows). It opens Ninaivu (the Control Panel, its tray icon, and the server started) with `NINAIVU_HOME`, `NINAIVU_STATE_DIR`, `NINAIVU_AI_MODELS_DIR` and `NINAIVU_LOG_DIR` pointed into the folder, and ends. On first open it makes `data\` beside `app\`: the library's index and settings, `data\ai-models` and `data\control`, apart from the program so a newer folder can take them over (`ninaivu/desktop/portable.py`). |
 | `app\` | The program: the private Python with the packages installed into it (`build.ps1`), ffmpeg, the readme and licence |
 | `logs\` | `ninaivu.log` (the server's own account) and `server.log` (what it printed), so a log is a thing a person can find and send |
 
@@ -75,15 +75,17 @@ Ninaivu elsewhere. The build zips the folder with `ditto`, which keeps the
 bundle's links and signature, and when the secrets are there notarises the
 zip and staples the ticket to the app inside.
 
-The Linux `.tar.gz` holds `Open Ninaivu`, `ninaivu`, `app/` and `logs/`:
-`app/python` is a python-build-standalone build with every package already
-installed into it (the build runs on Linux of the architecture it is for and
-installs the wheels with that Python), and `ninaivu` sets the same variables
-as `Ninaivu.exe` and opens the Control Panel (`--tray`, `--server`, `--where`,
+The Linux `.tar.gz` holds `ninaivu`, `app/` and `logs/`: `app/python` is a
+python-build-standalone build with every package already installed into it
+(the build runs on Linux of the architecture it is for and installs the
+wheels with that Python). `ninaivu` is the one starter, double-clicked or run
+in a terminal: a file manager opens a script in a text editor but runs a
+program, so it is a small static program (`linux/portable/ninaivu.c`) that
+runs `app/ninaivu.sh` (`linux/portable/ninaivu.sh`). That sets the same
+variables as `Ninaivu.exe` and opens Ninaivu (`--tray`, `--server`, `--where`,
 and `--add-to-menu` for Ninaivu in the application menu and on the Desktop).
-`Open Ninaivu` is the double-click: a file manager opens a script in a text
-editor but runs a program, so it is a small static program
-(`linux/portable/open-ninaivu.c`) that runs the script beside it.
+It keeps the small-letter name the script had before 4.0, which a 3.x
+Secondary looks for when its Primary sends it this download.
 
 Every download carries the same Python: the CPython build
 `python-version.txt` names, from python-build-standalone, checked against
@@ -118,8 +120,9 @@ Mac (needs Xcode's command-line tools), `bash installers/linux/build.sh` on
 x86-64 Linux with Python 3.12. Each prints the checksum and writes the
 package list under its `build/` folder.
 
-Until you have one of these, `start.cmd <folder>` (Windows) or
-`sh launcher/start.sh <folder>` from the repository root runs Ninaivu from a
-checkout, and `python -m ninaivu.desktop.tray` opens the tray from it.
+Until you have one of these, a checkout runs with `python -m ninaivu
+<folder>` once its requirements are installed (`launcher\start.cmd` or
+`sh launcher/start.sh` set them up first), and `python -m
+ninaivu.desktop.app` opens the Control Panel with its tray icon.
 
 See `docs/operations/production.md` for the full operations guide.

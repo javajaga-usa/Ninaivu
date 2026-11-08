@@ -1,5 +1,9 @@
 #!/bin/sh
-# Ninaivu, portable, for Linux: the one program at the top of the folder.
+# Ninaivu, portable, for Linux: app/ninaivu.sh, what the folder's one starter
+# runs. That starter is the program "ninaivu" at the top of the folder
+# (installers/linux/portable/ninaivu.c), because a file manager runs a
+# program on a double-click but opens a script in a text editor; it passes
+# its arguments on:
 #
 #   ./ninaivu                    opens Ninaivu: the Control Panel, its tray
 #                                icon, and the server started
@@ -19,8 +23,8 @@
 # Replacing the program folder does not remove a home-folder library.
 set -e
 
-# The folder this script is in, wherever it was started from, through a
-# symbolic link to it too (~/bin/ninaivu → here).
+# The portable folder, the one above app/ that this script is in, wherever
+# it was started from, through a symbolic link to it too.
 self=$0
 while [ -L "$self" ]; do
     link=$(readlink "$self")
@@ -29,7 +33,7 @@ while [ -L "$self" ]; do
         *) self=$(dirname "$self")/$link ;;
     esac
 done
-root=$(cd "$(dirname "$self")" && pwd -P)
+root=$(cd "$(dirname "$self")/.." && pwd -P)
 app="$root/app"
 python="$app/python/bin/python3"
 
@@ -43,7 +47,7 @@ say() {
 }
 
 if [ ! -x "$python" ]; then
-    say "Ninaivu's program files were not found next to this script ($app). Extract the whole archive and run ninaivu from the folder it makes."
+    say "Ninaivu's program files were not found in $app. Extract the whole archive and run ninaivu from the folder it makes."
     exit 1
 fi
 data="${NINAIVU_STATE_DIR:-$HOME/.ninaivu}"

@@ -165,13 +165,13 @@ def test_a_stripped_wheel_installs_and_imports_without_its_source(tmp_path):
 def test_the_linux_build_is_a_folder_that_needs_no_python_on_the_machine():
     linux = ROOT / "installers" / "linux"
     build = (linux / "build.sh").read_text(encoding="utf-8")
-    launcher = (linux / "portable" / "ninaivu").read_text(encoding="utf-8")
+    launcher = (linux / "portable" / "ninaivu.sh").read_text(encoding="utf-8")
     assert "python-build-standalone" in build and "install_only" in build, "the Python is bundled"
     assert "--only-binary=:all:" in build and "--platform" in build, "wheels are fetched for the target"
     assert "Linux-x86_64)" in build and "Linux-aarch64)" in build, "x64 and arm64, each on its own kind"
     assert "manylinux_2_28_aarch64" in build and "aarch64-unknown-linux-gnu" in build
     assert "--no-index" in build and "pip install" in build, "installed offline from the fetched wheels"
-    assert 'top" != "Open Ninaivu,app,logs,ninaivu,"' in build, "four things at the top, and nothing else"
+    assert 'top" != "app,logs,ninaivu,"' in build, "three things at the top, and one of them to open"
     assert "linux-$arch-portable" in build
     assert not (linux / "install.sh").exists() and not (linux / "header.sh").exists()
     # The machine's own Python is never called: only the bundled one, by path.
@@ -196,7 +196,7 @@ def test_every_build_opens_the_control_panel():
     assert "-m ninaivu.desktop.app" in mac and "desktop.tray" not in mac
     assert "<key>LSUIElement</key><false/>" in (MACOS / "build.sh").read_text(encoding="utf-8"), \
         "a window app shows in the Dock"
-    linux = (ROOT / "installers" / "linux" / "portable" / "ninaivu").read_text(encoding="utf-8")
+    linux = (ROOT / "installers" / "linux" / "portable" / "ninaivu.sh").read_text(encoding="utf-8")
     assert "-m ninaivu.desktop.app" in linux and "desktop.tray" not in linux and "--server" in linux
 
 
