@@ -723,3 +723,66 @@ def test_display_copies_start_at_once_and_a_stop_cuts_a_round_short(tmp_path):
         assert display.supervisor.state("mugil-display") == sup.STOPPED
     finally:
         assert display.supervisor.stop(timeout=5) == []
+
+
+# -- group 4: the AI passes ---------------------------------------------------------
+
+def _group_4(tmp_path):
+    from ninaivu.media.video_moments import MomentFinder
+    from ninaivu.runtime.describer import Describer
+    from ninaivu.runtime.transcriber import Transcriber
+
+    cfg = SimpleNamespace(state_dir=str(tmp_path))
+    return [
+        (Describer(cfg, lambda: None, host=lambda: None, every=1800),
+         "ninaivu-descriptions", 120),
+        (Transcriber(cfg, lambda: None, host=lambda: None, every=1800),
+         "ninaivu-story-words", 60),
+        (MomentFinder(cfg, lambda: None, engine=lambda: None, every=1800),
+         "ninaivu-video-moments", 180),
+    ]
+
+
+def test_group_4_keeps_its_threads_first_looks_and_wakes(tmp_path, clock, monkeypatch):
+    shared = Supervisor(clock=clock)
+    keepers = _group_4(tmp_path)
+    passes = []
+    try:
+        for keeper, thread, _ in keepers:
+            keeper.supervisor = shared
+            monkeypatch.setattr(type(keeper), "enabled", property(lambda self: True))
+            keeper.run = lambda thread=thread: passes.append(thread)
+            keeper.keep()
+            keeper.keep()                       # a second keep is no second loop
+        names = [t.name for t in threading.enumerate()]
+        for _, thread, first in keepers:
+            assert names.count(thread) == 1
+            clock.asleep_until(thread, first)   # its first look, as before
+        rows = {r["name"]: r for r in shared.activity()}
+        assert {rows[t]["when"] for _, t, _ in keepers} == {"every 1800 seconds"}
+        # Woken, each looks at once, and then waits its whole interval again.
+        for keeper, thread, _ in keepers:
+            keeper.wake()
+            until(lambda thread=thread: passes.count(thread) == 1)
+            clock.asleep_until(thread, 1800)
+        for keeper, thread, _ in keepers:
+            keeper.stop(join=True)
+            assert shared.state(thread) == sup.STOPPED
+            assert keeper._stop.is_set()        # what cuts a pass under way short
+            keeper.keep()
+            assert not keeper._stop.is_set() and shared.state(thread) == sup.IDLE
+    finally:
+        assert shared.stop(timeout=5) == []
+
+
+def test_an_ai_pass_woken_before_it_is_kept_looks_at_once(tmp_path):
+    describer = _group_4(tmp_path)[0][0]
+    describer.supervisor = Supervisor()
+    looked = threading.Event()
+    describer._look = looked.set
+    describer.wake()                            # before keep(): no job to ask yet
+    describer.keep()
+    try:
+        assert looked.wait(5), "the wake was lost until the first look"
+    finally:
+        assert describer.supervisor.stop(timeout=5) == []

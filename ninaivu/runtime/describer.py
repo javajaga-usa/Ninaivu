@@ -66,7 +66,8 @@ class Describer:
         self._wake = threading.Event()
         self._stop = threading.Event()
         self._lock = threading.Lock()
-        self._thread: threading.Thread | None = None
+        #: The supervisor its loop runs on; Ninaivu gives it its own.
+        self.supervisor = None
         self._state: dict[str, Any] = {"running": False, "done": 0, "failed": 0,
                                        "owed": 0, "earlier": 0, "message": "", "seconds": 0.0,
                                        "finished_at": 0.0}
@@ -81,36 +82,41 @@ class Describer:
     def running(self) -> bool:
         return bool(self._state["running"])
 
+    #: The thread it runs on, as before it moved to the supervisor.
+    JOB = "ninaivu-descriptions"
+
     def keep(self) -> None:
         """Start the background thread (once); it does nothing while off."""
-        if self._thread is not None and self._thread.is_alive():
-            return
-        self._stop.clear()
-        self._thread = threading.Thread(target=self._loop, name="ninaivu-descriptions",
-                                        daemon=True)
-        self._thread.start()
+        # A first look a while after start-up, out of the way of the scan.
+        # Then every self._every seconds, or at once when woken, kept by the
+        # supervisor (server/supervisor.py); retry_most=0: a pass that fails is
+        # tried again at the next, as before. A stop cuts a pass short by the
+        # flag it watches.
+        from ..server.supervisor import STOPPED, Job, every, supervisor_of  # noqa: PLC0415
+        supervisor = supervisor_of(self)
+        if supervisor.state(self.JOB) in (None, STOPPED):
+            self._stop.clear()
+        if supervisor.add(Job(
+                self.JOB, self._look, every(lambda: self._every, first=120), log=log,
+                failure="could not describe the photographs", retry_most=0, interrupt=self._stop.set,
+                progress=lambda: {"running": self.running})) and self._wake.is_set():
+            supervisor.request(self.JOB)            # woken before it was kept
 
     def wake(self) -> None:
         """Look for pictures to describe now, not at the next half hour."""
+        from ..server.supervisor import supervisor_of            # noqa: PLC0415
         self._wake.set()
+        supervisor_of(self).request(self.JOB)
 
     def stop(self, join: bool = False) -> None:
+        from ..server.supervisor import supervisor_of            # noqa: PLC0415
         self._stop.set()
-        self._wake.set()
-        if join and self._thread is not None and self._thread is not threading.current_thread():
-            self._thread.join(10)
+        supervisor_of(self).stop_job(self.JOB, timeout=10 if join else 0)
 
-    def _loop(self) -> None:
-        # A first look a while after start-up, out of the way of the scan.
-        self._wake.wait(120)
-        while not self._stop.is_set():
-            self._wake.clear()
-            if self.enabled:
-                try:
-                    self.run()
-                except Exception:                             # noqa: BLE001 - next time
-                    log.exception("could not describe the photographs")
-            self._wake.wait(self._every)
+    def _look(self) -> None:
+        self._wake.clear()
+        if self.enabled:
+            self.run()
 
     def _say(self, **values: Any) -> None:
         with self._lock:
