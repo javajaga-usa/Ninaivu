@@ -22,9 +22,11 @@ what it needs of the machine) and hands it to the :class:`Supervisor`, which:
 * keeps one list of what every job is doing, for the console
   (``GET /api/admin/jobs/background``).
 
-The scan itself, the archive job, the job engine (ninaivu/engine) and the
-model host (ninaivu/runtime/host.py) are not jobs here yet. They are moving
-over one at a time, each with its behaviour unchanged.
+The scan itself, the archive job and the cloud upload are not jobs here
+yet. They are moving over one at a time, each with its behaviour unchanged.
+The job engine (ninaivu/engine) works through a run on its caller's thread
+with its caller's connection, and the model host (ninaivu/runtime/host.py)
+has no thread of its own to keep: background-work.md says why each stays.
 """
 from __future__ import annotations
 
