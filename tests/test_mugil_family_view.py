@@ -229,3 +229,117 @@ def test_rerooting_rewrites_every_table_that_names_a_library(tmp_path):
         assert conn.execute("SELECT root FROM assets ORDER BY rel_path").fetchall() == [
             ("/srv/originals/A",), ("/Volumes/B",)]
         assert conn.execute("SELECT root FROM unrelated").fetchone() == ("/Volumes/A",)
+
+
+# -- withdrawn when unticked, and never served stale ------------------------------
+
+from ninaivu.mugil import machines  # noqa: E402
+from ninaivu.mugil.courier import PartnerError  # noqa: E402
+from ninaivu.mugil.handover import Handover  # noqa: E402
+from test_mugil_two_computers import partner_through  # noqa: E402
+
+
+def _primary_unticked(two):
+    """The Primary, paired with the Secondary, with the family view unticked."""
+    cfg = two.mac.cfg
+    pairing.save(cfg.state_dir, {"key": "ab" * 32, "role": "primary"})
+    cfg.mugil_role, cfg.mugil_partner_url = "primary", "http://linux-pc"
+    cfg.mugil_family_copy = False
+    return cfg
+
+
+def test_unticking_withdraws_the_view_and_removes_only_the_copy(two):
+    assert two.view.look() is True
+    originals = _snapshot(Path(two.cfg.mugil_originals_dir))
+    cfg = _primary_unticked(two)
+    sender = Handover(cfg, partner=partner_through(two.app.test_client()))
+    assert sender.withdraw_due() is True
+    assert sender.withdraw() is True
+    state = Path(two.cfg.state_dir)
+    assert not (state / handover.FOLDER).exists()
+    assert not (state / family_view.STATE).exists()
+    assert _snapshot(Path(two.cfg.mugil_originals_dir)) == originals
+    assert two.view.app is None and two.view.look() is False
+    assert two.app.test_client().get("/api/replica").status_code == 404
+    assert sender.withdraw_due() is False                     # asked once, not every look
+    # Ticked again: the next hand-over is served again.
+    cfg.mugil_family_copy = True
+    publish(cfg, handover.folder(two.cfg.state_dir))
+    two.view._wanted = (0.0, False)                              # noqa: SLF001
+    assert sender.withdraw_due() is False and two.view.look() is True
+
+
+def test_a_withdrawal_the_secondary_misses_is_asked_again(two):
+    assert two.view.look() is True
+    cfg = _primary_unticked(two)
+    through = partner_through(two.app.test_client())
+
+    class Away:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def request(self, *args, **kwargs):
+            raise PartnerError("The other computer did not answer.", 0)
+
+    late = Handover(cfg, partner=Away)
+    assert late.withdraw() is False and late.withdraw_due() is True
+    assert two.view.look() is True                             # still there meanwhile
+    late.partner = through                                     # the Secondary is back
+    assert late.withdraw_due() is True and late.withdraw() is True
+    assert two.view.look() is False
+
+
+def test_the_withdrawal_must_be_signed_by_the_pair(two):
+    assert two.view.look() is True
+    answer = two.app.test_client().post("/api/mugil/handover/withdraw", json={})
+    assert answer.status_code in (401, 403)
+    assert (Path(two.cfg.state_dir) / handover.FOLDER).is_dir() and two.view.look() is True
+
+
+def test_a_handover_that_says_the_view_is_off_is_not_served(two):
+    folder = handover.folder(two.cfg.state_dir)
+    manifest = json.loads((folder / "replica.json").read_text())
+    (folder / "replica.json").write_text(json.dumps({**manifest, "family_view": False}))
+    assert family_view.wanted(two.cfg) is False and two.view.look() is False
+
+
+def test_a_stale_handover_is_not_served(two):
+    import time
+    assert two.view.look() is True
+    made = json.loads((handover.folder(two.cfg.state_dir) / "replica.json").read_text())["made_at"]
+    later = made + family_view.STALE_AFTER + 60
+    assert family_view.wanted(two.cfg, now=made + family_view.STALE_AFTER - 60) is True
+    assert family_view.wanted(two.cfg, now=later) is False
+    # A Primary still heard from (a signed request) keeps it fresh.
+    machines.remember(two.cfg.state_dir, {"machine": {"role": "primary"}})
+    assert family_view.wanted(two.cfg, now=time.time() + family_view.STALE_AFTER - 60) is True
+    # Served, it goes back to the Secondary's own app once stale.
+    two.view._wanted = (0.0, False)                              # noqa: SLF001
+    original = family_view.STALE_AFTER
+    family_view.STALE_AFTER = -1.0
+    try:
+        assert two.app.test_client().get("/api/replica").status_code == 404
+    finally:
+        family_view.STALE_AFTER = original
+
+
+def test_the_page_and_a_refusal_name_the_two_computers(two):
+    pair = pairing.load(two.cfg.state_dir)
+    pairing.save(two.cfg.state_dir, {**pair, "partner_name": "Mac mini"})
+    two.cfg.house_name = "Linux PC"
+    assert two.view.look() is True
+    client = two.app.test_client()
+    page = client.get("/").get_data(as_text=True)
+    assert "This is the copy kept on Linux PC while Mac mini is off." in page
+    assert 'data-i18n="This is the copy kept on {here} while {primary} is off.' in page
+    assert "Pi" not in page.split('id="replica-banner"')[1].split("</div>")[0]
+    client = _signed_in(two.app)
+    refused = client.post("/api/albums", json={"name": "Madurai trip"}).get_json()
+    assert refused["params"] == {"primary": "Mac mini", "here": "Linux PC"}
+    assert "changes are made on Mac mini" in refused["error"]
+
+
+def test_without_a_name_the_primary_is_the_main_computer(two):
+    assert two.view.look() is True
+    refused = _signed_in(two.app).post("/api/albums", json={"name": "x"}).get_json()
+    assert refused["params"]["primary"] == "the main computer"

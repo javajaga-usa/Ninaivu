@@ -513,6 +513,8 @@ admin | PUT                  | /api/mugil/handover | peer | writes | same origin
 home  | PUT                  | /api/mugil/handover | peer | writes | same origin | mugil_peer.mugil_handover_receive
 admin | POST                 | /api/mugil/handover/remove | peer | writes | same origin | mugil_peer.mugil_handover_remove
 home  | POST                 | /api/mugil/handover/remove | peer | writes | same origin | mugil_peer.mugil_handover_remove
+admin | POST                 | /api/mugil/handover/withdraw | peer | writes | same origin | mugil_peer.mugil_handover_withdraw
+home  | POST                 | /api/mugil/handover/withdraw | peer | writes | same origin | mugil_peer.mugil_handover_withdraw
 admin | POST                 | /api/mugil/have | peer | writes | same origin | mugil_peer.mugil_have
 home  | POST                 | /api/mugil/have | peer | writes | same origin | mugil_peer.mugil_have
 admin | GET                  | /api/mugil/hello | peer | reads | - | mugil_peer.mugil_hello

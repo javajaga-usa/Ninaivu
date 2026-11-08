@@ -1573,6 +1573,24 @@ def mugil_handover_remove():
     return jsonify({"removed": handover.remove(cfg.state_dir, [str(p) for p in paths])})
 
 
+@mugil_peer_bp.post("/api/mugil/handover/withdraw")
+def mugil_handover_withdraw():
+    """On the Secondary: the family view was unticked on the Primary. Stop
+    serving it and remove the hand-over and the view's copy of it; the
+    originals are not touched (mugil/family_view.py)."""
+    from ..mugil import handover                                 # noqa: PLC0415
+    cfg = _cfg()
+    if role(cfg) != SECONDARY:
+        return _not_here()
+    raw = read_at_most(JSON_MAX_BYTES)
+    if _signed(pairing.body_digest(raw)) is None:
+        return _unsigned()
+    view = getattr(current_app.config.get("MV_SERVICES"), "mugil_family_view", None)
+    if view is not None:
+        return jsonify({"removed": view.withdraw()})
+    return jsonify({"removed": handover.clear_copy(cfg.state_dir)})
+
+
 @mugil_peer_bp.put("/api/mugil/originals")
 def mugil_receive():
     """On the Secondary: one original, kept only if it is the one named."""

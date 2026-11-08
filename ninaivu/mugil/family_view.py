@@ -23,6 +23,13 @@ when this computer is a paired Secondary and a hand-over is there:
   ``mugil-family-view/``), so nothing the Primary sent is changed, and
   nothing on the originals disk is ever written.
 
+**Only while it is wanted.** Unticked on the Primary, the Primary tells the
+Secondary over the pairing, and the Secondary stops serving and removes the
+hand-over and the view's copy (:meth:`FamilyView.withdraw`). As a second
+guard, the view is served only while the newest hand-over says it is on, and
+while the Primary was heard from (a hand-over made, or a signed request) in
+the last :data:`STALE_AFTER` seconds, seven days.
+
 What stays the Secondary's own on its family port: the routes between the
 two computers (``/api/mugil/``), the phone inbox (``/dav``) and the health
 check. Everything else goes to the family view while it is served, and to
@@ -46,11 +53,20 @@ from . import SECONDARY, SINGLE, pairing, role
 log = logging.getLogger(__name__)
 
 __all__ = ["FamilyView", "wanted", "reroot_index", "install", "STATE", "OWN_PATHS",
-           "LOOK_EVERY"]
+           "LOOK_EVERY", "STALE_AFTER", "MAIN_COMPUTER"]
 
 #: In the Secondary's state folder: the family view's own state (the copy of
 #: the index served, its sign-ins, the links to the thumbnails).
 STATE = "mugil-family-view"
+
+#: Seconds without a word from the Primary (no hand-over made, no signed
+#: request) after which the view is no longer served: a Primary unticked,
+#: replaced or gone whose withdrawal never arrived does not leave its last
+#: hand-over shared for ever.
+STALE_AFTER = 7 * 86400.0
+
+#: What the Primary is called when the pairing does not name it.
+MAIN_COMPUTER = "the main computer"
 #: In :data:`STATE`: the Primary's library folders, by their ids, as the last
 #: hand-over named them, for re-rooting a copy taken up before a restart.
 LIBRARIES = "family-view.json"
@@ -65,14 +81,24 @@ LOOK_EVERY = 60.0
 WANTED_FOR = 5.0
 
 
-def wanted(cfg) -> bool:
-    """Whether this computer serves the family view: a paired Secondary with
-    a hand-over from the Primary in ``mugil-handover/``."""
+def wanted(cfg, now: float | None = None) -> bool:
+    """Whether this computer serves the family view: a paired Secondary whose
+    newest hand-over from the Primary says the view is on, and whose Primary
+    was heard from in the last :data:`STALE_AFTER` seconds."""
     from ..replica import MANIFEST                                 # noqa: PLC0415
+    from . import machines                                         # noqa: PLC0415
     from .handover import folder                                   # noqa: PLC0415
     if role(cfg) != SECONDARY or pairing.load(cfg.state_dir) is None:
         return False
-    return (folder(cfg.state_dir) / MANIFEST).is_file()
+    try:
+        manifest = json.loads((folder(cfg.state_dir) / MANIFEST).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    if not isinstance(manifest, dict) or manifest.get("family_view") is not True:
+        return False
+    heard = max(float(manifest.get("made_at") or 0),
+                float((machines.remembered(cfg.state_dir) or {}).get("seen_at") or 0))
+    return (time.time() if now is None else now) - heard <= STALE_AFTER
 
 
 def reroot_index(index: Path | str, mapping: dict[str, str]) -> int:
@@ -163,6 +189,15 @@ class FamilyView:
             host = f"[{host}]"
         default = (scheme == "http" and port == 80) or (scheme == "https" and port == 443)
         return f"{scheme}://{host}" + ("" if default else f":{port}")
+
+    def _names(self) -> dict[str, str]:
+        """What the family calls the two computers: the Primary by the name
+        it paired with, this one by its own (the house name, or the
+        computer's)."""
+        from . import display_name                                 # noqa: PLC0415
+        pair = pairing.load(self.cfg.state_dir) or {}
+        return {"primary": str(pair.get("partner_name") or "").strip() or MAIN_COMPUTER,
+                "here": display_name(self.cfg)}
 
     def _wake_mac(self) -> str:
         from . import wake                                         # noqa: PLC0415
@@ -263,13 +298,33 @@ class FamilyView:
             replica.take_newest()                                  # raises ReplicaError
         else:
             replica.look()
-        front = Front(self.view_cfg, replica, **({"opener": self._opener}
-                                                 if self._opener else {}))
+        names = self._names()
+        front = Front(self.view_cfg, replica, primary_name=names["primary"],
+                      here_name=names["here"],
+                      **({"opener": self._opener} if self._opener else {}))
         self.app = self._build(self.view_cfg, replica, front)
         self.replica, self.front = replica, front
         self.error = replica.error
         front.keep_looking()
         log.info("the family view is served here while the Primary is off")
+
+    def withdraw(self) -> list[str]:
+        """The Primary unticked the family view: stop serving it, and remove
+        the hand-over and the view's copy (handover.clear_copy, which never
+        touches the originals). Returns what was removed."""
+        from ..storage import db                                   # noqa: PLC0415
+        from .handover import clear_copy                           # noqa: PLC0415
+        with self._lock:
+            if self.front is not None:
+                self.front.stop()
+            if self.view_cfg is not None:
+                db.retire(self.view_cfg.db_path)
+            self.app = self.replica = self.front = self.view_cfg = None
+            self._wanted = (0.0, False)
+            self.error = ""
+            gone = clear_copy(self.cfg.state_dir)
+        log.info("the Primary took the family view down: %s removed", ", ".join(gone) or "nothing")
+        return gone
 
     def keep(self) -> None:
         if self._thread is not None and self._thread.is_alive():

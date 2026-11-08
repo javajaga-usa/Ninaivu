@@ -92,7 +92,22 @@ arrived:
   the two computers, the phone inbox (`/dav`) and the health check.
 
 A newer hand-over is taken up within a minute of arriving, without signing
-anybody out. A photograph of a library the Secondary does not keep yet opens
+anybody out.
+
+**Untick it and it is withdrawn.** The Primary tells the Secondary over the
+pairing, and the Secondary stops serving the view and removes its copy: the
+`mugil-handover/` and `mugil-family-view/` folders in its state folder. The
+originals are never touched. If the Secondary is away, the Primary asks again
+every five minutes until it answers. As a second guard, the Secondary serves
+the view only while the newest hand-over says it is on, and only while the
+Primary was heard from in the last **7 days** (a hand-over made, or any
+signed request between the two). After 7 days without a word from the
+Primary, the Secondary's family app is its own again until the Primary is
+back.
+
+The page and a refused change name the two computers as the pairing knows
+them: the Primary by the name it paired with ("the main computer" when it
+gave none), this one by the house name or the computer's name. A photograph of a library the Secondary does not keep yet opens
 once its originals have arrived.
 
 ### The old way: a service of its own
