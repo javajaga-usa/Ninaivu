@@ -456,6 +456,38 @@ Looking is offered only after a complete run of sending the originals, so a
 photograph the Primary has, still to be sent, is not mistaken for the
 Secondary's own.
 
+### Switching two one-computer Ninaivus to a pair, safely
+
+The steps above keep every file; the census, the plan and the proof show it.
+They are on Mugil → Two computers, under **Census, plan and proof**, and
+nothing in them moves, changes or removes a file. The order is:
+
+1. **Census on both, disk plugged in.** On each computer, before anything is
+   paired or a part chosen, press **Take a census**: every file it keeps,
+   with its size and fingerprint. Plug the disk that holds the photographs in
+   first (the N300 on the Linux PC). A folder whose disk is away is not
+   counted, and a proof against such a census never passes; the page says
+   which folder it could not reach. Take it just before pairing: the page
+   says how old the last one is.
+2. **Pair**, steps 1 to 4 above.
+3. **Plan.** On the Primary, press **Plan**. From the two censuses it says,
+   for every file, what pairing and bringing in will do: on both, brought in,
+   kept beside, sent to the Secondary, or left alone and why. The totals are
+   by outcome, and the files can be shown one outcome at a time.
+4. **Bring them in**, step 5 above.
+5. **Prove.** On the Primary, press **Prove nothing was lost**. Both
+   computers take the census again, and every fingerprint seen before must
+   be on at least one of them. Passed, the change is done; failed, every
+   missing file is named by its path. Put it back and prove again.
+
+Moving the Primary and unpairing have a plan and a proof too
+(`POST /api/admin/mugil/topology/plan` with `"transition": "move_primary"` or
+`"unpair"`). Planned on the Primary that is moving, the plan and its censuses
+go with the next full index export, and the computer it is imported on, the
+Primary from then, proves that every file is on it or on the Secondary:
+copy the library to it as well as the index. After unpairing, each computer
+proves its own side against the census it took while paired.
+
 ## Setting it up from the command line
 
 Install Ninaivu on both computers, and on each run `ninaivu mugil setup` once
