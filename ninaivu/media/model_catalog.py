@@ -127,12 +127,18 @@ MODELS: dict[str, dict[str, Any]] = {
             {"url": ("https://media.githubusercontent.com/media/opencv/opencv_zoo/"
                      "main/models/face_detection_yunet/"
                      "face_detection_yunet_2023mar.onnx"),
+             "mirrors": [HF.format(repo="opencv/face_detection_yunet",
+                                   revision="3cc26e7f1014a5ee5d74a42acee58bafc9d0a310",
+                                   name="face_detection_yunet_2023mar.onnx")],
              "name": "face_detection_yunet_2023mar.onnx", "folder": "",
              "bytes": 232589,
              "sha256": "8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4"},
             {"url": ("https://media.githubusercontent.com/media/opencv/opencv_zoo/"
                      "main/models/face_recognition_sface/"
                      "face_recognition_sface_2021dec.onnx"),
+             "mirrors": [HF.format(repo="opencv/face_recognition_sface",
+                                   revision="3d7082438a6e4551e840c9b2bb60b71e8da4b524",
+                                   name="face_recognition_sface_2021dec.onnx")],
              "name": "face_recognition_sface_2021dec.onnx", "folder": "",
              "bytes": 38696353,
              "sha256": "0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79"},
@@ -822,6 +828,87 @@ def _clear_partials(folder: Path, base: str, now: float | None = None) -> int:
     return gone
 
 
+class KeptCuttingShort(OSError):
+    """A download that was cut short every time it was carried on."""
+
+
+def _source_failed(exc: BaseException) -> bool:
+    """Whether a download failed because of where it came from, so the same
+    file somewhere else may do: the host unreachable or refusing, something
+    in between answering for it, the bytes not the pinned ones. Not the disk,
+    which every source would fail at alike."""
+    import http.client                                              # noqa: PLC0415
+    import socket                                                   # noqa: PLC0415
+    import ssl                                                      # noqa: PLC0415
+    return isinstance(exc, (urllib.error.URLError, http.client.HTTPException,
+                            ssl.SSLError, socket.gaierror, ConnectionError,
+                            TimeoutError, socket.timeout, CutShort, KeptCuttingShort,
+                            ChecksumMismatch))
+
+
+def _host(url: str) -> str:
+    import urllib.parse                                             # noqa: PLC0415
+    return urllib.parse.urlsplit(url).hostname or url
+
+
+def _fetch_into(entry: dict[str, Any], url: str, output: Any,
+                on_bytes: Callable[[int], None] | None,
+                opener: Callable[..., Any]) -> tuple[Any, str]:
+    """Write *url* into *output* from the start, carrying on where the
+    connection drops; return the hash of what was written and the value it
+    must come to."""
+    digest, pinned = _hasher(entry)
+    expected = int(entry.get("bytes") or 0)
+    written = 0
+    tries = 0
+    while True:
+        headers = {"User-Agent": "Ninaivu model setup"}
+        if written:
+            # Carry on from where the connection dropped, rather than
+            # fetch gigabytes again.
+            headers["Range"] = f"bytes={written}-"
+        request = urllib.request.Request(url, headers=headers)
+        try:
+            with opener(request, timeout=60) as response:
+                if written and getattr(response, "status", 206) != 206:
+                    # The server sent the whole file again: start over.
+                    output.seek(0)
+                    output.truncate()
+                    digest, pinned = _hasher(entry)
+                    if on_bytes:
+                        on_bytes(-written)
+                    written = 0
+                while chunk := response.read(1 << 20):
+                    written += len(chunk)
+                    if expected and written > expected:
+                        # More than the pinned size can never match:
+                        # stop now rather than fill the disk first
+                        # (audit C-34).
+                        raise ChecksumMismatch(f"{entry['name']} was larger than "
+                                               f"its pinned size; it was discarded")
+                    output.write(chunk)
+                    digest.update(chunk)
+                    if on_bytes:
+                        on_bytes(len(chunk))
+            if expected and written < expected:
+                # A connection closed early ends the read quietly. It
+                # was reported as a checksum mismatch, as though the
+                # file were wrong, when it was only short.
+                raise CutShort(f"{written:,} of {expected:,} bytes")
+            return digest, pinned
+        except (OSError, CutShort) as exc:
+            if not _dropped(exc):
+                raise                    # missing, refused, the disk: not the line
+            tries += 1
+            if tries >= DOWNLOAD_TRIES:
+                raise KeptCuttingShort(f"the download of {Path(entry['name']).name} kept "
+                                       f"being cut short ({exc}); check the connection "
+                                       f"and try again") from exc
+            log.info("download of %s cut short (%s); carrying on in %ds",
+                     entry["name"], exc, min(30, 2 ** tries))
+            time.sleep(min(30, 2 ** tries))
+
+
 def download_file(entry: dict[str, Any], on_bytes: Callable[[int], None] | None = None,
                   opener: Callable[..., Any] = urllib.request.urlopen) -> Path:
     """Fetch one pinned file; publish it only if its SHA-256 matches.
@@ -835,9 +922,16 @@ def download_file(entry: dict[str, Any], on_bytes: Callable[[int], None] | None 
     # fetched itself — the face detector, the recogniser, the orientation
     # model — are a plain pinned URL. Both are a name, a size and a checksum,
     # which is all the rest of this cares about.
-    url = entry.get("url") or HF.format(
-        repo=entry["repo"], revision=entry["revision"], name=entry["name"])
-    digest, pinned = _hasher(entry)
+    #
+    # `mirrors` are the same bytes somewhere else, tried in turn when a source
+    # cannot be reached or sends something else. A home network's web filter
+    # answered GitHub's media host with a plain-text redirect to its warning
+    # page, so the face models failed with "wrong version number" on every
+    # try, while Hugging Face, which OpenCV publishes the same files to, was
+    # reachable. The checksum is what makes any source acceptable.
+    urls = [entry.get("url") or HF.format(
+        repo=entry["repo"], revision=entry["revision"], name=entry["name"])]
+    urls += list(entry.get("mirrors") or ())
     _clear_partials(target.parent, Path(entry["name"]).name)
     expected = int(entry.get("bytes") or 0)
     # The download and, for an archive, what is taken out of it, side by side,
@@ -856,56 +950,24 @@ def download_file(entry: dict[str, Any], on_bytes: Callable[[int], None] | None 
                                          prefix=f".{Path(entry['name']).name}.",
                                          suffix=".part", delete=False) as output:
             pending = Path(output.name)
-            written = 0
-            tries = 0
-            while True:
-                headers = {"User-Agent": "Ninaivu model setup"}
-                if written:
-                    # Carry on from where the connection dropped, rather than
-                    # fetch gigabytes again.
-                    headers["Range"] = f"bytes={written}-"
-                request = urllib.request.Request(url, headers=headers)
+            for place, url in enumerate(urls):
+                if output.tell():
+                    # What the last source sent is no use: start again.
+                    if on_bytes:
+                        on_bytes(-output.tell())
+                    output.seek(0)
+                    output.truncate()
                 try:
-                    with opener(request, timeout=60) as response:
-                        if written and getattr(response, "status", 206) != 206:
-                            # The server sent the whole file again: start over.
-                            output.seek(0)
-                            output.truncate()
-                            digest, pinned = _hasher(entry)
-                            if on_bytes:
-                                on_bytes(-written)
-                            written = 0
-                        while chunk := response.read(1 << 20):
-                            written += len(chunk)
-                            if expected and written > expected:
-                                # More than the pinned size can never match:
-                                # stop now rather than fill the disk first
-                                # (audit C-34).
-                                raise ChecksumMismatch(f"{entry['name']} was larger than "
-                                                       f"its pinned size; it was discarded")
-                            output.write(chunk)
-                            digest.update(chunk)
-                            if on_bytes:
-                                on_bytes(len(chunk))
-                    if expected and written < expected:
-                        # A connection closed early ends the read quietly. It
-                        # was reported as a checksum mismatch, as though the
-                        # file were wrong, when it was only short.
-                        raise CutShort(f"{written:,} of {expected:,} bytes")
+                    digest, pinned = _fetch_into(entry, url, output, on_bytes, opener)
+                    if digest.hexdigest() != pinned:
+                        raise ChecksumMismatch(f"{entry['name']} did not match its pinned "
+                                               f"checksum; it was discarded")
                     break
-                except (OSError, CutShort) as exc:
-                    if not _dropped(exc):
-                        raise                    # missing, refused, the disk: not the line
-                    tries += 1
-                    if tries >= DOWNLOAD_TRIES:
-                        raise OSError(f"the download of {Path(entry['name']).name} kept being "
-                                      f"cut short ({exc}); check the connection and try "
-                                      f"again") from exc
-                    log.info("download of %s cut short (%s); carrying on in %ds",
-                             entry["name"], exc, min(30, 2 ** tries))
-                    time.sleep(min(30, 2 ** tries))
-        if digest.hexdigest() != pinned:
-            raise ChecksumMismatch(f"{entry['name']} did not match its pinned checksum; it was discarded")
+                except (OSError, ValueError, CutShort) as exc:
+                    if place == len(urls) - 1 or not _source_failed(exc):
+                        raise
+                    log.warning("could not download %s from %s (%s); trying %s",
+                                entry["name"], _host(url), exc, _host(urls[place + 1]))
         if "take" in entry:
             _unpack(entry, pending)
             return target.parent
