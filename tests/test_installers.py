@@ -226,3 +226,30 @@ def test_every_download_is_used_as_a_household_would_before_a_release():
                      ("mac-windows", "primary"): "macos-15", ("mac-windows", "secondary"): "windows-2022"}
     assert across["strategy"]["fail-fast"] is False, "both halves of a pair run to the end"
 
+
+
+def test_each_download_is_checked_by_opening_its_one_starter():
+    """tools/check_portable.py opens Ninaivu.exe, Ninaivu.app or the Linux
+    folder's ninaivu as a double-click does, and the panel reports how the
+    start went (NINAIVU_CHECK_OPEN) before it quits."""
+    text = (ROOT / "tools" / "check_portable.py").read_text(encoding="utf-8")
+    assert "open_the_starter(portable, photos, logs)" in text
+    assert "NINAIVU_CHECK_OPEN" in text
+    assert "NINAIVU_CHECK_OPEN" in (ROOT / "ninaivu" / "desktop" / "app.py").read_text(encoding="utf-8")
+
+
+def test_the_check_finds_each_systems_one_starter(tmp_path, monkeypatch):
+    monkeypatch.syspath_prepend(str(ROOT / "tools"))
+    check_portable = importlib.import_module("check_portable")
+    windows, mac, linux = tmp_path / "w", tmp_path / "m", tmp_path / "l"
+    (windows / "app").mkdir(parents=True)
+    (windows / "Ninaivu.exe").write_bytes(b"MZ")
+    (mac / "Ninaivu.app" / "Contents" / "MacOS").mkdir(parents=True)
+    (mac / "Ninaivu.app" / "Contents" / "MacOS" / "ninaivu").write_text("#!/bin/sh\n")
+    (linux / "app").mkdir(parents=True)
+    (linux / "ninaivu").write_bytes(b"\x7fELF")
+    assert check_portable.starter(windows) == windows / "Ninaivu.exe"
+    assert check_portable.starter(mac) == mac / "Ninaivu.app" / "Contents" / "MacOS" / "ninaivu"
+    assert check_portable.starter(linux) == linux / "ninaivu"
+    with pytest.raises(check_portable.Failed):
+        check_portable.starter(tmp_path)
