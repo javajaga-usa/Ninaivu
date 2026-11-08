@@ -863,9 +863,7 @@ def status():
     # /api/status/stats.
     if (cfg.libraries or cfg.active_root) and _bool_arg("stats", True):
         try:
-            payload["stats"] = db.library_stats(
-                _conn(), _roots(), **_viewer()
-            )
+            payload["stats"] = db.library_stats(_conn(), gate=visibility.current())
         except Exception as exc:  # noqa: BLE001
             current_app.logger.warning("library_stats failed: %s", exc)
             payload["stats"] = None
@@ -886,7 +884,7 @@ def status_stats():
     if not (cfg.libraries or cfg.active_root):
         return jsonify({"stats": None})
     try:
-        stats = db.library_stats(_conn(), _roots(), **_viewer())
+        stats = db.library_stats(_conn(), gate=visibility.current())
     except Exception as exc:  # noqa: BLE001
         current_app.logger.warning("library_stats failed: %s", exc)
         stats = None

@@ -32,12 +32,12 @@ from typing import Any
 from flask import abort, jsonify, make_response
 
 from ..media import books as book_maker, films as maker, then_and_now as pairing
-from ..server import features
+from ..server import features, visibility
 from ..server.auth import current_user, require_family
 from ..storage import db, family_tree, films as film_store, then_and_now as born_store
 from ..words import Said, refusal
 from ._body import json_object
-from .api import _cfg, _conn, _roots, _safe_under, _thumb_version, _viewer, _viewer_limits, bp
+from .api import _cfg, _conn, _safe_under, _thumb_version, bp
 
 log = logging.getLogger(__name__)
 
@@ -66,8 +66,8 @@ def _switched_on() -> None:
 
 
 def _query(**filters: Any) -> list[dict[str, Any]]:
-    rows, _ = db.query_assets(_conn(), _roots(), kinds=["picture"], sort="date_asc",
-                              offset=0, columns=COLUMNS, with_total=False, **_viewer(),
+    rows, _ = db.query_assets(_conn(), gate=visibility.current(), kinds=["picture"],
+                              sort="date_asc", offset=0, columns=COLUMNS, with_total=False,
                               **filters)
     return rows
 
@@ -127,7 +127,7 @@ def _find(guest: bool) -> dict[str, Any]:
     if guest:
         return found
 
-    people = {int(p["id"]): p for p in db.list_people(conn, _roots(), **_viewer_limits())
+    people = {int(p["id"]): p for p in db.list_people(conn, gate=visibility.current())
               if p.get("name")}
     kept: dict[int, tuple[list[dict[str, Any]], dict[int, dict[str, Any]]]] = {}
 
@@ -173,11 +173,9 @@ def _find(guest: bool) -> dict[str, Any]:
 
 def _pairs() -> dict[str, Any]:
     conn = _conn()
-    viewer = _viewer()
     guest = bool(current_user().is_guest)
-    key = ("then_and_now", int(viewer["viewer_id"] or 0), int(viewer["max_visibility"]),
-           viewer["scope"] or "", tuple(_roots()), guest,
-           db.visibility_clause("a", viewer["max_visibility"]),
+    # The gate's key carries the date limit, which moves no library counter.
+    key = ("then_and_now", *visibility.current().cache_key(), guest,
            tuple(sorted(born_store.born(conn).items())),
            tuple((int(r["person_a"]), int(r["person_b"]), r["kind"])
                  for r in family_tree.relations(conn)))
@@ -217,7 +215,7 @@ def then_and_now_today():
 def then_and_now_born(person_id: int):
     """Keep the year somebody this viewer may see on the People page was born."""
     _switched_on()
-    people = {int(p["id"]) for p in db.list_people(_conn(), _roots(), **_viewer_limits())}
+    people = {int(p["id"]) for p in db.list_people(_conn(), gate=visibility.current())}
     if person_id not in people:
         abort(404)
     year = json_object().get("year")
@@ -268,9 +266,9 @@ def then_and_now_film():
     # Only what this viewer may see, whatever ids were sent.
     wanted = sorted({a for pair in sides for a, _ in pair})
     found = {int(r["id"]): r for r in db.query_assets(
-        _conn(), _roots(), kinds=["picture"], ids=wanted, limit=len(wanted), offset=0,
-        with_total=False, **_viewer())[0]}
-    people = {int(p["id"]) for p in db.list_people(_conn(), _roots(), **_viewer_limits())}
+        _conn(), gate=visibility.current(), kinds=["picture"], ids=wanted, limit=len(wanted),
+        offset=0, with_total=False)[0]}
+    people = {int(p["id"]) for p in db.list_people(_conn(), gate=visibility.current())}
     faces: dict[int, dict[int, dict[str, Any]]] = {}
 
     def held(asset_id: int, person: int | None) -> dict[str, Any] | None:

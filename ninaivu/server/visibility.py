@@ -207,6 +207,13 @@ class Viewer:
             params += scope_params
         return " AND ".join(parts), params
 
+    def cache_key(self) -> tuple[Any, ...]:
+        """What an answer remembered for this caller depends on: who they are
+        and everything that limits them, the date limit included — the same
+        caller, or one with the same limits, gets the same key."""
+        clause, params = self.sql("a")
+        return (self.viewer_id, self.max_visibility, clause, tuple(params))
+
     # -- one item --------------------------------------------------------------
 
     def may_see(self, asset: dict[str, Any] | None, *, own: bool = True) -> bool:

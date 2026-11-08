@@ -396,3 +396,31 @@ def test_the_books_years_count_through_the_gate_as_before(app, furnished, policy
             assert db.picture_years(conn, gate=viewer) == db.picture_years(
                 conn, viewer.roots, max_visibility=viewer.max_visibility,
                 scope=viewer.scope), name
+
+
+@pytest.mark.parametrize("policy", DOMAIN_POLICIES)
+def test_the_sidebar_counts_through_the_gate_as_before(app, furnished, policy):
+    conn, _, members = furnished
+    if policy:
+        db.set_meta(conn, date_policy.KEY, json.dumps(policy))
+    keys = {}
+    for name, user in members.items():
+        with app.test_request_context("/api/status/stats"):
+            g.user = user
+            viewer = visibility.current()
+            assert db.library_stats(conn, gate=viewer) == db.library_stats(
+                conn, viewer.roots, **viewer.limits()), name
+            keys[name] = viewer.cache_key()
+    # A remembered answer is never handed to somebody with other limits.
+    assert len(set(keys.values())) == len(keys)
+
+
+def test_every_open_read_of_photographs_is_the_gates():
+    """The manifest says so for every open route that reads the library."""
+    from ninaivu.server import routes
+    for endpoint in ("api.status_stats", "api.frame_next", "api.festivals_list",
+                     "api.festivals_one", "api.moments_search", "api.our_year_list",
+                     "api.our_year_one", "api.then_and_now_all", "api.then_and_now_today"):
+        assert routes.OPEN[endpoint] == ("guest", routes.GATE), endpoint
+    assert not [e for e, (_, why) in routes.OPEN.items()
+                if why == "the route applies the caller's visibility itself"]
