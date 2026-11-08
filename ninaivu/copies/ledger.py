@@ -13,18 +13,29 @@ so a file moved to another folder is still the same photograph kept in the
 same places. Its table, ``copies``, is index migration 3
 (storage/migrations.py).
 
-In this stage the engines keep writing their own records exactly as before,
-and nothing here changes what any of them sends. The ledger is filled *from*
-those records (:func:`fill`): read only, mapped from path to fingerprint
-through ``content_fingerprints``, and only where the file is still the file
-the record was made for (the same size and modified time). A record whose
-file has changed since says nothing about the photograph as it is now, and
-is left out. Nothing is sent, re-sent or forgotten by filling it.
+Each engine writes its row as it confirms a copy (:func:`confirm`): the
+second disk when a file is copied and read back, the off-site copy when an
+object is stored, Google Drive when an upload is done, and the Primary when
+the Secondary says it holds a file. The row is ``verified`` and says when.
+It is written where the engine records its own success, in the same
+transaction or right after it, and a failure to write it is logged and
+never stops the copy: the engine's own record is still the one it acts on.
 
-A row is ``kept`` while the engine's record says the copy is there. One whose
-record has gone (the second disk found a bad copy and dropped it, a
-different disk was plugged in) becomes ``unconfirmed`` rather than being
-deleted: the ledger only ever adds what it learns, as the copies do.
+The ledger is also filled *from* those records (:func:`fill`), for what was
+copied before the engines wrote it and for what they no longer confirm: read
+only, mapped from path to fingerprint through ``content_fingerprints``, and
+only where the file is still the file the record was made for (the same
+size and modified time). A record whose file has changed since says nothing
+about the photograph as it is now, and is left out. Nothing is sent, re-sent
+or forgotten by filling it. The index migration fills it once; after that a
+supervisor job does (ninaivu/copies/__init__.py), never a page's read.
+
+A row is ``kept`` (filled from a record) or ``verified`` (written by the
+engine as it confirmed the copy) while the engine's record says the copy is
+there; both count as held. One whose record has gone (the second disk found
+a bad copy and dropped it, a different disk was plugged in) becomes
+``unconfirmed`` rather than being deleted: the ledger only ever adds what it
+learns, as the copies do.
 """
 
 from __future__ import annotations
@@ -37,11 +48,15 @@ from typing import Any, Iterable, Sequence
 
 log = logging.getLogger(__name__)
 
-__all__ = ["KEPT", "UNCONFIRMED", "SOURCES", "fill", "refresh", "headline",
-           "counts", "holds", "state_dir_of"]
+__all__ = ["KEPT", "VERIFIED", "HELD", "UNCONFIRMED", "SOURCES", "fill", "refresh",
+           "confirm", "headline", "counts", "holds", "state_dir_of"]
 
-#: The copy is there, as far as the engine that made it knows.
+#: The copy is there, as far as the engine's record says (filled from it).
 KEPT = "kept"
+#: The engine confirmed the copy as it made it, and wrote so itself.
+VERIFIED = "verified"
+#: Both say the copy is there.
+HELD = (KEPT, VERIFIED)
 #: The engine's record of it has gone: it may be there, but nobody says so.
 UNCONFIRMED = "unconfirmed"
 
@@ -212,16 +227,18 @@ def fill(conn: sqlite3.Connection, *, state_dir: Path | str | None = None,
             if not source(conn, state_dir=state_dir, offsite_where=offsite_where):
                 continue
             conn.execute(
-                "UPDATE copies SET state = ? WHERE destination = ? AND state = ? "
+                "UPDATE copies SET state = ? WHERE destination = ? AND state IN (?, ?) "
                 "AND fingerprint NOT IN (SELECT fingerprint FROM temp.copies_found)",
-                (UNCONFIRMED, name, KEPT))
+                (UNCONFIRMED, name, *HELD))
+            # A row the engine wrote as verified stays so: the record agrees.
             conn.execute(
                 "INSERT INTO copies(fingerprint, destination, state, verified_at, size) "
                 "SELECT fingerprint, ?, ?, COALESCE(verified_at, 0), size "
                 "FROM temp.copies_found WHERE true "
-                "ON CONFLICT(fingerprint, destination) DO UPDATE SET state = excluded.state, "
+                "ON CONFLICT(fingerprint, destination) DO UPDATE SET state = CASE "
+                "WHEN copies.state = ? THEN copies.state ELSE excluded.state END, "
                 "verified_at = MAX(copies.verified_at, excluded.verified_at), "
-                "size = excluded.size", (name, KEPT))
+                "size = excluded.size", (name, KEPT, VERIFIED))
             kept[name] = int(conn.execute("SELECT COUNT(*) FROM temp.copies_found").fetchone()[0])
         finally:
             conn.execute("DROP TABLE IF EXISTS temp.copies_found")
@@ -245,6 +262,54 @@ def refresh(conn: sqlite3.Connection, *, state_dir: Path | str | None = None,
     return kept
 
 
+# -- the engines writing it as they confirm a copy ----------------------------------
+
+def confirm(conn: sqlite3.Connection, destination: str,
+            files: Iterable[tuple[str, str, int, float | None]], *, at: float,
+            expect: Sequence[str | None] | None = None) -> int:
+    """Write a ``verified`` row for each file an engine just confirmed is kept
+    at *destination*: ``(root, rel_path, size, mtime)`` as the engine copied
+    it (*mtime* None when the engine does not record one). Returns the rows
+    written.
+
+    The fingerprint is the file's in ``content_fingerprints``, and only when
+    it is of the file as it is now and as it was copied (the same size, and
+    the same modified time where one is given). *expect*, one per file, is
+    the ``algo:digest`` the other end confirmed; a different one is no row.
+    A file with no fingerprint yet gets no row: the supervisor's refill
+    reaches it once it has one.
+
+    Runs in the caller's transaction and commits nothing. Never raises: the
+    copy is made and recorded by its engine whatever happens here.
+    """
+    try:
+        if not _has_table(conn, "copies") or not _has_table(conn, "content_fingerprints"):
+            return 0
+        written = 0
+        wanted = list(expect) if expect is not None else None
+        for index, (root, rel, size, mtime) in enumerate(files):
+            row = conn.execute(
+                "SELECT " + _FP + ", a.size FROM assets a " + _FINGERPRINTED +
+                " WHERE a.root = ? AND a.rel_path = ? AND a.size = ? "
+                "AND (? IS NULL OR ABS(a.mtime - ?) < 0.001)",
+                (str(root), str(rel), int(size), mtime, mtime)).fetchone()
+            if row is None:
+                continue
+            if wanted is not None and wanted[index] and wanted[index] != row[0]:
+                continue
+            conn.execute(
+                "INSERT INTO copies(fingerprint, destination, state, verified_at, size) "
+                "VALUES (?,?,?,?,?) ON CONFLICT(fingerprint, destination) DO UPDATE SET "
+                "state = excluded.state, size = excluded.size, "
+                "verified_at = MAX(copies.verified_at, excluded.verified_at)",
+                (row[0], destination, VERIFIED, float(at), int(row[1])))
+            written += 1
+        return written
+    except sqlite3.Error as exc:
+        log.warning("the ledger was not told of a copy kept at %s: %s", destination, exc)
+        return 0
+
+
 # -- reading it -------------------------------------------------------------------
 
 def _roots_clause(roots: Sequence[str]) -> tuple[str, list[str]]:
@@ -265,9 +330,9 @@ def headline(conn: sqlite3.Connection, roots: Sequence[str]) -> dict[str, int]:
         return {"two_places": 0, "total": 0, "unfingerprinted": 0}
     known = conn.execute(
         "SELECT COUNT(*), COALESCE(SUM(EXISTS (SELECT 1 FROM copies c "
-        "WHERE c.fingerprint = d.digest AND c.state = ?)), 0) FROM "
+        "WHERE c.fingerprint = d.digest AND c.state IN (?, ?))), 0) FROM "
         f"(SELECT DISTINCT {_FP} AS digest FROM assets a {_FINGERPRINTED} "
-        f"WHERE a.trashed = 0 AND a.root IN ({marks})) d", (KEPT, *args)).fetchone()
+        f"WHERE a.trashed = 0 AND a.root IN ({marks})) d", (*HELD, *args)).fetchone()
     bare = conn.execute(
         f"SELECT COUNT(*) FROM assets a WHERE a.trashed = 0 AND a.root IN ({marks}) "
         "AND NOT EXISTS (SELECT 1 FROM content_fingerprints f WHERE f.asset_id = a.id "
@@ -277,16 +342,21 @@ def headline(conn: sqlite3.Connection, roots: Sequence[str]) -> dict[str, int]:
 
 
 def counts(conn: sqlite3.Connection, destination: str) -> dict[str, int]:
-    """What the ledger says one destination keeps: photographs and bytes,
-    and how many it no longer confirms."""
-    out = {"kept": 0, "kept_bytes": 0, "unconfirmed": 0, "verified_at": 0}
+    """What the ledger says one destination keeps: photographs and bytes
+    (``verified`` of them written by the engine as it made the copy), and how
+    many it no longer confirms."""
+    out = {"kept": 0, "kept_bytes": 0, "verified": 0, "unconfirmed": 0, "verified_at": 0}
     if not _has_table(conn, "copies"):
         return out
     for row in conn.execute("SELECT state, COUNT(*), COALESCE(SUM(size), 0), "
                             "COALESCE(MAX(verified_at), 0) FROM copies WHERE destination = ? "
                             "GROUP BY state", (destination,)):
-        if row[0] == KEPT:
-            out.update(kept=int(row[1]), kept_bytes=int(row[2]), verified_at=float(row[3]))
+        if row[0] in HELD:
+            out["kept"] += int(row[1])
+            out["kept_bytes"] += int(row[2])
+            out["verified_at"] = max(out["verified_at"], float(row[3]))
+            if row[0] == VERIFIED:
+                out["verified"] = int(row[1])
         elif row[0] == UNCONFIRMED:
             out["unconfirmed"] = int(row[1])
     return out
@@ -297,5 +367,6 @@ def holds(conn: sqlite3.Connection, destination: str, fingerprint: str) -> bool:
     if not _has_table(conn, "copies"):
         return False
     return conn.execute("SELECT 1 FROM copies WHERE fingerprint = ? AND destination = ? "
-                        "AND state = ?", (fingerprint, destination, KEPT)).fetchone() is not None
+                        "AND state IN (?, ?)", (fingerprint, destination, *HELD)
+                        ).fetchone() is not None
 

@@ -539,6 +539,8 @@ admin | PUT                  | /api/mugil/originals | peer | writes | same origi
 home  | PUT                  | /api/mugil/originals | peer | writes | same origin | mugil_peer.mugil_receive
 admin | POST                 | /api/mugil/originals/copy | peer | writes | same origin | mugil_peer.mugil_copy_kept
 home  | POST                 | /api/mugil/originals/copy | peer | writes | same origin | mugil_peer.mugil_copy_kept
+admin | POST                 | /api/mugil/originals/read-back | peer | writes | same origin | mugil_peer.mugil_read_back
+home  | POST                 | /api/mugil/originals/read-back | peer | writes | same origin | mugil_peer.mugil_read_back
 admin | POST                 | /api/mugil/originals/verify | peer | writes | same origin | mugil_peer.mugil_verify
 home  | POST                 | /api/mugil/originals/verify | peer | writes | same origin | mugil_peer.mugil_verify
 admin | POST                 | /api/mugil/pair | peer | writes | same origin | mugil_peer.mugil_pair_answer

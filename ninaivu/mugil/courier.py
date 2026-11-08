@@ -740,7 +740,7 @@ class Courier:
                         totals["changed"] += 1
                     elif outcome is not None:
                         totals["failed"] += 1
-            self._record(root, confirmed_now)
+            self._record(root, confirmed_now, conn)
             if failure is not None:
                 raise failure
             with self._lock:
@@ -932,7 +932,42 @@ class Courier:
             return "failed"
         return "kept"
 
-    def _record(self, root: str, items: list[dict[str, Any]]) -> None:
+    def read_back(self, count: int = 3, *, pick: Callable[[list, int], list] | None = None
+                  ) -> dict[str, Any]:
+        """A test restore from the Secondary: *count* files it confirmed,
+        chosen at random, read back there end to end over the signed pairing,
+        and the fingerprints it reports compared with the ones it confirmed.
+        Nothing is copied or changed at either end."""
+        import random                                            # noqa: PLC0415
+        pair = pairing.load(self.cfg.state_dir)
+        if role(self.cfg) != PRIMARY or pair is None:
+            return {"started": False, "reason": "This computer is not a paired Primary."}
+        with sent_record(self.cfg.state_dir) as record:
+            rows = [dict(r) for r in record.execute(
+                "SELECT s.root, s.rel_path, s.size, s.algo, s.digest, l.library FROM sent s "
+                "JOIN libraries l ON l.root = s.root")]
+        if not rows:
+            return {"started": False, "reason": "The Secondary has confirmed no file yet."}
+        sample = (pick or random.sample)(rows, min(int(count), len(rows)))
+        partner = self.partner(self.cfg.mugil_partner_url, pair.get("key"))
+        try:
+            answer = partner.request("POST", "/api/mugil/originals/read-back", body={
+                "items": [{"library": r["library"], "path": r["rel_path"]} for r in sample]})
+        except PartnerError as exc:
+            return {"started": False, "reason": str(exc)}
+        read = list(answer.get("read") or [])
+        files = []
+        for row, got in zip(sample, read + [{}] * (len(sample) - len(read))):
+            same = (not got.get("missing") and int(got.get("size", -1)) == int(row["size"])
+                    and got.get("algo") == row["algo"] and got.get("digest") == row["digest"])
+            files.append({"path": row["rel_path"], "ok": bool(same),
+                          **({} if same else {"why": "not kept there" if got.get("missing")
+                                              else "read back different"})})
+        return {"started": True, "ok": all(f["ok"] for f in files), "checked": len(files),
+                "files": files}
+
+    def _record(self, root: str, items: list[dict[str, Any]],
+                index: sqlite3.Connection | None = None) -> None:
         if not items:
             return
         now = time.time()
@@ -942,3 +977,14 @@ class Courier:
                 "VALUES (?,?,?,?,?,?,?)",
                 [(root, i["path"], i["size"], i["mtime"], i["algo"], i["digest"], now)
                  for i in items])
+        if index is not None:
+            # And the ledger in the index, right after (ninaivu/copies/ledger.py),
+            # with the fingerprint the Secondary confirmed.
+            from ..copies import ledger                          # noqa: PLC0415
+            ledger.confirm(index, "secondary",
+                           [(root, i["path"], i["size"], i["mtime"]) for i in items], at=now,
+                           expect=[f"{i['algo']}:{i['digest']}" for i in items])
+            try:
+                index.commit()
+            except sqlite3.Error as exc:
+                log.warning("the ledger was not told of the Secondary's copies: %s", exc)

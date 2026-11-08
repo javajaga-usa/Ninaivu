@@ -609,6 +609,28 @@ class Holding:
             return False
         return got == int(size) and fresh.hexdigest() == digest
 
+    def read_back(self, library: str, rel: str) -> dict[str, Any] | None:
+        """The kept file at *rel* of *library* read again end to end now, and
+        its fingerprint worked out from what was read, in the kind it was
+        kept with: what the Primary's test restore asks for. None when no
+        whole file is kept there."""
+        found = self.kept_file(library, rel)
+        if found is None:
+            return None
+        path, kept = found
+        fresh = hasher(str(kept["algo"]))
+        if fresh is None:
+            return None
+        got = 0
+        try:
+            with open(path, "rb") as handle:
+                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                    fresh.update(chunk)
+                    got += len(chunk)
+        except OSError:
+            return None
+        return {"size": got, "algo": str(kept["algo"]), "digest": fresh.hexdigest()}
+
     def kept_elsewhere(self, items: list[dict[str, Any]]) -> list[bool]:
         """For each ``{size, algo, digest}``, whether a file with that very
         content is kept here already, at any path of any library."""

@@ -788,6 +788,10 @@ class Services:
         # Kept, so whoever must know start-up is over (the tests, before they
         # stop the scan it may start) can wait for it.
         self._keep_the_bin_swept()
+        # The copies ledger filled from the engines' records, by the
+        # supervisor, never under a page's read (ninaivu/copies/).
+        from . import copies                                     # noqa: PLC0415
+        self.supervisor.add(copies.fill_job(self))
         self.boot_thread = threading.Thread(target=boot, name="ninaivu-boot", daemon=True)
         self.boot_thread.start()
 

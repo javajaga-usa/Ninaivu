@@ -941,16 +941,15 @@ def copies_single():
 @require_admin
 def admin_copies():
     """Each destination's status and what the ledger says it keeps, and the
-    headline: photographs in at least two places, of all of them. The ledger
-    is filled again from the engines' records first, at most every few
-    minutes; nothing is sent by asking."""
-    import time                                            # noqa: PLC0415
+    headline: photographs in at least two places, of all of them. Read only:
+    the engines write the ledger as they confirm a copy, and the supervisor
+    fills it from their records (copies.fill_job); nothing is sent or
+    written by asking."""
     from .. import copies                                  # noqa: PLC0415
 
     cfg = _cfg()
     conn = db.connect(cfg.db_path)
     dests = copies.destinations(current_app.config["MV_SERVICES"])
-    copies.refresh(conn, dests, cfg.state_dir, now=time.time())
     return jsonify(copies.report(conn, _library_roots(), dests))
 
 

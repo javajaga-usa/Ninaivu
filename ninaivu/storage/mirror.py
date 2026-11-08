@@ -72,6 +72,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from ..utils.files import CHUNK, create_new, sha256_file, stays_inside
+from ..copies import ledger
 from . import fit, roots as roots_kit
 
 log = logging.getLogger(__name__)
@@ -547,6 +548,9 @@ class Mirror:
                     "INSERT OR REPLACE INTO mirror_copies(root, rel_path, size, mtime, sha256, "
                     "copied_at, stored_as) VALUES(?,?,?,?,?,?,?)",
                     (root, rel, size, float(row["mtime"] or 0), digest, time.time(), stored))
+                # And the ledger, in the same transaction (ninaivu/copies/ledger.py).
+                ledger.confirm(conn, "mirror", [(root, rel, size, float(row["mtime"] or 0))],
+                               at=time.time())
                 conn.commit()
                 copied += 1
                 with self._lock:
