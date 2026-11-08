@@ -17,26 +17,6 @@ from pathlib import Path
 from typing import Any
 
 
-#: Settings that say how *this process* was started rather than what the
-#: household wants kept. The command line and the ``NINAIVU_*`` variables own
-#: these, and writing them down would make a one-off ``--port 8080`` permanent
-#: — and a state directory written into a file inside itself.
-RUNTIME_ONLY = frozenset({
-    "state_dir", "host", "port", "admin_host", "admin_port", "debug",
-    "server_threads", "trusted_proxies", "max_upload_mb",
-    "index_file", "replica_from", "replica_primary_url", "replica_wake_mac",
-})
-
-
-#: Settings the environment sets outright, whatever config.json says: where
-#: things are, not how Ninaivu behaves. Every other NINAIVU_* value only
-#: fills in what the household has not chosen in the console (Config.load).
-ENV_ALWAYS_WINS = frozenset({
-    "roots", "active_root", "host", "port", "admin_port", "admin_host",
-    "max_upload_mb", "debug", "server_threads", "trusted_proxies",
-    "backup_dir", "ai_models_dir",
-})
-
 #: Serialises ``Config.save`` across threads; see there.
 _SAVE_LOCK = threading.Lock()
 
@@ -266,6 +246,42 @@ def private_on_windows(folder: Path | str, remember: bool = False) -> None:
         logging.getLogger(__name__).warning("could not make %s private: %s", folder, exc)
 
 
+def setting(default: Any = MISSING, *, factory: Any = MISSING, env: str | None = None,
+            low: int | None = None, high: int | None = None,
+            env_wins: bool = False, runtime: bool = False) -> Any:
+    """One setting, declared beside its field: everything about it in one place.
+
+    * ``env`` — the ``NINAIVU_*`` variable that sets it. A ``bool`` field reads
+      1/true/yes/on; an ``int`` field a whole number held to ``low``..``high``
+      (said in the log when out of range); anything else the text as given.
+    * ``env_wins`` — the variable says *where* things are, so it beats what
+      config.json says. Every other variable only fills in a value the
+      household has not chosen in the console (:meth:`Config.load`).
+    * ``runtime`` — how *this process* was started rather than what the
+      household wants kept: shown, never written into config.json, or a
+      one-off ``--port 8080`` would become permanent.
+
+    The meaning is the ``#:`` comment above the field (settings_groups.py
+    reads it), and the group is in settings_groups.GROUPS. :data:`RUNTIME_ONLY`,
+    :data:`ENV_ALWAYS_WINS` and :data:`ENVIRONMENT` are worked out from these
+    declarations, so a variable can no longer be added in one place and
+    forgotten in another.
+    """
+    meta = {"env": env, "low": low, "high": high, "env_wins": env_wins, "runtime": runtime}
+    if factory is not MISSING:
+        return field(default_factory=factory, metadata=meta)
+    return field(default=default, metadata=meta)
+
+
+def _from_env(var: str, kind: str, current: Any, low: int | None, high: int | None) -> Any:
+    """The value the variable *var* gives a setting of *kind*, or *current*."""
+    if kind == "bool":
+        return _env_bool(var, current)
+    if kind == "int":
+        return _env_int(var, current, low, high)
+    return os.environ.get(var, current)
+
+
 @dataclass
 class Config:
     """Runtime configuration."""
@@ -273,14 +289,14 @@ class Config:
     # --- Library ---------------------------------------------------------
     #: Every library folder Ninaivu indexes. Members can be assigned one of
     #: these, or any folder inside one.
-    roots: list[str] = field(default_factory=list)
+    roots: list[str] = setting(factory=list, env_wins=True)
     #: The folder the console shows by default. Always one of :attr:`roots`.
-    active_root: str | None = None
+    active_root: str | None = setting(None, env_wins=True)
     #: Confine the folder picker to :attr:`roots` and nothing else. Off by
     #: default: the picker is behind an admin sign-in, and an admin who cannot
     #: reach their own Pictures folder cannot set the library up. Turn it on
     #: with ``--lock-roots`` when the console is exposed beyond your machine.
-    lock_roots: bool = False
+    lock_roots: bool = setting(False, env="NINAIVU_LOCK_ROOTS")
     #: Where new files go when the library folder they belong in cannot be
     #: written — an NTFS drive on a Mac, which macOS mounts read-only. Edited
     #: copies, approved uploads and phone backups land here instead, in the
@@ -296,7 +312,7 @@ class Config:
     #: publishes what was deliberately put out of sight. Indexing it as
     #: *hidden* — admin-only, and visible in the console with a reason — is the
     #: only reading that respects both. Set False to skip hidden items again.
-    index_hidden: bool = True
+    index_hidden: bool = setting(True, env="NINAIVU_INDEX_HIDDEN")
     #: Smallest file, in bytes, that counts as a real photo or video.
     #:
     #: A folder of old media is full of things that are technically images:
@@ -304,7 +320,7 @@ class Config:
     #: behind by other software. They are not anybody's photographs, and they
     #: pad the library and the archive with noise. Anything smaller than this
     #: is passed over as if it were not media at all.
-    min_media_bytes: int = 60 * 1024
+    min_media_bytes: int = setting(60 * 1024, env="NINAIVU_MIN_MEDIA_BYTES", low=0)
     #: Importing from a drive brings in the household's own recordings and
     #: leaves songs and film soundtracks behind. Every song is listened to
     #: before it is copied: one that sounds like continuous music is held back
@@ -347,7 +363,7 @@ class Config:
     first_day_done: bool = False
     #: Size of the request thread pool. Eight is generous for a household
     #: and small enough that the SQLite connection cache stays a cache.
-    server_threads: int = 8
+    server_threads: int = setting(8, env="NINAIVU_SERVER_THREADS", low=2, high=64, env_wins=True, runtime=True)
 
     #: How many reverse proxies sit in front of Ninaivu, each adding one
     #: address to X-Forwarded-For on the way in. Set it to the number of
@@ -371,7 +387,7 @@ class Config:
     #: are written by whoever is calling, and trusting them there would let an
     #: attacker forge a new address for every attempt and defeat the very
     #: limiter this is meant to protect.
-    trusted_proxies: int = 0
+    trusted_proxies: int = setting(0, env="NINAIVU_TRUSTED_PROXIES", low=0, high=10, env_wins=True, runtime=True)
 
     #: Only ever straighten a photograph with a person in it.
     #:
@@ -381,7 +397,7 @@ class Config:
     #: independent witness that the picture is of people and that this way up
     #: is the way a person stands. Off, it will straighten everything it is
     #: confident about.
-    straighten_requires_face: bool = True
+    straighten_requires_face: bool = setting(True, env="NINAIVU_STRAIGHTEN_REQUIRES_FACE")
     #: Look for sideways photographs by itself, after every scan.
     #:
     #: On, the survey runs over whatever a scan has just indexed (and only
@@ -389,14 +405,14 @@ class Config:
     #: waits on Review → Straighten for a person to approve, unless
     #: ``straighten_auto_apply`` is on. This only decides whether somebody has
     #: to remember to press the button. Off, the button is the only way.
-    straighten_auto: bool = True
+    straighten_auto: bool = setting(True, env="NINAIVU_STRAIGHTEN_AUTO")
     #: Turn what that automatic survey finds, without waiting for approval.
     #:
     #: The survey only proposes what the model is sure of (and, by default, only
     #: photographs with a person in them), and each run is one batch that Undo
     #: puts back exactly, thumbnails included. A survey started by the button is
     #: never applied for you: somebody who pressed it is there to look.
-    straighten_auto_apply: bool = True
+    straighten_auto_apply: bool = setting(True, env="NINAIVU_STRAIGHTEN_AUTO_APPLY")
 
     #: Work out which way up a photograph goes when the file does not say.
     #:
@@ -405,7 +421,7 @@ class Config:
     #: stripped on the way through, anything re-saved by an editor that dropped
     #: the tag: those are the cases. Set False to leave every untagged
     #: photograph exactly as it sits on disk.
-    detect_orientation: bool = True
+    detect_orientation: bool = setting(True, env="NINAIVU_DETECT_ORIENTATION")
     #: Also ask CLIP when the faces found nothing. Off by default.
     #:
     #: Faces are decisive and nearly free. CLIP is neither: it has to embed all
@@ -413,7 +429,7 @@ class Config:
     #: the ones with no faces in them — landscapes, mostly, which it has least
     #: to say about. On a fifty-thousand-item library that is minutes of work
     #: for a handful of corrections, so it is offered rather than assumed.
-    orientation_ai: bool = False
+    orientation_ai: bool = setting(False, env="NINAIVU_ORIENTATION_AI")
     #: Let family members use extensions that send a photograph out of the
     #: house (Gemini). Off: turning such an extension on is the
     #: administrator's decision, and so is each photograph it sends.
@@ -421,14 +437,14 @@ class Config:
     #: Detect and group faces. Off unless the models have been fetched, and
     #: independent of the AI tier: face grouping is OpenCV, not CLIP, so it
     #: works on a machine with no torch at all.
-    faces_enabled: bool = False
+    faces_enabled: bool = setting(False, env="NINAIVU_FACES")
     #: Which pair of models finds faces and tells people apart: ``sface``
     #: (OpenCV's YuNet and SFace, the default, Apache-2.0) or ``arcface``
     #: (InsightFace's SCRFD and ArcFace, downloaded from the AI models page;
     #: better at relatives and at a child over the years; their licence allows
     #: non-commercial use only). Switching has the next scan look at every
     #: photograph again; names already confirmed are kept by position.
-    face_model: str = "sface"
+    face_model: str = setting("sface", env="NINAIVU_FACE_MODEL")
     #: Directory names skipped during a scan.
     ignore_dirs: set[str] = field(default_factory=lambda: {
         # Ninaivu's own recycle bin. Deleted files are moved here, so a scan
@@ -446,26 +462,26 @@ class Config:
     #: Drive does not delete it from the library and does not cause it to be
     #: uploaded again — the record of what has gone up is kept here and is
     #: never cleared by anything the cloud does.
-    cloud_enabled: bool = False
+    cloud_enabled: bool = setting(False, env="NINAIVU_CLOUD")
     #: The single Drive folder Ninaivu owns. Everything it uploads goes inside
     #: this folder, and it touches nothing else in the account.
-    cloud_folder_name: str = "Ninaivu"
+    cloud_folder_name: str = setting("Ninaivu", env="NINAIVU_CLOUD_FOLDER")
     #: Start uploading by itself when the server starts. Off by default: a
     #: household on a metered connection chooses when the upload begins.
-    cloud_autostart: bool = False
+    cloud_autostart: bool = setting(False, env="NINAIVU_CLOUD_AUTOSTART")
     #: Ceiling on the upload, in kilobytes per second. Zero means no limit,
     #: which is the default because a limit nobody chose is its own surprise —
     #: but one file at a time is not a cap, and on a slow or metered line the
     #: difference matters. Applied between chunks, so it takes effect on a
     #: running upload without restarting it.
-    cloud_rate_kbps: int = 0
+    cloud_rate_kbps: int = setting(0, env="NINAIVU_CLOUD_RATE_KBPS", low=0)
     #: The hours uploading may run, in local time, as ``HH:MM``. Both empty
     #: means any time. A start later than the end crosses midnight, which is
     #: the case this is for: ``22:00`` to ``07:00`` is "overnight". An upload
     #: caught by the closing time stops where it is and resumes the next night.
-    cloud_window_start: str = ""
+    cloud_window_start: str = setting("", env="NINAIVU_CLOUD_WINDOW_START")
     #: When the backup's allowed hours end (``HH:MM``); empty means any time.
-    cloud_window_end: str = ""
+    cloud_window_end: str = setting("", env="NINAIVU_CLOUD_WINDOW_END")
     #: How many files the backup sends at once. Each waits about two seconds
     #: on Google before any of it moves, so one at a time a library of
     #: photographs used a third of a 32 Mbit/s line. 1 is one at a time.
@@ -606,7 +622,7 @@ class Config:
     #: busy, and carries on the next day where it got to. New photographs still
     #: appear straight away. The computer must be awake at that time: Ninaivu
     #: cannot wake it. Off: analysis follows the Background work choice.
-    daily_catchup: bool = False
+    daily_catchup: bool = setting(False, env="NINAIVU_DAILY_CATCHUP")
     #: When the daily catch-up's stretch begins, local ``HH:MM``.
     daily_catchup_at: str = "02:00"
     #: How many hours the daily catch-up's stretch lasts (24: all day, whenever idle).
@@ -622,11 +638,11 @@ class Config:
 
     # --- State -----------------------------------------------------------
     #: Where Ninaivu keeps its index, thumbnails, models and settings. Set at start (``NINAIVU_STATE_DIR``).
-    state_dir: Path = field(default_factory=_default_state_dir)
+    state_dir: Path = setting(factory=_default_state_dir, runtime=True)
 
     # --- Scanner ---------------------------------------------------------
     #: Threads the indexer uses for thumbnails.
-    workers: int = field(default_factory=lambda: min(8, (os.cpu_count() or 4)))
+    workers: int = setting(factory=lambda: min(8, (os.cpu_count() or 4)), env="NINAIVU_WORKERS", low=1, high=64)
     #: Thumbnail edge lengths made for every photograph.
     thumb_sizes: tuple[int, ...] = (256, 640)
     #: Thumbnail compression quality (1–100).
@@ -694,13 +710,13 @@ class Config:
     #: works once its pieces are there; nothing is downloaded until asked
     #: for. Search moves to the engine at the next start. Off: nothing of it
     #: runs.
-    ai_runtime: bool = True
+    ai_runtime: bool = setting(True, env="NINAIVU_AI_RUNTIME")
     #: Describe every photograph with the on-device engine's description
     #: model, in the background (runtime/describer.py). Off: none is
     #: described from now on, and those already written stay and are still
     #: searched; on again, it carries on where it stopped. Needs ai_runtime
     #: and the description model (AI models page).
-    describe_photos: bool = True
+    describe_photos: bool = setting(True, env="NINAIVU_DESCRIBE_PHOTOS")
     #: The languages the household speaks in its voice stories, as two-letter
     #: codes, most used first. A story heard as any other language is taken to
     #: be the first one (Whisper sometimes hears Tamil as Malayalam).
@@ -710,7 +726,7 @@ class Config:
     #: clips and voice stories of a year, a trip or a person, with the family's
     #: own music and the stories' words as subtitles, made on this computer.
     #: Needs ffmpeg. Off: the films page and its API are not there.
-    memory_films: bool = True
+    memory_films: bool = setting(True, env="NINAIVU_MEMORY_FILMS")
     #: Search by speaking: a microphone in the search box. What is said, in
     #: Tamil or English, is written down on this computer by the voice-story
     #: model (Whisper, AI models page; the speech reader under Extras) and
@@ -718,14 +734,14 @@ class Config:
     #: the picture search understands it too. The recording is read and
     #: thrown away; nothing is kept and nothing is sent anywhere. The
     #: browser allows the microphone only over the secure (https) address.
-    voice_search: bool = True
+    voice_search: bool = setting(True, env="NINAIVU_VOICE_SEARCH")
     #: Colour for black-and-white photographs: "Add colour" in the viewer of
     #: a photograph that has none, by the colouring model (DDColor, AI models
     #: page) on this computer. The result is shown beside the original to
     #: compare and kept, if wanted, as a copy beside it, as an edit is; the
     #: original is never changed. The copy can be compared with its original
     #: at any time afterwards.
-    colour_photos: bool = True
+    colour_photos: bool = setting(True, env="NINAIVU_COLOUR_PHOTOS")
 
     #: How many moments across a clip to tag, rather than the poster frame
     #: alone. A holiday video is a beach, a restaurant and a car park; one
@@ -740,18 +756,18 @@ class Config:
     #: Filling them in reads every file once, after a scan's other work, and
     #: carries on where it was after a stop. Nothing on disk changes. Off: as
     #: in 1.12, a moved file is indexed as a new one.
-    content_fingerprints: bool = True
+    content_fingerprints: bool = setting(True, env="NINAIVU_CONTENT_FINGERPRINTS")
     #: Keep a journal of what changes in the library: every file added,
     #: edited, renamed, moved, put in the bin or removed, with when. The
     #: console's Library changes shows it a day at a time and warns when
     #: hundreds of files go or are written over in one folder at once; on a
     #: Mac, start-up reads only the folders the drive says changed while
     #: Ninaivu was not running. Kept a year. Off: nothing is written down.
-    change_journal: bool = True
+    change_journal: bool = setting(True, env="NINAIVU_CHANGE_JOURNAL")
     #: Re-check files whose size or mtime changed.
     rescan_on_change: bool = True
     #: Watch the library for changes and index incrementally.
-    watch: bool = True
+    watch: bool = setting(True, env="NINAIVU_WATCH")
     #: Seconds. If the watcher is on and a scan finished this recently, start-up
     #: does not walk the library again — that gap is a restart, not a day away.
     #: Zero always scans.
@@ -763,11 +779,11 @@ class Config:
     #: `backup_dir` says otherwise — put that on another disk if you have one.
     backup_every_hours: float = 24.0
     #: How many dated copies of the index to keep on this computer.
-    backup_keep: int = 7
+    backup_keep: int = setting(7, env="NINAIVU_BACKUP_KEEP", low=0)
     #: Where the copies of the index go; empty means inside the state folder.
     #: Not inside a library folder or the second copy. Outside the state
     #: folder, the copies leave out the cloud key and the Google sign-in.
-    backup_dir: str = ""
+    backup_dir: str = setting("", env="NINAIVU_BACKUP_DIR", env_wins=True)
 
     #: Where every AI model lives — the search model, the editing models, the
     #: face detector and recogniser, the orientation model. Empty means the
@@ -775,7 +791,7 @@ class Config:
     #: of the person's own for an installed copy (model_catalog.user_models_dir),
     #: which upgrades never replace. One folder on purpose: moving Ninaivu to another machine is then
     #: this, the state folder and the library, and nothing else to hunt for.
-    ai_models_dir: str = ""
+    ai_models_dir: str = setting("", env="NINAIVU_AI_MODELS_DIR", env_wins=True)
 
     #: Days after which a file in the recycle bin is erased for good. Zero —
     #: the default — keeps everything until somebody says otherwise, which is
@@ -811,9 +827,9 @@ class Config:
 
     # --- AI --------------------------------------------------------------
     #: Run the AI passes at all (tagging, search, descriptions). Off leaves the gallery, faces and places working.
-    ai_enabled: bool = True
+    ai_enabled: bool = setting(True, env="NINAIVU_AI")
     #: "auto" picks CLIP when torch is importable, else the light tagger.
-    ai_engine: str = "auto"  # auto | clip | light | off
+    ai_engine: str = setting("auto", env="NINAIVU_AI_ENGINE")  # auto | clip | light | off
     #: Which kind of computer this is treated as: ``auto`` (measured from the
     #: memory and the graphics processor at start), ``basic`` (2 GB and no
     #: GPU: everything but the large models) or ``full``. Decides what
@@ -823,7 +839,7 @@ class Config:
     #: Run the image model on a graphics processor when there is one that
     #: works: NVIDIA's (CUDA) or a Mac's own (Metal). Off keeps it on the
     #: processor. Takes effect when Ninaivu next starts.
-    ai_gpu: bool = True
+    ai_gpu: bool = setting(True, env="NINAIVU_AI_GPU")
     #: Where the on-device AI engine (ai_runtime) runs its image models:
     #: ``auto``, ``cpu`` (the processor), ``coreml`` (a Mac's Neural Engine
     #: and graphics processor) or ``coreml-gpu`` (its graphics processor
@@ -834,7 +850,7 @@ class Config:
     #: Core ML compiles a model once, a minute or two, and keeps it. Off
     #: (ai_gpu) means the processor whatever this says. Takes effect when
     #: Ninaivu next starts.
-    ai_image_device: str = "auto"
+    ai_image_device: str = setting("auto", env="NINAIVU_AI_IMAGE_DEVICE")
     #: "auto": SigLIP 2 once downloaded (Admin → AI models), else ViT-B-32.
     clip_model: str = "auto"
     #: Which weights of the CLIP model to use.
@@ -847,7 +863,7 @@ class Config:
     max_tags: int = 8
     #: Flag adult content as explicit: admins only, reviewed on the console's
     #: Folders screen. Screenshots and documents are hidden, never explicit.
-    nsfw_filter: bool = True
+    nsfw_filter: bool = setting(True, env="NINAIVU_NSFW_FILTER")
     #: How sure the screen must be before a photograph is held back as explicit (0–1).
     nsfw_threshold: float = 0.6
     #: How much a picture must look like people in only their underwear before
@@ -864,7 +880,7 @@ class Config:
     #: Hide screenshots, documents and photographs of screens from everyone but
     #: administrators (media/screens.py). By name on every install; by picture
     #: once the search model has looked at it.
-    hide_screens: bool = True
+    hide_screens: bool = setting(True, env="NINAIVU_HIDE_SCREENS")
     #: Hamming distance under which two pHashes count as near-duplicates.
     duplicate_distance: int = 6
 
@@ -919,31 +935,31 @@ class Config:
     #: Let anyone who reaches the server browse public media without signing
     #: in. Family and admin features still require a login. Admins can turn
     #: this off to make the whole library private.
-    open_browsing: bool = True
+    open_browsing: bool = setting(True, env="NINAIVU_OPEN_BROWSING")
     #: Cover the screen after this many minutes with nobody there, in both the
     #: family app and the console, until the person unlocks it with their
     #: password or PIN. Nobody is signed out and nothing in progress stops.
     #: 0 turns the lock off. See the screen lock in ninaivu/server/auth.py.
-    lock_after_minutes: int = 15
+    lock_after_minutes: int = setting(15, env="NINAIVU_LOCK_AFTER_MINUTES", low=0)
     #: What the household calls this library. The admin sets it once and it is
     #: what everyone sees; each family member may then keep their own name for
     #: it instead. Empty means "Ninaivu".
-    house_name: str = ""
+    house_name: str = setting("", env="NINAIVU_HOUSE_NAME")
     #: The extensions switched on, by name (see ninaivu/extensions.py). Every
     #: extension is off until an administrator turns it on in the console, and
     #: a change takes effect at the next start. Empty by default, always.
     extensions: list = field(default_factory=list)
     #: Ceiling for the folder of converted videos, in megabytes. They are
     #: derivatives, so losing them costs only the time to make them again.
-    proxy_cache_mb: int = 4096
+    proxy_cache_mb: int = setting(4096, env="NINAIVU_PROXY_CACHE_MB", low=0)
 
     # --- Notifications ---------------------------------------------------
     #: Off unless one of these is set. Nothing phones anywhere by default.
-    notify_webhook: str = ""
+    notify_webhook: str = setting("", env="NINAIVU_NOTIFY_WEBHOOK")
     #: Shape of the webhook body: ``json`` (also read by Slack and Discord), ``ntfy`` or ``form``.
     notify_webhook_format: str = "json"     # json | ntfy | form
     #: Mail server for notifications; empty means no email.
-    notify_smtp_host: str = ""
+    notify_smtp_host: str = setting("", env="NINAIVU_NOTIFY_SMTP_HOST")
     #: Mail server port.
     notify_smtp_port: int = 587
     #: Mail server sign-in name.
@@ -951,7 +967,7 @@ class Config:
     #: Mail server password. Kept in config.json readable by this account only.
     notify_smtp_password: str = ""
     #: Who notification emails go to.
-    notify_smtp_to: str = ""
+    notify_smtp_to: str = setting("", env="NINAIVU_NOTIFY_SMTP_TO")
     #: Use STARTTLS when talking to the mail server (port 465 is always TLS).
     #: Off, a mail password is sent only to a relay on this computer.
     notify_smtp_tls: bool = True
@@ -1009,7 +1025,7 @@ class Config:
     #: stories), with the photographs the answer comes from. Writes its
     #: answers with the on-device writing model when it is downloaded, and
     #: plainly without it. Nothing is sent anywhere. See ninaivu/ask.
-    ask_ninaivu: bool = True
+    ask_ninaivu: bool = setting(True, env="NINAIVU_ASK")
     #: Our Year: the family's year in photographs as a set of cards, in Tamil
     #: or English: how many, the busiest month and day, who appears most and
     #: who for the first time, trips and the furthest place from home, the
@@ -1017,7 +1033,7 @@ class Config:
     #: film of the year. Counted on this computer from what the library
     #: already knows; opening words by the on-device writing model when it is
     #: downloaded. See ninaivu/media/our_year.py.
-    our_year: bool = True
+    our_year: bool = setting(True, env="NINAIVU_OUR_YEAR")
     #: Moments inside videos: search finds the second inside a long video
     #: ("candles" opens the birthday video where the cake comes in), and the
     #: viewer opens the clip there. Each clip of 20 seconds or more is read
@@ -1028,7 +1044,7 @@ class Config:
     #: ninaivu/media/video_moments.py. Off since the household asked for it
     #: off (October 2026): ``"video_moments": true`` in config.json turns it
     #: back on.
-    video_moments: bool = False
+    video_moments: bool = setting(False, env="NINAIVU_VIDEO_MOMENTS")
     #: Then and now: the same place, the same person, years apart, side by
     #: side with a slider between them. The same small square of the map that
     #: also looks like the same view to the picture search (or the very same
@@ -1038,7 +1054,7 @@ class Config:
     #: pairs taken this week years ago; chosen pairs become a memory film with
     #: memory_films on. On this computer; nothing is sent anywhere. See
     #: ninaivu/media/then_and_now.py.
-    then_and_now: bool = True
+    then_and_now: bool = setting(True, env="NINAIVU_THEN_AND_NOW")
     #: A life in photographs: one person's life told decade by decade, from
     #: their page or the Create menu: each chapter the best photographs of
     #: those years, where they were, who was beside them and who joined their
@@ -1048,7 +1064,7 @@ class Config:
     #: next time; plain words without it. Counted on this computer from what
     #: the library already knows; nothing is sent anywhere. See
     #: ninaivu/media/life_story.py.
-    life_story: bool = True
+    life_story: bool = setting(True, env="NINAIVU_LIFE_STORY")
     #: Share without strangers: on every share link, the faces nobody in the
     #: household has named are blurred: the photograph, its browser copy and
     #: its tiles. The family named on the People page stays clear. Each
@@ -1058,7 +1074,7 @@ class Config:
     #: the face pass, or hidden, which AI does not read) goes out blurred all
     #: over. Videos are shared as they are. On this computer; nothing is sent
     #: anywhere. See ninaivu/media/share_faces.py.
-    share_blur_strangers: bool = False
+    share_blur_strangers: bool = setting(False, env="NINAIVU_SHARE_BLUR_STRANGERS")
     #: Talk about this photo: ask the photograph open in the viewer a
     #: question ("what does the banner say?", "which temple is this?") and
     #: the on-device writing model looks at it and answers in a few sentences,
@@ -1066,7 +1082,7 @@ class Config:
     #: part (AI models page). Hidden and explicit photographs are never shown
     #: to the model; nothing is kept and nothing is sent anywhere. See
     #: ninaivu/media/photo_talk.py.
-    photo_talk: bool = True
+    photo_talk: bool = setting(True, env="NINAIVU_PHOTO_TALK")
     #: Festival albums: every Deepavali, every Pongal, Karthigai Deepam,
     #: Navaratri's golu and the rest, found without anybody tagging. Each
     #: festival's day is worked out on this computer from the Tamil calendar,
@@ -1074,7 +1090,7 @@ class Config:
     #: (lamps, kolam, golu dolls, sugarcane), and the years are shown side by
     #: side from the first to now. Nothing is sent anywhere. See
     #: ninaivu/media/festivals.py.
-    festival_albums: bool = True
+    festival_albums: bool = setting(True, env="NINAIVU_FESTIVAL_ALBUMS")
     #: Letters read aloud: an old letter, a recipe card or a note in a
     #: grandparent's hand, photographed, is given its words, written out
     #: under it (read by the text reader, or typed and corrected by the
@@ -1083,7 +1099,7 @@ class Config:
     #: reading when nobody recorded a story about it. The voices are Meta's
     #: MMS models from the AI models page, never anybody's own voice. On
     #: this computer; nothing is sent anywhere. See ninaivu/media/letters.py.
-    letters_aloud: bool = False
+    letters_aloud: bool = setting(False, env="NINAIVU_LETTERS_ALOUD")
     #: Young faces, older names: who an unnamed child in an old photograph
     #: may be, from the faces the family has named in later years, the year
     #: each person was born and the family tree. Shown to the family in the
@@ -1091,14 +1107,14 @@ class Config:
     #: this?" link. Worked out on this computer from the faces already found;
     #: nothing is sent anywhere, and nothing is named until somebody says
     #: yes. See ninaivu/media/young_faces.py.
-    young_faces: bool = False
+    young_faces: bool = setting(False, env="NINAIVU_YOUNG_FACES")
     #: Find this print: photograph a framed print or a page of an album with
     #: the family app (Add photos menu) and Ninaivu finds the photograph it is
     #: a copy of, by the picture fingerprint every photograph keeps and by the
     #: picture search, or says it has no copy yet and takes the print in as a
     #: scanned print. Compared on this computer; the phone's picture is sent
     #: nowhere. See ninaivu/media/find_print.py.
-    find_print: bool = True
+    find_print: bool = setting(True, env="NINAIVU_FIND_PRINT")
     #: Photo stacks: the frames of a burst, and a photograph with the copies
     #: edited from it, are one tile in the timeline, with how many there are
     #: on it; the sharpest is on top unless somebody chose another, and the
@@ -1107,7 +1123,7 @@ class Config:
     #: keeps; only photographs every viewer sees alike are stacked together.
     #: Nothing is moved or deleted, and albums, people, search and the
     #: folders screen still list every frame. See ninaivu/storage/stacks.py.
-    photo_stacks: bool = True
+    photo_stacks: bool = setting(True, env="NINAIVU_PHOTO_STACKS")
 
     # --- Server ----------------------------------------------------------
     #: Which addresses to serve on. ``0.0.0.0`` means "every address this
@@ -1115,7 +1131,7 @@ class Config:
     #: able to reach it — the whole point of a family library. Pass
     #: ``--local-only`` (or set ``host`` to ``127.0.0.1``) to keep it to this
     #: machine.
-    host: str = "0.0.0.0"
+    host: str = setting("0.0.0.0", env="NINAIVU_HOST", env_wins=True, runtime=True)
     #: The Network access switch on the console's Server page. Off, Ninaivu
     #: answers only on this computer - the family app and the console both
     #: bind to 127.0.0.1 and no name is announced - however it was started:
@@ -1132,11 +1148,11 @@ class Config:
     #: start.py's own ``--port`` default is what actually governs a normal
     #: launch (it always passes an explicit value through), so this default
     #: mainly matters for `python -m ninaivu` run directly.
-    port: int = 80
+    port: int = setting(80, env="NINAIVU_PORT", low=1, high=65535, env_wins=True, runtime=True)
     #: The admin console, deliberately on a different port so it can be
     #: firewalled off or bound to localhost independently -- set via
     #: ``admin_host`` below, or ``--admin-host``/``NINAIVU_ADMIN_HOST``.
-    admin_port: int = 3000
+    admin_port: int = setting(3000, env="NINAIVU_ADMIN_PORT", low=1, high=65535, env_wins=True, runtime=True)
     #: Address the admin console binds to. ``None`` means "the same as
     #: ``host``", which is today's behaviour and keeps an existing
     #: deployment's reachable addresses unchanged on upgrade. Set this to
@@ -1144,7 +1160,7 @@ class Config:
     #: the console reachable only from this machine -- the split the two
     #: ports exist for in the first place. main() warns at startup whenever
     #: the console ends up bound beyond loopback.
-    admin_host: str | None = None
+    admin_host: str | None = setting(None, env="NINAIVU_ADMIN_HOST", env_wins=True, runtime=True)
     #: Let other devices at home open the console too. Off by default: the
     #: console is where the library is run, and on a new install it is where
     #: the administrator is made, so it answers on this computer only until
@@ -1158,7 +1174,7 @@ class Config:
     console_from_internet: bool = False
     #: Ceiling on a single request body, in megabytes. Covers /api/upload --
     #: raise it if the household shoots video larger than this.
-    max_upload_mb: int = 512
+    max_upload_mb: int = setting(512, env="NINAIVU_MAX_UPLOAD_MB", low=1, high=1048576, env_wins=True, runtime=True)
     #: Put family members' phone backups straight into the library instead of
     #: the review queue. Off by default: a family upload waits for an
     #: administrator, and a backup is an upload. An administrator's own phone
@@ -1176,7 +1192,7 @@ class Config:
     #: the disk. Zero means no limit. Administrators are not held to it.
     upload_quota_gb: int = 50
     #: Flask debug mode. Set at start; never in a house.
-    debug: bool = False
+    debug: bool = setting(False, env="NINAIVU_DEBUG", env_wins=True, runtime=True)
     #: Page size for the gallery API.
     page_size: int = 200
     #: The most items one gallery request may ask for.
@@ -1190,16 +1206,16 @@ class Config:
     replica_every_minutes: float = 30.0
     #: On the Pi, from the command line: the hand-over folder this process
     #: serves a read-only copy from (``--replica-of``). Empty: not a replica.
-    replica_from: str = ""
+    replica_from: str = setting("", runtime=True)
     #: On the Pi: the Mac mini's family app address, to send people to while
     #: it is awake (``--replica-primary``).
-    replica_primary_url: str = ""
+    replica_primary_url: str = setting("", runtime=True)
     #: On the Pi: the Mac mini's network (MAC) address, to wake it with
     #: (``--replica-wake``).
-    replica_wake_mac: str = ""
+    replica_wake_mac: str = setting("", runtime=True)
     #: The index file, when it is not ``index.db`` in the state folder: the
     #: replica serves each hand-over from a file of its own.
-    index_file: str = ""
+    index_file: str = setting("", runtime=True)
 
     # Two computers (ninaivu/mugil/): one that does the work and one that
     # keeps the originals. Nothing here applies to a single computer.
@@ -1506,86 +1522,11 @@ class Config:
             cfg.active_root = env_root
             if env_root not in cfg.roots:
                 cfg.roots.append(env_root)
-        cfg.host = os.environ.get("NINAIVU_HOST", cfg.host)
-        cfg.port = _env_int("NINAIVU_PORT", cfg.port, 1, 65535)
-        cfg.admin_port = _env_int("NINAIVU_ADMIN_PORT", cfg.admin_port, 1, 65535)
-        cfg.admin_host = os.environ.get("NINAIVU_ADMIN_HOST", cfg.admin_host)
-        cfg.max_upload_mb = _env_int("NINAIVU_MAX_UPLOAD_MB", cfg.max_upload_mb, 1, 1024 * 1024)
-        cfg.straighten_requires_face = _env_bool(
-            "NINAIVU_STRAIGHTEN_REQUIRES_FACE", cfg.straighten_requires_face)
-        cfg.straighten_auto = _env_bool("NINAIVU_STRAIGHTEN_AUTO", cfg.straighten_auto)
-        cfg.straighten_auto_apply = _env_bool("NINAIVU_STRAIGHTEN_AUTO_APPLY",
-                                              cfg.straighten_auto_apply)
-        cfg.debug = _env_bool("NINAIVU_DEBUG", cfg.debug)
-        cfg.server_threads = _env_int("NINAIVU_SERVER_THREADS",
-                                      cfg.server_threads, 2, 64)
-        cfg.ai_enabled = _env_bool("NINAIVU_AI", cfg.ai_enabled)
-        cfg.ai_engine = os.environ.get("NINAIVU_AI_ENGINE", cfg.ai_engine)
-        cfg.ai_gpu = _env_bool("NINAIVU_AI_GPU", cfg.ai_gpu)
-        cfg.ai_image_device = os.environ.get("NINAIVU_AI_IMAGE_DEVICE", cfg.ai_image_device)
-        cfg.nsfw_filter = _env_bool("NINAIVU_NSFW_FILTER", cfg.nsfw_filter)
-        cfg.hide_screens = _env_bool("NINAIVU_HIDE_SCREENS", cfg.hide_screens)
-        cfg.min_media_bytes = _env_int("NINAIVU_MIN_MEDIA_BYTES", cfg.min_media_bytes, 0)
-        cfg.index_hidden = _env_bool("NINAIVU_INDEX_HIDDEN", cfg.index_hidden)
-        cfg.trusted_proxies = _env_int("NINAIVU_TRUSTED_PROXIES",
-                                       cfg.trusted_proxies, 0, 10)
-        cfg.detect_orientation = _env_bool("NINAIVU_DETECT_ORIENTATION",
-                                           cfg.detect_orientation)
-        cfg.orientation_ai = _env_bool("NINAIVU_ORIENTATION_AI",
-                                       cfg.orientation_ai)
-        cfg.faces_enabled = _env_bool("NINAIVU_FACES", cfg.faces_enabled)
-        cfg.face_model = os.environ.get("NINAIVU_FACE_MODEL", cfg.face_model)
-        cfg.daily_catchup = _env_bool("NINAIVU_DAILY_CATCHUP", cfg.daily_catchup)
-        cfg.ai_runtime = _env_bool("NINAIVU_AI_RUNTIME", cfg.ai_runtime)
-        cfg.describe_photos = _env_bool("NINAIVU_DESCRIBE_PHOTOS", cfg.describe_photos)
-        cfg.memory_films = _env_bool("NINAIVU_MEMORY_FILMS", cfg.memory_films)
-        cfg.voice_search = _env_bool("NINAIVU_VOICE_SEARCH", cfg.voice_search)
-        cfg.colour_photos = _env_bool("NINAIVU_COLOUR_PHOTOS", cfg.colour_photos)
-        cfg.house_name = os.environ.get("NINAIVU_HOUSE_NAME", cfg.house_name)
-        cfg.proxy_cache_mb = _env_int("NINAIVU_PROXY_CACHE_MB", cfg.proxy_cache_mb, 0)
-        cfg.notify_webhook = os.environ.get("NINAIVU_NOTIFY_WEBHOOK",
-                                            cfg.notify_webhook)
-        cfg.notify_smtp_host = os.environ.get("NINAIVU_NOTIFY_SMTP_HOST",
-                                              cfg.notify_smtp_host)
-        cfg.notify_smtp_to = os.environ.get("NINAIVU_NOTIFY_SMTP_TO",
-                                            cfg.notify_smtp_to)
-        cfg.watch = _env_bool("NINAIVU_WATCH", cfg.watch)
-        cfg.content_fingerprints = _env_bool("NINAIVU_CONTENT_FINGERPRINTS",
-                                             cfg.content_fingerprints)
-        cfg.change_journal = _env_bool("NINAIVU_CHANGE_JOURNAL", cfg.change_journal)
-        cfg.ask_ninaivu = _env_bool("NINAIVU_ASK", cfg.ask_ninaivu)
-        cfg.our_year = _env_bool("NINAIVU_OUR_YEAR", cfg.our_year)
-        cfg.video_moments = _env_bool("NINAIVU_VIDEO_MOMENTS", cfg.video_moments)
-        cfg.then_and_now = _env_bool("NINAIVU_THEN_AND_NOW", cfg.then_and_now)
-        cfg.life_story = _env_bool("NINAIVU_LIFE_STORY", cfg.life_story)
-        cfg.share_blur_strangers = _env_bool("NINAIVU_SHARE_BLUR_STRANGERS",
-                                             cfg.share_blur_strangers)
-        cfg.photo_talk = _env_bool("NINAIVU_PHOTO_TALK", cfg.photo_talk)
-        cfg.festival_albums = _env_bool("NINAIVU_FESTIVAL_ALBUMS", cfg.festival_albums)
-        cfg.letters_aloud = _env_bool("NINAIVU_LETTERS_ALOUD", cfg.letters_aloud)
-        cfg.young_faces = _env_bool("NINAIVU_YOUNG_FACES", cfg.young_faces)
-        cfg.find_print = _env_bool("NINAIVU_FIND_PRINT", cfg.find_print)
-        cfg.photo_stacks = _env_bool("NINAIVU_PHOTO_STACKS", cfg.photo_stacks)
-        cfg.open_browsing = _env_bool("NINAIVU_OPEN_BROWSING", cfg.open_browsing)
-        cfg.lock_after_minutes = max(0, _env_int("NINAIVU_LOCK_AFTER_MINUTES",
-                                                 cfg.lock_after_minutes))
-        cfg.workers = _env_int("NINAIVU_WORKERS", cfg.workers, 1, 64)
-        cfg.lock_roots = _env_bool("NINAIVU_LOCK_ROOTS", cfg.lock_roots)
-        cfg.cloud_enabled = _env_bool("NINAIVU_CLOUD", cfg.cloud_enabled)
-        cfg.cloud_folder_name = os.environ.get("NINAIVU_CLOUD_FOLDER",
-                                               cfg.cloud_folder_name)
-        cfg.cloud_autostart = _env_bool("NINAIVU_CLOUD_AUTOSTART",
-                                        cfg.cloud_autostart)
-        cfg.cloud_rate_kbps = _env_int("NINAIVU_CLOUD_RATE_KBPS",
-                                       cfg.cloud_rate_kbps, 0)
-        cfg.cloud_window_start = os.environ.get("NINAIVU_CLOUD_WINDOW_START",
-                                                cfg.cloud_window_start)
-        cfg.cloud_window_end = os.environ.get("NINAIVU_CLOUD_WINDOW_END",
-                                              cfg.cloud_window_end)
-        cfg.backup_dir = os.environ.get("NINAIVU_BACKUP_DIR", cfg.backup_dir)
-        cfg.ai_models_dir = os.environ.get("NINAIVU_AI_MODELS_DIR",
-                                           cfg.ai_models_dir)
-        cfg.backup_keep = _env_int("NINAIVU_BACKUP_KEEP", cfg.backup_keep, 0)
+        for f in fields(cls):
+            if var := f.metadata.get("env"):
+                setattr(cfg, f.name, _from_env(
+                    var, _kind_of(f), getattr(cfg, f.name),
+                    f.metadata.get("low"), f.metadata.get("high")))
 
         chosen = getattr(cfg, "_chosen", set()) or set()
         seeded = {}
@@ -1611,6 +1552,33 @@ class Config:
         if cfg.active_root:
             cfg.active_root = str(Path(cfg.active_root).expanduser())
         return cfg
+
+
+def _kind_of(f: Any) -> str:
+    """``bool``, ``int`` or ``text``: how a variable for field *f* is read."""
+    head = str(f.type).split("|")[0].strip()
+    return head if head in ("bool", "int") else "text"
+
+
+#: Settings that say how *this process* was started rather than what the
+#: household wants kept (``setting(runtime=True)``). The command line and the
+#: ``NINAIVU_*`` variables own these, and writing them down would make a
+#: one-off ``--port 8080`` permanent — and a state directory written into a
+#: file inside itself.
+RUNTIME_ONLY = frozenset(f.name for f in fields(Config) if f.metadata.get("runtime"))
+
+#: Settings the environment sets outright, whatever config.json says: where
+#: things are, not how Ninaivu behaves (``setting(env_wins=True)``). Every
+#: other NINAIVU_* value only fills in what the household has not chosen in
+#: the console (Config.load).
+ENV_ALWAYS_WINS = frozenset(f.name for f in fields(Config) if f.metadata.get("env_wins"))
+
+#: Every setting a ``NINAIVU_*`` variable sets, by variable. ``NINAIVU_ROOTS``,
+#: ``NINAIVU_ROOT`` and ``NINAIVU_STATE_DIR`` are read on their own in
+#: Config.load and _default_state_dir: a list of folders and the folder
+#: everything else is in are not one value each.
+ENVIRONMENT: dict[str, str] = {
+    f.metadata["env"]: f.name for f in fields(Config) if f.metadata.get("env")}
 
 
 #: Directories that must never *become* a library root. Browsing through them
