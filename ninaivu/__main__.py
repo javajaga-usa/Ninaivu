@@ -248,9 +248,10 @@ def build_parser() -> argparse.ArgumentParser:
                         "it exits (the Windows scheduled task). A restart from "
                         "the console then exits and leaves the starting to it")
     replica = p.add_argument_group(
-        "read-only family view (the Secondary)",
-        "Serve the family app from the hand-over the Primary sends, never writing "
-        "to the library; see docs/two-computers.md")
+        "read-only family view, the old way",
+        "Serve the family app from the hand-over the Primary sends, as a process of "
+        "its own, never writing to the library. Since 4.0 a paired Secondary serves "
+        "it from its own Ninaivu with none of this; see docs/two-computers.md")
     replica.add_argument("--replica-of", default=None, metavar="DIR",
                          help="The hand-over folder (mugil-handover/ in the state folder)")
     replica.add_argument("--replica-primary", default=None, metavar="URL",

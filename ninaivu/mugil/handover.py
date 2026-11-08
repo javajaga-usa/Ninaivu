@@ -4,8 +4,8 @@ The Primary is not always on; the Secondary is. With ``mugil_family_copy``
 on, the Primary sends the Secondary a *hand-over*: a slimmed snapshot of the
 index (:func:`slim`), the thumbnails, faces, profile pictures, stories and
 films, and ``replica.json`` last, over the pairing with every request signed,
-into ``mugil-handover/`` in the Secondary's state folder. There
-``ninaivu --replica-of <that folder>`` serves it read-only (ninaivu/replica/).
+into ``mugil-handover/`` in the Secondary's state folder. There the
+Secondary's own Ninaivu serves it read-only (mugil/family_view.py).
 
 (Until 4.0 the same hand-over could also be written into a shared folder for
 a Raspberry Pi to serve. That way is retired; this one is what is left of it,
@@ -19,10 +19,14 @@ fingerprinted and is kept by the Secondary only when the bytes match, written
 under a temporary name and renamed, so a hand-over half sent leaves the one
 before whole.
 
-**On the Secondary** (:func:`receive`): the files land where
-``ninaivu --replica-of`` reads them. The photographs themselves are the
-originals the Secondary keeps; the replica finds them at the Primary's paths
-through a read-only bind mount (docs/two-computers.md shows the unit).
+**On the Secondary** (:func:`receive`): the files land in
+``mugil-handover/``, and the Secondary's own Ninaivu serves them on its
+family app while the Primary does not answer (mugil/family_view.py). The
+photographs themselves are the originals the Secondary keeps; each library's
+paths are re-rooted onto its folder there, through the Secondary's own record
+of which library is in which folder (mugil/hold.py). The old way,
+``ninaivu --replica-of`` as a service of its own with the originals bind
+mounted at the Primary's paths, still works.
 
 Nothing here changes the library, or runs with one computer.
 """
@@ -347,6 +351,9 @@ class Handover:
                 "version": __version__, "schema_version": schema,
                 "index": {"file": name, "size": size, "sha256": digest},
                 "libraries": library_ids(self.cfg),
+                # Where the family app answers here, so the Secondary can send
+                # visitors to it while this computer is awake (family_view.py).
+                "family_port": int(getattr(self.cfg, "port", 80) or 80),
                 "settings": family_settings(self.cfg), "folders": counts,
             }
             with tempfile.NamedTemporaryFile("w", dir=state, suffix=".json", delete=False,

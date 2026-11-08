@@ -1,4 +1,9 @@
-"""Taking up the Mac's hand-over, on the Pi.
+"""Taking up the Primary's hand-over: on the Secondary, or the old way on a Pi.
+
+The Secondary's own Ninaivu does this since 4.0 (mugil/family_view.py), with
+``shared`` set and each index re-rooted onto its originals folder as it is
+taken up. ``ninaivu --replica-of`` still runs it as a process of its own,
+the old way, for a Pi or a hand-written service.
 
 The Pi reads the hand-over folder (:mod:`.publish`) and serves from its own
 copy of the index, in its own state folder: ``index-<generation>.db``. Each
@@ -32,7 +37,7 @@ import threading
 import time
 from contextlib import closing
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from ..storage import db, roots as roots_kit
 from ..utils.files import atomic_write, sync_folder
@@ -174,10 +179,18 @@ def carry_sessions(old: Path, new: Path) -> int:
 class Replica:
     """The Pi's side: which generation it serves, and taking up newer ones."""
 
-    def __init__(self, cfg, source: Path | str) -> None:
+    def __init__(self, cfg, source: Path | str, *, shared: bool = False,
+                 on_point: Callable[[Path, dict[str, Any] | None], None] | None = None) -> None:
         self.cfg = cfg
         self.source = Path(source).expanduser()
         self.state = Path(cfg.state_dir)
+        #: True inside a Ninaivu that serves its own index too (the
+        #: Secondary's, mugil/family_view.py): this process's own record of
+        #: where its library ids are is then left alone.
+        self.shared = shared
+        #: Called with each index about to be served, and the hand-over that
+        #: named it (None when it is not known): the Secondary re-roots it.
+        self.on_point = on_point
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._keeper: threading.Thread | None = None
@@ -260,7 +273,8 @@ class Replica:
         ids = manifest.get("libraries")
         if isinstance(ids, dict):
             atomic_write(self.state / roots_kit.KNOWN, json.dumps(ids, indent=2))
-            roots_kit.remember_state_dir(self.state)
+            if not self.shared:
+                roots_kit.remember_state_dir(self.state)
 
     def _point_at(self, index: Path, record: dict[str, Any],
                   manifest: dict[str, Any] | None = None) -> None:
@@ -274,7 +288,10 @@ class Replica:
         if manifest is not None:
             self._take_settings(manifest.get("settings"))
         self._link_folders()
-        roots_kit.remember_state_dir(self.state)
+        if not self.shared:
+            roots_kit.remember_state_dir(self.state)
+        if self.on_point is not None:
+            self.on_point(index, manifest)
         old = str(self.cfg.db_path)
         self.cfg.index_file = str(index)
         if old != str(index):
