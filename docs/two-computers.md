@@ -60,17 +60,21 @@ run and says why.
 
 Tick **Let the family browse on the Secondary while this computer is off** on
 the Primary. Every hour, if the library has changed, the Primary then sends
-the family app's read-only copy to the Secondary: a slimmed snapshot of the
-index, the thumbnails, faces, profile pictures, stories and films. It is the
-same hand-over the Pi replica uses (see [the Pi replica](pi-replica.md)),
-sent over the pairing instead of a share. Only what changed goes. Each file
-is checked, and `replica.json` goes last, so a half-sent copy leaves the one
-before whole. On the Secondary it lands in `mugil-handover/` in the state
-folder.
+the family app's read-only copy to the Secondary over the pairing: a slimmed
+snapshot of the index, the thumbnails, faces, profile pictures, stories and
+films. Only what changed goes. Each file is checked, and `replica.json` goes
+last, so a half-sent copy leaves the one before whole. On the Secondary it
+lands in `mugil-handover/` in the state folder.
 
-To serve it, run the read-only family app on the Linux PC as the Pi does. The
-originals there are under `<originals folder>/<library folder name>`, so name
-each library folder with `--map`:
+(Until 4.0 the same copy could also be written to a shared folder for a
+Raspberry Pi to serve. That way is retired: the Secondary is the always-on
+computer now.)
+
+To serve it, the Secondary runs a second, read-only Ninaivu as a service of
+its own. The originals there are under `<originals folder>/<library folder
+name>`, so name each of the Primary's library folders with `--map`, and Ninaivu
+writes the service for you. It mounts each one read-only at the Primary's own
+path, so every path in the index fits as it is:
 
 ```bash
 cd /opt/ninaivu
@@ -81,9 +85,21 @@ sudo -u ninaivu .venv/bin/python -m ninaivu replica unit \
     --output /tmp/ninaivu-replica.service
 ```
 
-Then install and start the unit as the Pi guide says. While the Mac is
-awake, pages go to it; while it is off, the Linux PC shows what the Mac last
-sent, read-only.
+It prints the few commands to run once as root before the first start (the
+empty folders the library is mounted on, and the service's own state folder).
+Run them, then:
+
+```bash
+sudo cp /tmp/ninaivu-replica.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now ninaivu-replica
+```
+
+`--primary` is the Primary's family app address as the family's phones reach
+it: while the Primary is awake, pages go to it; while it is off, the Secondary
+shows what the Primary last sent, read-only, and says so at the top. Add
+`--wake <network address>` to let a change asked for there wake the Primary.
+`ninaivu replica status --from <folder>` says what a hand-over holds.
 
 ## Phone uploads while the Primary sleeps
 

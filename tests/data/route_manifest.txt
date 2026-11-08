@@ -12,6 +12,7 @@ admin | POST                 | /api/admin/backups/now | admin | writes | same or
 admin | POST                 | /api/admin/backups/verify | admin | writes | same origin | admin.verify_backup
 admin | GET                  | /api/admin/components | admin | reads | - | components.listing
 admin | POST                 | /api/admin/components/<component_id>/install | admin | writes | same origin | components.install
+admin | GET                  | /api/admin/copies | admin | reads | - | cloud.admin_copies
 admin | GET                  | /api/admin/date-policy | admin | reads | - | admin.date_policy_get
 admin | POST                 | /api/admin/date-policy | admin | writes | same origin | admin.date_policy_save
 admin | GET                  | /api/admin/digest | admin | reads | - | admin.digest_settings
@@ -606,9 +607,6 @@ admin | GET                  | /api/recycle | admin | reads | - | api_admin.recy
 admin | POST                 | /api/recycle/purge | admin | writes | same origin | api_admin.recycle_purge
 admin | POST                 | /api/recycle/restore | admin | writes | same origin | api_admin.recycle_restore
 admin | GET                  | /api/recycle/thumb/<int:entry_id> | admin | reads | - | api_admin.recycle_thumbnail
-admin | GET                  | /api/replica/handover | admin | reads | - | cloud.replica_handover_status
-admin | POST                 | /api/replica/handover | admin | writes | same origin | cloud.replica_handover_start
-admin | POST                 | /api/replica/handover/settings | admin | writes | same origin | cloud.replica_handover_settings
 admin | POST                 | /api/rotate | admin | writes | same origin | api.rotate_originals
 home  | POST                 | /api/rotate | admin | writes | same origin | api.rotate_originals
 admin | POST                 | /api/scan | admin | writes | same origin | api_admin.rescan

@@ -290,10 +290,6 @@ class Services:
         self.mirror = Mirror(cfg, lambda: db.connect(cfg.db_path),
                              hold=lambda: self.workload.hold("upload"))
         self.mirror.scanner = self.scanner
-        # The hand-over to the Pi, which serves a read-only copy of the
-        # library while this computer sleeps. See ninaivu/replica/.
-        from .replica.publish import Publisher                  # noqa: PLC0415
-        self.replica_publisher = Publisher(cfg, hold=lambda: self.workload.hold("upload"))
         # Two computers: the Primary sending its originals to the Secondary.
         # See ninaivu/mugil/.
         from .mugil.courier import Courier                      # noqa: PLC0415
@@ -700,7 +696,6 @@ class Services:
         self.restore_tests.start()
         self.index_copy.start()
         self.mirror.keep()
-        self.replica_publisher.keep()
         self.mugil_courier.keep()
         self.mugil_display.keep()
         self.mugil_handover.keep()
@@ -1589,7 +1584,6 @@ class Services:
         if getattr(self, "tv_album", None) is not None:
             attempt("the TV album", self.tv_album.close)
         for name, label in (("mirror", "the second copy"), ("offsite", "the off-site copy"),
-                            ("replica_publisher", "the hand-over to the Pi"),
                             ("mugil_courier", "sending the originals"),
                             ("mugil_beacon", "answering the Primary"),
                             ("mugil_waker", "waking the Primary"),

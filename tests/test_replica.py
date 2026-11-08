@@ -1,16 +1,16 @@
-"""The Pi as a read-only replica (proposal F): the hand-over and the copy.
+"""The family's read-only view (ninaivu/replica/): the hand-over and the copy.
 
-The Mac writes a hand-over (ninaivu/replica/publish.py); the Pi serves the
-family app from it, never writing to the library, and sends people to the
-mini while it is awake (receive.py, front.py). These run both ends in one
-process: the "Pi" has its own state folder and reads the library at the same
-path the "Mac" has it, as the Pi's systemd unit arranges with a read-only
-bind mount.
+The Primary sends a hand-over to the Secondary (mugil/handover.py); the
+Secondary serves the family app from it, never writing to the library, and
+sends people to the Primary while it is awake (receive.py, front.py). These
+run both ends in one process: the "Secondary" has its own state folder and
+reads the library at the same path the "Primary" has it, as the systemd unit
+arranges with a read-only bind mount. (The fixtures keep their old names,
+mac and pi: the Pi's own way of being handed over to was retired in 4.0.)
 """
 
 import json
 import sqlite3
-import time
 from contextlib import closing
 from pathlib import Path
 from types import SimpleNamespace
@@ -22,7 +22,8 @@ from ninaivu import Services, create_home_app
 from ninaivu.cli import replica as replica_cli
 from ninaivu.replica import MANIFEST, front as front_mod
 from ninaivu.replica.front import Front, magic_packet
-from ninaivu.replica.publish import Publisher, publish
+from ninaivu.mugil import handover
+from ninaivu.mugil.handover import Handover
 from ninaivu.replica.receive import Replica, ReplicaError, carry_sessions
 from ninaivu.server import auth
 from ninaivu.server.config import Config
@@ -45,9 +46,33 @@ def mac(app, people, tmp_path):
     cfg.notify_smtp_password = "hunter2-smtp"
     cfg.house_name = "Jagadeesh's house"
     cfg.save()
-    dest = tmp_path / "handover"
-    dest.mkdir()
+    dest = handover.folder(tmp_path / "secondary")
+    dest.mkdir(parents=True)
     return SimpleNamespace(services=services, cfg=cfg, conn=conn, dest=dest, first=first)
+
+
+class _Secondary:
+    """The Secondary's end of the pairing, in this process: what its
+    ``/api/mugil/handover`` routes do with what the Primary sends."""
+
+    def __init__(self, state: Path) -> None:
+        self.state = state
+
+    def request(self, method, path, *, query=None, body=None, length=0, digest="",
+                headers=None):
+        if path == "/api/mugil/handover/remove":
+            return {"removed": handover.remove(self.state, body["paths"])}
+        algo, value, size = digest.split(":")
+        return {"kept": handover.receive(self.state, query["path"], algo=algo, digest=value,
+                                         size=int(size), body=body)}
+
+
+def publish(cfg, dest: Path) -> dict:
+    """One hand-over from the "Primary" into *dest* (``mugil-handover/``)."""
+    sender = Handover(cfg, partner=lambda url, key=None: _Secondary(dest.parent))
+    manifest = sender.run()
+    assert manifest is not None, sender.last()
+    return manifest
 
 
 def _pi_config(tmp_path: Path, dest: Path) -> Config:
@@ -136,12 +161,6 @@ def test_only_changed_thumbnails_are_copied_again(mac):
     assert not (mac.dest / "thumbs" / gone.relative_to(mac.cfg.thumbs_dir)).exists()
 
 
-def test_a_new_destination_is_copied_to_from_the_beginning(mac, tmp_path):
-    publish(mac.cfg, mac.dest)
-    other = tmp_path / "other"
-    other.mkdir()
-    again = publish(mac.cfg, other)
-    assert again["folders"]["thumbs"]["copied"] == again["folders"]["thumbs"]["files"] > 0
 
 
 def test_old_snapshots_are_removed_but_the_one_before_is_kept(mac):
@@ -150,50 +169,25 @@ def test_old_snapshots_are_removed_but_the_one_before_is_kept(mac):
     assert left == sorted(names[1:])
 
 
-def test_publishing_needs_the_folder_to_be_there(mac, tmp_path):
-    with pytest.raises(FileNotFoundError):
-        publish(mac.cfg, tmp_path / "share-not-connected")
 
 
-def test_the_publisher_hands_over_when_the_index_changed(mac):
-    mac.cfg.replica_dir = str(mac.dest)
-    mac.cfg.replica_every_minutes = 30
-    keeper = Publisher(mac.cfg)
-    assert keeper.due()                       # never handed over to this folder
-    keeper.start()
-    keeper._thread.join(60)
-    status = keeper.status()
-    assert status["error"] == "" and status["generation"]
-    assert not keeper.due()                   # just done
-    record = keeper.last()
-    record["at"] = time.time() - 3600
-    (Path(mac.cfg.state_dir) / "replica-publish.json").write_text(json.dumps(record))
-    assert not keeper.due()                   # time has passed, nothing changed
-    db.update_asset(mac.conn, mac.first, caption="Amma's 60th birthday")
-    mac.conn.commit()
-    assert keeper.due()
 
 
-def test_the_console_sets_the_handover_folder(mac, as_admin, tmp_path):
-    inside = Path(mac.cfg.active_root) / "2023"
-    refused = as_admin.post("/api/replica/handover/settings", json={"folder": str(inside)})
-    assert refused.status_code == 400
-    missing = as_admin.post("/api/replica/handover/settings",
-                            json={"folder": str(tmp_path / "nope")})
-    assert missing.status_code == 400
-    ok = as_admin.post("/api/replica/handover/settings",
-                       json={"folder": str(mac.dest), "every_minutes": 15})
-    assert ok.status_code == 200, ok.get_json()
-    assert mac.cfg.replica_dir == str(mac.dest) and mac.cfg.replica_every_minutes == 15
-    started = as_admin.post("/api/replica/handover")
-    assert started.status_code == 200
-    mac.services.replica_publisher._thread.join(60)
-    assert (mac.dest / MANIFEST).is_file()
-    assert as_admin.get("/api/replica/handover").get_json()["generation"]
 
 
-def test_the_handover_controls_are_the_consoles(mac, as_family):
-    assert as_family.get("/api/replica/handover").status_code in (401, 403)
+def test_the_pis_own_handover_is_retired(mac, as_admin, tmp_path, monkeypatch):
+    """Retired in 4.0: the console's hand-over folder, its routes and its
+    settings. A config.json from 3.x that still names them loads as it is."""
+    assert as_admin.get("/api/replica/handover").status_code == 404
+    assert not hasattr(mac.services, "replica_publisher")
+    old = tmp_path / "old-state"
+    old.mkdir()
+    (old / "config.json").write_text(json.dumps({
+        "replica_dir": "/Volumes/Pi/replica", "replica_every_minutes": 15,
+        "house_name": "Kept"}))
+    monkeypatch.setenv("NINAIVU_STATE_DIR", str(old))
+    loaded = Config.load()
+    assert loaded.house_name == "Kept" and not hasattr(loaded, "replica_dir")
 
 
 # -- the Pi ------------------------------------------------------------------------
@@ -441,11 +435,6 @@ def test_the_server_becomes_a_replica(mac, tmp_path):
     assert front_mod.OPEN_WRITES >= {"/api/auth/login", "/api/auth/logout"}
 
 
-def test_a_handover_is_never_written_into_the_library(mac):
-    inside = Path(mac.cfg.active_root) / "2023"
-    with pytest.raises(OSError, match="inside the library"):
-        publish(mac.cfg, inside)
-    assert not (inside / MANIFEST).exists()
 
 
 def test_films_play_on_the_pi_and_listing_them_writes_nothing(mac, people, tmp_path):

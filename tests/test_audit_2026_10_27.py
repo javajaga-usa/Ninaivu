@@ -30,7 +30,6 @@ from types import SimpleNamespace
 import pytest
 from werkzeug.datastructures import FileStorage
 
-from ninaivu.replica.publish import Publisher
 from ninaivu.replica.receive import carry_sessions
 from ninaivu.server import auth
 from ninaivu.storage import db
@@ -173,31 +172,8 @@ def test_an_upload_with_room_is_written_whole(tmp_path, monkeypatch):
 
 # --- A-04 ------------------------------------------------------------------------
 
-def test_a_settings_change_alone_makes_a_hand_over_due(tmp_path):
-    (tmp_path / "share").mkdir()
-    cfg = SimpleNamespace(state_dir=tmp_path, db_path=tmp_path / "index.db",
-                          replica_dir=str(tmp_path / "share"), replica_every_minutes=1,
-                          open_browsing=True)
-    cfg.db_path.write_bytes(b"index")
-    publisher = Publisher(cfg)
-    publisher._remember(folder=str(publisher.folder), at=time.time() - 120,
-                        stamp=publisher._index_stamp())
-    assert publisher.due() is False                     # nothing changed
-    cfg.open_browsing = False
-    assert publisher.due() is True
-
-
-def test_the_settings_page_change_reaches_the_pi(as_admin, cfg, tmp_path):
-    (tmp_path / "share").mkdir()
-    cfg.replica_dir = str(tmp_path / "share")
-    cfg.replica_every_minutes = 1
-    publisher = Publisher(cfg)
-    publisher._remember(folder=str(publisher.folder), at=time.time() - 120,
-                        stamp=publisher._index_stamp())
-    before = cfg.nsfw_filter
-    response = as_admin.post("/api/settings", json={"nsfw_filter": not before})
-    assert response.status_code == 200, response.get_json()
-    assert publisher.due() is True
+# The Pi's hand-over folder and its keeper (replica/publish.Publisher) were
+# retired in 4.0, and these two tests with them.
 
 
 # --- A-05 ------------------------------------------------------------------------

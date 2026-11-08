@@ -58,7 +58,10 @@ def test_a_37_index_is_up_to_date_and_unchanged(tmp_path):
     try:
         after = conn.execute(
             "SELECT type, name, sql FROM sqlite_master ORDER BY type, name").fetchall()
-        assert [tuple(r) for r in after] == [tuple(r) for r in before]
+        # Everything 3.7 had is there as it was; the later steps only add.
+        assert {tuple(r) for r in before} <= {tuple(r) for r in after}
+        added = {r[1] for r in after} - {r[1] for r in before}
+        assert added <= {"copies", "idx_copies_destination", "locations"}
         assert db.get_meta(conn, "marker") == "kept"
         assert migrations.recorded(conn) == migrations.latest(migrations.INDEX)
     finally:

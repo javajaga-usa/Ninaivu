@@ -347,8 +347,8 @@ own once there are 2,000 faces. A run of fewer than 32 tasks (the photograph
 or two the watcher found) works on threads of the server instead, on the same
 list and in the same way, since starting processes would take longer than the
 work; faces, and videos on a computer without ffmpeg, always use processes.
-Describing photographs, place names, imports, the storage check, the Pi
-mirror and backups run as before. `engine.db` holds nothing that cannot be
+Describing photographs, place names, imports, the storage check, the second
+copy and backups run as before. `engine.db` holds nothing that cannot be
 worked out again: deleting it while Ninaivu is stopped only forgets which files
 were set aside. `tools/bench_engine.py` compares a scan on threads and on
 worker processes, on the computer it runs on.
@@ -1165,7 +1165,8 @@ Ninaivu refuses a folder with no index in it (moving this index somewhere is
 **Move the index**, above), the folder it uses now, an index another Ninaivu
 is using, one a newer Ninaivu last opened, and one that has itself moved
 elsewhere. The setting is never written into `config.json`, and is not
-offered on the Secondary or on a copy that follows another computer (the Pi).
+offered on the Secondary or on a read-only copy that follows another computer
+(the family view served with `--replica-of`).
 
 ## Environment variables and the state folder
 
@@ -1194,5 +1195,4 @@ a folder of the user's own, which an upgrade does not replace
 - [The tray, the Control Panel and HTTPS](desktop-control.md)
 - [Backup and recovery](backup-recovery.md) and [encryption and the recovery file](encryption-files.md)
 - [Moving to another machine](moving-to-another-machine.md)
-- [The Pi as the always-on copy](pi-replica.md)
 - [Contributing](CONTRIBUTING.md) and [security](SECURITY.md)
