@@ -275,10 +275,10 @@ class XmpWriter:
         self._every = every
         self._lock = threading.Lock()
         self._stop = threading.Event()
-        #: The schedule's own stop, apart from a pass's (see stop()).
-        self._asleep = threading.Event()
+        #: The supervisor its schedule runs on; Ninaivu gives it its own.
+        #: The schedule's stop is apart from a pass's (see stop()).
+        self.supervisor = None
         self._thread: threading.Thread | None = None
-        self._timer: threading.Thread | None = None
         self._state: dict[str, Any] = {"running": False, "written": 0, "removed": 0,
                                        "unchanged": 0, "left_alone": 0, "failed": 0,
                                        "message": "", "finished_at": 0.0, "problems": []}
@@ -326,31 +326,35 @@ class XmpWriter:
         """Stop the pass in progress; with *join*, at shutdown, the schedule too."""
         self._stop.set()
         if join:
-            self._asleep.set()
-            for thread in (self._thread, self._timer):
-                if thread is not None and thread is not threading.current_thread():
-                    thread.join(10)
+            from ..server.supervisor import supervisor_of        # noqa: PLC0415
+            supervisor_of(self).stop_job(self.SCHEDULE, timeout=10)
+            thread = self._thread
+            if thread is not None and thread is not threading.current_thread():
+                thread.join(10)
 
     def join(self, timeout: float | None = None) -> None:
         if self._thread:
             self._thread.join(timeout)
 
+    #: The schedule's thread, as before it moved to the supervisor.
+    SCHEDULE = "ninaivu-xmp-schedule"
+
     def keep(self) -> None:
         """Bring the sidecars up to date every hour while the setting is on."""
-        if self._timer is not None and self._timer.is_alive():
-            return
-        self._asleep.clear()
+        # Kept by the supervisor (server/supervisor.py). retry_most=0: a look
+        # that fails is tried again at the next; it used to end the schedule.
+        from ..server.supervisor import Job, every, supervisor_of  # noqa: PLC0415
+        supervisor_of(self).add(Job(
+            self.SCHEDULE, self._look, every(self._every), log=log, retry_most=0,
+            failure="the sidecars could not be brought up to date by themselves",
+            progress=lambda: {"running": self.running}))
 
-        def loop() -> None:
-            while not self._asleep.wait(self._every):
-                if self.enabled and not self.running:
-                    try:
-                        self.start()
-                    except ValueError:
-                        pass
-
-        self._timer = threading.Thread(target=loop, name="ninaivu-xmp-schedule", daemon=True)
-        self._timer.start()
+    def _look(self) -> None:
+        if self.enabled and not self.running:
+            try:
+                self.start()
+            except ValueError:
+                pass
 
     def _pause_for_the_household(self) -> None:
         """Wait while people are using Ninaivu (the workload's say), or until stopped.

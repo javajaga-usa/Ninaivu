@@ -467,8 +467,10 @@ def test_a_check_that_stepped_aside_wakes_the_keeper(tmp_path, monkeypatch):
         raise mirror_mod._Yield()
 
     monkeypatch.setattr(mirror, "_know_the_disk", due_now)
+    woken = []
+    monkeypatch.setattr(mirror, "look_now", lambda: woken.append(1))
     mirror._verify()
-    assert mirror._look_now.is_set()
+    assert woken == [1]
 
 
 def test_the_keeper_starts_the_copy_when_woken(tmp_path, monkeypatch):
@@ -479,12 +481,11 @@ def test_the_keeper_starts_the_copy_when_woken(tmp_path, monkeypatch):
     monkeypatch.setattr(mirror, "start", lambda: started.set())
     mirror.keep()
     try:
-        mirror._look_now.set()
+        mirror.look_now()
         assert started.wait(5), "the copy waited for the keeper's ten minutes"
     finally:
         mirror.stop(join=True)
-        mirror._keeper.join(5)
-    assert not mirror._keeper.is_alive()
+    assert mirror.supervisor.stop_job(mirror.KEEPER, timeout=5)
 
 
 # -- 12. start-up: approvals off the thread that opens the ports -----------------

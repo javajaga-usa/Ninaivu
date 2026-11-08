@@ -172,8 +172,8 @@ class XmpReader:
         self._lock = threading.Lock()
         self._thread: threading.Thread | None = None
         self._stop = threading.Event()
-        self._asleep = threading.Event()
-        self._timer: threading.Thread | None = None
+        #: The supervisor its timer runs on; Ninaivu gives it its own.
+        self.supervisor = None
         self.last: dict[str, Any] = {}
 
     def _db(self) -> sqlite3.Connection:
@@ -214,19 +214,22 @@ class XmpReader:
     def schedule(self, every: float = 1800.0) -> None:
         """Look again every *every* seconds: names wait for faces found later."""
         self.baseline()
-        if self._timer is not None:
-            return
+        # Kept by the supervisor (server/supervisor.py); a second schedule()
+        # is no second timer.
+        from ..server.supervisor import Job, every as every_, supervisor_of  # noqa: PLC0415
+        supervisor_of(self).add(Job(
+            self.TIMER, self.wake, every_(every), log=log, retry_most=0,
+            failure="could not wake the reading of the sidecars"))
 
-        def tick() -> None:
-            while not self._asleep.wait(every):
-                self.wake()
-        self._timer = threading.Thread(target=tick, daemon=True, name="ninaivu-xmp-read-timer")
-        self._timer.start()
+    #: The timer's thread, as before it moved to the supervisor.
+    TIMER = "ninaivu-xmp-read-timer"
 
     def stop(self, join: bool = False) -> None:
         self._stop.set()
         if join:
-            self._asleep.set()
+            from ..server.supervisor import supervisor_of        # noqa: PLC0415
+            # Asked, not waited for, as before: a tick only wakes a pass.
+            supervisor_of(self).stop_job(self.TIMER, timeout=0)
             if self._thread is not None:
                 self._thread.join(timeout=30)
 

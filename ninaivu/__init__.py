@@ -441,6 +441,9 @@ class Services:
         # The backups, the drive watch and the archive guardian.
         for keeper in (self.backups, self.disks, self.guardian):
             keeper.supervisor = self.supervisor
+        # The second copy, the off-site copy, the sidecars and the catch-up.
+        for keeper in (self.mirror, self.offsite, self.xmp, self.xmp_reader, self.catchup):
+            keeper.supervisor = self.supervisor
         self.engine = None
         self._ai_mod = ai_mod
         self._started = False

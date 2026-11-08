@@ -562,3 +562,76 @@ def test_a_backup_switched_off_starts_no_job(tmp_path):
     keeper.supervisor = Supervisor()
     keeper.start()
     assert keeper.supervisor.activity() == []
+
+
+# -- group 2: the second copy, the off-site copy, the sidecars, the catch-up ------
+
+def _group_2(tmp_path):
+    from ninaivu.cloud.offsite import Offsite
+    from ninaivu.server.catchup import DailyCatchUp
+    from ninaivu.storage.mirror import Mirror
+    from ninaivu.storage.xmp import XmpWriter
+    from ninaivu.storage.xmp_read import XmpReader
+
+    cfg = SimpleNamespace(state_dir=str(tmp_path), mirror_dir="", libraries=[])
+    reader = XmpReader(cfg, lambda: None)
+    reader.baseline = lambda: None
+    return [
+        (Mirror(cfg, lambda: None), "keep", "ninaivu-second-copy-keeper",
+         "every 600 seconds"),
+        (Offsite(cfg, lambda: None), "keep", "ninaivu-offsite-schedule", "every 600 seconds"),
+        (XmpWriter(cfg, lambda: None), "keep", "ninaivu-xmp-schedule", "every 3600 seconds"),
+        (reader, "schedule", "ninaivu-xmp-read-timer", "every 1800 seconds"),
+        (DailyCatchUp(cfg, None, None, None, owed=lambda: []), "keep",
+         "ninaivu-daily-catchup", "every 30 seconds"),
+    ]
+
+
+def test_group_2_keeps_its_threads_and_schedules(tmp_path):
+    shared = Supervisor()
+    keepers = _group_2(tmp_path)
+    try:
+        for keeper, start, _, _ in keepers:
+            keeper.supervisor = shared
+            getattr(keeper, start)()
+            getattr(keeper, start)()            # a second start is no second loop
+        names = [t.name for t in threading.enumerate()]
+        rows = {r["name"]: r for r in shared.activity()}
+        for _, _, thread, when in keepers:
+            assert names.count(thread) == 1
+            assert rows[thread]["when"] == when
+        for keeper, _, thread, _ in keepers:
+            keeper.stop(join=True)
+            until(lambda thread=thread: shared.state(thread) == sup.STOPPED)
+        for keeper, start, thread, _ in keepers:
+            getattr(keeper, start)()            # and started again after a stop
+            assert shared.state(thread) == sup.IDLE
+    finally:
+        assert shared.stop(timeout=5) == []
+
+
+def test_the_sidecar_schedule_outlives_an_unexpected_error(tmp_path, clock, caplog,
+                                                            monkeypatch):
+    """Only a refusal was caught: anything else ended the hourly schedule."""
+    from ninaivu.storage.xmp import XmpWriter
+
+    writer = XmpWriter(SimpleNamespace(state_dir=str(tmp_path)), lambda: None, every=60)
+    writer.supervisor = Supervisor(clock=clock)
+    tries = []
+
+    def start() -> None:
+        tries.append(clock.now())
+        raise RuntimeError("unexpected")
+
+    monkeypatch.setattr(XmpWriter, "enabled", property(lambda self: True))
+    try:
+        writer.start = start
+        caplog.set_level(logging.ERROR)
+        writer.keep()
+        for when in (60, 120):
+            clock.asleep_until(writer.SCHEDULE, when)
+            clock.advance(60)
+            until(lambda when=when: tries[-1:] == [float(when)])
+        assert any("brought up to date by themselves" in r.getMessage() for r in caplog.records)
+    finally:
+        assert writer.supervisor.stop(timeout=5) == []
