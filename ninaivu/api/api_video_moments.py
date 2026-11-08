@@ -25,7 +25,7 @@ from flask import abort, jsonify, request, send_file
 from ..media import media
 from ..server import features
 from ..storage import db, video_moments
-from .api import (_cfg, _conn, _engine, _guard, _roots, _search_shield, _text_vector,
+from .api import (_cfg, _conn, _engine, _gate, _roots, _search_shield, _text_vector,
                   _thumb_version, _viewer, bp)
 
 #: A clip is offered when its best scene is at least this share of the best
@@ -119,7 +119,7 @@ def moments_search():
 def moments_of_clip(asset_id: int):
     _switched_on()
     conn = _conn()
-    row = _guard(db.get_asset_brief(conn, asset_id))
+    row = _gate(db.get_asset_brief(conn, asset_id))
     if row.get("kind") != "video":
         abort(404)
     return jsonify({"id": asset_id, "moments": video_moments.of_clip(conn, asset_id)})
@@ -146,7 +146,7 @@ def _keep_few(folder: Path) -> None:
 def moment_frame(asset_id: int):
     _switched_on()
     conn = _conn()
-    row = _guard(db.get_asset_brief(conn, asset_id))
+    row = _gate(db.get_asset_brief(conn, asset_id))
     if row.get("kind") != "video":
         abort(404)
     try:

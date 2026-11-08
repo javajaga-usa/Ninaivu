@@ -2674,8 +2674,9 @@ WORDS_TOTAL_SECONDS = 30.0
 
 def query_assets(
     conn: sqlite3.Connection,
-    roots: Sequence[str] | str,
+    roots: Sequence[str] | str | None = None,
     *,
+    gate: Any = None,
     viewer_id: int = 0,
     max_visibility: int = 1,
     scope: str | None = None,
@@ -2754,22 +2755,36 @@ def query_assets(
     a request parameter: ``max_visibility`` (derived from the caller's role)
     and ``scope`` (the folder the admin confined that profile to). Favourites
     and ratings come from the caller's own ``user_assets`` rows.
+
+    ``gate`` is the caller's ``server.visibility.Viewer``: given, it is the
+    whole of who may see what — its folders, visibility, dates, kinds and
+    sub-folder, and its own private items when asked for by id or for the
+    private view — and *roots*, ``viewer_id``, ``max_visibility`` and
+    ``scope`` are taken from it.
     """
-    roots_sql, roots_params = roots_clause("a", roots)
-    if private_mine:
+    if gate is not None:
+        viewer_id, max_visibility, scope = gate.viewer_id, gate.max_visibility, None
+        gate_sql, gate_params = gate.sql(
+            "a", mine="only" if private_mine else "also" if ids is not None else "")
+        where = [gate_sql]
+        params: list[Any] = list(gate_params)
+    elif private_mine:
+        roots_sql, roots_params = roots_clause("a", roots if roots is not None else [])
         # The viewer's own "Only to me" view: what they took out of everybody
         # else's, and nothing else. No viewer, nothing.
         owner_sql, owner_params = private_owner_clause("a", max_visibility, viewer_id)
         where = [roots_sql, owner_sql]
-        params: list[Any] = [*roots_params, *owner_params]
+        params = [*roots_params, *owner_params]
     elif ids is not None and viewer_id and int(max_visibility) < 2:
         # Asked for by id — the viewer opening, downloading or favouriting
         # something — their own private items are theirs to reach as well.
+        roots_sql, roots_params = roots_clause("a", roots if roots is not None else [])
         owner_sql, owner_params = private_owner_clause("a", max_visibility, viewer_id)
         where = [roots_sql,
                  f"(({visibility_clause('a', max_visibility)}) OR ({owner_sql}))"]
         params = [*roots_params, int(max_visibility), *owner_params]
     else:
+        roots_sql, roots_params = roots_clause("a", roots if roots is not None else [])
         where = [roots_sql, visibility_clause("a", max_visibility)]
         params = [*roots_params, int(max_visibility)]
 
@@ -3336,25 +3351,34 @@ def library_stats(conn: sqlite3.Connection, roots: Sequence[str] | str, *,
     }
 
 
-def facets(conn: sqlite3.Connection, roots: Sequence[str] | str, limit: int = 40, *,
-           max_visibility: int = 1, scope: str | None = None) -> dict[str, Any]:
+def facets(conn: sqlite3.Connection, roots: Sequence[str] | str | None = None,
+           limit: int = 40, *, max_visibility: int = 1, scope: str | None = None,
+           gate: Any = None) -> dict[str, Any]:
     """Tag cloud, folder list, camera list and per-year counts.
 
     Everything here leaks information about the library, so it is filtered by
-    the same visibility and scope rules as the gallery itself.
+    the same visibility and scope rules as the gallery itself: those of
+    *gate* (a ``server.visibility.Viewer``) when it is given.
     """
-    roots_sql, roots_params = roots_clause("assets", roots)
-    scope_sql, scope_params = scope_clause("assets", scope)
-    guard = (roots_sql.replace("assets.", "") + " AND trashed=0 AND "
-             + "live_clip=0 AND raw_twin=0 AND "
-             + visibility_clause("", max_visibility))
-    # As in library_stats: below an admin, flagged content is not counted in
-    # the folder, camera and year lists either — only the tags left it out.
-    if int(max_visibility) < 2:
-        guard += " AND nsfw=0"
-    if scope_sql:
-        guard += " AND " + scope_sql.replace("assets.", "")
-    base: list[Any] = [*roots_params, int(max_visibility), *scope_params]
+    if gate is not None:
+        gate_sql, base = gate.sql("")
+        max_visibility = gate.max_visibility
+        guard = gate_sql + " AND trashed=0 AND live_clip=0 AND raw_twin=0"
+        if int(max_visibility) < 2:
+            guard += " AND nsfw=0"
+    else:
+        roots_sql, roots_params = roots_clause("assets", roots if roots is not None else [])
+        scope_sql, scope_params = scope_clause("assets", scope)
+        guard = (roots_sql.replace("assets.", "") + " AND trashed=0 AND "
+                 + "live_clip=0 AND raw_twin=0 AND "
+                 + visibility_clause("", max_visibility))
+        # As in library_stats: below an admin, flagged content is not counted
+        # in the folder, camera and year lists either — only the tags left it out.
+        if int(max_visibility) < 2:
+            guard += " AND nsfw=0"
+        if scope_sql:
+            guard += " AND " + scope_sql.replace("assets.", "")
+        base = [*roots_params, int(max_visibility), *scope_params]
 
     # The tag cloud reads tags, which have a counter of their own. Worked out
     # once at the longest length anybody asks for and cut to each caller's:
@@ -3417,17 +3441,25 @@ def _facets(conn: sqlite3.Connection, guard: str, base: list[Any],
     }
 
 
-def timeline(conn: sqlite3.Connection, roots: Sequence[str] | str, *,
-             max_visibility: int = 1,
-             scope: str | None = None) -> list[dict[str, Any]]:
-    roots_sql, roots_params = roots_clause("assets", roots)
-    scope_sql, scope_params = scope_clause("assets", scope)
-    guard = (roots_sql.replace("assets.", "")
-             + " AND trashed=0 AND nsfw=0 AND live_clip=0 AND raw_twin=0 AND "
-             + visibility_clause("", max_visibility) + " AND date_key != ''")
-    if scope_sql:
-        guard += " AND " + scope_sql.replace("assets.", "")
-    params = (*roots_params, int(max_visibility), *scope_params)
+def timeline(conn: sqlite3.Connection, roots: Sequence[str] | str | None = None, *,
+             max_visibility: int = 1, scope: str | None = None,
+             gate: Any = None) -> list[dict[str, Any]]:
+    """How many items each day holds, for the caller's limits: *gate*'s (a
+    ``server.visibility.Viewer``) when it is given."""
+    if gate is not None:
+        gate_sql, gate_params = gate.sql("")
+        guard = (gate_sql + " AND trashed=0 AND nsfw=0 AND live_clip=0 AND raw_twin=0"
+                 " AND date_key != ''")
+        params = tuple(gate_params)
+    else:
+        roots_sql, roots_params = roots_clause("assets", roots if roots is not None else [])
+        scope_sql, scope_params = scope_clause("assets", scope)
+        guard = (roots_sql.replace("assets.", "")
+                 + " AND trashed=0 AND nsfw=0 AND live_clip=0 AND raw_twin=0 AND "
+                 + visibility_clause("", max_visibility) + " AND date_key != ''")
+        if scope_sql:
+            guard += " AND " + scope_sql.replace("assets.", "")
+        params = (*roots_params, int(max_visibility), *scope_params)
 
     def days() -> list[dict[str, Any]]:
         rows = conn.execute(

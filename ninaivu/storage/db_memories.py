@@ -40,7 +40,7 @@ _YEAR_SQL = ("COALESCE(NULLIF(SUBSTR(a.date_key, 1, 4), ''), "
 
 def query_on_this_day(
     conn: sqlite3.Connection,
-    roots: Sequence[str] | str,
+    roots: Sequence[str] | str | None = None,
     *,
     month: int,
     day: int,
@@ -48,18 +48,29 @@ def query_on_this_day(
     max_visibility: int = 1,
     scope: str | None = None,
     limit: int = 150,
+    gate: Any = None,
 ) -> dict[str, Any]:
-    """Return media items captured on this month and day across historical years."""
-    roots_sql, roots_params = roots_clause("a", roots)
-    where = [roots_sql, "a.trashed = 0", "a.nsfw = 0", visibility_clause("a", max_visibility),
-             # A pair's other half is the same moment again: shown once.
-             "a.live_clip = 0 AND a.raw_twin = 0"]
-    params: list[Any] = [*roots_params, int(max_visibility)]
+    """Return media items captured on this month and day across historical years.
 
-    scope_sql, scope_params = scope_clause("a", scope)
-    if scope_sql:
-        where.append(scope_sql)
-        params.extend(scope_params)
+    *gate*, a ``server.visibility.Viewer``, is the caller's limits when given.
+    """
+    if gate is not None:
+        viewer_id = gate.viewer_id
+        gate_sql, gate_params = gate.sql("a")
+        where = [gate_sql, "a.trashed = 0", "a.nsfw = 0",
+                 # A pair's other half is the same moment again: shown once.
+                 "a.live_clip = 0 AND a.raw_twin = 0"]
+        params: list[Any] = list(gate_params)
+    else:
+        roots_sql, roots_params = roots_clause("a", roots if roots is not None else [])
+        where = [roots_sql, "a.trashed = 0", "a.nsfw = 0",
+                 visibility_clause("a", max_visibility),
+                 "a.live_clip = 0 AND a.raw_twin = 0"]
+        params = [*roots_params, int(max_visibility)]
+        scope_sql, scope_params = scope_clause("a", scope)
+        if scope_sql:
+            where.append(scope_sql)
+            params.extend(scope_params)
 
     m_str = f"{month:02d}"
     d_str = f"{day:02d}"

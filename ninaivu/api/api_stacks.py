@@ -23,10 +23,11 @@ from typing import Any
 
 from flask import abort, jsonify
 
+from ..server import visibility
 from ..server.auth import current_user
 from ..storage import db, stacks
 from ._body import json_object
-from .api import _cfg, _conn, _roots, _thumb_version, _viewer, bp
+from .api import _cfg, _conn, _thumb_version, bp
 
 
 def _switched_on() -> None:
@@ -39,8 +40,8 @@ def _visible(conn, ids: list[int]) -> list[dict[str, Any]]:  # noqa: ANN001
     if not ids:
         return []
     admin = bool(current_user().is_admin)
-    rows, _ = db.query_assets(conn, _roots(), ids=ids, kinds=["picture"], limit=len(ids),
-                              offset=0, with_total=False, include_nsfw=admin, **_viewer())
+    rows, _ = db.query_assets(conn, gate=visibility.current(), ids=ids, kinds=["picture"],
+                              limit=len(ids), offset=0, with_total=False, include_nsfw=admin)
     return rows
 
 
