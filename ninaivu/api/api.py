@@ -3911,20 +3911,29 @@ PLAIN_ERRORS = {
 # phones, the library folder, and shares with what grew up beside them. They
 # register on the blueprints above, so they must be imported after those exist,
 # which is why this sits at the foot of the file rather than the head.
+#
+# A feature's routes (ninaivu/features: smart albums, photo books, memory
+# films, ...) are put on by its manifest, _feature(name), in the very place
+# its module was imported before 4.0, so the URL map is the same, rule for
+# rule. Each still answers 404 from inside while it is switched off.
+from ..features import register_routes as _feature                    # noqa: E402
 from . import (api_faces, api_library, api_phone_backup,             # noqa: E402,F401
-               api_portrait, api_share, api_smart, api_straighten)
+               api_portrait, api_share)
+_feature("smart")
+from . import api_straighten                                         # noqa: E402,F401
 # "Who is this?" links and the family tree.
-from . import api_ask_family, api_family_tree  # noqa: E402,F401
-from . import api_books  # noqa: E402,F401 - photo books (media/books.py)
-from . import api_films  # noqa: E402,F401 - memory films (media/films.py)
-from . import api_handover                                           # noqa: E402,F401
-from . import api_stories                                           # noqa: E402,F401
+_feature("ask_family")
+_feature("family_tree")
+_feature("books")
+_feature("films")
+_feature("handover")
+_feature("stories")
 # The phone inbox for sync apps (WebDAV, phone keys): media/phone_keys.py.
 from . import api_webdav                                            # noqa: E402,F401
 # "Only to me": a family member's items kept out of everybody else's view.
 from . import api_private                                           # noqa: E402,F401
 # Sent for screening: family members flag items, an administrator decides.
-from . import api_screening                                         # noqa: E402,F401
+_feature("screening")
 
 
 # The AI Playground's routes live in their own module and register on `bp`.
@@ -3935,7 +3944,8 @@ from . import api_scan_prints  # noqa: E402,F401 - registers routes
 
 # Family moments, each off until switched on: the living photo frame and
 # time capsules.
-from . import api_capsules, api_frame  # noqa: E402,F401
+_feature("capsules")
+from . import api_frame  # noqa: E402,F401
 
 # Ask Ninaivu: questions about the photographs, answered on this computer.
 from . import api_ask_ninaivu  # noqa: E402,F401
@@ -3944,7 +3954,7 @@ from . import api_ask_ninaivu  # noqa: E402,F401
 from . import api_our_year  # noqa: E402,F401
 
 # A life in photographs: one person's life, decade by decade.
-from . import api_life_story  # noqa: E402,F401
+_feature("life_story")
 
 # Talk about this photo: questions about the photograph open in the viewer.
 from . import api_photo_talk  # noqa: E402,F401
@@ -3952,7 +3962,7 @@ from . import api_photo_talk  # noqa: E402,F401
 from . import api_festivals  # noqa: E402,F401
 
 # Letters read aloud: an old letter's words, written out and spoken.
-from . import api_letters  # noqa: E402,F401
+_feature("letters")
 
 # Young faces, older names: who an unnamed child in an old photograph may be.
 from . import api_young_faces  # noqa: E402,F401
@@ -3961,14 +3971,15 @@ from . import api_young_faces  # noqa: E402,F401
 from . import api_find_print  # noqa: E402,F401
 
 # Photo stacks: a burst, or a photograph and its copies, as one tile.
-from . import api_stacks  # noqa: E402,F401
+_feature("stacks")
 
 # Speaking to search, and colour for black-and-white photographs: each off
 # until switched on, each answered on this computer.
-from . import api_colour, api_voice_search  # noqa: E402,F401
+_feature("colour_copies")
+from . import api_voice_search  # noqa: E402,F401
 
 # Moments inside videos: search finds the second inside a long clip.
-from . import api_video_moments  # noqa: E402,F401
+_feature("video_moments")
 
 # Then and now: the same place, the same person, years apart.
-from . import api_then_and_now  # noqa: E402,F401
+_feature("then_and_now")
