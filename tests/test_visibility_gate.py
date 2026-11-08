@@ -302,3 +302,58 @@ def test_the_stack_route_hides_the_bin_from_the_administrator_today(app, house, 
         assert [r["id"] for r in api_stacks._visible(conn, [binned])] == [binned]
         g.user = members["family"]
         assert api_stacks._visible(conn, [binned]) == []
+
+
+# -- the second slice: each domain's lists through the gate, as before ------------
+
+@pytest.fixture()
+def furnished(house):
+    """The house with albums, named faces and places in every state."""
+    from ninaivu.storage import db_albums, db_faces
+    conn, ids, members = house
+    admin, maya = members["admin"].id, members["family"].id
+    for name, by, rels in (
+            ("Holiday", admin, ["shared/holiday/beach0.jpg", "shared/holiday/beach3.jpg",
+                                "2023/06/11/shot1.jpg", "2023/08/10/shot3.jpg",
+                                "2023/09/09/shot4.jpg", "2023/05/12/shot0.jpg"]),
+            ("Mayas", maya, ["2023/07/11/shot2.jpg", "misc/plain.png"]),
+            ("Old", None, ["private/secret0.jpg", "shared/holiday/beach1.jpg"]),
+            ("Empty", maya, [])):
+        album = db_albums.create_album(conn, name, created_by=by)
+        db_albums.album_add(conn, album, [ids[r] for r in rels])
+    people = {n: int(db_faces.create_person_cluster(conn, n)["id"]) for n in ("Amma", "Appa")}
+    for rel, who in (("shared/holiday/beach0.jpg", "Amma"), ("2023/06/11/shot1.jpg", "Amma"),
+                     ("2023/07/11/shot2.jpg", "Appa"), ("shared/holiday/beach3.jpg", "Appa"),
+                     ("2023/10/09/shot5.jpg", "Appa")):
+        conn.execute("INSERT INTO faces(asset_id, person_id, source, bbox, embedding, thumb, "
+                     "quality) VALUES (?, ?, 'confirmed', '[1,1,9,9]', x'00', 't.jpg', 0.5)",
+                     (ids[rel], people[who]))
+    for rel in ("shared/holiday/beach0.jpg", "2023/06/11/shot1.jpg", "2023/07/11/shot2.jpg",
+                "2023/05/12/shot0.jpg", "shared/holiday/beach3.jpg", "misc/plain.png"):
+        conn.execute("UPDATE assets SET gps_lat=13.0, gps_lon=80.2, country='India', "
+                     "city='Chennai' WHERE id=?", (ids[rel],))
+    conn.commit()
+    return conn, ids, members
+
+
+DOMAIN_POLICIES = [None, {"cutoff": "2023-07-01", "admin": "after", "family": "before",
+                          "guest": "after"}]
+
+
+@pytest.mark.parametrize("policy", DOMAIN_POLICIES)
+def test_albums_and_people_count_through_the_gate_as_before(app, furnished, policy):
+    conn, _, members = furnished
+    if policy:
+        db.set_meta(conn, date_policy.KEY, json.dumps(policy))
+    for name, user in members.items():
+        with app.test_request_context("/api/albums"):
+            g.user = user
+            viewer = visibility.current()
+            old = {"max_visibility": viewer.max_visibility, "scope": viewer.scope}
+            assert db.list_albums(conn, gate=viewer, viewer_id=user.id,
+                                  is_admin=viewer.is_admin) == db.list_albums(
+                conn, viewer.roots, viewer_id=user.id, is_admin=viewer.is_admin, **old), name
+            assert db.list_people(conn, gate=viewer) == db.list_people(
+                conn, viewer.roots, **old), name
+            assert db.list_unnamed_clusters(conn, gate=viewer, min_size=1) == \
+                db.list_unnamed_clusters(conn, viewer.roots, min_size=1, **old), name

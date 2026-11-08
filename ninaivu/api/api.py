@@ -3618,13 +3618,13 @@ def _own_album(album_id: int):
     exists, owner = db.album_owner(_conn(), album_id)
     if not exists:
         abort(404)
-    from ..server import date_policy
+    viewer = visibility.current()
     # Only a restricted viewer needs the album's date, and that is all this
     # needs: loading every item id to learn whether there were any was most
     # of the cost of each edit to a large album.
-    if date_policy.restricted():
+    if viewer.restricted:
         album = db.get_album(_conn(), album_id)
-        if album["item_ids"] and not date_policy.allows(album):
+        if album["item_ids"] and not viewer.in_dates(album):
             abort(404)
     user = current_user()
     if owner is not None and owner != user.id and not user.is_admin:
@@ -3644,12 +3644,12 @@ def _visible_ids(ids: Sequence[int]) -> list[int]:
     # a family member adding a whole library to one, a few thousand at a time
     # — could then not be read, patched or added to at all.
     ids = list(ids)
-    conn, roots, viewer = _conn(), _roots(), _viewer()
+    conn, viewer = _conn(), visibility.current()
     seen: list[int] = []
     for start in range(0, len(ids), _IN_CHUNK):
         piece = ids[start:start + _IN_CHUNK]
-        rows, _ = db.query_assets(conn, roots, ids=piece, limit=len(piece),
-                                 offset=0, columns=("id",), with_total=False, **viewer)
+        rows, _ = db.query_assets(conn, gate=viewer, ids=piece, limit=len(piece),
+                                 offset=0, columns=("id",), with_total=False)
         seen.extend(int(r["id"]) for r in rows)
     return seen
 
@@ -3659,9 +3659,7 @@ def _visible_ids(ids: Sequence[int]) -> list[int]:
 def albums():
     user = current_user()
     return jsonify({"albums": db.list_albums(
-        _conn(), _roots(), **_viewer_limits(),
-        viewer_id=user.id, is_admin=user.is_admin
-    )})
+        _conn(), gate=visibility.current(), viewer_id=user.id, is_admin=user.is_admin)})
 
 
 @bp.get("/api/albums/<int:album_id>")
@@ -3671,11 +3669,11 @@ def album_get(album_id: int):
     if not album:
         abort(404)
     user = current_user()
+    viewer = visibility.current()
     visible_ids = _visible_ids(album.get("item_ids", []))
-    from ..server import date_policy
-    if not date_policy.allows(album):
+    if not viewer.in_dates(album):
         abort(404)
-    if not visible_ids and (date_policy.restricted() or (album.get("created_by") != user.id and not user.is_admin)):
+    if not visible_ids and (viewer.restricted or (album.get("created_by") != user.id and not user.is_admin)):
         abort(404)
     album["item_ids"] = visible_ids
     album["n"] = len(visible_ids)
@@ -3763,8 +3761,8 @@ def album_items(album_id: int):
         db.album_add(_conn(), album_id, ids)
     # Counted in one query. Read back as ids and narrowed 500 at a time, every
     # addition to a 50,000-photograph album ran a hundred queries (240 ms).
-    _, count = db.query_assets(_conn(), _roots(), album=album_id, include_companions=True,
-                               limit=1, offset=0, columns=("id",), **_viewer())
+    _, count = db.query_assets(_conn(), gate=visibility.current(), album=album_id,
+                               include_companions=True, limit=1, offset=0, columns=("id",))
     return jsonify({"ok": True, "count": count})
 
 

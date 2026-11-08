@@ -38,13 +38,12 @@ from typing import Any
 
 from flask import abort, current_app, jsonify, render_template, request, send_file
 
-from ..server import auth, date_policy
+from ..server import auth, date_policy, visibility
 from ..server.auth import current_user, require_family
 from ..storage import ask_family, db
 from ..media import media
 from ._body import json_object
-from .api import (bp, _asset_file, _cfg, _conn, _guard, _int_arg, _roots, _viewer_limits,
-                  _viewing_copy)
+from .api import (bp, _asset_file, _cfg, _conn, _gate, _int_arg, _viewing_copy)
 
 log = logging.getLogger(__name__)
 
@@ -70,14 +69,13 @@ PICKER_PAGE = 60
 
 def _visible_to_me(row: dict[str, Any]) -> bool:
     """Whether the signed-in caller may open the photograph a face is in —
-    ``_guard`` without the 404, for filtering a list."""
-    limits = _viewer_limits()
-    user = current_user()
-    if row.get("root") not in _roots():
+    ``_guard`` without the 404, for filtering a list, asked of the visibility
+    gate as for anybody with the caller's limits (not their own "Only to me"
+    items), and never anything in the bin."""
+    viewer = visibility.current()
+    if row.get("root") not in viewer.roots:
         return False
-    if row.get("trashed") or (row.get("nsfw") and not user.is_admin):
-        return False
-    return db.visible_to(row, limits["max_visibility"], limits["scope"])
+    return not row.get("trashed") and viewer.may_see(row, own=False)
 
 
 def _shown(face: dict[str, Any], limits: dict[str, Any]) -> bool:
@@ -270,9 +268,8 @@ def ask_family_faces():
     from ..media.faceindex import CLUSTER_MIN_QUALITY          # noqa: PLC0415
 
     conn = _conn()
-    limits = _viewer_limits()
     guard, params = db._face_visibility_sql(                   # noqa: SLF001
-        "a", limits["max_visibility"], limits["scope"], _roots())
+        "a", gate=visibility.current())
     limit = max(1, min(_int_arg("limit", PICKER_PAGE), 200))
     offset = max(0, _int_arg("offset", 0))
     sql = ("SELECT f.id, a.visibility, MAX(f.quality) AS quality, COUNT(*) AS size "
@@ -346,7 +343,7 @@ def ask_family_create():
         # The face is asked about only if its photograph is one this person
         # can open now — which keeps an administrator-only photograph to an
         # administrator — and the answer is 404 either way, as for the crop.
-        asset = _guard(db.get_asset(conn, int(face["asset_id"])))
+        asset = _gate(db.get_asset(conn, int(face["asset_id"])))
         if int(asset.get("visibility") or 0) >= auth.VIS_HIDDEN and not user.is_admin:
             abort(404)
         if face.get("person_id") is not None:
@@ -403,7 +400,7 @@ def _reviewable(answer: dict[str, Any] | None) -> dict[str, Any]:
 
 
 def _visible_people() -> list[dict[str, Any]]:
-    return db.list_people(_conn(), _roots(), **_viewer_limits())
+    return db.list_people(_conn(), gate=visibility.current())
 
 
 @bp.get("/api/ask-family/answers")
