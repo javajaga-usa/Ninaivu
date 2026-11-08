@@ -6,12 +6,14 @@
 * a claim on the disk makes the library scan stand down, and a job that
   moves files waits for another that does;
 * the activity list says who is doing what;
+* the loops moved onto it keep their thread names and schedules.
 """
 from __future__ import annotations
 
 import logging
 import threading
 import time
+from types import SimpleNamespace
 
 import pytest
 
@@ -371,3 +373,72 @@ def test_the_console_reads_the_activity_list(app, as_admin, as_family):
         assert as_family.get("/api/admin/jobs/background").status_code == 403
     finally:
         assert services.supervisor.stop(timeout=5) == []
+
+
+# -- the loops moved onto it ----------------------------------------------------------
+
+def _keepers(tmp_path):
+    from ninaivu.cloud.index_copy import IndexCopy
+    from ninaivu.cloud.restore_test import RestoreTester
+    from ninaivu.storage.library_drives import LibraryDrives
+    from ninaivu.utils.digest import DigestKeeper
+
+    cfg = SimpleNamespace(state_dir=str(tmp_path), roots=[])
+    return [
+        (DigestKeeper(cfg, connect=lambda: None, roots=lambda: []),
+         "ninaivu-digest", "every 1200 seconds"),
+        (LibraryDrives(cfg, lambda roots: None), "ninaivu-library-drives", "every 15 seconds"),
+        (IndexCopy(cfg, None, connect_db=lambda: None), "ninaivu-index-copy",
+         "every 1800 seconds"),
+        (RestoreTester(cfg, None, connect_db=lambda: None), "ninaivu-restore-test",
+         "every 3600 seconds"),
+    ]
+
+
+def test_the_keepers_keep_their_threads_and_schedules(tmp_path):
+    shared = Supervisor()
+    keepers = _keepers(tmp_path)
+    try:
+        for keeper, _, _ in keepers:
+            keeper.supervisor = shared
+            keeper.start()
+            keeper.start()                      # a second start is no second loop
+        names = [t.name for t in threading.enumerate()]
+        rows = {r["name"]: r for r in shared.activity()}
+        for _keeper, thread, when in keepers:
+            assert names.count(thread) == 1
+            assert rows[thread]["when"] == when
+        for keeper, thread, _ in keepers:
+            keeper.stop(timeout=5)
+            assert shared.state(thread) == sup.STOPPED
+        assert not {thread for _, thread, _ in keepers} & {
+            t.name for t in threading.enumerate()}
+        # And started again after a stop, as before.
+        for keeper, thread, _ in keepers:
+            keeper.start()
+            assert shared.state(thread) == sup.IDLE
+    finally:
+        assert shared.stop(timeout=5) == []
+
+
+def test_a_keeper_used_by_itself_has_a_supervisor_of_its_own(tmp_path):
+    keeper, thread, _ = _keepers(tmp_path)[0]
+    assert keeper.supervisor is None
+    keeper.start()
+    try:
+        assert keeper.supervisor is not None and keeper.supervisor.state(thread) == sup.IDLE
+    finally:
+        keeper.stop(timeout=5)
+    assert thread not in [t.name for t in threading.enumerate()]
+
+
+def test_the_index_copy_stop_still_reaches_an_upload_under_way(tmp_path):
+    keeper, _, _ = _keepers(tmp_path)[2]
+    keeper.start()
+    assert not keeper._stop.is_set()
+    keeper.stop(timeout=5)
+    # The flag its upload paces itself by: a stop cut an upload short, and does.
+    assert keeper._stop.is_set()
+    keeper.start()
+    assert not keeper._stop.is_set()
+    keeper.stop(timeout=5)

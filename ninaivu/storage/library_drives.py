@@ -20,7 +20,6 @@ rather than at the next restart.
 from __future__ import annotations
 
 import logging
-import threading
 import time
 from typing import Any, Callable
 
@@ -47,28 +46,26 @@ class LibraryDrives:
         #: The library folders away at the last look; None before the first.
         self.away: set[str] | None = None
         self._moves_at = float("-inf")
-        self._stop = threading.Event()
-        self._thread: threading.Thread | None = None
+        #: The supervisor its loop runs on; Ninaivu gives it its own.
+        self.supervisor = None
+
+    #: The thread it runs on, as before it moved to the supervisor.
+    JOB = "ninaivu-library-drives"
 
     def start(self) -> None:
-        if self._thread and self._thread.is_alive():
-            return
-        self._stop.clear()
-        self._thread = threading.Thread(target=self._loop, name="ninaivu-library-drives",
-                                        daemon=True)
-        self._thread.start()
+        # A look every EVERY seconds, kept by the supervisor
+        # (server/supervisor.py). retry_most=0: a look that fails is tried
+        # again at the next look and no later, so a drive plugged back in is
+        # still noticed within seconds of the error clearing.
+        from ..server.supervisor import Job, every, supervisor_of  # noqa: PLC0415
+        supervisor_of(self).add(Job(
+            self.JOB, self.check, every(lambda: self.EVERY), log=log,
+            failure="could not look at the library drives", retry_most=0,
+            progress=lambda: {"away": sorted(self.away or ())}))
 
     def stop(self, timeout: float = 5.0) -> None:
-        self._stop.set()
-        if self._thread and self._thread.is_alive():
-            self._thread.join(timeout)
-
-    def _loop(self) -> None:
-        while not self._stop.wait(self.EVERY):
-            try:
-                self.check()
-            except Exception:                               # noqa: BLE001
-                log.exception("could not look at the library drives")
+        from ..server.supervisor import supervisor_of            # noqa: PLC0415
+        supervisor_of(self).stop_job(self.JOB, timeout)
 
     def check(self) -> list[str]:
         """One look. Returns the library folders that came back since the last."""

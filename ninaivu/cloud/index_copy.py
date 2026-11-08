@@ -303,7 +303,8 @@ class IndexCopy:
         self._clock = clock
         self._running = threading.Lock()
         self._stop = threading.Event()
-        self._thread: threading.Thread | None = None
+        #: The supervisor its loop runs on; Ninaivu gives it its own.
+        self.supervisor = None
         self._worker: threading.Thread | None = None
         self.error = ""
 
@@ -317,27 +318,34 @@ class IndexCopy:
 
     # -- schedule ---------------------------------------------------------
 
+    #: The thread it runs on, as before it moved to the supervisor.
+    JOB = "ninaivu-index-copy"
+
     def start(self) -> None:
-        if self._thread and self._thread.is_alive():
-            return
-        self._stop.clear()
-        self._thread = threading.Thread(target=self._loop, name="ninaivu-index-copy",
-                                        daemon=True)
-        self._thread.start()
+        # A look every half hour, kept by the supervisor (server/supervisor.py).
+        # An upload under way is stopped where it can be picked up again: the
+        # same stop flag the upload's own pacing listens to.
+        from ..server.supervisor import NETWORK, Job, every, supervisor_of  # noqa: PLC0415
+        if supervisor_of(self).add(Job(
+                self.JOB, self._look, every(1800), claims={NETWORK}, log=log,
+                failure="the copy of the index could not be sent to Drive",
+                interrupt=self._stop.set, progress=lambda: {"sending": self.running})):
+            # Only once a new loop is kept: a stop still finishing its upload
+            # is not told to carry on. The first look is half an hour away.
+            self._stop.clear()
 
     def stop(self, timeout: float = 5.0) -> None:
+        from ..server.supervisor import supervisor_of            # noqa: PLC0415
         self._stop.set()
-        for thread in (self._thread, self._worker):
-            if thread and thread.is_alive():
-                thread.join(timeout)
+        supervisor_of(self).stop_job(self.JOB, timeout)
+        worker = self._worker
+        if worker and worker.is_alive():
+            worker.join(timeout)
 
-    def _loop(self) -> None:
-        while not self._stop.wait(1800):
-            try:
-                if self.due():
-                    self.run()
-            except Exception:                                    # noqa: BLE001
-                log.exception("the copy of the index could not be sent to Drive")
+    def _look(self) -> None:
+        """One look: send a fresh copy, if one is owed."""
+        if self.due():
+            self.run()
 
     def last(self) -> dict[str, Any]:
         try:

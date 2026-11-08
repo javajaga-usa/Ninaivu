@@ -264,8 +264,8 @@ class DigestKeeper:
         self.cfg = cfg
         self._connect = connect
         self._roots = roots
-        self._stop = threading.Event()
-        self._thread: threading.Thread | None = None
+        #: The supervisor its loop runs on; Ninaivu gives it its own.
+        self.supervisor = None
         self._running = threading.Lock()
         self.last_error: str | None = None
         #: The day that turned out to have nothing worth sending. Asked again
@@ -315,30 +315,32 @@ class DigestKeeper:
             log.debug("could not write down that the digest went")
 
     # -- the loop ----------------------------------------------------------
+    #: The thread it runs on, as before it moved to the supervisor.
+    JOB = "ninaivu-digest"
+
     def start(self) -> None:
-        if self._thread and self._thread.is_alive():
-            return
-        self._stop.clear()
-        self._thread = threading.Thread(target=self._loop, name="ninaivu-digest",
-                                        daemon=True)
-        self._thread.start()
+        # Every twenty minutes is often enough for something that happens
+        # once a week, and cheap enough that nobody notices it. The
+        # supervisor (server/supervisor.py) keeps the loop: an error is
+        # logged and the next look comes twenty minutes later, as it did.
+        from ..server.supervisor import NETWORK, Job, every, supervisor_of  # noqa: PLC0415
+        supervisor_of(self).add(Job(
+            self.JOB, self._look, every(1200), claims={NETWORK}, log=log,
+            failure="the weekly photograph could not be sent",
+            progress=lambda: {"sending": self.busy}))
 
     def stop(self, timeout: float = 5.0) -> None:
-        self._stop.set()
-        thread = self._thread
-        if thread and thread.is_alive():
-            thread.join(timeout=timeout)
+        from ..server.supervisor import supervisor_of            # noqa: PLC0415
+        supervisor_of(self).stop_job(self.JOB, timeout)
 
-    def _loop(self) -> None:
-        # Every twenty minutes is often enough for something that happens
-        # once a week, and cheap enough that nobody notices it.
-        while not self._stop.wait(1200):
-            try:
-                if self.due():
-                    self.run()
-            except Exception as exc:                       # noqa: BLE001
-                self.last_error = str(exc)
-                log.exception("the weekly photograph could not be sent")
+    def _look(self) -> None:
+        """One look: send this week's, if it is due."""
+        try:
+            if self.due():
+                self.run()
+        except Exception as exc:
+            self.last_error = str(exc)
+            raise
 
     def run(self, *, force: bool = False,
             when: time.struct_time | None = None) -> dict[str, Any]:
