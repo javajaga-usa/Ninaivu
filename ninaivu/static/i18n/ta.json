@@ -5384,7 +5384,6 @@
   "Choose a folder on the big disk. This computer has no library of its own: leave Library settings empty here, and never add this disk as a library.": "பெரிய வட்டில் ஒரு கோப்புறையைத் தேர்ந்தெடுங்கள். இந்தக் கணினிக்குத் தனி நூலகம் இல்லை: இங்கே நூலக அமைப்புகளை வெறுமையாக விடுங்கள், இந்த வட்டை ஒருபோதும் நூலகமாகச் சேர்க்காதீர்கள்.",
   "The one that is always on with the big disk, a Linux PC for example. It keeps the originals, never changes them, and has no library of its own.": "பெரிய வட்டுடன் எப்போதும் இயங்குவது, உதாரணமாக Linux PC. இது மூலப் படங்களை வைத்திருக்கும், அவற்றை ஒருபோதும் மாற்றாது, தனி நூலகம் இதற்கு இல்லை.",
   "The library this computer shows ({paths}) is inside that folder. Keep it as the originals? This computer stops showing it as its library, and the Primary brings in what only it has. No file is moved, changed or removed. Turn on XMP sidecars first and let them be written, so the names, albums and stars go with the photographs.": "இந்தக் கணினி காட்டும் நூலகம் ({paths}) அந்தக் கோப்புறைக்குள் உள்ளது. அதையே மூலக் கோப்புகளாக வைத்துக்கொள்ளவா? இந்தக் கணினி அதைத் தன் நூலகமாகக் காட்டுவதை நிறுத்தும்; அதில் மட்டும் உள்ளவற்றை முதன்மைக் கணினி கொண்டுவரும். எந்தக் கோப்பும் நகர்த்தப்படவோ மாற்றப்படவோ நீக்கப்படவோ செய்யாது. பெயர்கள், ஆல்பங்கள், நட்சத்திரங்கள் புகைப்படங்களுடன் செல்ல, முதலில் XMP sidecar கோப்புகளை இயக்கி அவை எழுதப்படும் வரை காத்திருங்கள்.",
-  "A test restore from the Secondary is not written yet; every file it keeps was checked against its fingerprint as it arrived.": "இரண்டாம் கணினியிலிருந்து சோதனை மீட்பு இன்னும் எழுதப்படவில்லை; அது வைத்திருக்கும் ஒவ்வொரு கோப்பும் வந்து சேர்ந்தபோதே அதன் கைரேகையுடன் சரிபார்க்கப்பட்டது.",
   "A test restore is already running.": "ஒரு சோதனை மீட்பு ஏற்கனவே நடந்துகொண்டிருக்கிறது.",
   "There is no test restore here.": "இங்கே சோதனை மீட்பு இல்லை.",
   "A census, a plan or a proof is being made already. Wait for it to finish.": "ஒரு கணக்கெடுப்போ, திட்டமோ, சான்றோ ஏற்கெனவே உருவாகிக்கொண்டிருக்கிறது. அது முடியும் வரை காத்திருங்கள்.",
@@ -5415,5 +5414,9 @@
   "The two computers' fingerprints are of different kinds, so the files cannot be compared. Install the same Ninaivu on both and take the censuses again.": "இரண்டு கணினிகளின் கைரேகைகளும் வெவ்வேறு வகையானவை, அதனால் கோப்புகளை ஒப்பிட முடியாது. இரண்டிலும் ஒரே நினைவை நிறுவி, கணக்கெடுப்புகளை மீண்டும் எடுங்கள்.",
   "There is no such change.": "அப்படி ஒரு மாற்றம் இல்லை.",
   "This computer's part is chosen already: it pairs as that part.": "இந்தக் கணினியின் பங்கு ஏற்கெனவே தேர்ந்தெடுக்கப்பட்டுவிட்டது: அந்தப் பங்காகவே இணையும்.",
-  "Waiting in the phone inbox: the Primary's next run files it.": "தொலைபேசி உள்பெட்டியில் காத்திருக்கிறது: முதன்மைக் கணினியின் அடுத்த ஓட்டம் அதைச் சேர்த்துவைக்கும்."
+  "Waiting in the phone inbox: the Primary's next run files it.": "தொலைபேசி உள்பெட்டியில் காத்திருக்கிறது: முதன்மைக் கணினியின் அடுத்த ஓட்டம் அதைச் சேர்த்துவைக்கும்.",
+  "Nothing has been sent to the off-site copy yet.": "வெளியிட நகலுக்கு இதுவரை எதுவும் அனுப்பப்படவில்லை.",
+  "The Secondary has confirmed no file yet.": "இரண்டாம் கணினி இதுவரை எந்தக் கோப்பையும் உறுதிசெய்யவில்லை.",
+  "This computer is not a paired Primary.": "இந்தக் கணினி இணைக்கப்பட்ட முதன்மைக் கணினி அல்ல.",
+  "the fingerprint differs": "கைரேகை வேறுபடுகிறது"
 }
