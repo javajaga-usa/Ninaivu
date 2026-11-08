@@ -395,15 +395,25 @@ def _keepers(tmp_path):
     ]
 
 
+def _new_threads(before: set[int]) -> list[str]:
+    """Names of the threads started since *before* (idents) that are still alive.
+
+    Only these count: other tests in the same process may have left threads
+    of the same names running, and they are not this test's.
+    """
+    return [t.name for t in threading.enumerate() if t.ident not in before]
+
+
 def test_the_keepers_keep_their_threads_and_schedules(tmp_path):
     shared = Supervisor()
     keepers = _keepers(tmp_path)
+    before = {t.ident for t in threading.enumerate()}
     try:
         for keeper, _, _ in keepers:
             keeper.supervisor = shared
             keeper.start()
             keeper.start()                      # a second start is no second loop
-        names = [t.name for t in threading.enumerate()]
+        names = _new_threads(before)
         rows = {r["name"]: r for r in shared.activity()}
         for _keeper, thread, when in keepers:
             assert names.count(thread) == 1
@@ -411,8 +421,7 @@ def test_the_keepers_keep_their_threads_and_schedules(tmp_path):
         for keeper, thread, _ in keepers:
             keeper.stop(timeout=5)
             assert shared.state(thread) == sup.STOPPED
-        assert not {thread for _, thread, _ in keepers} & {
-            t.name for t in threading.enumerate()}
+        assert not {thread for _, thread, _ in keepers} & set(_new_threads(before))
         # And started again after a stop, as before.
         for keeper, thread, _ in keepers:
             keeper.start()
@@ -424,12 +433,13 @@ def test_the_keepers_keep_their_threads_and_schedules(tmp_path):
 def test_a_keeper_used_by_itself_has_a_supervisor_of_its_own(tmp_path):
     keeper, thread, _ = _keepers(tmp_path)[0]
     assert keeper.supervisor is None
+    before = {t.ident for t in threading.enumerate()}
     keeper.start()
     try:
         assert keeper.supervisor is not None and keeper.supervisor.state(thread) == sup.IDLE
     finally:
         keeper.stop(timeout=5)
-    assert thread not in [t.name for t in threading.enumerate()]
+    assert thread not in _new_threads(before)
 
 
 def test_the_index_copy_stop_still_reaches_an_upload_under_way(tmp_path):
