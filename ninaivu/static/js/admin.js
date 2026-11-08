@@ -3271,11 +3271,6 @@ function wireFolderScreen() {
   });
 }
 
-/** Ask the server to open its own file manager with `item` selected.
- *
- * Only ever works when the admin console and Ninaivu's server are the same
- * machine — the server says so plainly (409) when they are not, rather than
- * pretending the click did something. */
 let uploadPoll;
 let uploadSignature = '';
 let uploadActionBusy = false;

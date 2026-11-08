@@ -1378,7 +1378,6 @@ function wireChrome() {
     && ['family', 'admin'].includes(state.user?.role));
   wireSharing();
   wireAlbums();
-  wireDuplicatesReview();
 
   document.querySelectorAll('.modal').forEach((modal) => {
     modal.addEventListener('click', (event) => {
@@ -2859,148 +2858,18 @@ async function bulk(fields) {
 
 /* -- duplicates review ---------------------------------------------------
  *
- * `/api/duplicates` already groups near-identical shots (a burst, or the same
- * photo saved twice) by perceptual hash and picks the sharpest, highest-
- * resolution one as `best` — never overriding a favourite or a rating someone
- * already gave it (see `db.best_of`). Nothing consumed that pick before this:
- * the sidebar's Duplicates view just filtered the ordinary grid to items that
- * have a `dup_group`, flat and unranked. This turns that existing judgment
- * into something a person can act on, without changing what the plain filter
- * view does for anyone who liked it as it was.
+ * The review itself is a page of its own (pages/family/duplicates.js),
+ * fetched the first time the Duplicates view is opened by somebody who may
+ * download. Anywhere else the banner is simply put away.
  */
-let duplicateGroupsCache = null;
-
-async function loadDuplicatesIfNeeded() {
+function loadDuplicatesIfNeeded() {
   const banner = $('#duplicates-banner');
   if (!banner) return;
   if (state.view !== 'duplicates' || !state.user?.can?.download) {
     banner.hidden = true;
     return;
   }
-  try {
-    const data = await api.duplicates();
-    duplicateGroupsCache = data.groups || [];
-  } catch {
-    duplicateGroupsCache = [];
-  }
-  renderDuplicatesSummary();
-}
-
-function renderDuplicatesSummary() {
-  const banner = $('#duplicates-banner');
-  if (!banner) return;
-  const groups = duplicateGroupsCache || [];
-  if (state.view !== 'duplicates' || !groups.length) {
-    banner.hidden = true;
-    return;
-  }
-  const wasted = groups.reduce((sum, g) => sum + (g.wasted || 0), 0);
-  $('#duplicates-headline').textContent =
-    `${groups.length} ${groups.length === 1 ? 'group' : 'groups'} of similar shots`
-    + (wasted ? ` · ${humanBytes(wasted)} could be freed` : '');
-  banner.hidden = false;
-}
-
-function renderDuplicateGroups() {
-  const box = $('#duplicates-groups');
-  if (!box) return;
-  const groups = duplicateGroupsCache || [];
-  box.replaceChildren();
-  if (!groups.length) {
-    const empty = document.createElement('p');
-    empty.className = 'empty-note';
-    empty.textContent = i18n.t('No duplicate groups right now.');
-    box.appendChild(empty);
-    return;
-  }
-  for (const group of groups) {
-    const wrap = document.createElement('div');
-    wrap.className = 'dup-group';
-
-    const head = document.createElement('div');
-    head.className = 'dup-group-head';
-    const info = document.createElement('span');
-    info.className = 'hint';
-    const count = group.items.length;
-    info.innerHTML = `<b>${count}</b> versions of this shot`
-      + (group.wasted_h ? ` &middot; <b>${group.wasted_h}</b> to free` : '');
-    const keepBtn = document.createElement('button');
-    keepBtn.className = 'btn ghost small';
-    keepBtn.type = 'button';
-    keepBtn.textContent = i18n.t('Keep only the best');
-    keepBtn.onclick = () => {
-      const rest = group.items.filter((i) => i.id !== group.best).map((i) => i.id);
-      if (!rest.length) return;
-      deleteSelected(rest, () => {
-        duplicateGroupsCache = (duplicateGroupsCache || [])
-          .filter((g) => g.group !== group.group);
-        renderDuplicateGroups();
-        renderDuplicatesSummary();
-      });
-    };
-    head.append(info, keepBtn);
-
-    const thumbs = document.createElement('div');
-    thumbs.className = 'dup-thumbs';
-    group.items.forEach((item, index) => {
-      const cell = document.createElement('div');
-      cell.className = 'dup-item' + (item.id === group.best ? ' best' : '');
-      const img = document.createElement('img');
-      img.src = thumbUrl(item.id, 220, item.thumb_v);
-      img.loading = 'lazy';
-      img.alt = item.name || '';
-      cell.appendChild(img);
-      if (item.id === group.best) {
-        const badge = document.createElement('span');
-        badge.className = 'dup-badge';
-        badge.textContent = i18n.t('Best');
-        cell.appendChild(badge);
-      }
-      const meta = document.createElement('span');
-      meta.className = 'dup-item-meta';
-      const dims = item.width && item.height ? `${item.width}×${item.height} · ` : '';
-      meta.textContent = `${dims}${item.size_h || ''}`;
-      cell.appendChild(meta);
-      cell.title = item.name || '';
-      cell.onclick = () => {
-        $('#duplicates-modal').hidden = true;
-        viewer.open(group.items.map((i) => i.id), index);
-      };
-      thumbs.appendChild(cell);
-    });
-
-    wrap.append(head, thumbs);
-    box.appendChild(wrap);
-  }
-}
-
-function wireDuplicatesReview() {
-  const banner = $('#duplicates-banner');
-  if (!banner) return;
-
-  $('#duplicates-review-btn')?.addEventListener('click', () => {
-    renderDuplicateGroups();
-    $('#duplicates-modal').hidden = false;
-  });
-  $('#duplicates-close')?.addEventListener('click', () => {
-    $('#duplicates-modal').hidden = true;
-  });
-  $('#duplicates-close-x')?.addEventListener('click', () => {
-    $('#duplicates-modal').hidden = true;
-  });
-  $('#duplicates-keep-all-best')?.addEventListener('click', () => {
-    const groups = duplicateGroupsCache || [];
-    const rest = groups.flatMap(
-      (g) => g.items.filter((i) => i.id !== g.best).map((i) => i.id),
-    );
-    if (!rest.length) return;
-    deleteSelected(rest, () => {
-      duplicateGroupsCache = [];
-      renderDuplicateGroups();
-      renderDuplicatesSummary();
-      $('#duplicates-modal').hidden = true;
-    });
-  });
+  openPage('duplicates').then((page) => page?.load());
 }
 
 /* -- scrubber ----------------------------------------------------------- */
@@ -4062,6 +3931,7 @@ function wireSharing() {
  * (server/modules.py).
  */
 const PAGE_MODULES = {
+  duplicates: () => import('./pages/family/duplicates.js'),
   map: () => import('./pages/family/map.js'),
   sharing: () => import('./pages/family/sharing.js'),
   upload: () => import('./pages/family/upload.js'),
@@ -4071,6 +3941,7 @@ const loadedPages = new Map();
 /** What a page may ask of the gallery around it. */
 const shell = {
   get viewer() { return viewer; },
+  deleteSelected: (ids, done) => deleteSelected(ids, done),
   reload: (options) => reload(options),
 };
 

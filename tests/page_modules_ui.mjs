@@ -59,6 +59,19 @@ ok('with its options, not an old link', await p.isVisible('#share-options')
 await p.click('#share-close');
 ok('closing it hides it', await p.isHidden('#share-modal'));
 
+ok('the duplicates review is not fetched for the ordinary gallery', pageAsked('family/duplicates.js').length === 0);
+await p.keyboard.press('Escape');          // the viewer the share came from
+await p.waitForTimeout(300);
+await press(p, '.side-item[data-view="duplicates"]');
+await p.waitForTimeout(1500);
+ok('opening Duplicates fetches its review', pageAsked('family/duplicates.js').length === 1);
+const banner = await p.$eval('#duplicates-banner', (n) => ({ hidden: n.hidden, text: n.innerText.trim() }));
+ok('and its banner is drawn or put away, never left half-done', banner.hidden || banner.text.length > 0,
+  JSON.stringify(banner));
+await press(p, '.side-item[data-view="all"]');
+await p.waitForTimeout(800);
+ok('leaving Duplicates puts the banner away', await p.$eval('#duplicates-banner', (n) => n.hidden));
+
 /* ---------- the console ---------- */
 const c = await b.newPage({ viewport: { width: 1400, height: 900 } });
 c.on('pageerror', (e) => errors.push(e.message));
