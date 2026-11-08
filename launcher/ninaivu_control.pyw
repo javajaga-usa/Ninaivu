@@ -1,10 +1,11 @@
-"""Ninaivu Control Panel — the double-click entry point.
+"""Ninaivu Control Panel from a checkout — the double-click entry point.
 
-On Windows, "Start - Ninaivu Control Panel.vbs" runs this with the .venv's
-pythonw, so no console window opens; on a Mac, "Ninaivu Control Panel.app"
-(built by "Setup Ninaivu.command") runs it with the .venv's python; on Linux,
-"Start - Ninaivu Control Panel.sh" does, and so does the menu entry that
-`sh launcher/start.sh --add-to-menu` makes.
+On Windows, launcher/"Start - Ninaivu Control Panel.vbs" runs this with the
+.venv's pythonw, so no console window opens; on Linux, launcher/"Start -
+Ninaivu Control Panel.sh" does, and so does the menu entry that
+`sh launcher/start.sh --add-to-menu` makes. Anywhere,
+``python -m ninaivu.desktop.app`` opens the same panel from a terminal. The
+portable downloads have their own one starter and do not use this.
 
 When the panel cannot open, this says why in a dialog rather than dying
 silently, which is all a pythonw process can otherwise do. That includes a
@@ -15,7 +16,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))        # the checkout
 
 TITLE = 'Ninaivu Control Panel'
 
@@ -64,7 +65,7 @@ def main():
     except ImportError:
         if sys.platform == 'darwin':
             hint = ('Install python-tk for it (brew install python-tk@3.12), or use the Python '
-                    'from python.org, then run Setup Ninaivu again.')
+                    'from python.org, then open the Control Panel again.')
         elif sys.platform.startswith('linux'):
             hint = ('Install Tk for the system\'s Python (on Ubuntu, Debian or Linux Mint: '
                     'sudo apt install python3-tk), then open the Control Panel again.')

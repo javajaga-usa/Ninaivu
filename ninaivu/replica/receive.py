@@ -284,7 +284,7 @@ class Replica:
         """Apply the Mac's family settings to this process, in memory only."""
         if not isinstance(settings, dict):
             return
-        from .publish import SETTINGS                       # noqa: PLC0415
+        from ..mugil.handover import SETTINGS               # noqa: PLC0415
         for key in SETTINGS:
             if key not in settings:
                 continue

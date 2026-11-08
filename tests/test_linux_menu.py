@@ -1,5 +1,5 @@
-"""One click on Linux: "Open Ninaivu" in the portable folder, and Ninaivu in
-the application menu and on the Desktop (ninaivu/desktop/linux_menu.py)."""
+"""One click on Linux: the portable folder's one starter, ninaivu, and Ninaivu
+in the application menu and on the Desktop (ninaivu/desktop/linux_menu.py)."""
 
 import shutil
 import subprocess
@@ -19,9 +19,10 @@ pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="Linux desktops"
 
 def _portable(folder: Path, marker: Path) -> Path:
     (folder / "app").mkdir(parents=True)
-    script = folder / "ninaivu"
+    script = folder / "app" / "ninaivu.sh"
     script.write_text(f'#!/bin/sh\nprintf "%s|%s|%s" "$0" "$PWD" "$*" > "{marker}"\n')
     script.chmod(0o755)
+    (folder / "ninaivu").write_bytes(b"\x7fELF the starter")
     return folder
 
 
@@ -47,7 +48,7 @@ def test_the_menu_entry_opens_the_folder_it_was_made_for(tmp_path, name, monkeyp
             break
         time.sleep(0.1)
     script, workdir, _ = marker.read_text().split("|")
-    assert script == str(folder / "ninaivu") and workdir == str(folder)
+    assert script == str(folder / "app" / "ninaivu.sh") and workdir == str(folder)
 
 
 def test_a_checkout_gets_ninaivu_and_its_control_panel(tmp_path, monkeypatch):
@@ -66,9 +67,9 @@ PANEL = ROOT / linux_menu.PANEL_SCRIPT
 
 
 def _checkout(folder: Path) -> Path:
-    """A checkout's top: the Control Panel script, and nothing set up yet."""
-    folder.mkdir(parents=True)
-    shutil.copyfile(PANEL, folder / PANEL.name)
+    """A checkout: the Control Panel script in launcher/, and nothing set up yet."""
+    (folder / "launcher").mkdir(parents=True)
+    shutil.copyfile(PANEL, folder / linux_menu.PANEL_SCRIPT)
     return folder
 
 
@@ -80,20 +81,20 @@ def test_the_control_panel_script_runs_the_venv_from_anywhere(tmp_path):
     venv.mkdir(parents=True)
     (venv / "python").write_text(f'#!/bin/sh\nprintf "%s|%s" "$1" "$PWD" > "{marker}"\n')
     (venv / "python").chmod(0o755)
-    subprocess.run(["sh", str(folder / PANEL.name)], check=True, cwd="/", timeout=30)
-    assert marker.read_text() == f"{folder / 'ninaivu_control.pyw'}|{folder}"
+    subprocess.run(["sh", str(folder / linux_menu.PANEL_SCRIPT)], check=True, cwd="/", timeout=30)
+    assert marker.read_text() == f"{folder / 'launcher' / 'ninaivu_control.pyw'}|{folder}"
 
 
 def test_the_control_panel_script_says_to_set_up_first(tmp_path):
     folder = _checkout(tmp_path / "Ninaivu")
-    done = subprocess.run(["sh", str(folder / PANEL.name)], cwd="/", capture_output=True, text=True,
+    done = subprocess.run(["sh", str(folder / linux_menu.PANEL_SCRIPT)], cwd="/", capture_output=True, text=True,
                           timeout=30, env={"PATH": "/usr/bin:/bin", "NINAIVU_NO_DIALOG": "1"})
     assert done.returncode == 1
     assert "not set up in this folder yet" in done.stderr and "sh launcher/start.sh" in done.stderr
 
 
 def test_the_control_panel_script_sits_beside_the_windows_one():
-    assert (ROOT / "Start - Ninaivu Control Panel.vbs").is_file()
+    assert (ROOT / "launcher" / "Start - Ninaivu Control Panel.vbs").is_file()
     assert PANEL.read_bytes().startswith(b"#!/bin/sh\n"), "LF line endings, or sh cannot run it"
     assert "ninaivu_control.pyw" in PANEL.read_text()
 
@@ -115,42 +116,34 @@ def test_removing_takes_out_only_its_own(tmp_path, monkeypatch):
     assert cache.read_text() == "[MIME Cache]\n"
 
 
-def test_open_ninaivu_runs_the_script_beside_it_from_anywhere(tmp_path):
+def test_the_starter_runs_the_script_in_app_from_anywhere(tmp_path):
     cc = shutil.which("cc")
     if not cc or not sys.platform.startswith("linux"):
         pytest.skip("needs a C compiler on Linux")
     marker = tmp_path / "marker"
     folder = _portable(tmp_path / "My Photos 'x'", marker)
-    program = folder / "Open Ninaivu"
-    subprocess.run([cc, "-O2", "-o", str(program), str(LINUX / "portable" / "open-ninaivu.c")], check=True)
+    program = folder / "ninaivu"
+    subprocess.run([cc, "-O2", "-o", str(program), str(LINUX / "portable" / "ninaivu.c")], check=True)
     subprocess.run([str(program), "a b", "c"], check=True, cwd="/", timeout=30)
-    assert marker.read_text() == f"{folder / 'ninaivu'}|{folder}|a b c"
+    assert marker.read_text() == f"{folder / 'app' / 'ninaivu.sh'}|{folder}|a b c"
 
 
-def test_the_linux_build_makes_and_checks_open_ninaivu():
+def test_the_linux_build_makes_and_checks_its_one_starter():
     build = (LINUX / "build.sh").read_text()
-    script = (LINUX / "portable" / "ninaivu").read_text()
-    assert 'cc -O2 -static -s -o "$stage/Open Ninaivu"' in build
-    assert '"$stage/Open Ninaivu" --where' in build
+    script = (LINUX / "portable" / "ninaivu.sh").read_text()
+    assert 'cc -O2 -static -s -o "$stage/ninaivu"' in build
+    assert 'install -m 0755 "$here/portable/ninaivu.sh" "$stage/app/ninaivu.sh"' in build
+    assert '"$stage/ninaivu" --where' in build
     assert "--add-to-menu) exec \"$python\" -m ninaivu.desktop.linux_menu --add" in script
+    assert not (LINUX / "portable" / "open-ninaivu.c").exists(), "one thing to double-click"
 
 
-def test_native_checkout_launcher_opens_control_panel_from_another_directory(tmp_path):
-    cc = shutil.which('cc')
-    if not cc or not sys.platform.startswith('linux'):
-        pytest.skip('needs a C compiler on Linux')
-    folder = _checkout(tmp_path / "My App 'x' 50%")
-    (folder / 'ninaivu').mkdir()  # Package directory must not be mistaken for the portable script.
-    venv = folder / '.venv/bin'
-    venv.mkdir(parents=True)
-    marker = tmp_path / 'native-marker'
-    python = venv / 'python'
-    python.write_text(f'#!/bin/sh\nprintf "%s" "$1" > "{marker}"\n')
-    python.chmod(0o755)
-    program = folder / 'Open Ninaivu'
-    subprocess.run([cc, '-O2', '-o', str(program), str(LINUX / 'portable/open-ninaivu.c')], check=True)
-    subprocess.run([str(program)], check=True, cwd='/', timeout=30)
-    assert marker.read_text() == str(folder / 'ninaivu_control.pyw')
+def test_a_folder_from_before_4_0_still_gets_its_menu_entry(tmp_path):
+    folder = tmp_path / "Ninaivu-3.7.0-linux-x64-portable"
+    (folder / "app").mkdir(parents=True)
+    (folder / "ninaivu").write_text("#!/bin/sh\n")
+    made = dict(linux_menu.launchers(folder))
+    assert str(folder / "ninaivu") in made[linux_menu.PORTABLE_ID]
 
 
 def test_linux_checkout_default_and_existing_library_locations(tmp_path):

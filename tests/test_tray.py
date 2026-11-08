@@ -151,7 +151,7 @@ def test_the_tray_says_what_it_needs_when_pystray_is_missing(monkeypatch, capsys
             raise ImportError("no pystray")
         return real(name, *a, **k)
     monkeypatch.setattr(builtins, "__import__", no_pystray)
-    assert tray_mod.main([]) == 2
+    assert tray_mod.run_alone() == 2
     assert "requirements-desktop.txt" in capsys.readouterr().err
 
 

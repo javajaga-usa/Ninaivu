@@ -21,11 +21,12 @@ you ask for yourself that reaches outside it:
 To start
   1. Extract the whole zip somewhere you can write to (your Documents, or a
      USB drive). Right-click the zip and choose Extract All.
-  2. Open Ninaivu.exe in the folder it makes. The Ninaivu Control Panel opens;
-     press Start.
+  2. Open Ninaivu.exe in the folder it makes. The Ninaivu Control Panel opens and starts
+     Ninaivu, and its icon goes in the tray. Closing the window puts it
+     there; Ninaivu keeps running. Opening Ninaivu.exe again brings it back.
 
 Where things are
-  Ninaivu.exe     opens the Control Panel.
+  Ninaivu.exe     the one thing to open: the Control Panel, and Ninaivu started.
   app\            the program and its private Python.
   data\           what Ninaivu keeps, made the first time it opens: the
                   index of your library, settings, people, thumbnails;

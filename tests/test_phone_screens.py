@@ -7,6 +7,7 @@ stylesheets. The browser checks cannot give a page an iPhone's notch.
 
 from __future__ import annotations
 
+from js_sources import family_app
 import re
 from pathlib import Path
 
@@ -62,7 +63,7 @@ def test_timeline_rail_is_not_left_up_by_a_tap():
     # there is a real pointer to hover with.
     assert ".content:hover .scrubber, .scrubber.active" not in css
     assert "@media (hover: hover) { .content:hover .scrubber { opacity: 1; } }" in css
-    app = (STATIC / "js" / "app.js").read_text(encoding="utf-8")
+    app = family_app()
     assert "classList.add('scrolling')" in app
 
 

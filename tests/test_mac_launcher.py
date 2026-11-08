@@ -1,5 +1,8 @@
-"""The macOS double-click launchers: Ninaivu.command, "Setup Ninaivu.command",
-and the Python finder and installer they share, launcher/install-python-mac.sh.
+"""The macOS checkout launcher, launcher/Ninaivu.command, and the Python
+finder and installer it shares with launcher/start.sh,
+launcher/install-python-mac.sh. ("Setup Ninaivu.command" was retired in 4.0:
+a checkout starts with python -m ninaivu, and the portable download has
+Ninaivu.app.)
 
 Finder behaviour cannot be exercised from here, so what these tests hold is
 everything that *is* mechanical: the files exist and are executable, the shell
@@ -14,7 +17,6 @@ window on the screen of whoever runs it.
 """
 
 import os
-import plistlib
 import shutil
 import subprocess
 import sys
@@ -23,8 +25,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-LAUNCHER = ROOT / "Ninaivu.command"
-INSTALLER = ROOT / "Setup Ninaivu.command"
+LAUNCHER = ROOT / "launcher" / "Ninaivu.command"
 HELPER = ROOT / "launcher" / "install-python-mac.sh"
 LSREGISTER = ("/System/Library/Frameworks/CoreServices.framework/Frameworks/"
               "LaunchServices.framework/Support/lsregister")
@@ -78,8 +79,8 @@ def _stage(tmp_path: Path, *files: Path) -> Path:
     (stage / "launcher").mkdir(parents=True)
     for path in files:
         text = path.read_text(encoding="utf-8").replace(LSREGISTER, "true")
-        (stage / path.name).write_text(text, encoding="utf-8")
-        (stage / path.name).chmod(0o755)
+        (stage / "launcher" / path.name).write_text(text, encoding="utf-8")
+        (stage / "launcher" / path.name).chmod(0o755)
     shutil.copy(HELPER, stage / "launcher" / HELPER.name)
     (stage / ".venv").mkdir()
     _tool(stage / ".venv" / "bin", "python", f'exec "{sys.executable}" "$@"\n')
@@ -90,72 +91,44 @@ def _stage(tmp_path: Path, *files: Path) -> Path:
 # The files themselves
 # ---------------------------------------------------------------------------
 
-@pytest.mark.parametrize("path", [LAUNCHER, INSTALLER, HELPER])
+@pytest.mark.parametrize("path", [LAUNCHER, HELPER])
 def test_the_launchers_are_shipped(path):
     assert path.is_file(), f"{path.name} is missing"
 
 
-@pytest.mark.parametrize("path", [LAUNCHER, INSTALLER])
+@pytest.mark.parametrize("path", [LAUNCHER])
 @pytest.mark.skipif(os.name == "nt", reason="Windows has no executable bit")
 def test_they_are_executable(path):
     assert path.stat().st_mode & 0o111, (
         f"{path.name} is not executable, so double-clicking it does nothing")
 
 
-@pytest.mark.parametrize("path", [LAUNCHER, INSTALLER])
+@pytest.mark.parametrize("path", [LAUNCHER])
 def test_they_start_with_a_shebang(path):
     assert path.read_text(encoding="utf-8").startswith("#!/bin/bash")
 
 
-@pytest.mark.parametrize("path", [LAUNCHER, INSTALLER, HELPER, ROOT / "launcher" / "start.sh"])
+@pytest.mark.parametrize("path", [LAUNCHER, HELPER, ROOT / "launcher" / "start.sh"])
 @pytest.mark.skipif(os.name == "nt", reason="bash on Windows is WSL's, which may have no Linux to run")
 def test_the_shell_parses(path):
     result = subprocess.run(["bash", "-n", str(path)], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
 
 
-@pytest.mark.parametrize("path", [LAUNCHER, INSTALLER, HELPER])
+@pytest.mark.parametrize("path", [LAUNCHER, HELPER])
 def test_no_carriage_returns(path):
     """A CR on the shebang line and macOS looks for an interpreter called
     "bash\\r"; .gitattributes keeps them LF, and this says so if it did not."""
     assert b"\r" not in path.read_bytes()
 
 
-def test_the_installer_clears_the_quarantine_flag():
-    """Without this the apps it builds are blocked by Gatekeeper on arrival."""
-    assert "com.apple.quarantine" in INSTALLER.read_text(encoding="utf-8")
-
-
-def test_the_installer_builds_the_apps_locally():
-    """An app created on the Mac is not quarantined; a downloaded one is."""
-    text = INSTALLER.read_text(encoding="utf-8")
-    assert "Contents/MacOS" in text and "Info.plist" in text
-    assert "$HOME/Applications" in text
-    assert "Ninaivu Control Panel" in text and "ninaivu_control.pyw" in text
-    assert "installers/macos/ninaivu.iconset" in text, "Ninaivu's own icon, not a drawn one"
-
-
-def test_the_generated_plist_is_valid():
-    """Extract the heredoc the installer writes and parse it as Finder would."""
-    text = INSTALLER.read_text(encoding="utf-8")
-    start = text.index("<?xml", text.index("Info.plist"))
-    end = text.index("</plist>", start) + len("</plist>")
-    plist = (text[start:end]
-             .replace("$APP_NAME", "Ninaivu")
-             .replace("$BUNDLE_ID", "local.ninaivu.launcher"))
-    parsed = plistlib.loads(plist.encode())
-    assert parsed["CFBundleExecutable"] == "Ninaivu"
-    assert parsed["CFBundlePackageType"] == "APPL"
-    assert parsed["CFBundleIdentifier"]
-
-
-@pytest.mark.parametrize("path", [LAUNCHER, INSTALLER, HELPER, ROOT / "launcher" / "start.sh"])
+@pytest.mark.parametrize("path", [LAUNCHER, HELPER, ROOT / "launcher" / "start.sh"])
 def test_python_is_never_asked_of_the_command_line_tools(path):
     """They bring Python 3.9, which Ninaivu refuses (it needs 3.12)."""
     assert "xcode-select" not in path.read_text(encoding="utf-8")
 
 
-@pytest.mark.parametrize("path", [LAUNCHER, INSTALLER, ROOT / "launcher" / "start.sh"])
+@pytest.mark.parametrize("path", [LAUNCHER, ROOT / "launcher" / "start.sh"])
 def test_they_share_one_way_of_finding_python(path):
     assert "install-python-mac.sh" in path.read_text(encoding="utf-8")
 
@@ -185,7 +158,7 @@ def test_a_flag_is_not_taken_for_the_library_folder(tmp_path):
     (stage / "launcher" / "start.py").write_text("import sys; print('ARGS', sys.argv[1:])\n")
 
     result = subprocess.run(
-        ["bash", str(stage / LAUNCHER.name), "--rescan"],
+        ["bash", str(stage / "launcher" / LAUNCHER.name), "--rescan"],
         capture_output=True, text=True, env={"HOME": str(home), "PATH": "/usr/bin:/bin"},
         timeout=60)
 
@@ -205,7 +178,7 @@ def test_the_library_is_remembered_in_the_state_folder_it_is_given(tmp_path):
     stage = _stage(tmp_path, LAUNCHER)
     (stage / "launcher" / "start.py").write_text("print('STARTED')\n")
     result = subprocess.run(
-        ["bash", str(stage / LAUNCHER.name), str(library)],
+        ["bash", str(stage / "launcher" / LAUNCHER.name), str(library)],
         capture_output=True, text=True, timeout=60,
         env={"HOME": str(home), "PATH": "/usr/bin:/bin", "NINAIVU_STATE_DIR": str(state)})
     assert "STARTED" in result.stdout, result.stdout + result.stderr
@@ -225,7 +198,7 @@ def test_a_folder_that_no_longer_exists_is_not_used(tmp_path):
     # run against a missing folder.
     path, asked = _no_dialogs(tmp_path)
     result = subprocess.run(
-        ["bash", str(stage / LAUNCHER.name)],
+        ["bash", str(stage / "launcher" / LAUNCHER.name)],
         capture_output=True, text=True, env={"HOME": str(home), "PATH": path},
         input="", timeout=60)
     assert "SHOULD NOT RUN" not in result.stdout
@@ -245,144 +218,12 @@ def test_the_photos_library_package_is_refused(tmp_path):
     (stage / "launcher" / "start.py").write_text("print('SHOULD NOT RUN')\n")
     path, asked = _no_dialogs(tmp_path)
     result = subprocess.run(
-        ["bash", str(stage / LAUNCHER.name)],
+        ["bash", str(stage / "launcher" / LAUNCHER.name)],
         capture_output=True, text=True, env={"HOME": str(home), "PATH": path},
         input="", timeout=60)
     assert "SHOULD NOT RUN" not in result.stdout
     assert "photoslibrary" in result.stdout
     assert "Photos library" in asked.read_text(), "the refusal was never shown"
-
-
-# ---------------------------------------------------------------------------
-# Setup Ninaivu.command
-# ---------------------------------------------------------------------------
-
-@runs_the_launcher
-def test_apps_only_builds_both_apps_and_installs_nothing(tmp_path):
-    """`--apps-only` makes Ninaivu and Ninaivu Control Panel, and neither looks
-    for Python nor runs start.py. The panel's app opens the panel itself, not
-    a Terminal."""
-    home = tmp_path / "home"
-    home.mkdir()
-    stage = _stage(tmp_path, INSTALLER)
-    (stage / "launcher" / "start.py").write_text("raise SystemExit('start.py ran')\n")
-    path, asked = _no_dialogs(tmp_path)
-
-    system_apps = tmp_path / "Applications"      # stands in for /Applications
-    system_apps.mkdir()
-    result = subprocess.run(
-        ["bash", str(stage / INSTALLER.name), "--apps-only"],
-        capture_output=True, text=True, timeout=120,
-        env={"HOME": str(home), "PATH": path, "NINAIVU_SYSTEM_APPS_DIR": str(system_apps)})
-
-    output = result.stdout + result.stderr
-    assert result.returncode == 0, output
-    assert "start.py ran" not in output
-    assert not asked.exists(), "it asked something while only rebuilding the apps"
-    apps = home / "Applications"
-    identifiers = set()
-    for name in ("Ninaivu", "Ninaivu Control Panel"):
-        contents = apps / f"{name}.app" / "Contents"
-        plist = plistlib.loads((contents / "Info.plist").read_bytes())
-        assert plist["CFBundleExecutable"] == name
-        identifiers.add(plist["CFBundleIdentifier"])
-        assert (contents / "MacOS" / name).stat().st_mode & 0o111, name
-    assert len(identifiers) == 2, "two apps sharing an identifier are one app to macOS"
-    assert "org.ninaivu.app" not in identifiers, "the installer's app has that one"
-    panel = (apps / "Ninaivu Control Panel.app" / "Contents" / "MacOS"
-             / "Ninaivu Control Panel").read_text(encoding="utf-8")
-    assert f"here='{stage}'" in panel
-    assert '"$here/.venv/bin/python" "$here/ninaivu_control.pyw"' in panel
-    assert "Terminal" not in panel
-    launcher = (apps / "Ninaivu.app" / "Contents" / "MacOS" / "Ninaivu").read_text(encoding="utf-8")
-    assert f"here='{stage}'" in launcher and '"$here/Ninaivu.command"' in launcher
-    # The same panel beside the setup script and in the main Applications folder.
-    for folder in (stage, system_apps):
-        copy = folder / "Ninaivu Control Panel.app" / "Contents" / "MacOS" / "Ninaivu Control Panel"
-        assert copy.read_text(encoding="utf-8") == panel, folder
-        assert copy.stat().st_mode & 0o111
-    assert not (system_apps / "Ninaivu.app").exists(), "only the panel is copied"
-
-
-@runs_the_launcher
-def test_the_apps_work_from_a_folder_with_quotes_and_dollars_in_its_name(tmp_path):
-    """Audit 2026-10-06 A-55: the folder's path went into the two launchers
-    bare, so a " or a $ in it broke them, and a backtick ran a command."""
-    awkward = tmp_path / "Bob's \"photos\" $HOME `touch pwned`"
-    awkward.mkdir()
-    home = awkward / "home"
-    home.mkdir()
-    stage = _stage(awkward, INSTALLER)
-    (stage / "ninaivu_control.pyw").write_text("import os; print('panel ran in', os.getcwd())\n")
-    path, _asked = _no_dialogs(tmp_path)
-    tools = tmp_path / "open-stub"
-    _tool(tools, "open", 'printf "%s\\n" "$@"\n')
-    env = {"HOME": str(home), "PATH": f"{tools}:{path}",
-           "NINAIVU_SYSTEM_APPS_DIR": str(tmp_path / "none")}
-    done = subprocess.run(["bash", str(stage / INSTALLER.name), "--apps-only"],
-                          capture_output=True, text=True, timeout=120, env=env, cwd=tmp_path)
-    assert done.returncode == 0, done.stdout + done.stderr
-    apps = home / "Applications"
-    panel = subprocess.run(
-        ["bash", str(apps / "Ninaivu Control Panel.app/Contents/MacOS/Ninaivu Control Panel")],
-        capture_output=True, text=True, timeout=60, env=env, cwd=tmp_path)
-    assert panel.stdout.strip() == f"panel ran in {stage}", panel.stderr
-    opened = subprocess.run(["bash", str(apps / "Ninaivu.app/Contents/MacOS/Ninaivu")],
-                            capture_output=True, text=True, timeout=60, env=env, cwd=tmp_path)
-    assert opened.stdout.splitlines() == ["-a", "Terminal", f"{stage}/Ninaivu.command"]
-    assert not (tmp_path / "pwned").exists()
-
-
-@runs_the_launcher
-def test_a_folder_macos_keeps_the_panel_out_of_is_explained(tmp_path):
-    """Opened from Finder, an app macOS has not let into Documents could not
-    read the folder, and Python died on pyvenv.cfg with nothing on screen.
-    The panel says what to allow, opens the setting, and starts nothing."""
-    home = tmp_path / "home"
-    home.mkdir()
-    stage = _stage(tmp_path, INSTALLER)
-    (stage / "ninaivu_control.pyw").write_text("print('panel ran')\n")
-    path, asked = _no_dialogs(tmp_path)
-    tools = tmp_path / "blocked"
-    opened = tmp_path / "opened.log"
-    _tool(tools, "ls", "exit 1\n")                 # what a denied folder looks like
-    _tool(tools, "open", f'printf "%s\\n" "$@" >> "{opened}"\n')
-    env = {"HOME": str(home), "PATH": path, "NINAIVU_SYSTEM_APPS_DIR": str(tmp_path / "none")}
-    done = subprocess.run(["bash", str(stage / INSTALLER.name), "--apps-only"],
-                          capture_output=True, text=True, timeout=120, env=env, cwd=tmp_path)
-    assert done.returncode == 0, done.stdout + done.stderr
-    panel = subprocess.run(
-        ["bash", str(home / "Applications/Ninaivu Control Panel.app/Contents/MacOS/Ninaivu Control Panel")],
-        capture_output=True, text=True, timeout=60, cwd=tmp_path,
-        env={**env, "PATH": f"{tools}:{path}"})
-    assert panel.returncode == 1
-    assert "panel ran" not in panel.stdout
-    assert "Files & Folders" in asked.read_text()
-    assert "Privacy_FilesAndFolders" in opened.read_text()
-
-
-@runs_the_launcher
-@pytest.mark.skipif(hasattr(os, "geteuid") and os.geteuid() == 0,
-                    reason="root may write to a read-only folder")
-def test_a_main_applications_folder_it_cannot_write_is_left_alone(tmp_path):
-    home = tmp_path / "home"
-    home.mkdir()
-    stage = _stage(tmp_path, INSTALLER)
-    path, _asked = _no_dialogs(tmp_path)
-    locked = tmp_path / "Applications"
-    locked.mkdir()
-    locked.chmod(0o555)
-    try:
-        result = subprocess.run(
-            ["bash", str(stage / INSTALLER.name), "--apps-only"],
-            capture_output=True, text=True, timeout=120,
-            env={"HOME": str(home), "PATH": path, "NINAIVU_SYSTEM_APPS_DIR": str(locked)})
-    finally:
-        locked.chmod(0o755)
-    assert result.returncode == 0, result.stdout + result.stderr
-    assert "cannot write there" in result.stdout
-    assert not (locked / "Ninaivu Control Panel.app").exists()
-    assert (home / "Applications" / "Ninaivu Control Panel.app").exists()
 
 
 # ---------------------------------------------------------------------------

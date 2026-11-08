@@ -1198,19 +1198,18 @@ class Config:
     #: The most items one gallery request may ask for.
     max_page_size: int = 1000
 
-    # Proposal F: the Pi as a read-only replica (ninaivu/replica/).
-    #: On the Mac: the folder the hand-over for the Pi is written to (the
-    #: Pi's share, or a folder a copy job carries there). Empty: none.
-    replica_dir: str = ""
-    #: On the Mac: at most how often a changed library is handed over.
-    replica_every_minutes: float = 30.0
-    #: On the Pi, from the command line: the hand-over folder this process
-    #: serves a read-only copy from (``--replica-of``). Empty: not a replica.
+    # The family's read-only view served from a hand-over (ninaivu/replica/):
+    # on the Secondary, from what the Primary sent (mugil/handover.py). The
+    # Pi's own hand-over folder (``replica_dir``, ``replica_every_minutes``)
+    # was retired in 4.0; a config.json that still names them loads as it
+    # is, the two keys passed over.
+    #: From the command line: the hand-over folder this process serves a
+    #: read-only copy from (``--replica-of``). Empty: not a replica.
     replica_from: str = setting("", runtime=True)
-    #: On the Pi: the Mac mini's family app address, to send people to while
-    #: it is awake (``--replica-primary``).
+    #: The Primary's family app address, to send people to while it is
+    #: awake (``--replica-primary``).
     replica_primary_url: str = setting("", runtime=True)
-    #: On the Pi: the Mac mini's network (MAC) address, to wake it with
+    #: The Primary's network (MAC) address, to wake it with
     #: (``--replica-wake``).
     replica_wake_mac: str = setting("", runtime=True)
     #: The index file, when it is not ``index.db`` in the state folder: the

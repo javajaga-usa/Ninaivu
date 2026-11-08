@@ -4,6 +4,7 @@ tests/sidebar_first_login_ui.mjs."""
 
 from __future__ import annotations
 
+from js_sources import console as console_js, family_app
 import re
 from pathlib import Path
 
@@ -35,7 +36,7 @@ def test_an_idle_connection_closed_by_its_timeout_is_logged_as_debug(monkeypatch
 def test_a_temporary_password_is_drawn_from_a_cryptographic_generator():
     """Two words of twelve and a two-digit number from Math.random was 12,816
     passwords in all."""
-    admin = (JS / "admin.js").read_text(encoding="utf-8")
+    admin = console_js()
     body = admin[admin.index("function randomPassword()"):]
     body = body[:body.index("\n}\n")]
     assert "Math.random" not in body
@@ -56,7 +57,7 @@ def test_the_unused_people_panel_is_gone():
 # --- the family app speaks the reader's language ----------------------------------------
 
 def test_the_family_app_toasts_and_titles_are_translated():
-    app = (JS / "app.js").read_text(encoding="utf-8")
+    app = family_app()
     english = [
         r"toast\(`\$\{scan\.added", r"`Updated \$\{ids\.length\} item", r"`Share Album: ",
         r"`Can’t reach Ninaivu at \$\{", r"`Now visible to \$\{", r"`Remove \$\{label\} filter`",

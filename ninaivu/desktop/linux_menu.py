@@ -2,11 +2,11 @@
 
 A Mac has Ninaivu.app and Windows has Ninaivu.exe: a double-click. On Linux a
 file manager opens a shell script in a text editor rather than running it, so
-the portable folder carries "Open Ninaivu", a small program
-(installers/linux/portable/open-ninaivu.c), and a checkout carries "Start -
-Ninaivu Control Panel.sh", which Linux Mint's Nemo offers to Run. A desktop
-entry cannot do it from inside the folder: GLib leaves ``%k`` (the entry's
-own path) empty, so it cannot find the folder it is in.
+the portable folder's one starter, ``ninaivu``, is a small program
+(installers/linux/portable/ninaivu.c), and a checkout carries
+launcher/"Start - Ninaivu Control Panel.sh". A desktop entry cannot do it
+from inside the folder: GLib leaves ``%k`` (the entry's own path) empty, so it
+cannot find the folder it is in.
 
 This writes the same launcher with the folder's own paths into the
 application menu, ``~/.local/share/applications``, and onto the Desktop,
@@ -18,11 +18,11 @@ marked as trusted so it opens with one click, with Ninaivu's icon:
     python3 ninaivu/desktop/linux_menu.py --remove
 
 From a portable folder there is one entry, *Ninaivu*, which opens the
-Control Panel. From a checkout there are two: *Ninaivu* and *Ninaivu Control Panel*. Both open
-the app without a terminal after "Setup Ninaivu.sh" has prepared its Python. Each
-runs "Start - Ninaivu Control Panel.sh" at the top of the checkout (the .venv
-that made, or a message saying to run start.sh first). Moving the folder
-needs ``--add-to-menu`` again.
+Control Panel. From a checkout there are two: *Ninaivu* and *Ninaivu Control
+Panel*. Both open the app without a terminal once ``sh launcher/start.sh``
+has prepared its Python: each runs launcher/"Start - Ninaivu Control
+Panel.sh" (with that .venv, or a message saying to run start.sh first).
+Moving the folder needs ``--add-to-menu`` again.
 
 Standard library only: a checkout runs it with the system's Python, before
 anything is installed.
@@ -45,7 +45,7 @@ CHECKOUT_ID = "local.ninaivu.checkout"
 PANEL_ID = "local.ninaivu.control-panel"
 ICON_NAME = "ninaivu"
 #: A checkout's double-click for the Control Panel, at its top.
-PANEL_SCRIPT = "Start - Ninaivu Control Panel.sh"
+PANEL_SCRIPT = "launcher/Start - Ninaivu Control Panel.sh"
 
 HERE = Path(__file__).resolve().parent
 
@@ -120,15 +120,24 @@ def icon_source(root: Path) -> Path | None:
     return None
 
 
+def portable_script(root: Path) -> Path:
+    """The script a portable folder's starter runs: app/ninaivu.sh from 4.0,
+    the ninaivu script at the top before."""
+    inside = root / "app" / "ninaivu.sh"
+    return inside if inside.is_file() else root / "ninaivu"
+
+
 def launchers(root: Path) -> list[tuple[str, str]]:
     """(file id, text) of each launcher for the folder at *root*."""
     if (root / "ninaivu").is_file() and (root / "app").is_dir():
         return [(PORTABLE_ID, entry(
             "Ninaivu", "Your family's photographs: the Ninaivu Control Panel",
-            # By way of sh, whose path has nothing to quote: GLib looks for the
-            # program before it reads %% back as %, and a folder with a % in
-            # its name ("Photos 100%") was "not found".
-            ["sh", str(root / "ninaivu")], workdir=root))]
+            # The script the starter runs, by way of sh, whose path has
+            # nothing to quote: GLib looks for the program before it reads %%
+            # back as %, and a folder with a % in its name ("Photos 100%")
+            # was "not found". A folder from before 4.0 has the script itself
+            # at the top.
+            ["sh", str(portable_script(root))], workdir=root))]
     if (root / "launcher" / "start.sh").is_file():
         return [
             (CHECKOUT_ID, entry(

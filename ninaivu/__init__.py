@@ -290,10 +290,6 @@ class Services:
         self.mirror = Mirror(cfg, lambda: db.connect(cfg.db_path),
                              hold=lambda: self.workload.hold("upload"))
         self.mirror.scanner = self.scanner
-        # The hand-over to the Pi, which serves a read-only copy of the
-        # library while this computer sleeps. See ninaivu/replica/.
-        from .replica.publish import Publisher                  # noqa: PLC0415
-        self.replica_publisher = Publisher(cfg, hold=lambda: self.workload.hold("upload"))
         # Two computers: the Primary sending its originals to the Secondary.
         # See ninaivu/mugil/.
         from .mugil.courier import Courier                      # noqa: PLC0415
@@ -436,6 +432,12 @@ class Services:
         from .utils.resources import budget
         self.power = PowerPolicy(profile=budget()['mode'])
         self.guardian = ArchiveGuardian(is_scanning)
+        # One supervisor for the background loops (server/supervisor.py),
+        # handed to each keeper that has moved onto it.
+        from .server.supervisor import Supervisor                 # noqa: PLC0415
+        self.supervisor = Supervisor(self.scanner)
+        for keeper in (self.digest, self.library_drives, self.index_copy, self.restore_tests):
+            keeper.supervisor = self.supervisor
         self.engine = None
         self._ai_mod = ai_mod
         self._started = False
@@ -694,7 +696,6 @@ class Services:
         self.restore_tests.start()
         self.index_copy.start()
         self.mirror.keep()
-        self.replica_publisher.keep()
         self.mugil_courier.keep()
         self.mugil_display.keep()
         self.mugil_handover.keep()
@@ -786,17 +787,7 @@ class Services:
 
         # Kept, so whoever must know start-up is over (the tests, before they
         # stop the scan it may start) can wait for it.
-        # And then once a day: a server that stays up for months never
-        # reached start-up again, and the bin policy the console showed as
-        # in force was never applied.
-        self._bin_stop = threading.Event()
-
-        def sweep_daily() -> None:
-            while not self._bin_stop.wait(24 * 3600):
-                self._sweep_the_bin()
-                self._tidy_records()
-
-        threading.Thread(target=sweep_daily, name="bin-sweep", daemon=True).start()
+        self._keep_the_bin_swept()
         self.boot_thread = threading.Thread(target=boot, name="ninaivu-boot", daemon=True)
         self.boot_thread.start()
 
@@ -1149,6 +1140,23 @@ class Services:
         except Exception:                                    # noqa: BLE001
             logging.getLogger(__name__).exception(
                 "could not carry on the interrupted video compressions")
+
+    def _keep_the_bin_swept(self) -> None:
+        """The bin swept and the records tidied once a day, after start-up's.
+
+        A server that stays up for months never reached start-up again, and
+        the bin policy the console showed as in force was never applied.
+        """
+        from .server.supervisor import INDEX_WRITE, Job, every   # noqa: PLC0415
+
+        def sweep() -> None:
+            self._sweep_the_bin()
+            self._tidy_records()
+
+        self.supervisor.add(Job("bin-sweep", sweep, every(24 * 3600),
+                                claims={INDEX_WRITE},
+                                log=logging.getLogger(__name__),
+                                failure="could not sweep the recycle bin"))
 
     def _sweep_the_bin(self) -> None:
         """Erase what the household said it was done with.
@@ -1576,7 +1584,6 @@ class Services:
         if getattr(self, "tv_album", None) is not None:
             attempt("the TV album", self.tv_album.close)
         for name, label in (("mirror", "the second copy"), ("offsite", "the off-site copy"),
-                            ("replica_publisher", "the hand-over to the Pi"),
                             ("mugil_courier", "sending the originals"),
                             ("mugil_beacon", "answering the Primary"),
                             ("mugil_waker", "waking the Primary"),
@@ -1587,6 +1594,7 @@ class Services:
                             ("mugil_rebuild", "rebuilding the library"),
                             ("mugil_bring_in", "bringing in the Secondary's files"),
                             ("mugil_survey", "looking for the Secondary's own files"),
+                            ("mugil_topology", "the census and the proof"),
                             ("mugil_adopter", "checking the copy made by hand"),
                             ("repairer", "the repair"), ("xmp", "the sidecars"),
                             ("xmp_reader", "reading the sidecars"),
@@ -1610,8 +1618,15 @@ class Services:
         if engine is not None and callable(getattr(engine, "close", None)):
             # The on-device engine's search model has a host of its own.
             attempt("the search model host", engine.close)
-        if getattr(self, "_bin_stop", None) is not None:
-            self._bin_stop.set()
+        if getattr(self, "supervisor", None) is not None:
+            # Whatever is left on it (the daily bin sweep), within what is
+            # left of the budget; the keepers above stopped their own jobs.
+            def stop_the_rest() -> None:
+                left = self.supervisor.stop(timeout=max(0.0, deadline - time.monotonic()))
+                if left:
+                    raise RuntimeError("still running: " + ", ".join(left))
+
+            attempt("the background jobs", stop_the_rest)
         attempt("the power policy", self.power.stop)
         settle_late()
         # Its stop waits only so long for the file in hand; a scan still

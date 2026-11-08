@@ -134,10 +134,11 @@ def occasion_inputs(conn: sqlite3.Connection, root: str) -> str:
     return f"{row[0]}:{row[1]}:{row[2]}"
 
 
-def list_occasions(conn: sqlite3.Connection, roots: Sequence[str] | str, *,
+def list_occasions(conn: sqlite3.Connection, roots: Sequence[str] | str | None = None, *,
                 viewer_id: int = 0, max_visibility: int = 1,
                 scope: str | None = None,
-                limit: int = 200, with_place: bool = True) -> list[dict[str, Any]]:
+                limit: int = 200, with_place: bool = True,
+                gate: Any = None) -> list[dict[str, Any]]:
     """Auto-albums this viewer may see, newest occasion first.
 
     ``with_place=False`` (a guest) gives each occasion its dates for a title
@@ -147,15 +148,22 @@ def list_occasions(conn: sqlite3.Connection, roots: Sequence[str] | str, *,
     what *this* viewer can actually open. They differ for a guest scoped to
     one folder, and showing the stored number would advertise the rest of the
     library.
+
+    *gate*, a ``server.visibility.Viewer``, is the caller's limits when given.
     """
-    roots_sql, roots_params = roots_clause("a", roots)
-    scope_sql, scope_params = scope_clause("a", scope)
-    guard = (f"{roots_sql} AND a.trashed=0 AND a.nsfw=0 AND "
-             + visibility_clause("a", max_visibility)
-             + " AND a.occasion_id IS NOT NULL")
-    if scope_sql:
-        guard += " AND " + scope_sql
-    params = (*roots_params, int(max_visibility), *scope_params, int(limit))
+    if gate is not None:
+        gate_sql, gate_params = gate.sql("a")
+        guard = f"{gate_sql} AND a.trashed=0 AND a.nsfw=0 AND a.occasion_id IS NOT NULL"
+        params = (*gate_params, int(limit))
+    else:
+        roots_sql, roots_params = roots_clause("a", roots if roots is not None else [])
+        scope_sql, scope_params = scope_clause("a", scope)
+        guard = (f"{roots_sql} AND a.trashed=0 AND a.nsfw=0 AND "
+                 + visibility_clause("a", max_visibility)
+                 + " AND a.occasion_id IS NOT NULL")
+        if scope_sql:
+            guard += " AND " + scope_sql
+        params = (*roots_params, int(max_visibility), *scope_params, int(limit))
     def grouped() -> list[dict[str, Any]]:
         return [dict(r) for r in conn.execute(
             f"SELECT o.id, o.key, o.title, o.place, o.started_at, o.ended_at, "

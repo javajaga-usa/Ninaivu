@@ -28,10 +28,10 @@ them along. Your photographs are not copied into it: they stay where they are.
 ## Windows
 
 Right-click the zip and choose **Extract All**, then open **Ninaivu.exe** in
-the folder it makes. The Control Panel opens: Start, Stop and Restart, the
-addresses to open, the computer's readings and the log, and *Start Ninaivu
-when I sign in*. The small menu in the system tray is there too, for anyone
-who prefers it.
+the folder it makes. The Control Panel opens and starts Ninaivu: Stop and
+Restart, the addresses to open, the computer's readings and the log, and
+*Start Ninaivu when I sign in*. Closing the window puts it in the system
+tray; Ninaivu keeps running, and a click on its icon brings the window back.
 
 If Ninaivu.exe is not signed (the release notes say), Windows SmartScreen
 says *Windows protected your PC*: choose **More info → Run anyway**.
@@ -50,9 +50,10 @@ opened it from a temporary copy, open Terminal, type
 `xattr -dr com.apple.quarantine ` (with the space), drag the Ninaivu folder
 onto the window, press Return and open it again.
 
-Opening **Ninaivu** opens the Control Panel: Start, Stop and Restart, the
-addresses to open, the computer's readings and the log, and *Start Ninaivu
-when I sign in*. The menu-bar tray is there too, for anyone who prefers it.
+Opening **Ninaivu** opens the Control Panel and starts Ninaivu: Stop and
+Restart, the addresses to open, the computer's readings and the log, and
+*Start Ninaivu when I sign in*. Closing the window puts it in the menu bar;
+Ninaivu keeps running, and its icon, or the Dock's, brings the window back.
 
 ## Linux
 
@@ -65,8 +66,9 @@ cd Ninaivu-<version>-linux-x64-portable
 ```
 
 No root is needed, and the machine needs no Python: the folder carries its
-own, with every package Ninaivu uses, and downloads nothing. `./ninaivu`
-opens the Control Panel. On a machine with no desktop (a server, or over
+own, with every package Ninaivu uses, and downloads nothing. `ninaivu` is
+the one thing in the folder to open, by a double-click too: it opens the
+Control Panel and starts Ninaivu. On a machine with no desktop (a server, or over
 ssh), `./ninaivu --server ~/Pictures` runs Ninaivu in that terminal with
 `~/Pictures` as the library; to have it start with the computer, see "The
 Linux system service" in the technical administrator guide.

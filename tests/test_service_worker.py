@@ -7,6 +7,7 @@ tests are not about offline behaviour at all — they are about what the worker
 is forbidden from storing.
 """
 
+from js_sources import console as console_js, family_app
 import re
 from pathlib import Path
 
@@ -67,7 +68,7 @@ def test_the_console_gets_only_the_cache_free_worker(scanned):
 def test_the_console_registers_its_worker():
     """An admin opening the console with the server down is told "Ninaivu is
     Offline", as family members are, rather than shown the browser's error."""
-    admin_js = (SW.parent / "js" / "admin.js").read_text(encoding="utf-8")
+    admin_js = console_js()
     assert "register('/sw.js?console=1').catch(dropStaleWorkers)" in admin_js
     # The one unregister is the worker the browser could not fetch again.
     assert admin_js.count("unregister()") == 1
@@ -147,7 +148,7 @@ def test_signing_out_clears_everything(source):
     """A shared tablet passes between people. What one person cached must not
     outlive their session."""
     assert "ninaivu:forget" in source
-    app_js = (SW.parent / "js" / "app.js").read_text(encoding="utf-8")
+    app_js = family_app()
     assert "forgetCachedShell" in app_js
     assert app_js.count("forgetCachedShell()") >= 2, (
         "clear the cache on sign-out and on sign-in, not just one of them")

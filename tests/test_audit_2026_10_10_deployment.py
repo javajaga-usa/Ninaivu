@@ -179,19 +179,6 @@ def test_the_pre_commit_hooks_scan_for_secrets_pinned_by_commit():
     assert re.search(r"rev: [0-9a-f]{40}\s+# v\d+\.\d+\.\d+", text), "the version beside the commit"
 
 
-# --- L-19: the Mac setup clears the quarantine from what runs, not the whole folder -------
-
-def test_the_mac_setup_clears_the_quarantine_only_from_the_files_it_runs():
-    setup = _read(ROOT / "Setup Ninaivu.command")
-    assert "xattr -dr" not in setup
-    assert 'xattr -d com.apple.quarantine "$file"' in setup
-    cleared = setup[setup.index("for file in"):setup.index("; do")]
-    for name in ('"$HERE/Ninaivu.command"', '"$HERE/Setup Ninaivu.command"',
-                 '"$HERE/ninaivu_control.pyw"', '"$HERE"/launcher/*'):
-        assert name in cleared, name
-    assert '[ -f "$file" ] || continue' in setup
-
-
 # --- I-2: the portable README says what a USB stick cannot protect ------------------------
 
 def test_the_portable_readme_warns_about_data_on_a_fat_formatted_stick():

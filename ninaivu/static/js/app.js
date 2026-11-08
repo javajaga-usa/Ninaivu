@@ -35,34 +35,8 @@ import { announceCapsules, openCapsules, openSealSheet } from './capsules.js';
 import { openAsk } from './ask-ninaivu.js';
 import { VoiceSearch } from './voice-search.js';
 import { VideoMoments } from './video-moments.js';
-
-const $ = (sel) => document.querySelector(sel);
-const store = {
-  get(key, fallback) {
-    try {
-      const raw = localStorage.getItem(`mv.${key}`);
-      return raw === null ? fallback : JSON.parse(raw);
-    } catch { return fallback; }
-  },
-  set(key, value) {
-    try { localStorage.setItem(`mv.${key}`, JSON.stringify(value)); } catch { /* private mode */ }
-  },
-};
-
-const state = {
-  user: null,
-  view: 'all',
-  filters: { q: '', kinds: [], favorites: false, duplicates: false,
-             tag: '', folder: '', camera: '', from: '', to: '', person: 0,
-             occasion: 0, album: 0, near: 0, sort: 'date_desc' },
-  people: [],
-  occasions: [],
-  albums: [],
-  status: null,
-  facets: null,
-  semantic: false,
-  loading: false,
-};
+import { state, store } from './store.js';
+import { $, closeMenus, humanBytes, toast, wireMenu } from './ui.js';
 
 let grid;
 let viewer;
@@ -828,7 +802,6 @@ function showAwayLibraries(status) {
     ? `${text} (${paths.join(', ')})` : text;
 }
 
-
 async function refreshStatus(asked = null) {
   countsAskedAt = Date.now();
   try {
@@ -1405,7 +1378,6 @@ function wireChrome() {
     && ['family', 'admin'].includes(state.user?.role));
   wireSharing();
   wireAlbums();
-  wireDuplicatesReview();
 
   document.querySelectorAll('.modal').forEach((modal) => {
     modal.addEventListener('click', (event) => {
@@ -1434,67 +1406,6 @@ function showLayout(mode) {
   const icon = $('#view-btn-icon');
   const svg = current?.querySelector('svg');
   if (icon && svg) icon.replaceChildren(svg.cloneNode(true));
-}
-
-/* -- small menus ---------------------------------------------------------- */
-
-//: The topbar's drop-down menus (view, profile), so Escape can close
-//: whichever is open.
-const menus = [];
-
-/**
- * A button that opens a small menu under it.
- *
- * The same behaviour as the "More" menus: the button toggles it, a click
- * outside or on an item closes it, Escape closes it and gives focus back to
- * the button. Opened from the keyboard, focus goes to the first item and the
- * arrow keys move between items. An item marked `data-keep-open` (the theme
- * and the language, which somebody may press twice to get where they want)
- * leaves the menu open.
- */
-function wireMenu(button, menu) {
-  if (!button || !menu) return;
-  const items = () => [...menu.querySelectorAll('button')]
-    .filter((item) => !item.hidden && item.offsetParent !== null);
-  const close = (returnFocus = false) => {
-    if (!menu.classList.contains('open')) return false;
-    const hadFocus = menu.contains(document.activeElement);
-    menu.classList.remove('open');
-    button.setAttribute('aria-expanded', 'false');
-    if (returnFocus && hadFocus) button.focus();
-    return true;
-  };
-  menus.push(close);
-  button.addEventListener('click', (event) => {
-    event.stopPropagation();
-    const open = !menu.classList.contains('open');
-    menus.forEach((other) => other !== close && other());
-    menu.classList.toggle('open', open);
-    button.setAttribute('aria-expanded', String(open));
-    if (open && event.detail === 0) items()[0]?.focus();
-  });
-  menu.addEventListener('click', (event) => {
-    const item = event.target.closest('button');
-    if (item && !item.hasAttribute('data-keep-open')) close();
-  });
-  menu.addEventListener('keydown', (event) => {
-    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
-    event.preventDefault();
-    event.stopPropagation();          // not the gallery's own arrow keys
-    const list = items();
-    const at = list.indexOf(document.activeElement);
-    const next = at < 0 ? 0 : (at + (event.key === 'ArrowDown' ? 1 : -1) + list.length) % list.length;
-    list[next]?.focus();
-  });
-  document.addEventListener('click', (event) => {
-    if (menu.contains(event.target) || button.contains(event.target)) return;
-    close();
-  });
-}
-
-/** Close whichever topbar menu is open. True if one was. */
-function closeMenus() {
-  return menus.map((close) => close(true)).some(Boolean);
 }
 
 /** Save the language on the profile, so every device of theirs follows. */
@@ -1997,7 +1908,8 @@ function renderFilterBar() {
       const shareBtn = document.createElement('button');
       shareBtn.className = 'btn ghost small';
       shareBtn.innerHTML = '<svg viewBox="0 0 24 24" style="width:13px;height:13px;margin-right:4px;vertical-align:-2px;"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>Share Album';
-      shareBtn.onclick = () => openShareModal({ type: 'album', id: album.id, name: album.name });
+      shareBtn.onclick = () => openPage('sharing')
+        .then((page) => page?.openShareModal({ type: 'album', id: album.id, name: album.name }));
       bar.appendChild(shareBtn);
 
       const delBtn = document.createElement('button');
@@ -2946,148 +2858,18 @@ async function bulk(fields) {
 
 /* -- duplicates review ---------------------------------------------------
  *
- * `/api/duplicates` already groups near-identical shots (a burst, or the same
- * photo saved twice) by perceptual hash and picks the sharpest, highest-
- * resolution one as `best` — never overriding a favourite or a rating someone
- * already gave it (see `db.best_of`). Nothing consumed that pick before this:
- * the sidebar's Duplicates view just filtered the ordinary grid to items that
- * have a `dup_group`, flat and unranked. This turns that existing judgment
- * into something a person can act on, without changing what the plain filter
- * view does for anyone who liked it as it was.
+ * The review itself is a page of its own (pages/family/duplicates.js),
+ * fetched the first time the Duplicates view is opened by somebody who may
+ * download. Anywhere else the banner is simply put away.
  */
-let duplicateGroupsCache = null;
-
-async function loadDuplicatesIfNeeded() {
+function loadDuplicatesIfNeeded() {
   const banner = $('#duplicates-banner');
   if (!banner) return;
   if (state.view !== 'duplicates' || !state.user?.can?.download) {
     banner.hidden = true;
     return;
   }
-  try {
-    const data = await api.duplicates();
-    duplicateGroupsCache = data.groups || [];
-  } catch {
-    duplicateGroupsCache = [];
-  }
-  renderDuplicatesSummary();
-}
-
-function renderDuplicatesSummary() {
-  const banner = $('#duplicates-banner');
-  if (!banner) return;
-  const groups = duplicateGroupsCache || [];
-  if (state.view !== 'duplicates' || !groups.length) {
-    banner.hidden = true;
-    return;
-  }
-  const wasted = groups.reduce((sum, g) => sum + (g.wasted || 0), 0);
-  $('#duplicates-headline').textContent =
-    `${groups.length} ${groups.length === 1 ? 'group' : 'groups'} of similar shots`
-    + (wasted ? ` · ${humanBytes(wasted)} could be freed` : '');
-  banner.hidden = false;
-}
-
-function renderDuplicateGroups() {
-  const box = $('#duplicates-groups');
-  if (!box) return;
-  const groups = duplicateGroupsCache || [];
-  box.replaceChildren();
-  if (!groups.length) {
-    const empty = document.createElement('p');
-    empty.className = 'empty-note';
-    empty.textContent = i18n.t('No duplicate groups right now.');
-    box.appendChild(empty);
-    return;
-  }
-  for (const group of groups) {
-    const wrap = document.createElement('div');
-    wrap.className = 'dup-group';
-
-    const head = document.createElement('div');
-    head.className = 'dup-group-head';
-    const info = document.createElement('span');
-    info.className = 'hint';
-    const count = group.items.length;
-    info.innerHTML = `<b>${count}</b> versions of this shot`
-      + (group.wasted_h ? ` &middot; <b>${group.wasted_h}</b> to free` : '');
-    const keepBtn = document.createElement('button');
-    keepBtn.className = 'btn ghost small';
-    keepBtn.type = 'button';
-    keepBtn.textContent = i18n.t('Keep only the best');
-    keepBtn.onclick = () => {
-      const rest = group.items.filter((i) => i.id !== group.best).map((i) => i.id);
-      if (!rest.length) return;
-      deleteSelected(rest, () => {
-        duplicateGroupsCache = (duplicateGroupsCache || [])
-          .filter((g) => g.group !== group.group);
-        renderDuplicateGroups();
-        renderDuplicatesSummary();
-      });
-    };
-    head.append(info, keepBtn);
-
-    const thumbs = document.createElement('div');
-    thumbs.className = 'dup-thumbs';
-    group.items.forEach((item, index) => {
-      const cell = document.createElement('div');
-      cell.className = 'dup-item' + (item.id === group.best ? ' best' : '');
-      const img = document.createElement('img');
-      img.src = thumbUrl(item.id, 220, item.thumb_v);
-      img.loading = 'lazy';
-      img.alt = item.name || '';
-      cell.appendChild(img);
-      if (item.id === group.best) {
-        const badge = document.createElement('span');
-        badge.className = 'dup-badge';
-        badge.textContent = i18n.t('Best');
-        cell.appendChild(badge);
-      }
-      const meta = document.createElement('span');
-      meta.className = 'dup-item-meta';
-      const dims = item.width && item.height ? `${item.width}×${item.height} · ` : '';
-      meta.textContent = `${dims}${item.size_h || ''}`;
-      cell.appendChild(meta);
-      cell.title = item.name || '';
-      cell.onclick = () => {
-        $('#duplicates-modal').hidden = true;
-        viewer.open(group.items.map((i) => i.id), index);
-      };
-      thumbs.appendChild(cell);
-    });
-
-    wrap.append(head, thumbs);
-    box.appendChild(wrap);
-  }
-}
-
-function wireDuplicatesReview() {
-  const banner = $('#duplicates-banner');
-  if (!banner) return;
-
-  $('#duplicates-review-btn')?.addEventListener('click', () => {
-    renderDuplicateGroups();
-    $('#duplicates-modal').hidden = false;
-  });
-  $('#duplicates-close')?.addEventListener('click', () => {
-    $('#duplicates-modal').hidden = true;
-  });
-  $('#duplicates-close-x')?.addEventListener('click', () => {
-    $('#duplicates-modal').hidden = true;
-  });
-  $('#duplicates-keep-all-best')?.addEventListener('click', () => {
-    const groups = duplicateGroupsCache || [];
-    const rest = groups.flatMap(
-      (g) => g.items.filter((i) => i.id !== g.best).map((i) => i.id),
-    );
-    if (!rest.length) return;
-    deleteSelected(rest, () => {
-      duplicateGroupsCache = [];
-      renderDuplicateGroups();
-      renderDuplicatesSummary();
-      $('#duplicates-modal').hidden = true;
-    });
-  });
+  openPage('duplicates').then((page) => page?.load());
 }
 
 /* -- scrubber ----------------------------------------------------------- */
@@ -3856,7 +3638,6 @@ const COUNTS_EVERY_MS = 30000;
 /** The server's count of changes to who may see what (onActivity). */
 let seenGeneration = null;
 
-
 // Coming back to the tab is the moment to catch up on what happened while it
 // was in the background, and to restart the loop that visibility stopped.
 document.addEventListener('visibilitychange', () => {
@@ -3979,34 +3760,6 @@ function onActivity(activity) {
   } else if (scan.status === 'tagging' && scan.tagged && scan.tagged % 200 === 0) {
     refreshFacets();
   }
-}
-
-function toast(message, isError = false) {
-  // Nothing to say while the screen is locked: nobody is there to read it,
-  // and requests refused behind the lock would pile their errors up here.
-  if (document.body.classList.contains('screen-locked')) return;
-  const node = document.createElement('div');
-  node.className = `toast${isError ? ' error' : ''}`;
-  node.textContent = message;
-  $('#toasts').appendChild(node);
-  setTimeout(() => {
-    // Fades and sinks a little on its way out (premium.css, `leaving`).
-    node.classList.add('leaving');
-    node.style.opacity = '0';
-    setTimeout(() => node.remove(), 250);
-  }, isError ? 5200 : 2800);
-}
-
-function humanBytes(n) {
-  if (!n) return '0 B';
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  let i = 0;
-  let value = n;
-  while (value >= 1024 && i < units.length - 1) {
-    value /= 1024;
-    i++;
-  }
-  return `${i === 0 ? value : value.toFixed(1)} ${units[i]}`;
 }
 
 /* ========================================================================
@@ -4134,169 +3887,17 @@ function wireMemories() {
   });
 }
 
-/* -- Geo Map ------------------------------------------------------------ */
-let leafletMap = null;
-let leafletLoading = null;
-
-/**
- * Fetch Leaflet the first time a map is actually opened.
- *
- * It is 147 KB of the app's JavaScript and a stylesheet besides, and it was
- * loading on every visit to the gallery whether or not anybody went near the
- * map — including on phones, on the household's own broadband, before a
- * single photograph appeared.
- */
-function loadLeaflet() {
-  if (window.L) return Promise.resolve();
-  if (leafletLoading) return leafletLoading;
-  leafletLoading = new Promise((resolve, reject) => {
-    const css = document.createElement('link');
-    css.rel = 'stylesheet';
-    css.href = '/static/css/leaflet.css';
-    document.head.appendChild(css);
-    const script = document.createElement('script');
-    script.src = '/static/js/leaflet.js';
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error(i18n.t('The map could not be loaded.')));
-    document.head.appendChild(script);
-  });
-  return leafletLoading;
-}
-let worldOutline = null;
-
-/* Whether the household has asked for street tiles.
- *
- * Off is the default, and it is the only setting in Ninaivu that decides
- * whether anything about the library leaves the machine. A tile server is
- * told which square of the world is on screen, one request per tile — open
- * the map on last summer's holiday and somebody else's logs know where the
- * family spent it. So the map is drawn from an outline that ships with
- * Ninaivu instead, and the tiles are something a household turns on knowing
- * what it is trading.
- */
-function wantsTiles() {
-  return document.body.dataset.mapTiles === '1';
-}
-
-/* The world, from a file in this repository.
- *
- * Natural Earth's 1:110m coastlines and borders, public domain, about 160 KB,
- * fetched once and kept. It draws which country and which coast, which is
- * what a map of a family library is usually being asked. It has no streets,
- * and past roughly a city's width there is nothing left in it to draw — the
- * pins are then their own map, which for photographs taken in one town is
- * what you were looking at anyway.
- */
-async function loadWorld() {
-  if (worldOutline) return worldOutline;
-  const answer = await fetch('/static/data/world.geojson');
-  if (!answer.ok) throw new Error(i18n.t('The world outline could not be loaded.'));
-  worldOutline = await answer.json();
-  return worldOutline;
-}
-
-async function drawBasemap(map) {
-  if (wantsTiles()) {
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 18,
-      attribution: '\u00a9 OpenStreetMap contributors',
-    }).addTo(map);
-    return;
-  }
-  try {
-    L.geoJSON(await loadWorld(), {
-      interactive: false,
-      // Colours live in the stylesheet so the map follows the theme rather
-      // than staying daylight-coloured in a dark room.
-      style: () => ({ className: 'world-shape' }),
-      attribution: i18n.t('Outline: Natural Earth'),
-    }).addTo(map);
-  } catch (err) {
-    // A map of pins on an empty ground is still a map. Failing to draw the
-    // sea is not a reason to show the household nothing.
-    console.warn(err);
-  }
-}
-
-/* The map's state. It asked for up to 1,500 photographs and drew one pin
-   each, and read `gps_lat` from answers that said `lat`, so it drew none.
-   Now the server groups what is on screen (storage/geo.py): every photograph
-   with a location is on the map, a busy place is one circle with a count,
-   and a circle opens to all of its photographs. */
-const mapView = {
-  year: '', person: '', trip: false,
-  groups: null, route: null, here: null,
-  places: null, openCountries: new Set(),
-  seq: 0, timer: null, returning: false,
-};
-
-function mapQuery(extra = {}) {
-  const query = { ...extra };
-  if (mapView.year) query.year = mapView.year;
-  if (mapView.person) query.person = mapView.person;
-  return query;
-}
-
-/* A country's name from its code, in the page's language, by the browser. */
-function countryName(code) {
-  if (!code) return '';
-  try {
-    return new Intl.DisplayNames([i18n.language(), 'en'], { type: 'region' }).of(code) || code;
-  } catch {
-    return code;
-  }
-}
-
-function placeLabel(city, country) {
-  return [city, countryName(country)].filter(Boolean).join(', ') || i18n.t('Unnamed places');
-}
-
-function shortCount(n) {
-  if (n < 1000) return String(n);
-  return `${(n / 1000).toFixed(n < 10000 ? 1 : 0)}k`;
-}
-
-function dateRange(first, last) {
-  return first && last && first !== last ? `${first} – ${last}` : (first || last || '');
-}
-
-/** Frame [south, north, west, east] on the map. */
-function fitTo(bounds, maxZoom = 14) {
-  if (!leafletMap || !bounds) return;
-  const [south, north, west, east] = bounds;
-  leafletMap.fitBounds([[south, west], [north, east]], { padding: [40, 40], maxZoom });
-}
+/* -- Geo Map, Local Upload and Sharing ------------------------------------ */
 
 function wireMap() {
-  $('#map-btn')?.addEventListener('click', () => openMap());
-  $('#map-close')?.addEventListener('click', closeMap);
-  $('#map-year')?.addEventListener('change', (event) => {
-    mapView.year = event.target.value;
-    if (!mapView.year && mapView.trip) setTrip(false);
-    refreshMap();
-  });
-  $('#map-person')?.addEventListener('change', (event) => {
-    mapView.person = event.target.value;
-    refreshMap();
-  });
-  $('#map-trip')?.addEventListener('click', () => setTrip(!mapView.trip));
-  $('#map-places-toggle')?.addEventListener('click', () => {
-    const open = $('#map-places').classList.toggle('open');
-    $('#map-places-toggle').setAttribute('aria-expanded', String(open));
-    setTimeout(() => leafletMap?.invalidateSize(), 50);
-  });
-  // A photograph opened from the map goes back to the map when it closes.
-  viewer.addEventListener('close', () => {
-    if (!mapView.returning) return;
-    mapView.returning = false;
-    $('#map-modal').hidden = false;
-    setTimeout(() => leafletMap?.invalidateSize(), 50);
-  });
+  // The map is a page of its own (pages/family/map.js), fetched when first opened.
+  $('#map-btn')?.addEventListener('click', () => openPage('map').then((page) => page?.openMap()));
   viewer.addEventListener('map', (event) => {
     const item = event.detail?.item;
     if (!item?.gps) return;
     viewer.close();
-    openMap({ focus: { lat: item.gps[0], lon: item.gps[1] } });
+    const focus = { lat: item.gps[0], lon: item.gps[1] };
+    openPage('map').then((page) => page?.openMap({ focus }));
   });
   viewer.addEventListener('nearby', (event) => {
     const item = event.detail?.item;
@@ -4308,529 +3909,58 @@ function wireMap() {
   });
 }
 
-function closeMap() {
-  mapView.returning = false;
-  $('#map-modal').hidden = true;
-}
-
-async function openMap({ focus = null } = {}) {
-  const modal = $('#map-modal');
-  try {
-    await loadLeaflet();
-  } catch (err) {
-    toast(err.message, true);
-    return;
-  }
-  modal.hidden = false;
-  if (typeof L === 'undefined') return;
-
-  if (!leafletMap) {
-    leafletMap = L.map('leaflet-map', { worldCopyJump: true }).setView([20, 0], 2);
-    await drawBasemap(leafletMap);
-    mapView.groups = L.layerGroup().addTo(leafletMap);
-    mapView.route = L.layerGroup().addTo(leafletMap);
-    mapView.here = L.layerGroup().addTo(leafletMap);
-    leafletMap.on('moveend', () => {
-      clearTimeout(mapView.timer);
-      mapView.timer = setTimeout(refreshGroups, 120);
-    });
-  }
-  // Its size is only known once the dialog is showing.
-  setTimeout(() => leafletMap?.invalidateSize(), 50);
-  setTimeout(() => leafletMap?.invalidateSize(), 250);
-
-  // Opened from a photograph, the map shows it: a year or a person chosen
-  // earlier would have filtered out the very photograph it was opened on.
-  if (focus) {
-    mapView.year = '';
-    mapView.person = '';
-    if (mapView.trip) setTrip(false);
-    const person = $('#map-person');
-    if (person) person.value = '';
-  }
-  fillPeople();
-  mapView.here.clearLayers();
-  const places = await loadPlaces();
-  if (focus) {
-    leafletMap.setView([focus.lat, focus.lon], 15);
-    mapView.here.addLayer(L.circleMarker([focus.lat, focus.lon],
-      { radius: 34, className: 'map-here', interactive: false }));
-  } else if (places?.bounds) {
-    fitTo(places.bounds);
-  } else if (places && !places.total) {
-    toast(i18n.t('No photos with GPS coordinates found yet.'));
-  }
-  refreshGroups();
-}
-
-async function refreshMap() {
-  await loadPlaces();
-  refreshGroups();
-  if (mapView.trip) loadRoute();
-}
-
-function fillPeople() {
-  const select = $('#map-person');
-  if (!select) return;
-  const people = (state.people || []).filter((person) => person.name);
-  select.hidden = !people.length;
-  const signature = people.map((person) => person.id).join(',');
-  if (select.dataset.signature === signature) return;
-  select.dataset.signature = signature;
-  select.length = 1;
-  for (const person of people) select.add(new Option(person.name, String(person.id)));
-  select.value = mapView.person;
-}
-
-function fillYears(years) {
-  const select = $('#map-year');
-  if (!select) return;
-  const signature = (years || []).join(',');
-  if (select.dataset.signature !== signature) {
-    select.dataset.signature = signature;
-    select.length = 1;
-    for (const year of years || []) select.add(new Option(String(year), String(year)));
-  }
-  select.value = mapView.year;
-}
-
-async function loadPlaces() {
-  let data;
-  try {
-    data = await api.geoPlaces(mapQuery());
-  } catch (err) {
-    toast(i18n.t('Could not load map points: {reason}', { reason: err.message }), true);
-    return null;
-  }
-  mapView.places = data;
-  fillYears(data.years);
-  renderPlaces(data);
-  return data;
-}
-
-/* The places, country by country, most photographed first. A country opens
-   to its cities; a city frames the map, and its button opens its photos. */
-function renderPlaces(data) {
-  const list = $('#map-places-list');
-  if (!list || !data) return;
-  list.innerHTML = '';
-  $('#map-places-summary').textContent = i18n.t('{count} photographs in {places} places',
-    { count: data.total.toLocaleString(), places: data.places.length.toLocaleString() });
-
-  const countries = new Map();
-  for (const place of data.places) {
-    const country = countries.get(place.country)
-      || { code: place.country, count: 0, places: [], bounds: null };
-    country.count += place.count;
-    country.places.push(place);
-    const [s, n, w, e] = place.bounds;
-    country.bounds = country.bounds
-      ? [Math.min(country.bounds[0], s), Math.max(country.bounds[1], n),
-        Math.min(country.bounds[2], w), Math.max(country.bounds[3], e)]
-      : [s, n, w, e];
-    countries.set(place.country, country);
-  }
-
-  for (const country of [...countries.values()].sort((a, b) => b.count - a.count)) {
-    const open = mapView.openCountries.has(country.code);
-    const row = document.createElement('button');
-    row.type = 'button';
-    row.className = 'map-place map-country';
-    row.setAttribute('aria-expanded', String(open));
-    const toggle = document.createElement('span');
-    toggle.className = 'map-place-toggle';
-    toggle.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 6 6-6 6"/></svg>';
-    const name = document.createElement('span');
-    name.className = 'map-place-name';
-    name.textContent = country.code ? countryName(country.code) : i18n.t('Unnamed places');
-    const count = document.createElement('span');
-    count.className = 'map-place-count';
-    count.textContent = country.count.toLocaleString();
-    row.append(toggle, name, count);
-    row.onclick = () => {
-      if (open) mapView.openCountries.delete(country.code);
-      else mapView.openCountries.add(country.code);
-      renderPlaces(mapView.places);
-      if (!open) fitTo(country.bounds, 8);
-    };
-    list.appendChild(row);
-    if (!open) continue;
-
-    for (const place of country.places) {
-      const city = document.createElement('div');
-      city.className = 'map-place map-city';
-      const go = document.createElement('button');
-      go.type = 'button';
-      go.className = 'map-place-name';
-      go.textContent = place.city || i18n.t('Unnamed places');
-      go.onclick = () => fitTo(place.bounds);
-      const tally = document.createElement('span');
-      tally.className = 'map-place-count';
-      tally.textContent = place.count.toLocaleString();
-      const view = document.createElement('button');
-      view.type = 'button';
-      view.className = 'icon-btn map-place-view';
-      view.title = i18n.t('View photos');
-      view.setAttribute('aria-label', `${i18n.t('View photos')}: ${go.textContent}`);
-      view.innerHTML = '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="m21 16-5-5-8 8"/></svg>';
-      view.onclick = () => openPlacePhotos({ country: place.country, city: place.city });
-      city.append(go, tally, view);
-      list.appendChild(city);
-    }
-  }
-}
-
-async function refreshGroups() {
-  if (!leafletMap || $('#map-modal').hidden) return;
-  const seq = ++mapView.seq;
-  const bounds = leafletMap.getBounds();
-  let data;
-  try {
-    data = await api.geoClusters(mapQuery({
-      south: bounds.getSouth(), north: bounds.getNorth(),
-      west: bounds.getWest(), east: bounds.getEast(), zoom: leafletMap.getZoom(),
-    }));
-  } catch (err) {
-    if (seq === mapView.seq) {
-      toast(i18n.t('Could not load map points: {reason}', { reason: err.message }), true);
-    }
-    return;
-  }
-  if (seq !== mapView.seq) return;           // the map moved on while this was asked
-  mapView.groups.clearLayers();
-  for (const group of mergeOverlapping(data.clusters || [])) {
-    mapView.groups.addLayer(groupMarker(group));
-  }
-}
-
-/* The server groups by a grid, and a town on a grid line came back as two
-   circles on top of each other. Circles nearer than this on screen become
-   one; it keeps each part's own bounds, so opening it opens exactly its
-   photographs and none from between them. */
-const MERGE_PX = 44;
-
-function mergeOverlapping(groups) {
-  const merged = [];
-  for (const group of [...groups].sort((a, b) => b.count - a.count)) {
-    const at = leafletMap.latLngToLayerPoint([group.lat, group.lon]);
-    const near = merged.find((other) => other.at.distanceTo(at) < MERGE_PX);
-    if (!near) {
-      merged.push({ ...group, at, parts: [group.bounds] });
-      continue;
-    }
-    const total = near.count + group.count;
-    near.lat = (near.lat * near.count + group.lat * group.count) / total;
-    near.lon = (near.lon * near.count + group.lon * group.count) / total;
-    near.count = total;
-    near.parts.push(group.bounds);
-    const [s, n, w, e] = group.bounds;
-    near.bounds = [Math.min(near.bounds[0], s), Math.max(near.bounds[1], n),
-      Math.min(near.bounds[2], w), Math.max(near.bounds[3], e)];
-  }
-  return merged;
-}
-
-function groupMarker(group) {
-  const many = group.count > 1;
-  const html = `<div class="map-cluster"><img src="${thumbUrl(group.cover, 160)}" alt="" loading="lazy">`
-    + (many ? `<span class="map-count">${shortCount(group.count)}</span>` : '') + '</div>';
-  const icon = L.divIcon({ className: 'map-cluster-icon', html, iconSize: [52, 52], iconAnchor: [26, 26] });
-  const marker = L.marker([group.lat, group.lon], { icon, title: placeLabel(group.city, group.country) });
-  if (many) {
-    // Bound once, drawn when opened. Bound in the click itself, Leaflet's own
-    // toggle ran in the same click and closed the popup it had just opened.
-    marker.bindPopup(() => groupPopup(group, marker), { minWidth: 200 });
-  } else {
-    marker.on('click', () => openMapPhotos([group.cover]));
-  }
-  return marker;
-}
-
-function groupPopup(group, marker) {
-  const box = document.createElement('div');
-  box.className = 'map-popup';
-  const img = document.createElement('img');
-  img.src = thumbUrl(group.cover, 320);
-  img.alt = '';
-  const title = document.createElement('strong');
-  title.textContent = placeLabel(group.city, group.country);
-  const count = document.createElement('span');
-  count.className = 'hint';
-  count.textContent = i18n.t('{count} photographs', { count: group.count.toLocaleString() });
-  const actions = document.createElement('div');
-  actions.className = 'map-popup-actions';
-  const view = document.createElement('button');
-  view.type = 'button';
-  view.className = 'btn primary small';
-  view.textContent = i18n.t('View photos');
-  view.onclick = () => {
-    marker.closePopup();
-    openGroupPhotos(group.parts || [group.bounds]);
-  };
-  const zoom = document.createElement('button');
-  zoom.type = 'button';
-  zoom.className = 'btn ghost small';
-  zoom.textContent = i18n.t('Zoom in');
-  zoom.onclick = () => {
-    marker.closePopup();
-    fitTo(group.bounds, Math.min(18, leafletMap.getZoom() + 4));
-  };
-  actions.append(view, zoom);
-  box.append(img, title, count, actions);
-  return box;
-}
-
-/* A circle's photographs: each part it was made of, asked for on its own. */
-async function openGroupPhotos(parts) {
-  let answers;
-  try {
-    answers = await Promise.all(parts.map(([south, north, west, east]) =>
-      api.geoPhotos(mapQuery({ south, north, west, east }))));
-  } catch (err) {
-    toast(err.message, true);
-    return;
-  }
-  const ids = [...new Set(answers.flatMap((answer) => answer.ids || []))];
-  const total = answers.reduce((sum, answer) => sum + (answer.total || 0), 0);
-  if (!ids.length) return;
-  if (total > ids.length) {
-    toast(i18n.t('Showing the newest {shown} of {total}',
-      { shown: ids.length.toLocaleString(), total: total.toLocaleString() }));
-  }
-  openMapPhotos(ids);
-}
-
-async function openPlacePhotos(query) {
-  let data;
-  try {
-    data = await api.geoPhotos(mapQuery(query));
-  } catch (err) {
-    toast(err.message, true);
-    return;
-  }
-  if (!data.ids?.length) return;
-  if (data.total > data.ids.length) {
-    toast(i18n.t('Showing the newest {shown} of {total}',
-      { shown: data.ids.length.toLocaleString(), total: data.total.toLocaleString() }));
-  }
-  openMapPhotos(data.ids);
-}
-
-/* The viewer is drawn beneath dialogs, so the map steps aside while a
-   photograph is open, and comes back when it closes. */
-function openMapPhotos(ids) {
-  mapView.returning = true;
-  $('#map-modal').hidden = true;
-  viewer.open(ids, 0);
-}
-
-function setTrip(on) {
-  if (on && !mapView.year) {
-    toast(i18n.t('Choose a year to see its trips.'));
-    return;
-  }
-  mapView.trip = on;
-  const button = $('#map-trip');
-  button?.setAttribute('aria-pressed', String(on));
-  button?.classList.toggle('active', on);
-  if (on) loadRoute();
-  else mapView.route?.clearLayers();
-}
-
-/* A year's photographs in the order they were taken, as a route of stops. */
-async function loadRoute() {
-  mapView.route.clearLayers();
-  if (!mapView.trip || !mapView.year) return;
-  let data;
-  try {
-    data = await api.geoTrail(mapQuery());
-  } catch (err) {
-    toast(err.message, true);
-    return;
-  }
-  const stops = data.stops || [];
-  if (!stops.length) {
-    toast(i18n.t('No photos with locations in {year}.', { year: mapView.year }));
-    return;
-  }
-  const line = L.polyline(stops.map((stop) => [stop.lat, stop.lon]),
-    { className: 'map-trail', interactive: false });
-  mapView.route.addLayer(line);
-  stops.forEach((stop, index) => {
-    const dot = L.circleMarker([stop.lat, stop.lon], { radius: 6, className: 'map-stop' });
-    const tip = document.createElement('span');
-    tip.textContent = `${index + 1}. ${placeLabel(stop.city, stop.country)} · `
-      + `${dateRange(stop.first, stop.last)} · ${i18n.t('{count} photographs', { count: stop.count })}`;
-    dot.bindTooltip(tip);
-    dot.on('click', () => openMapPhotos(stop.ids));
-    mapView.route.addLayer(dot);
-  });
-  leafletMap.fitBounds(line.getBounds(), { padding: [40, 40], maxZoom: 12 });
-}
-
-/* -- Local Upload ------------------------------------------------------- */
 function wireUpload() {
-  const modal = $('#upload-modal');
-  const btn = $('#upload-btn');
-  const dropzone = $('#upload-dropzone');
-  const fileInput = $('#upload-file-input');
-  const closeBtn = $('#upload-close');
-
-  btn?.addEventListener('click', () => { modal.hidden = false; });
-  closeBtn?.addEventListener('click', () => {
-    modal.hidden = true;
-    reload();
-  });
-
-  dropzone?.addEventListener('click', () => fileInput?.click());
-  fileInput?.addEventListener('change', (e) => {
-    if (e.target.files?.length) handleUpload(Array.from(e.target.files));
-  });
-
-  dropzone?.addEventListener('dragover', (e) => {
-    e.preventDefault();
-    dropzone.classList.add('dragover');
-  });
-  dropzone?.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
-  dropzone?.addEventListener('drop', (e) => {
-    e.preventDefault();
-    dropzone.classList.remove('dragover');
-    if (e.dataTransfer.files?.length) {
-      handleUpload(Array.from(e.dataTransfer.files));
-    }
-  });
+  // The upload dialog is a page of its own (pages/family/upload.js).
+  $('#upload-btn')?.addEventListener('click', () => openPage('upload').then((page) => page?.open()));
 }
-
-async function handleUpload(files) {
-  if (!files.length) return;
-  const progress = $('#upload-progress');
-  const fill = $('#upload-fill');
-  const list = $('#upload-list');
-  progress.hidden = false;
-  fill.style.width = '20%';
-
-  const formData = new FormData();
-  files.forEach((f) => formData.append('files', f));
-
-  try {
-    fill.style.width = '60%';
-    // X-Requested-With: multipart is what a cross-origin form could also
-    // send, so the server takes one only from a script that says so. See
-    // _refuse_cross_origin_writes in ninaivu/__init__.py.
-    const response = await fetch('/api/upload', {
-      method: 'POST',
-      headers: { 'X-Requested-With': 'fetch' },
-      body: formData,
-    });
-    const result = await response.json();
-    fill.style.width = '100%';
-
-    if (!response.ok) throw new Error(i18n.fromServer(result, i18n.t('Upload failed')));
-
-    const count = result.total ?? result.uploaded?.length ?? 0;
-    const failed = files.length - count;
-    const sent = result.pending_approval
-      ? i18n.t('Uploaded {items} for an administrator to approve.', { items: i18n.items(count) })
-      : i18n.t('Uploaded {items}.', { items: i18n.items(count) });
-    toast(failed > 0
-      ? `${sent} ${i18n.t('{count} could not be uploaded.', { count: failed.toLocaleString(i18n.locale()) })}`
-      : sent, failed > 0);
-    for (const error of result.errors || []) toast(`${error.filename}: ${error.error}`, true);
-    if (count && !result.pending_approval) reload();
-    $('#upload-file-input').value = '';
-    if (list) {
-      (result.uploaded || []).forEach((u) => {
-        const item = document.createElement('div');
-        item.className = 'upload-item';
-        // Built as nodes, not markup: a filename is whatever the person
-        // uploading chose to call the file, and every other line in this
-        // codebase treats such text as text.
-        const tick = document.createElement('span');
-        tick.append('✓ ');
-        const name = document.createElement('strong');
-        name.textContent = u.filename;
-        tick.appendChild(name);
-        const where = document.createElement('span');
-        where.className = 'hint';
-        where.textContent = result.pending_approval ? i18n.t('Awaiting admin approval') : u.rel_path;
-        item.replaceChildren(tick, where);
-        list.prepend(item);
-      });
-    }
-    setTimeout(() => { progress.hidden = true; }, 1200);
-  } catch (err) {
-    toast(i18n.t('Upload failed: {reason}', { reason: err.message }), true);
-    progress.hidden = true;
-  }
-}
-
-/* -- Sharing ------------------------------------------------------------ */
-let shareTargetItem = null;
 
 function wireSharing() {
+  // The share dialog is a page of its own (pages/family/sharing.js).
   viewer.addEventListener('share', (e) => {
-    shareTargetItem = e.detail.item;
-    openShareModal(shareTargetItem);
-  });
-
-  $('#share-close')?.addEventListener('click', () => {
-    $('#share-modal').hidden = true;
-  });
-
-  $('#share-create-btn')?.addEventListener('click', async () => {
-    const button = $('#share-create-btn');
-    if (!shareTargetItem || button.disabled) return;
-    const target = shareTargetItem;
-    button.disabled = true;
-    const expiry = Number($('#share-expiry').value || 30);
-    const pwd = $('#share-password').value.trim() || null;
-    const scope = target.type === 'album' ? 'album' : 'asset';
-    try {
-      const res = await api.createShare(scope, target.id, expiry, pwd);
-      if (shareTargetItem !== target) return;
-      const fullUrl = `${window.location.origin}${res.share_url}`;
-      $('#share-url-text').value = fullUrl;
-      $('#share-link-result').hidden = false;
-      $('#share-options').hidden = true;
-      $('#share-create-btn').hidden = true;
-      toast(i18n.t('Share link generated!'));
-    } catch (err) {
-      toast(i18n.t('Could not create share link: {reason}', { reason: err.message }), true);
-    } finally {
-      button.disabled = false;
-    }
-  });
-
-  $('#share-copy-btn')?.addEventListener('click', async () => {
-    const input = $('#share-url-text');
-    input.select();
-    try {
-      if (!navigator.clipboard?.writeText) throw new Error(i18n.t('Clipboard unavailable'));
-      await navigator.clipboard.writeText(input.value);
-      toast(i18n.t('Link copied to clipboard!'));
-    } catch {
-      input.focus();
-      input.select();
-      toast(i18n.t('Could not copy automatically. Copy the selected link manually.'), true);
-    }
+    const item = e.detail.item;
+    openPage('sharing').then((page) => page?.openShareModal(item));
   });
 }
 
-function openShareModal(item) {
-  shareTargetItem = item;
-  $('#share-link-result').hidden = true;
-  $('#share-options').hidden = false;
-  $('#share-create-btn').hidden = false;
-  $('#share-password').value = '';
-  if (item?.type === 'album') {
-    $('#share-title').textContent = i18n.t('Share album: {name}', { name: item.name });
-  } else {
-    $('#share-title').textContent = i18n.t('Share with Family & Friends');
+/* -- pages ----------------------------------------------------------------
+ *
+ * The parts of the family app that are opened rather than always on screen
+ * are modules of their own (static/js/pages/family/), fetched the first time
+ * they are opened. The import() calls are written out in full so the server
+ * finds them and names each at its stamped URL in the import map
+ * (server/modules.py).
+ */
+const PAGE_MODULES = {
+  duplicates: () => import('./pages/family/duplicates.js'),
+  map: () => import('./pages/family/map.js'),
+  sharing: () => import('./pages/family/sharing.js'),
+  upload: () => import('./pages/family/upload.js'),
+};
+const loadedPages = new Map();
+
+/** What a page may ask of the gallery around it. */
+const shell = {
+  get viewer() { return viewer; },
+  deleteSelected: (ids, done) => deleteSelected(ids, done),
+  reload: (options) => reload(options),
+};
+
+/** The module of page *name*, loaded and wired once; null if it has none. */
+function openPage(name) {
+  const load = PAGE_MODULES[name];
+  if (!load) return Promise.resolve(null);
+  if (!loadedPages.has(name)) {
+    loadedPages.set(name, load().then((module) => {
+      module.wire?.(shell);
+      return module;
+    }).catch((err) => {
+      // Not kept: the next opening asks again (the server was restarting, say).
+      loadedPages.delete(name);
+      toast(err.message, true);
+      return null;
+    }));
   }
-  // Share without strangers (api_share.py): said before the link is made.
-  const blurNote = $('#share-blur-note');
-  if (blurNote) blurNote.hidden = !state.status?.moments?.share_blur;
-  $('#share-modal').hidden = false;
+  return loadedPages.get(name);
 }
 
 /* ======================================================================== */

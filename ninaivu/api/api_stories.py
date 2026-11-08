@@ -28,7 +28,7 @@ from flask import abort, current_app, jsonify, make_response, request, send_file
 
 from ..server.auth import current_user, require_family
 from ..storage import db, stories, story_words
-from .api import _cfg, _conn, _guard, bp
+from .api import _cfg, _conn, _gate, _guard, bp
 from .api_share import _share_asset_or_404
 
 
@@ -80,7 +80,7 @@ def _story_or_404(story_id: int) -> dict[str, Any]:
     story = stories.get(conn, story_id)
     if not story:
         abort(404)
-    _guard(db.get_asset(conn, int(story["asset_id"]), current_user().id))
+    _gate(db.get_asset(conn, int(story["asset_id"]), current_user().id))
     return story
 
 
@@ -108,7 +108,7 @@ def _send(story: dict[str, Any]):
 def asset_stories(asset_id: int):
     """The stories told about one item, oldest first."""
     conn = _conn()
-    _guard(db.get_asset(conn, asset_id, current_user().id))
+    _gate(db.get_asset(conn, asset_id, current_user().id))
     stories.sweep(conn, _folder())
     told = stories.for_asset(conn, asset_id)
     words = story_words.for_stories(conn, [s["id"] for s in told])

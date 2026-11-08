@@ -4,7 +4,7 @@
 #   sh launcher/install-python-mac.sh --find   # prints the first Python 3.12+, or fails
 #   sh launcher/install-python-mac.sh          # asks, then installs Python 3.12
 #
-# Shared by Ninaivu.command, "Setup Ninaivu.command" and launcher/start.sh, so
+# Shared by launcher/Ninaivu.command and launcher/start.sh, so
 # the three look in the same places and install the same way.
 #
 # Ninaivu needs Python 3.12 or newer (MIN_PYTHON in launcher/start.py). The

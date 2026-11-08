@@ -30,6 +30,7 @@ translating all of the console rather than none of it.
 
 from __future__ import annotations
 
+from js_sources import family_app
 import ast
 import html
 import html.parser
@@ -338,7 +339,7 @@ def test_an_attribute_marker_survives_a_comma_in_the_sentence():
 def test_the_page_carries_the_control_and_the_script_finds_it():
     assert 'id="lang-btn"' in page()
     assert 'id="lang-label"' in page()
-    app = (ROOT / "ninaivu" / "static" / "js" / "app.js").read_text(encoding="utf-8")
+    app = family_app()
     assert "#lang-btn" in app and "#lang-label" in app
     assert "i18n.start()" in app, "the language is not set before the first paint"
 
@@ -487,7 +488,7 @@ def test_the_language_is_saved_on_the_profile_and_comes_back_at_sign_in(app, peo
 
 
 def test_the_page_applies_the_profile_language_and_saves_the_button():
-    app_js = (ROOT / "ninaivu" / "static" / "js" / "app.js").read_text(encoding="utf-8")
+    app_js = family_app()
     assert "state.user.language" in app_js and "rememberLanguage(next)" in app_js
 
 

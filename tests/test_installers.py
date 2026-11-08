@@ -77,7 +77,8 @@ def test_the_mac_app_opens_the_control_panel_and_keeps_its_files_in_its_folder_o
     assert '"$here/launcher.sh" "$app/Contents/MacOS/ninaivu"' in sh
     assert 'NINAIVU_HOME="$HOME/Library/Application Support/Ninaivu"' in launcher, "on its own, as an app"
     assert '"$folder/.ninaivu-portable"' in launcher and 'NINAIVU_STATE_DIR="$folder/data"' in launcher
-    assert "ninaivu.desktop.app" in launcher and "ninaivu.desktop.tray" in launcher
+    assert "ninaivu.desktop.app" in launcher and "ninaivu.desktop.tray" not in launcher, \
+        "the tray is the Control Panel minimised, not a second program"
     assert "notarytool submit" in sh and "stapler staple" in sh
     assert "ditto -c -k" in sh, "zipped with the bundle's links and attributes kept"
     assert (MACOS / "entitlements.plist").is_file()
@@ -164,13 +165,13 @@ def test_a_stripped_wheel_installs_and_imports_without_its_source(tmp_path):
 def test_the_linux_build_is_a_folder_that_needs_no_python_on_the_machine():
     linux = ROOT / "installers" / "linux"
     build = (linux / "build.sh").read_text(encoding="utf-8")
-    launcher = (linux / "portable" / "ninaivu").read_text(encoding="utf-8")
+    launcher = (linux / "portable" / "ninaivu.sh").read_text(encoding="utf-8")
     assert "python-build-standalone" in build and "install_only" in build, "the Python is bundled"
     assert "--only-binary=:all:" in build and "--platform" in build, "wheels are fetched for the target"
     assert "Linux-x86_64)" in build and "Linux-aarch64)" in build, "x64 and arm64, each on its own kind"
     assert "manylinux_2_28_aarch64" in build and "aarch64-unknown-linux-gnu" in build
     assert "--no-index" in build and "pip install" in build, "installed offline from the fetched wheels"
-    assert 'top" != "Open Ninaivu,app,logs,ninaivu,"' in build, "four things at the top, and nothing else"
+    assert 'top" != "app,logs,ninaivu,"' in build, "three things at the top, and one of them to open"
     assert "linux-$arch-portable" in build
     assert not (linux / "install.sh").exists() and not (linux / "header.sh").exists()
     # The machine's own Python is never called: only the bundled one, by path.
@@ -192,11 +193,11 @@ def test_every_build_opens_the_control_panel():
     exe = (WINDOWS / "portable" / "Ninaivu.cs").read_text(encoding="utf-8")
     assert "-m ninaivu.desktop.app" in exe
     mac = (MACOS / "launcher.sh").read_text(encoding="utf-8")
-    assert "-m ninaivu.desktop.app" in mac and "--tray" in mac
+    assert "-m ninaivu.desktop.app" in mac and "desktop.tray" not in mac
     assert "<key>LSUIElement</key><false/>" in (MACOS / "build.sh").read_text(encoding="utf-8"), \
         "a window app shows in the Dock"
-    linux = (ROOT / "installers" / "linux" / "portable" / "ninaivu").read_text(encoding="utf-8")
-    assert "-m ninaivu.desktop.app" in linux and "--tray" in linux and "--server" in linux
+    linux = (ROOT / "installers" / "linux" / "portable" / "ninaivu.sh").read_text(encoding="utf-8")
+    assert "-m ninaivu.desktop.app" in linux and "desktop.tray" not in linux and "--server" in linux
 
 
 def test_the_control_panel_falls_back_to_the_tray_without_tk(monkeypatch):
@@ -204,8 +205,8 @@ def test_the_control_panel_falls_back_to_the_tray_without_tk(monkeypatch):
     monkeypatch.setattr(app, "tk", None)
     called = []
     import ninaivu.desktop.tray as tray
-    monkeypatch.setattr(tray, "main", lambda: called.append(True) or 7)
-    assert app.main() == 7 and called == [True]
+    monkeypatch.setattr(tray, "run_alone", lambda: called.append(True) or 7)
+    assert app.main([]) == 7 and called == [True]
 
 
 def test_every_download_is_used_as_a_household_would_before_a_release():
@@ -225,3 +226,30 @@ def test_every_download_is_used_as_a_household_would_before_a_release():
                      ("mac-windows", "primary"): "macos-15", ("mac-windows", "secondary"): "windows-2022"}
     assert across["strategy"]["fail-fast"] is False, "both halves of a pair run to the end"
 
+
+
+def test_each_download_is_checked_by_opening_its_one_starter():
+    """tools/check_portable.py opens Ninaivu.exe, Ninaivu.app or the Linux
+    folder's ninaivu as a double-click does, and the panel reports how the
+    start went (NINAIVU_CHECK_OPEN) before it quits."""
+    text = (ROOT / "tools" / "check_portable.py").read_text(encoding="utf-8")
+    assert "open_the_starter(portable, photos, logs)" in text
+    assert "NINAIVU_CHECK_OPEN" in text
+    assert "NINAIVU_CHECK_OPEN" in (ROOT / "ninaivu" / "desktop" / "app.py").read_text(encoding="utf-8")
+
+
+def test_the_check_finds_each_systems_one_starter(tmp_path, monkeypatch):
+    monkeypatch.syspath_prepend(str(ROOT / "tools"))
+    check_portable = importlib.import_module("check_portable")
+    windows, mac, linux = tmp_path / "w", tmp_path / "m", tmp_path / "l"
+    (windows / "app").mkdir(parents=True)
+    (windows / "Ninaivu.exe").write_bytes(b"MZ")
+    (mac / "Ninaivu.app" / "Contents" / "MacOS").mkdir(parents=True)
+    (mac / "Ninaivu.app" / "Contents" / "MacOS" / "ninaivu").write_text("#!/bin/sh\n")
+    (linux / "app").mkdir(parents=True)
+    (linux / "ninaivu").write_bytes(b"\x7fELF")
+    assert check_portable.starter(windows) == windows / "Ninaivu.exe"
+    assert check_portable.starter(mac) == mac / "Ninaivu.app" / "Contents" / "MacOS" / "ninaivu"
+    assert check_portable.starter(linux) == linux / "ninaivu"
+    with pytest.raises(check_portable.Failed):
+        check_portable.starter(tmp_path)

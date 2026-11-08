@@ -1645,3 +1645,138 @@ def mugil_about_primary():
         from ..mugil import adopt                                # noqa: PLC0415
         adopt.remember_algo(cfg.state_dir, algo)
     return jsonify({"ok": True})
+
+
+# -- the census, the plan and the proof (mugil/topology.py) ---------------------
+
+def _topology():
+    """The census, plan and proof of this computer, one for the life of the
+    process; made when first asked, so a computer that never uses them pays
+    nothing."""
+    from ..mugil.topology import Topology                       # noqa: PLC0415
+    services = current_app.config["MV_SERVICES"]
+    current = getattr(services, "mugil_topology", None)
+    if current is None:
+        cfg = _cfg()
+        # Partner looked up when asked, so it is the one this module has then.
+        current = Topology(cfg, lambda: db.connect(cfg.db_path),
+                           partner=lambda *a, **k: Partner(*a, **k))
+        services.mugil_topology = current
+    return current
+
+
+def _refused(exc: Exception):
+    return jsonify({**refusal(str(exc)), "status": 409}), 409
+
+
+@mugil_bp.get("/api/admin/mugil/topology")
+@require_admin
+def mugil_topology_status():
+    """Where this computer stands, its censuses, and the change under way:
+    its plan's totals and its proof."""
+    return jsonify(_topology().status())
+
+
+@mugil_bp.post("/api/admin/mugil/census")
+@require_admin
+def mugil_census_take():
+    """Take a census of this computer, on any computer, single too: the
+    one taken before pairing is what the proof compares against."""
+    from ..mugil.topology import Refused                         # noqa: PLC0415
+    data = json_body()
+    data = data if isinstance(data, dict) else {}
+    try:
+        answer = _topology().take_census(read_all=data.get("read_all") is True)
+    except Refused as exc:
+        return _refused(exc)
+    _audit("census taken")
+    return jsonify(answer)
+
+
+@mugil_bp.post("/api/admin/mugil/topology/plan")
+@require_admin
+def mugil_topology_plan():
+    """On the Primary: plan a change (``{"transition": "pair"}``)."""
+    from ..mugil.topology import Refused                         # noqa: PLC0415
+    data = json_body()
+    if not isinstance(data, dict) or not isinstance(data.get("transition"), str):
+        return jsonify({**refusal("Say which change to plan."), "status": 400}), 400
+    try:
+        answer = _topology().plan(data["transition"], data.get("part") or None)
+    except Refused as exc:
+        return _refused(exc)
+    _audit(f"plan for {data['transition']} started")
+    return jsonify(answer)
+
+
+@mugil_bp.get("/api/admin/mugil/topology/plan")
+@require_admin
+def mugil_topology_plan_read():
+    """A page of the plan: ``outcome``, ``on`` (primary or secondary),
+    ``after`` (a line number) and ``limit``."""
+    try:
+        after = max(0, int(request.args.get("after", "0")))
+        limit = max(1, min(int(request.args.get("limit", "500")), 2000))
+    except ValueError:
+        return jsonify({**refusal("Give whole numbers."), "status": 400}), 400
+    return jsonify(_topology().plan_page(outcome=request.args.get("outcome") or None,
+                                         side=request.args.get("on") or None,
+                                         after=after, limit=limit))
+
+
+@mugil_bp.post("/api/admin/mugil/topology/prove")
+@require_admin
+def mugil_topology_prove():
+    """On the Primary: take both censuses again and prove nothing was lost."""
+    from ..mugil.topology import Refused                         # noqa: PLC0415
+    try:
+        answer = _topology().prove()
+    except Refused as exc:
+        return _refused(exc)
+    _audit("proof started")
+    return jsonify(answer)
+
+
+@mugil_peer_bp.post("/api/mugil/census")
+def mugil_census_start():
+    """On the Secondary: take a census, for the Primary's plan or proof."""
+    from ..mugil.topology import Refused                         # noqa: PLC0415
+    cfg = _cfg()
+    if role(cfg) != SECONDARY:
+        return _not_here()
+    if _signed(pairing.body_digest(read_at_most(JSON_MAX_BYTES))) is None:
+        return _unsigned()
+    try:
+        return jsonify(_topology().take_census())
+    except Refused as exc:
+        return _refused(exc)
+
+
+@mugil_peer_bp.get("/api/mugil/census")
+def mugil_census_status():
+    """On the Secondary: its censuses, and the one being taken."""
+    cfg = _cfg()
+    if role(cfg) != SECONDARY:
+        return _not_here()
+    if _signed(pairing.body_digest(b"")) is None:
+        return _unsigned()
+    answer = _topology().status()
+    answer.pop("record", None)
+    return jsonify(answer)
+
+
+@mugil_peer_bp.get("/api/mugil/census/file")
+def mugil_census_file():
+    """On the Secondary: one of its own censuses, as it is on the disk."""
+    from ..mugil.topology import census_file                     # noqa: PLC0415
+    cfg = _cfg()
+    if role(cfg) != SECONDARY:
+        return _not_here()
+    if _signed(pairing.body_digest(b"")) is None:
+        return _unsigned()
+    path = census_file(cfg.state_dir, request.args.get("name", ""))
+    if path is None:
+        return jsonify({"refused": "No census of that name is kept here.", "status": 404}), 404
+    response = send_file(path, mimetype="application/gzip", conditional=False, max_age=0)
+    response.headers["Cache-Control"] = "no-store"
+    return response

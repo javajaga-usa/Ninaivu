@@ -121,8 +121,8 @@ class RestoreTester:
         self._hold = hold
         self._clock = clock
         self._running = threading.Lock()
-        self._stop = threading.Event()
-        self._thread: threading.Thread | None = None
+        #: The supervisor its loop runs on; Ninaivu gives it its own.
+        self.supervisor = None
         self._worker: threading.Thread | None = None
         self.current: restore.RestoreJob | None = None
 
@@ -146,30 +146,36 @@ class RestoreTester:
 
     # -- schedule ---------------------------------------------------------------
 
+    #: The thread it runs on, as before it moved to the supervisor.
+    JOB = "ninaivu-restore-test"
+
     def start(self) -> None:
-        if self._thread and self._thread.is_alive():
-            return
-        self._stop.clear()
-        self._thread = threading.Thread(target=self._loop, name="ninaivu-restore-test",
-                                        daemon=True)
-        self._thread.start()
+        # A look every LOOK_EVERY seconds, kept by the supervisor
+        # (server/supervisor.py). A test under way is stopped as a stop
+        # always stopped it: its restore is told to stop.
+        from ..server.supervisor import NETWORK, Job, every, supervisor_of  # noqa: PLC0415
+        supervisor_of(self).add(Job(
+            self.JOB, self._look, every(lambda: LOOK_EVERY), claims={NETWORK}, log=log,
+            failure="the scheduled test restore failed to run",
+            interrupt=self._interrupt, progress=lambda: {"testing": self.running}))
 
     def stop(self, timeout: float = 5.0) -> None:
-        self._stop.set()
+        from ..server.supervisor import supervisor_of            # noqa: PLC0415
+        self._interrupt()
+        supervisor_of(self).stop_job(self.JOB, timeout)
+        worker = self._worker
+        if worker and worker.is_alive():
+            worker.join(timeout)
+
+    def _interrupt(self) -> None:
         job = self.current
         if job is not None:
             job.stop()
-        for thread in (self._thread, self._worker):
-            if thread and thread.is_alive():
-                thread.join(timeout)
 
-    def _loop(self) -> None:
-        while not self._stop.wait(LOOK_EVERY):
-            try:
-                if self.due():
-                    self.run(scheduled=True)
-            except Exception:                                   # noqa: BLE001
-                log.exception("the scheduled test restore failed to run")
+    def _look(self) -> None:
+        """One look: run the scheduled test, if one is owed."""
+        if self.due():
+            self.run(scheduled=True)
 
     def due(self) -> bool:
         """Is a scheduled test owed, and is now a fair time for it?"""

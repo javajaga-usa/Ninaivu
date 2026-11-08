@@ -7,6 +7,7 @@ storage check has a Stop button and a progress line.
 
 from __future__ import annotations
 
+from js_sources import console as console_js
 import re
 from pathlib import Path
 
@@ -61,6 +62,6 @@ def test_the_storage_check_can_be_stopped_and_shows_progress():
     assert 'id="scrubber-stop-btn"' in ADMIN
     assert 'id="scrub-progress-bar"' in ADMIN
     assert "Bitrot" not in re.sub(r"<!--.*?-->", "", ADMIN, flags=re.DOTALL)
-    js = (STATIC / "js" / "admin.js").read_text(encoding="utf-8")
+    js = console_js()
     assert "'/api/admin/scrubber/stop'" in js
     assert "showScrubberProgress(data?.progress)" in js

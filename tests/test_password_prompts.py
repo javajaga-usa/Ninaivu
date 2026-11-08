@@ -7,6 +7,7 @@ and Enter never presses the Show button that now sits inside the box.
 
 from __future__ import annotations
 
+from js_sources import console as console_js, family_app
 import re
 from pathlib import Path
 
@@ -32,8 +33,8 @@ def test_every_password_dialog_reads_out_its_error():
 
 
 def test_the_dialogs_get_show_and_hide():
-    admin = (JS / "admin.js").read_text(encoding="utf-8")
-    app = (JS / "app.js").read_text(encoding="utf-8")
+    admin = console_js()
+    app = family_app()
     assert "'.modal .field input[type=password]'" in admin and "upgradeSecret(input)" in admin
     assert "upgradeSecret($('#delete-password'))" in app
     assert app.count("upgradeSecret(") >= 2          # the Turn dialog builds its own

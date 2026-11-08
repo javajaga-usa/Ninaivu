@@ -4,6 +4,7 @@ through a link of 200 ms and 5 Mbit/s: opening the gallery again took 2.5 s
 before (a module at a time, each asked about again, then the start-up
 questions one after the other) and 1.3 s after."""
 
+from js_sources import family_app
 import base64
 import hashlib
 import re
@@ -61,7 +62,7 @@ def test_the_graph_follows_imports_into_subfolders():
 
 
 def test_start_up_asks_for_status_beside_the_lock():
-    app = (JS / "app.js").read_text(encoding="utf-8")
+    app = family_app()
     start = app[app.index("async function start(user)"):app.index("function renderIdentity()")]
     assert start.index("const statusAsked = api.status()") < start.index("await screenLock?.start(state.user)")
     assert "await refreshStatus(statusAsked)" in start

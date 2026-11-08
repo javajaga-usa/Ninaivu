@@ -78,7 +78,6 @@ nav:
       - Backup and recovery (tools): backup-recovery.md
       - Encryption and the recovery file: encryption-files.md
       - Moving to another machine: moving-to-another-machine.md
-      - The Pi as the always-on copy: pi-replica.md
       - Two computers, Primary and Secondary: two-computers.md
       - Date access: date-access.md
       - Changelog: CHANGELOG.md

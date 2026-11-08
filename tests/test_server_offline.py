@@ -1,3 +1,4 @@
+from js_sources import family_app
 import re
 from pathlib import Path
 
@@ -20,7 +21,7 @@ def test_style_css_has_offline_rules():
 
 
 def test_app_js_handles_offline_and_reconnection():
-    app_js = (Path(__file__).parents[1] / 'ninaivu' / 'static' / 'js' / 'app.js').read_text(encoding='utf-8')
+    app_js = family_app()
     assert 'setServerOffline' in app_js
     assert 'checkConnection' in app_js
     assert 'isNetworkFailure' in app_js

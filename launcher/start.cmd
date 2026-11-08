@@ -1,11 +1,13 @@
 @echo off
-rem Ninaivu - double-click to set up and start. Everything else lives in folders.
-rem Passes its arguments on: start.cmd D:\Photos --ai off
+rem Ninaivu from a checkout, on Windows - double-click to set up and start.
+rem Passes its arguments on: launcher\start.cmd D:\Photos --ai off
+rem (The portable download has Ninaivu.exe instead, and needs none of this.)
 rem
 rem The first run on a computer without Python 3.12 or newer installs it for
 rem this user (launcher\install-python.ps1), then carries on as usual.
 setlocal EnableExtensions
-cd /d "%~dp0"
+rem The checkout, one folder up from this one.
+cd /d "%~dp0.."
 
 call :find_python
 if defined NINAIVU_PY goto run
@@ -14,14 +16,14 @@ echo.
 echo   Ninaivu needs Python 3.12 or newer, and this computer does not have it yet.
 echo   Installing it now, for this user only. This takes a few minutes, once.
 echo.
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0launcher\install-python.ps1"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0install-python.ps1"
 call :find_python
 if defined NINAIVU_PY goto run
 
 echo.
 echo   Python could not be installed automatically.
 echo   Install Python 3.12 from https://www.python.org/downloads/windows/
-echo   (tick "Add python.exe to PATH"), then double-click start.cmd again.
+echo   (tick "Add python.exe to PATH"), then double-click launcher\start.cmd again.
 echo.
 pause
 endlocal & exit /b 1
@@ -34,7 +36,7 @@ rem the reason with it. On a failure it waits, so the message can be read.
 if not "%NINAIVU_RC%"=="0" (
   echo.
   echo   Ninaivu stopped with an error ^(code %NINAIVU_RC%^). The messages above say why.
-  echo   The full log is in the .ninaivu-control folder beside start.cmd.
+  echo   The full log is in the .ninaivu-control folder of the checkout.
   echo.
   pause
 )

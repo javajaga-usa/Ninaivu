@@ -9,8 +9,9 @@ silicon (M1 or later) on macOS 14 (Sonoma) or newer.
 To start
   1. Double-click the zip. Move the Ninaivu folder it makes somewhere you
      can write to: your Documents, or a drive.
-  2. Open Ninaivu.app in that folder. The Ninaivu Control Panel opens; press
-     Start.
+  2. Open Ninaivu.app in that folder. The Ninaivu Control Panel opens and starts
+     Ninaivu, and its icon goes in the menu bar. Closing the window puts it
+     there; Ninaivu keeps running. Opening Ninaivu.app again brings it back.
 
   If the release is not signed, macOS refuses it at first: open it once,
   then go to System Settings > Privacy & Security and choose Open Anyway.
@@ -26,7 +27,7 @@ To start
   there Ninaivu cannot see the folder its data lives in.
 
 Where things are
-  Ninaivu.app     opens the Control Panel.
+  Ninaivu.app     the one thing to open: the Control Panel, and Ninaivu started.
   data/           what Ninaivu keeps, made the first time it opens: the
                   index of your library, settings, people, thumbnails;
                   data/ai-models (the AI models, once you download them);

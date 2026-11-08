@@ -42,6 +42,7 @@ from .. import __version__, about, ai as ai_mod
 from ..utils import phrase, proxies, query
 from ..server import features
 from ..server import activity as activity_kit, auth, turn as turn_file
+from ..server import visibility
 from ..storage import colour_copies, db, new_files, recycle
 from ..storage import stories as stories_mod
 from ..storage import descriptions as descriptions_mod
@@ -294,32 +295,13 @@ def _viewer() -> dict[str, Any]:
 
 #: A family member's search leaves out what the explicit check scored at this
 #: share of its line or over (storage/db.py, search_shield_clause).
-NEAR_EXPLICIT_SHARE = 0.5
+NEAR_EXPLICIT_SHARE = visibility.NEAR_EXPLICIT_SHARE
 
 
 def _search_shield() -> dict[str, Any]:
-    """What a search by this caller leaves out beyond their own limits.
-
-    Nothing for an administrator, who sees everything. For everybody else no
-    screenshot or document, no picture of people in only their underwear
-    (media/revealing.py), and nothing scored near the explicit line: on
-    the scale SigLIP gives (sigmoid scores, ai.py) half the line still sits
-    far above an ordinary photograph. CLIP's softmax scores sit close to its
-    line on ordinary photographs, so no nearer line is drawn for it.
-    """
-    if current_user().is_admin:
-        return {}
-    near = 0.0
-    engine = _engine()
-    bare = 0.0
-    if getattr(_cfg(), "nsfw_filter", False):
-        if getattr(engine, "sigmoid_scores", False):
-            near = ai_mod.explicit_line(_cfg(), engine) * NEAR_EXPLICIT_SHARE
-        # People in only their underwear, on a model they are judged under.
-        from ..media import revealing                           # noqa: PLC0415
-        if revealing.applies(str(getattr(engine, "model_id", "") or "")):
-            bare = revealing.line(_cfg())
-    return {"search_shield": True, "near_explicit": near, "revealing": bare}
+    """What a search by this caller leaves out beyond their own limits: the
+    shields the visibility gate holds (``Viewer.search_shield``)."""
+    return visibility.current().search_shield()
 
 
 def _viewer_limits() -> dict[str, Any]:
@@ -331,6 +313,15 @@ def _viewer_limits() -> dict[str, Any]:
 def _guard(asset: dict[str, Any] | None) -> dict[str, Any]:
     """404 unless the caller is allowed to see this asset."""
     if not _may_see(asset):
+        abort(404)
+    return asset  # type: ignore[return-value]
+
+
+def _gate(asset: dict[str, Any] | None) -> dict[str, Any]:
+    """404 unless the caller may see this asset, as the visibility gate
+    decides it (server/visibility.py): :func:`_guard`, for the routes that go
+    through the gate."""
+    if not visibility.current().may_see(asset):
         abort(404)
     return asset  # type: ignore[return-value]
 
@@ -1224,7 +1215,8 @@ def segments():
     ranked list already — so those always come back as a single piece.
     """
     cfg = _cfg()
-    roots = _roots()
+    viewer = visibility.current()
+    roots = viewer.roots
     conn = _conn()
     filters = _filters_from_request()
     limit = max(1, min(_int_arg("limit", 100_000), 200_000))
@@ -1268,9 +1260,8 @@ def segments():
     # The count is kept between pieces: each piece of a large library counted
     # the whole of it again, for the same answer.
     rows, total = db.query_assets(
-        conn, roots, limit=limit, offset=offset, columns=_SEGMENT_COLUMNS, positional=True,
-        remember_total=True, stacks=stacked, **_viewer(), **filters
-    )
+        conn, gate=viewer, limit=limit, offset=offset, columns=_SEGMENT_COLUMNS,
+        positional=True, remember_total=True, stacks=stacked, **filters)
     reached = offset + len(rows)
 
     if order_map:
@@ -1292,7 +1283,7 @@ def segments():
         width, height = row[WIDTH] or 0, row[HEIGHT] or 0
         aspect = round((width / height) * 100) if width and height else 100
         aspect = 30 if aspect < 30 else 400 if aspect > 400 else aspect
-        visibility = row[VIS]
+        level = row[VIS]
         thumb = row[THUMB]
         flags = (
             (1 if row[FAVOURITE] else 0)
@@ -1301,8 +1292,8 @@ def segments():
             | (8 if row[DUP] else 0)
             | (16 if row[LAT] is not None else 0)
             | (32 if (row[RATING] or 0) > 0 else 0)
-            | (64 if visibility == 0 else 0)
-            | (128 if visibility == VIS_HIDDEN else 0)
+            | (64 if level == 0 else 0)
+            | (128 if level == VIS_HIDDEN else 0)
             # A Live badge on the tile, and a RAW one for a RAW+JPEG shot.
             | (256 if row[LIVE] and row[LIVE_VIDEO] else 0)
             | (512 if row[RAW] else 0)
@@ -1348,7 +1339,8 @@ def segments():
 def assets():
     """Full metadata, paginated — used for detail views and exports."""
     cfg = _cfg()
-    roots = _roots()
+    viewer = visibility.current()
+    roots = viewer.roots
     conn = _conn()
     filters = _filters_from_request()
     limit = max(1, min(_int_arg("limit", cfg.page_size), cfg.max_page_size))
@@ -1359,9 +1351,9 @@ def assets():
         # ids is one (not the first page of everything).
         wanted = _ids_from_csv(request.args.get("ids"), 1000)
         rows, total = db.query_assets(
-            conn, roots, ids=wanted, include_nsfw=current_user().is_admin,
+            conn, gate=viewer, ids=wanted, include_nsfw=current_user().is_admin,
             include_trashed=current_user().is_admin,
-            limit=len(wanted) or 1, offset=0, **_viewer(),
+            limit=len(wanted) or 1, offset=0,
         )
         rank = {v: i for i, v in enumerate(wanted)}
         rows.sort(key=lambda r: rank.get(r["id"], 0))
@@ -1378,14 +1370,12 @@ def assets():
         filters["ids"] = ranked_ids
         filters["include_companions"] = False   # see /api/segments
         matching, _ = db.query_assets(
-            conn, roots, limit=len(ranked_ids), offset=0, columns=("id",),
-            **_viewer(), **filters
-        )
+            conn, gate=viewer, limit=len(ranked_ids), offset=0, columns=("id",), **filters)
         rank = {aid: i for i, aid in enumerate(ranked_ids)}
         kept = sorted((r["id"] for r in matching), key=rank.__getitem__)
         filters["ids"] = kept[offset:offset + limit]
         rows, _ = db.query_assets(
-            conn, roots, limit=limit, offset=0, **_viewer(), **filters, with_total=False)
+            conn, gate=viewer, limit=limit, offset=0, **filters, with_total=False)
         rows.sort(key=lambda r: rank[r["id"]])
         total = len(kept)
     else:
@@ -1393,8 +1383,7 @@ def assets():
         # segments keep it (db.query_assets): scrolling through a search
         # counted every match again for each page of 200.
         rows, total = db.query_assets(
-            conn, roots, limit=limit, offset=offset, remember_total=True, **_viewer(), **filters
-        )
+            conn, gate=viewer, limit=limit, offset=offset, remember_total=True, **filters)
 
     return jsonify({
         "items": [_public(r, scores) for r in rows],
@@ -1598,7 +1587,7 @@ def _public(row: dict[str, Any], scores: dict[int, float] | None = None) -> dict
 @bp.get("/api/asset/<int:asset_id>")
 def asset_detail(asset_id: int):
     conn = _conn()
-    row = _guard(db.get_asset(conn, asset_id, current_user().id))
+    row = _gate(db.get_asset(conn, asset_id, current_user().id))
     out = _public(row)
     # How many voice stories it has, for the viewer's Stories button. Past
     # the guard, so only ever said about an item this viewer may open.
@@ -1618,7 +1607,7 @@ def thumb(asset_id: int):
     cfg = _cfg()
     # The guard columns only: a grid asks for hundreds of these at a time,
     # and each fetched the whole row, caption and OCR text included.
-    row = _guard(db.get_asset_brief(_conn(), asset_id))
+    row = _gate(db.get_asset_brief(_conn(), asset_id))
     if not row.get("thumb"):
         abort(404)
     size = _int_arg("s", cfg.thumb_sizes[0])
@@ -1797,7 +1786,7 @@ def _leaving(row: dict[str, Any], path: Path) -> tuple[Path, str]:
 
 @bp.get("/api/file/<int:asset_id>")
 def original(asset_id: int):
-    row = _guard(db.get_asset(_conn(), asset_id))
+    row = _gate(db.get_asset(_conn(), asset_id))
     path = _asset_file(row, viewing=True)
     row = _as_file(row, path)
     etag = None
@@ -1884,7 +1873,7 @@ def still_preview(asset_id: int):
     not open it. The original is still behind ``/api/file``, for family
     members and admins; a guest is given this same copy there too.
     """
-    row = _guard(db.get_asset(_conn(), asset_id))
+    row = _gate(db.get_asset(_conn(), asset_id))
     if (row.get("kind") or "") != "picture":
         abort(404)
     path = _asset_file(row, viewing=True)
@@ -2291,7 +2280,7 @@ def converted_stream(asset_id: int):
 def live_video(asset_id: int):
     """Stream companion live photo video clip."""
     conn = _conn()
-    row = _guard(db.get_asset(conn, asset_id))
+    row = _gate(db.get_asset(conn, asset_id))
     live_path = row.get("live_video_path")
     if not live_path:
         abort(404, description="No companion live video for this item")
@@ -2299,7 +2288,7 @@ def live_video(asset_id: int):
     # (hidden, flagged, in the bin): whoever may see the still is not
     # thereby given a clip they could not open by its own id.
     clip = db.live_clip_of(conn, row)
-    if clip is not None and not _may_see(clip):
+    if clip is not None and not visibility.current().may_see(clip):
         abort(404, description="Companion video file not found")
     if request.args.get("convert") == "1":
         return _live_converted(clip)
@@ -3532,11 +3521,7 @@ def clear_folder_visibility():
 
 @bp.get("/api/facets")
 def facets():
-    limits = _viewer()
-    found = db.facets(
-        _conn(), _roots(),
-        max_visibility=limits["max_visibility"], scope=limits["scope"],
-    )
+    found = db.facets(_conn(), gate=visibility.current())
     if current_user().is_guest:
         # No EXIF, no camera, no GPS for a guest (_public); the list of every
         # camera in the house, with counts, is the same information.
@@ -3552,22 +3537,15 @@ def occasions():
     place to put something a person wants to keep. Hand-made albums are what
     that is for.
     """
-    limits = _viewer()
     return jsonify({"occasions": db.list_occasions(
-        _conn(), _roots(),
-        viewer_id=limits["viewer_id"], max_visibility=limits["max_visibility"],
-        scope=limits["scope"], limit=max(1, min(_int_arg("limit", 200), 1000)),
+        _conn(), gate=visibility.current(), limit=max(1, min(_int_arg("limit", 200), 1000)),
         with_place=not current_user().is_guest,
     )})
 
 
 @bp.get("/api/timeline")
 def timeline():
-    limits = _viewer()
-    return jsonify({"days": db.timeline(
-        _conn(), _roots(),
-        max_visibility=limits["max_visibility"], scope=limits["scope"],
-    )})
+    return jsonify({"days": db.timeline(_conn(), gate=visibility.current())})
 
 
 @bp.get("/api/duplicates")
@@ -3608,7 +3586,7 @@ def _duplicate_item(row: dict[str, Any], recipe: str) -> dict[str, Any]:
 @bp.get("/api/similar/<int:asset_id>")
 def similar(asset_id: int):
     conn = _conn()
-    _guard(db.get_asset(conn, asset_id))
+    _gate(db.get_asset(conn, asset_id))
     row = conn.execute(
         "SELECT vector, dim FROM embeddings WHERE asset_id=?", (asset_id,)
     ).fetchone()
@@ -3622,9 +3600,10 @@ def similar(asset_id: int):
     wanted = [i for i, _ in ranked]
     # Not the photograph's own RAW or clip, which were always the "most
     # similar" of all.
+    viewer = visibility.current()
     rows, _ = db.query_assets(
-        conn, _roots(), ids=wanted, limit=len(wanted), offset=0, **_viewer(),
-        with_total=False, include_companions=False, **_search_shield())
+        conn, gate=viewer, ids=wanted, limit=len(wanted), offset=0,
+        with_total=False, include_companions=False, **viewer.search_shield())
     scores = dict(ranked)
     rows.sort(key=lambda r: -scores.get(r["id"], 0))
     return jsonify({"items": [_public(r, scores) for r in rows]})
@@ -3634,9 +3613,7 @@ def similar(asset_id: int):
 def suggest():
     """Autocomplete for the search box: tags, folders, cameras."""
     text = request.args.get("q", "").strip().lower()
-    limits = _viewer()
-    data = db.facets(_conn(), _roots(), limit=200,
-                     max_visibility=limits["max_visibility"], scope=limits["scope"])
+    data = db.facets(_conn(), gate=visibility.current(), limit=200)
     out: list[dict[str, Any]] = []
     for kind, items, field in (
         ("tag", data["tags"], "name"),
@@ -3911,20 +3888,29 @@ PLAIN_ERRORS = {
 # phones, the library folder, and shares with what grew up beside them. They
 # register on the blueprints above, so they must be imported after those exist,
 # which is why this sits at the foot of the file rather than the head.
+#
+# A feature's routes (ninaivu/features: smart albums, photo books, memory
+# films, ...) are put on by its manifest, _feature(name), in the very place
+# its module was imported before 4.0, so the URL map is the same, rule for
+# rule. Each still answers 404 from inside while it is switched off.
+from ..features import register_routes as _feature                    # noqa: E402
 from . import (api_faces, api_library, api_phone_backup,             # noqa: E402,F401
-               api_portrait, api_share, api_smart, api_straighten)
+               api_portrait, api_share)
+_feature("smart")
+from . import api_straighten                                         # noqa: E402,F401
 # "Who is this?" links and the family tree.
-from . import api_ask_family, api_family_tree  # noqa: E402,F401
-from . import api_books  # noqa: E402,F401 - photo books (media/books.py)
-from . import api_films  # noqa: E402,F401 - memory films (media/films.py)
-from . import api_handover                                           # noqa: E402,F401
-from . import api_stories                                           # noqa: E402,F401
+_feature("ask_family")
+_feature("family_tree")
+_feature("books")
+_feature("films")
+_feature("handover")
+_feature("stories")
 # The phone inbox for sync apps (WebDAV, phone keys): media/phone_keys.py.
 from . import api_webdav                                            # noqa: E402,F401
 # "Only to me": a family member's items kept out of everybody else's view.
 from . import api_private                                           # noqa: E402,F401
 # Sent for screening: family members flag items, an administrator decides.
-from . import api_screening                                         # noqa: E402,F401
+_feature("screening")
 
 
 # The AI Playground's routes live in their own module and register on `bp`.
@@ -3935,7 +3921,8 @@ from . import api_scan_prints  # noqa: E402,F401 - registers routes
 
 # Family moments, each off until switched on: the living photo frame and
 # time capsules.
-from . import api_capsules, api_frame  # noqa: E402,F401
+_feature("capsules")
+from . import api_frame  # noqa: E402,F401
 
 # Ask Ninaivu: questions about the photographs, answered on this computer.
 from . import api_ask_ninaivu  # noqa: E402,F401
@@ -3944,7 +3931,7 @@ from . import api_ask_ninaivu  # noqa: E402,F401
 from . import api_our_year  # noqa: E402,F401
 
 # A life in photographs: one person's life, decade by decade.
-from . import api_life_story  # noqa: E402,F401
+_feature("life_story")
 
 # Talk about this photo: questions about the photograph open in the viewer.
 from . import api_photo_talk  # noqa: E402,F401
@@ -3952,7 +3939,7 @@ from . import api_photo_talk  # noqa: E402,F401
 from . import api_festivals  # noqa: E402,F401
 
 # Letters read aloud: an old letter's words, written out and spoken.
-from . import api_letters  # noqa: E402,F401
+_feature("letters")
 
 # Young faces, older names: who an unnamed child in an old photograph may be.
 from . import api_young_faces  # noqa: E402,F401
@@ -3961,14 +3948,15 @@ from . import api_young_faces  # noqa: E402,F401
 from . import api_find_print  # noqa: E402,F401
 
 # Photo stacks: a burst, or a photograph and its copies, as one tile.
-from . import api_stacks  # noqa: E402,F401
+_feature("stacks")
 
 # Speaking to search, and colour for black-and-white photographs: each off
 # until switched on, each answered on this computer.
-from . import api_colour, api_voice_search  # noqa: E402,F401
+_feature("colour_copies")
+from . import api_voice_search  # noqa: E402,F401
 
 # Moments inside videos: search finds the second inside a long clip.
-from . import api_video_moments  # noqa: E402,F401
+_feature("video_moments")
 
 # Then and now: the same place, the same person, years apart.
-from . import api_then_and_now  # noqa: E402,F401
+_feature("then_and_now")

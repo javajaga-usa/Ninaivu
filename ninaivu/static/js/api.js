@@ -1,395 +1,751 @@
-/** Thin fetch layer with in-flight de-duplication and abortable searches. */
-
-import * as i18n from './i18n.js';
-
-const inflight = new Map();
-
-/* -- expired sessions ----------------------------------------------------
- *
- * A session can end while a tab is sitting open: it is reset, signed out from
- * elsewhere, or it simply reaches its thirty days. Every request after that
- * answers 401, and without this the page just showed failures until somebody
- * thought to reload. Instead the first 401 raises the sign-in screen the app
- * already has.
- *
- * Signing in is itself a 401 when the password is wrong, so anything under
- * /api/auth/ is exempt — otherwise one typo would be reported as an expired
- * session.
- */
-
-const unauthorizedHandlers = new Set();
-let sessionAlreadyLost = false;
-
-/* -- guest browsing --------------------------------------------------------
- *
- * Bug: "Continue as a guest" signed itself out immediately. The guest picker
- * tile signs in as nobody on purpose (id 0, the anonymous viewer) so that
- * anything family-or-above-only — the People row, favouriting, and so on —
- * answers 401 "Sign in to do that." That is the server being honest, and the
- * calling code already expects it and degrades gracefully (loadPeople(), for
- * one, just shows an empty row). But every 401 anywhere also used to raise
- * the sign-in screen unconditionally, which is right for someone who really
- * was signed in and got logged out from under them, and wrong for someone
- * who was never signed in at all — a guest hits this on the very first
- * family-gated call the page happens to make, and got bounced straight back
- * to the picker they'd just left, looking exactly like an instant sign-out.
- *
- * The fix isn't to silence 401s (the server's distinction between "you're
- * not signed in" and "you don't have permission" is worth keeping); it's to
- * only treat one as a lost session when there was a session to lose.
- */
-let viewerIsAnonymous = false;
-
-/** Call whenever who's-viewing changes — real sign-in, guest, or sign-out. */
-export function setAnonymousViewer(isAnonymous) {
-  viewerIsAnonymous = !!isAnonymous;
-}
-
-export function onUnauthorized(handler) {
-  unauthorizedHandlers.add(handler);
-  return () => unauthorizedHandlers.delete(handler);
-}
-
-/** Call from any fetch helper that sees a 401. Safe to call repeatedly. */
-export function reportUnauthorized(url = '') {
-  if (String(url).includes('/api/auth/')) return false;
-  if (viewerIsAnonymous) return false;      // expected for a guest; not a lost session
-  if (sessionAlreadyLost) return true;      // one sign-in screen, not twelve
-  sessionAlreadyLost = true;
-  for (const handler of unauthorizedHandlers) {
-    try {
-      handler();
-    } catch {
-      /* a broken listener must not swallow the original error */
-    }
-  }
-  return true;
-}
-
-/** Called once the viewer is back in, so a later expiry is noticed again. */
-export function sessionRestored() {
-  sessionAlreadyLost = false;
-  forgetInflight();
-}
-
 /**
- * Let go of the questions still on their way. Somebody new is viewing (a
- * sign-in, a guest, the picker over an ended session): a question asked for
- * the last one, under the last one's cookie, must not be handed to the next as
- * its own answer — a 401, or the last person's list, in place of theirs.
- */
-export function forgetInflight() {
-  inflight.clear();
-}
-
-async function request(url, options = {}) {
-  // X-Requested-With says this came from a script, not a form. A multipart
-  // body (a voice story) is what a cross-origin form can also send, so the
-  // server will not take one without it; see _refuse_cross_origin_writes.
-  const response = await fetch(url, {
-    ...options,
-    headers: { Accept: 'application/json', 'X-Requested-With': 'fetch', ...(options.headers || {}) },
-  });
-  const text = await response.text();
-  let data = null;
-  try {
-    data = text ? JSON.parse(text) : null;
-  } catch {
-    throw new Error(`Unexpected response from ${url}`);
-  }
-  if (!response.ok) {
-    // A 401 carrying `needs_password` is this request asking you to confirm
-    // who you are before it does something irreversible — not a session that
-    // has ended. Raising the sign-in screen for it put the gate on top of the
-    // dialog doing the asking, and signed somebody out of their own gallery
-    // for mistyping a password into a delete box.
-    if (response.status === 401 && !data?.needs_password) reportUnauthorized(url);
-    throw Object.assign(new Error(i18n.fromServer(data, response.statusText)), {
-      status: response.status,
-      data,
-    });
-  }
-  return data;
-}
-
-function post(url, body) {
-  return request(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify(body ?? {}),
-  });
-}
-
-/** Collapses duplicate concurrent GETs to the same URL. */
-function get(url, { signal } = {}) {
-  if (signal) return request(url, { signal });
-  if (inflight.has(url)) return inflight.get(url);
-  const promise = request(url).finally(() => inflight.delete(url));
-  inflight.set(url, promise);
-  return promise;
-}
-
-export function buildQuery(filters) {
-  const params = new URLSearchParams();
-  if (filters.q) params.set('q', filters.q);
-  for (const kind of filters.kinds || []) params.append('kind', kind);
-  if (filters.favorites) params.set('favorites', '1');
-  if (filters.duplicates) params.set('duplicates', '1');
-  if (filters.is_live) params.set('is_live', '1');
-  if (filters.tag) params.set('tag', filters.tag);
-  if (filters.folder) params.set('folder', filters.folder);
-  if (filters.camera) params.set('camera', filters.camera);
-  if (filters.person) params.set('person', String(filters.person));
-  if (filters.occasion) params.set('occasion', String(filters.occasion));
-  if (filters.album) params.set('album', String(filters.album));
-  // Photographs taken near this one (the viewer's "Photos taken nearby").
-  if (filters.near) params.set('near', String(filters.near));
-  if (filters.from) params.set('from', filters.from);
-  if (filters.to) params.set('to', filters.to);
-  if (filters.minRating) params.set('min_rating', String(filters.minRating));
-  if (filters.visibility) params.set('visibility', filters.visibility);
-  if (filters.private) params.set('private', '1');
-  if (filters.sort) params.set('sort', filters.sort);
-  return params;
-}
-
-let scanProgressMissing = false;
-
-export const api = {
-  // Without the counts by default. They are the one part of the status that
-  // grows with the library — 196,174 photographs and a cold cache made it
-  // twenty-three seconds — and nothing on screen needs them to draw a
-  // photograph. `counts()` fills them in afterwards.
-  status: () => get('/api/status?stats=0'),
-  counts: () => get('/api/status/stats'),
-  // Everything running in the background, the scan among them. See
-  // activity.js, which owns the fallback for a server older than this script.
-  activity: () => get('/api/status/activity'),
-  scanProgress: async () => {
-    // Scripts update the moment they change on disk; the server only on a
-    // restart. A page that has the new script and a server that does not yet
-    // have this endpoint gets the scan from /api/status as before — the heavy
-    // way, but a bar that moves rather than one that stops.
-    if (!scanProgressMissing) {
-      try {
-        return await get('/api/status/scan');
-      } catch (err) {
-        if (err instanceof TypeError || (err.status && err.status !== 404)) throw err;
-        scanProgressMissing = true;
-      }
-    }
-    return (await get('/api/status'))?.scan ?? null;
-  },
-  people: () => get('/api/faces/people'),
-  albums: () => get('/api/albums'),
-  album: (id) => get(`/api/albums/${id}`),
-  createAlbum: (name, ids = []) => post('/api/albums', { name, ids }),
-  updateAlbum: (id, fields) => request(`/api/albums/${id}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify(fields ?? {}),
-  }),
-  albumAdd: (id, ids) => post(`/api/albums/${id}/items`, { ids, remove: false }),
-  albumRemove: (id, ids) => post(`/api/albums/${id}/items`, { ids, remove: true }),
-  // "Only to me": keep these out of everybody else's view, or give them back.
-  keepPrivate: (ids, keep = true) => post('/api/private', { ids, private: keep }),
-  // Sent for screening (api/api_screening.py).
-  sendForScreening: (ids, note = '', sent = true) => post('/api/screening', { ids, note, sent }),
-  deleteAlbum: (id) => request(`/api/albums/${id}`, { method: 'DELETE' }),
-  // Photo books (static/js/books.js).
-  bookOptions: () => request('/api/books/options'),
-  bookIdeas: () => request('/api/books/ideas'),
-  bookPick: (source, count) => post('/api/books/pick', { source, count }),
-  bookBuild: (fields) => post('/api/books', fields),
-  books: () => request('/api/books'),
-  book: (id) => request(`/api/books/${id}`),
-  bookCancel: (id) => post(`/api/books/${id}/cancel`),
-  deleteBook: (id) => request(`/api/books/${id}`, { method: 'DELETE' }),
-  // Memory films (static/js/films.js), while `memory_films` is switched on.
-  filmOptions: () => get('/api/films/options'),
-  filmPick: (source, count, style = 'film') => post('/api/films/pick', { source, count, style }),
-  filmStoryboard: (fields) => post('/api/films/storyboard', fields),
-  filmBuild: (fields) => post('/api/films', fields),
-  films: () => request('/api/films'),
-  film: (id) => request(`/api/films/${id}`),
-  filmCancel: (id) => post(`/api/films/${id}/cancel`),
-  deleteFilm: (id) => request(`/api/films/${id}`, { method: 'DELETE' }),
-  filmSongAdd: (file) => {
-    const form = new FormData();
-    form.append('audio', file, file.name);
-    return request('/api/films/music', { method: 'POST', body: form });
-  },
-  deleteFilmSong: (token) => request(`/api/films/music/${token}`, { method: 'DELETE' }),
-  segments: (filters, signal, { limit, offset = 0 } = {}) => {
-    const params = buildQuery(filters);
-    if (limit) params.set('limit', String(limit));
-    if (offset) params.set('offset', String(offset));
-    return get(`/api/segments?${params}`, { signal });
-  },
-  assets: (filters, { limit = 200, offset = 0 } = {}) => {
-    const params = buildQuery(filters);
-    params.set('limit', String(limit));
-    params.set('offset', String(offset));
-    return get(`/api/assets?${params}`);
-  },
-  byIds: (ids) => get(`/api/assets?ids=${ids.join(',')}`),
-  asset: (id) => get(`/api/asset/${id}`),
-  // Voice stories (stories.js). The recording goes as multipart, so the
-  // browser writes its own Content-Type.
-  stories: (id) => request(`/api/asset/${id}/stories`),
-  // Talk about this photo (static/js/talk.js).
-  talkStatus: (id) => request(`/api/asset/${id}/talk`),
-  talk: (id, question, turns) => post(`/api/asset/${id}/talk`, { question, turns }),
-  addStory: (id, form) => request(`/api/asset/${id}/stories`, { method: 'POST', body: form }),
-  deleteStory: (id) => request(`/api/stories/${id}`, { method: 'DELETE' }),
-  update: (id, fields) => post(`/api/asset/${id}`, fields),
-  bulk: (ids, fields) => post('/api/assets/bulk', { ids, ...fields }),
-  // The password goes with every call, never remembered between them.
-  deleteItems: (ids, password) => post('/api/delete', { ids, password }),
-  rotate: (id, rotation) => post(`/api/asset/${id}/rotate`, { rotation }),
-  // Turns the files themselves, not just Ninaivu's view of them. Admin only,
-  // and the password goes with it as it does with deleting.
-  rotateFiles: (ids, rotation, password) => post('/api/rotate', { ids, rotation, password }),
-  facets: () => get('/api/facets'),
-  duplicates: () => get('/api/duplicates'),
-  occasions: () => get('/api/occasions'),
-  similar: (id) => get(`/api/similar/${id}`),
-  suggest: (q) => get(`/api/suggest?q=${encodeURIComponent(q)}`),
-  browse: (path) => get(`/api/library/browse?path=${encodeURIComponent(path || '')}`),
-  setRoot: (path, full = false) => post('/api/library/root', { path, full }),
-  rescan: (full = false) => post('/api/scan', { full }),
-  settings: (fields) => post('/api/settings', fields),
-  memories: (month, day) => {
-    const params = new URLSearchParams();
-    if (month) params.set('month', month);
-    if (day) params.set('day', day);
-    const qs = params.toString();
-    return get(`/api/memories/on-this-day${qs ? '?' + qs : ''}`);
-  },
-  geoPoints: (bounds = {}) => {
-    const qs = new URLSearchParams(bounds).toString();
-    return get(`/api/geo/points${qs ? '?' + qs : ''}`);
-  },
-  // The map (storage/geo.py): groups on screen, the places, a group's or a
-  // place's photographs, and a year's route.
-  geoClusters: (query) => get(`/api/geo/clusters?${new URLSearchParams(query)}`),
-  geoPlaces: (query = {}) => get(`/api/geo/places?${new URLSearchParams(query)}`),
-  geoPhotos: (query) => get(`/api/geo/photos?${new URLSearchParams(query)}`),
-  geoTrail: (query) => get(`/api/geo/trail?${new URLSearchParams(query)}`),
-  shares: () => get('/api/shares'),
-  createShare: (scope, targetId, expiresInDays, password) =>
-    post('/api/shares', { scope, target_id: targetId, expires_in_days: expiresInDays, password }),
-  deleteShare: (token) => request(`/api/shares/${token}`, { method: 'DELETE' }),
-  peopleClusters: () => get('/api/faces/clusters'),
-  savePersonCluster: (name, avatarAssetId) =>
-    post('/api/faces/clusters', { name, avatar_asset_id: avatarAssetId }),
-};
-
-/**
- * A thumbnail URL, with the version that makes caching safe.
+ * One function per API route, made from the route manifest.
  *
- * Thumbnails come back `immutable` with a year's lifetime, so a browser that
- * has one will never ask again — which is right until a rotation rewrites the
- * file underneath it. Passing the asset's `thumb_v` means a rewritten
- * thumbnail is a different URL, and the old one can stay cached for ever
- * exactly as intended.
+ * Generated by tools/js_api.py. Do not edit: change the route in
+ * ninaivu/server/ and run python tools/route_manifest.py, then
+ * python tools/js_api.py. The hand-written fetch layer is http.js; it
+ * is exported from here as well, so `from './api.js'` still finds it.
  */
-export function thumbUrl(id, size, version) {
-  const v = version ? `&v=${version}` : '';
-  return `/api/thumb/${id}?s=${size}${v}`;
-}
 
-function safeParse(text) {
-  try { return JSON.parse(text); } catch { return null; }
-}
+import { consoleJson, homeSend, withQuery } from './http.js';
 
-/** Subscribes to scan progress over SSE, falling back to polling. */
-export function subscribeProgress(onMessage) {
-  let source = null;
-  let retry = null;
-  let poll = null;
+export * from './http.js';
 
-  // Not every browser has server-sent events, and a privacy extension or a
-  // corporate proxy can take them away from one that does. Falling back to
-  // polling costs a request every two seconds and keeps the progress bar
-  // honest; throwing here used to take the whole page down with it, because
-  // this runs inside the console's start-up and nothing above it caught.
-  const startPolling = () => {
-    if (poll) return;
-    const ask = async () => {
-      // Nobody is looking; the next tick after they come back catches up.
-      if (typeof document !== 'undefined' && document.hidden) return;
-      try {
-        // The counters alone. /api/status counts the whole library, which
-        // every two seconds during a scan is real work for the database.
-        const scan = await api.scanProgress();
-        if (scan) onMessage(scan);
-      } catch { /* a dropped poll is not worth reporting */ }
-    };
-    ask();
-    poll = setInterval(ask, 2000);
+const seg = (value) => encodeURIComponent(String(value));
+const path = (value) => String(value).split('/').map(encodeURIComponent).join('/');
+
+/** The family app's routes (port 80). */
+export const home = (() => {
+  const send = (method, url, options = {}) => homeSend(method, withQuery(url, options.query), options);
+  return {
+    deleteAlbumsByAlbumId: (albumId, options) => send('DELETE', `/api/albums/${seg(albumId)}`, options),
+    deleteAskFamilyQuestionsByToken: (token, options) => send('DELETE', `/api/ask-family/questions/${seg(token)}`, options),
+    deleteAssetByAssetIdLetter: (assetId, options) => send('DELETE', `/api/asset/${seg(assetId)}/letter`, options),
+    deleteBooksByBookId: (bookId, options) => send('DELETE', `/api/books/${seg(bookId)}`, options),
+    deleteCapsulesByCapsuleId: (capsuleId, options) => send('DELETE', `/api/capsules/${seg(capsuleId)}`, options),
+    deleteFamilyTreeRelationsByRelationId: (relationId, options) => send('DELETE', `/api/family-tree/relations/${seg(relationId)}`, options),
+    deleteFilmsByFilmId: (filmId, options) => send('DELETE', `/api/films/${seg(filmId)}`, options),
+    deleteFilmsMusicByToken: (token, options) => send('DELETE', `/api/films/music/${seg(token)}`, options),
+    deleteMeAvatar: (options) => send('DELETE', '/api/me/avatar', options),
+    deletePhoneKeysByKeyId: (keyId, options) => send('DELETE', `/api/phone-keys/${seg(keyId)}`, options),
+    deleteSharesByToken: (token, options) => send('DELETE', `/api/shares/${seg(token)}`, options),
+    deleteSmartAlbumsByAlbumId: (albumId, options) => send('DELETE', `/api/smart-albums/${seg(albumId)}`, options),
+    deleteStoriesByStoryId: (storyId, options) => send('DELETE', `/api/stories/${seg(storyId)}`, options),
+    getAiPlaygroundCapabilities: (options) => send('GET', '/api/ai-playground/capabilities', options),
+    getAiPlaygroundServerJobsByJobId: (jobId, options) => send('GET', `/api/ai-playground/server-jobs/${seg(jobId)}`, options),
+    getAiPlaygroundServerJobsByJobIdResult: (jobId, options) => send('GET', `/api/ai-playground/server-jobs/${seg(jobId)}/result`, options),
+    getAlbums: (options) => send('GET', '/api/albums', options),
+    getAlbumsByAlbumId: (albumId, options) => send('GET', `/api/albums/${seg(albumId)}`, options),
+    getAskByToken: (token, options) => send('GET', `/api/ask/${seg(token)}`, options),
+    getAskByTokenFaceByPosition: (token, position, options) => send('GET', `/api/ask/${seg(token)}/face/${seg(position)}`, options),
+    getAskByTokenPhotoByPosition: (token, position, options) => send('GET', `/api/ask/${seg(token)}/photo/${seg(position)}`, options),
+    getAskFamilyAnswers: (options) => send('GET', '/api/ask-family/answers', options),
+    getAskFamilyFaces: (options) => send('GET', '/api/ask-family/faces', options),
+    getAskFamilyQuestions: (options) => send('GET', '/api/ask-family/questions', options),
+    getAskNinaivu: (options) => send('GET', '/api/ask-ninaivu', options),
+    getAssetByAssetId: (assetId, options) => send('GET', `/api/asset/${seg(assetId)}`, options),
+    getAssetByAssetIdColour: (assetId, options) => send('GET', `/api/asset/${seg(assetId)}/colour`, options),
+    getAssetByAssetIdColourUpright: (assetId, options) => send('GET', `/api/asset/${seg(assetId)}/colour/upright`, options),
+    getAssetByAssetIdEnhance: (assetId, options) => send('GET', `/api/asset/${seg(assetId)}/enhance`, options),
+    getAssetByAssetIdLetter: (assetId, options) => send('GET', `/api/asset/${seg(assetId)}/letter`, options),
+    getAssetByAssetIdLetterVoiceWav: (assetId, options) => send('GET', `/api/asset/${seg(assetId)}/letter/voice.wav`, options),
+    getAssetByAssetIdStories: (assetId, options) => send('GET', `/api/asset/${seg(assetId)}/stories`, options),
+    getAssetByAssetIdTalk: (assetId, options) => send('GET', `/api/asset/${seg(assetId)}/talk`, options),
+    getAssets: (options) => send('GET', '/api/assets', options),
+    getAuthProfiles: (options) => send('GET', '/api/auth/profiles', options),
+    getAuthSession: (options) => send('GET', '/api/auth/session', options),
+    getAuthState: (options) => send('GET', '/api/auth/state', options),
+    getAvatarByUserId: (userId, options) => send('GET', `/api/avatar/${seg(userId)}`, options),
+    getBooks: (options) => send('GET', '/api/books', options),
+    getBooksByBookId: (bookId, options) => send('GET', `/api/books/${seg(bookId)}`, options),
+    getBooksByBookIdDownload: (bookId, options) => send('GET', `/api/books/${seg(bookId)}/download`, options),
+    getBooksIdeas: (options) => send('GET', '/api/books/ideas', options),
+    getBooksOptions: (options) => send('GET', '/api/books/options', options),
+    getCapsules: (options) => send('GET', '/api/capsules', options),
+    getCapsulesByCapsuleId: (capsuleId, options) => send('GET', `/api/capsules/${seg(capsuleId)}`, options),
+    getDownloadByAssetId: (assetId, options) => send('GET', `/api/download/${seg(assetId)}`, options),
+    getDownloadZip: (options) => send('GET', '/api/download/zip', options),
+    getDuplicates: (options) => send('GET', '/api/duplicates', options),
+    getFacesAssetByAssetId: (assetId, options) => send('GET', `/api/faces/asset/${seg(assetId)}`, options),
+    getFacesPeople: (options) => send('GET', '/api/faces/people', options),
+    getFacesThumbByFaceId: (faceId, options) => send('GET', `/api/faces/thumb/${seg(faceId)}`, options),
+    getFacets: (options) => send('GET', '/api/facets', options),
+    getFamilyTree: (options) => send('GET', '/api/family-tree', options),
+    getFestivals: (options) => send('GET', '/api/festivals', options),
+    getFestivalsByKey: (key, options) => send('GET', `/api/festivals/${seg(key)}`, options),
+    getFileByAssetId: (assetId, options) => send('GET', `/api/file/${seg(assetId)}`, options),
+    getFilms: (options) => send('GET', '/api/films', options),
+    getFilmsByFilmId: (filmId, options) => send('GET', `/api/films/${seg(filmId)}`, options),
+    getFilmsByFilmIdVideo: (filmId, options) => send('GET', `/api/films/${seg(filmId)}/video`, options),
+    getFilmsMusicOwnByName: (name, options) => send('GET', `/api/films/music/own/${seg(name)}`, options),
+    getFilmsOptions: (options) => send('GET', '/api/films/options', options),
+    getFrameNext: (options) => send('GET', '/api/frame/next', options),
+    getFramePictureByAssetId: (assetId, options) => send('GET', `/api/frame/picture/${seg(assetId)}`, options),
+    getGeoClusters: (options) => send('GET', '/api/geo/clusters', options),
+    getGeoPhotos: (options) => send('GET', '/api/geo/photos', options),
+    getGeoPlaces: (options) => send('GET', '/api/geo/places', options),
+    getGeoPoints: (options) => send('GET', '/api/geo/points', options),
+    getGeoTrail: (options) => send('GET', '/api/geo/trail', options),
+    getHandoverClaims: (options) => send('GET', '/api/handover/claims', options),
+    getHandoverMe: (options) => send('GET', '/api/handover/me', options),
+    getLife: (options) => send('GET', '/api/life', options),
+    getLifeByPersonId: (personId, options) => send('GET', `/api/life/${seg(personId)}`, options),
+    getLiveVideoByAssetId: (assetId, options) => send('GET', `/api/live-video/${seg(assetId)}`, options),
+    getMe: (options) => send('GET', '/api/me', options),
+    getMemoriesOnThisDay: (options) => send('GET', '/api/memories/on-this-day', options),
+    getMoments: (options) => send('GET', '/api/moments', options),
+    getMomentsByAssetId: (assetId, options) => send('GET', `/api/moments/${seg(assetId)}`, options),
+    getMomentsByAssetIdFrame: (assetId, options) => send('GET', `/api/moments/${seg(assetId)}/frame`, options),
+    getMugilCensus: (options) => send('GET', '/api/mugil/census', options),
+    getMugilCensusFile: (options) => send('GET', '/api/mugil/census/file', options),
+    getMugilHello: (options) => send('GET', '/api/mugil/hello', options),
+    getMugilInbox: (options) => send('GET', '/api/mugil/inbox', options),
+    getMugilInboxFile: (options) => send('GET', '/api/mugil/inbox/file', options),
+    getMugilKept: (options) => send('GET', '/api/mugil/kept', options),
+    getMugilOriginals: (options) => send('GET', '/api/mugil/originals', options),
+    getMugilSurvey: (options) => send('GET', '/api/mugil/survey', options),
+    getMugilSurveyFile: (options) => send('GET', '/api/mugil/survey/file', options),
+    getMugilSurveyItems: (options) => send('GET', '/api/mugil/survey/items', options),
+    getMugilUpdate: (options) => send('GET', '/api/mugil/update', options),
+    getOccasions: (options) => send('GET', '/api/occasions', options),
+    getOurYear: (options) => send('GET', '/api/our-year', options),
+    getOurYearByYear: (year, options) => send('GET', `/api/our-year/${seg(year)}`, options),
+    getPhoneBackupStatus: (options) => send('GET', '/api/phone-backup/status', options),
+    getPhoneKeys: (options) => send('GET', '/api/phone-keys', options),
+    getPreviewByAssetId: (assetId, options) => send('GET', `/api/preview/${seg(assetId)}`, options),
+    getPrintsCapabilities: (options) => send('GET', '/api/prints/capabilities', options),
+    getPrintsJobsByJobId: (jobId, options) => send('GET', `/api/prints/jobs/${seg(jobId)}`, options),
+    getPrintsJobsByJobIdResult: (jobId, options) => send('GET', `/api/prints/jobs/${seg(jobId)}/result`, options),
+    getProxyByAssetId: (assetId, options) => send('GET', `/api/proxy/${seg(assetId)}`, options),
+    getScreeningByAssetId: (assetId, options) => send('GET', `/api/screening/${seg(assetId)}`, options),
+    getSegments: (options) => send('GET', '/api/segments', options),
+    getShareByToken: (token, options) => send('GET', `/api/share/${seg(token)}`, options),
+    getShareByTokenFileByAssetId: (token, assetId, options) => send('GET', `/api/share/${seg(token)}/file/${seg(assetId)}`, options),
+    getShareByTokenPreviewByAssetId: (token, assetId, options) => send('GET', `/api/share/${seg(token)}/preview/${seg(assetId)}`, options),
+    getShareByTokenStoriesByAssetId: (token, assetId, options) => send('GET', `/api/share/${seg(token)}/stories/${seg(assetId)}`, options),
+    getShareByTokenStoryByStoryId: (token, storyId, options) => send('GET', `/api/share/${seg(token)}/story/${seg(storyId)}`, options),
+    getShareByTokenThumbByAssetId: (token, assetId, options) => send('GET', `/api/share/${seg(token)}/thumb/${seg(assetId)}`, options),
+    getShares: (options) => send('GET', '/api/shares', options),
+    getSimilarByAssetId: (assetId, options) => send('GET', `/api/similar/${seg(assetId)}`, options),
+    getSmartAlbums: (options) => send('GET', '/api/smart-albums', options),
+    getStacksByAssetId: (assetId, options) => send('GET', `/api/stacks/${seg(assetId)}`, options),
+    getStatus: (options) => send('GET', '/api/status', options),
+    getStatusActivity: (options) => send('GET', '/api/status/activity', options),
+    getStatusScan: (options) => send('GET', '/api/status/scan', options),
+    getStatusStats: (options) => send('GET', '/api/status/stats', options),
+    getStoriesByStoryIdAudio: (storyId, options) => send('GET', `/api/stories/${seg(storyId)}/audio`, options),
+    getStreamByAssetId: (assetId, options) => send('GET', `/api/stream/${seg(assetId)}`, options),
+    getSuggest: (options) => send('GET', '/api/suggest', options),
+    getThenAndNow: (options) => send('GET', '/api/then-and-now', options),
+    getThenAndNowToday: (options) => send('GET', '/api/then-and-now/today', options),
+    getThumbByAssetId: (assetId, options) => send('GET', `/api/thumb/${seg(assetId)}`, options),
+    getTimeline: (options) => send('GET', '/api/timeline', options),
+    getVoiceSearch: (options) => send('GET', '/api/voice-search', options),
+    getYoungFaces: (options) => send('GET', '/api/young-faces', options),
+    patchAlbumsByAlbumId: (albumId, options) => send('PATCH', `/api/albums/${seg(albumId)}`, options),
+    patchSmartAlbumsByAlbumId: (albumId, options) => send('PATCH', `/api/smart-albums/${seg(albumId)}`, options),
+    postAiPlaygroundGenerate: (options) => send('POST', '/api/ai-playground/generate', options),
+    postAiPlaygroundInpaint: (options) => send('POST', '/api/ai-playground/inpaint', options),
+    postAiPlaygroundPlan: (options) => send('POST', '/api/ai-playground/plan', options),
+    postAiPlaygroundSegment: (options) => send('POST', '/api/ai-playground/segment', options),
+    postAiPlaygroundServerJobs: (options) => send('POST', '/api/ai-playground/server-jobs', options),
+    postAlbums: (options) => send('POST', '/api/albums', options),
+    postAlbumsByAlbumIdItems: (albumId, options) => send('POST', `/api/albums/${seg(albumId)}/items`, options),
+    postAskByTokenAnswer: (token, options) => send('POST', `/api/ask/${seg(token)}/answer`, options),
+    postAskFamilyAnswersByAnswerIdAccept: (answerId, options) => send('POST', `/api/ask-family/answers/${seg(answerId)}/accept`, options),
+    postAskFamilyAnswersByAnswerIdReject: (answerId, options) => send('POST', `/api/ask-family/answers/${seg(answerId)}/reject`, options),
+    postAskFamilyQuestions: (options) => send('POST', '/api/ask-family/questions', options),
+    postAskNinaivu: (options) => send('POST', '/api/ask-ninaivu', options),
+    postAssetByAssetId: (assetId, options) => send('POST', `/api/asset/${seg(assetId)}`, options),
+    postAssetByAssetIdColour: (assetId, options) => send('POST', `/api/asset/${seg(assetId)}/colour`, options),
+    postAssetByAssetIdEditedCopy: (assetId, options) => send('POST', `/api/asset/${seg(assetId)}/edited-copy`, options),
+    postAssetByAssetIdLetterRead: (assetId, options) => send('POST', `/api/asset/${seg(assetId)}/letter/read`, options),
+    postAssetByAssetIdLetterVoice: (assetId, options) => send('POST', `/api/asset/${seg(assetId)}/letter/voice`, options),
+    postAssetByAssetIdRotate: (assetId, options) => send('POST', `/api/asset/${seg(assetId)}/rotate`, options),
+    postAssetByAssetIdStories: (assetId, options) => send('POST', `/api/asset/${seg(assetId)}/stories`, options),
+    postAssetByAssetIdTalk: (assetId, options) => send('POST', `/api/asset/${seg(assetId)}/talk`, options),
+    postAssetsBulk: (options) => send('POST', '/api/assets/bulk', options),
+    postAuthActive: (options) => send('POST', '/api/auth/active', options),
+    postAuthEnter: (options) => send('POST', '/api/auth/enter', options),
+    postAuthForgot: (options) => send('POST', '/api/auth/forgot', options),
+    postAuthLock: (options) => send('POST', '/api/auth/lock', options),
+    postAuthLogin: (options) => send('POST', '/api/auth/login', options),
+    postAuthLogout: (options) => send('POST', '/api/auth/logout', options),
+    postAuthSetup: (options) => send('POST', '/api/auth/setup', options),
+    postAuthUnlock: (options) => send('POST', '/api/auth/unlock', options),
+    postBooks: (options) => send('POST', '/api/books', options),
+    postBooksByBookIdCancel: (bookId, options) => send('POST', `/api/books/${seg(bookId)}/cancel`, options),
+    postBooksPick: (options) => send('POST', '/api/books/pick', options),
+    postCapsules: (options) => send('POST', '/api/capsules', options),
+    postDelete: (options) => send('POST', '/api/delete', options),
+    postFamilyTreeRelations: (options) => send('POST', '/api/family-tree/relations', options),
+    postFilms: (options) => send('POST', '/api/films', options),
+    postFilmsByFilmIdCancel: (filmId, options) => send('POST', `/api/films/${seg(filmId)}/cancel`, options),
+    postFilmsMusic: (options) => send('POST', '/api/films/music', options),
+    postFilmsPick: (options) => send('POST', '/api/films/pick', options),
+    postFilmsStoryboard: (options) => send('POST', '/api/films/storyboard', options),
+    postHandoverClaim: (options) => send('POST', '/api/handover/claim', options),
+    postHandoverClaimsByClaimIdCancel: (claimId, options) => send('POST', `/api/handover/claims/${seg(claimId)}/cancel`, options),
+    postLifeByPersonIdWords: (personId, options) => send('POST', `/api/life/${seg(personId)}/words`, options),
+    postMe: (options) => send('POST', '/api/me', options),
+    postMeAvatar: (options) => send('POST', '/api/me/avatar', options),
+    postMePassword: (options) => send('POST', '/api/me/password', options),
+    postMugilCensus: (options) => send('POST', '/api/mugil/census', options),
+    postMugilHandoverRemove: (options) => send('POST', '/api/mugil/handover/remove', options),
+    postMugilHave: (options) => send('POST', '/api/mugil/have', options),
+    postMugilInboxTaken: (options) => send('POST', '/api/mugil/inbox/taken', options),
+    postMugilIntroduce: (options) => send('POST', '/api/mugil/introduce', options),
+    postMugilJoin: (options) => send('POST', '/api/mugil/join', options),
+    postMugilMove: (options) => send('POST', '/api/mugil/move', options),
+    postMugilOriginalsCopy: (options) => send('POST', '/api/mugil/originals/copy', options),
+    postMugilOriginalsVerify: (options) => send('POST', '/api/mugil/originals/verify', options),
+    postMugilPair: (options) => send('POST', '/api/mugil/pair', options),
+    postMugilSurvey: (options) => send('POST', '/api/mugil/survey', options),
+    postOurYearByYearWords: (year, options) => send('POST', `/api/our-year/${seg(year)}/words`, options),
+    postPhoneBackupCheck: (options) => send('POST', '/api/phone-backup/check', options),
+    postPhoneBackupFiles: (options) => send('POST', '/api/phone-backup/files', options),
+    postPhoneBackupFinish: (options) => send('POST', '/api/phone-backup/finish', options),
+    postPhoneKeys: (options) => send('POST', '/api/phone-keys', options),
+    postPortraitAnalyse: (options) => send('POST', '/api/portrait/analyse', options),
+    postPrintsDetect: (options) => send('POST', '/api/prints/detect', options),
+    postPrintsFind: (options) => send('POST', '/api/prints/find', options),
+    postPrintsSave: (options) => send('POST', '/api/prints/save', options),
+    postPrivate: (options) => send('POST', '/api/private', options),
+    postRotate: (options) => send('POST', '/api/rotate', options),
+    postScreening: (options) => send('POST', '/api/screening', options),
+    postShareByTokenUnlock: (token, options) => send('POST', `/api/share/${seg(token)}/unlock`, options),
+    postShares: (options) => send('POST', '/api/shares', options),
+    postSmartAlbums: (options) => send('POST', '/api/smart-albums', options),
+    postStacksByAssetIdApart: (assetId, options) => send('POST', `/api/stacks/${seg(assetId)}/apart`, options),
+    postStacksByAssetIdTop: (assetId, options) => send('POST', `/api/stacks/${seg(assetId)}/top`, options),
+    postThenAndNowFilm: (options) => send('POST', '/api/then-and-now/film', options),
+    postUpload: (options) => send('POST', '/api/upload', options),
+    postVisibility: (options) => send('POST', '/api/visibility', options),
+    postVoiceSearch: (options) => send('POST', '/api/voice-search', options),
+    postYoungFacesByFaceIdNo: (faceId, options) => send('POST', `/api/young-faces/${seg(faceId)}/no`, options),
+    postYoungFacesByFaceIdYes: (faceId, options) => send('POST', `/api/young-faces/${seg(faceId)}/yes`, options),
+    putAssetByAssetIdLetter: (assetId, options) => send('PUT', `/api/asset/${seg(assetId)}/letter`, options),
+    putLifeByPersonIdBorn: (personId, options) => send('PUT', `/api/life/${seg(personId)}/born`, options),
+    putMugilAboutPrimary: (options) => send('PUT', '/api/mugil/about-primary', options),
+    putMugilHandover: (options) => send('PUT', '/api/mugil/handover', options),
+    putMugilInboxKeys: (options) => send('PUT', '/api/mugil/inbox/keys', options),
+    putMugilOriginals: (options) => send('PUT', '/api/mugil/originals', options),
+    putMugilUpdate: (options) => send('PUT', '/api/mugil/update', options),
+    putMugilWake: (options) => send('PUT', '/api/mugil/wake', options),
+    putPhoneBackupFilesByRowId: (rowId, options) => send('PUT', `/api/phone-backup/files/${seg(rowId)}`, options),
+    putThenAndNowBornByPersonId: (personId, options) => send('PUT', `/api/then-and-now/born/${seg(personId)}`, options),
+    putYoungFacesBornByPersonId: (personId, options) => send('PUT', `/api/young-faces/born/${seg(personId)}`, options),
   };
+})();
 
-  let failures = 0;
-
-  const connect = () => {
-    if (typeof EventSource === 'undefined') {
-      startPolling();
-      return;
-    }
-    source = new EventSource('/api/events');
-    source.onmessage = (event) => {
-      failures = 0;
-      onMessage(safeParse(event.data));
-    };
-    source.onerror = () => {
-      source.close();
-      source = null;
-      clearTimeout(retry);
-      failures += 1;
-      // A stream that keeps failing is not a network blip, it is a stream
-      // that is not there. On the family port the progress endpoint is an
-      // admin route and so genuinely 404s, which used to leave this retrying
-      // every four seconds for ever while the progress bar never appeared at
-      // all. Two attempts, then poll — which that port does allow.
-      if (failures >= 2) startPolling();
-      else retry = setTimeout(connect, 4000);
-    };
+/** The console's routes (port 3000). */
+export const admin = (() => {
+  const send = (method, url, options = {}) => consoleJson(withQuery(url, options.query),
+    { method, body: options.body, signal: options.signal });
+  return {
+    deleteAdminLibraries: (options) => send('DELETE', '/api/admin/libraries', options),
+    deleteAdminPhoneKeysByKeyId: (keyId, options) => send('DELETE', `/api/admin/phone-keys/${seg(keyId)}`, options),
+    deleteAlbumsByAlbumId: (albumId, options) => send('DELETE', `/api/albums/${seg(albumId)}`, options),
+    deleteAskFamilyQuestionsByToken: (token, options) => send('DELETE', `/api/ask-family/questions/${seg(token)}`, options),
+    deleteAssetByAssetIdLetter: (assetId, options) => send('DELETE', `/api/asset/${seg(assetId)}/letter`, options),
+    deleteBooksByBookId: (bookId, options) => send('DELETE', `/api/books/${seg(bookId)}`, options),
+    deleteCapsulesByCapsuleId: (capsuleId, options) => send('DELETE', `/api/capsules/${seg(capsuleId)}`, options),
+    deleteFacesPersonByPersonId: (personId, options) => send('DELETE', `/api/faces/person/${seg(personId)}`, options),
+    deleteFamilyTreeRelationsByRelationId: (relationId, options) => send('DELETE', `/api/family-tree/relations/${seg(relationId)}`, options),
+    deleteFilmsByFilmId: (filmId, options) => send('DELETE', `/api/films/${seg(filmId)}`, options),
+    deleteFilmsMusicByToken: (token, options) => send('DELETE', `/api/films/music/${seg(token)}`, options),
+    deleteMeAvatar: (options) => send('DELETE', '/api/me/avatar', options),
+    deletePeopleByUserId: (userId, options) => send('DELETE', `/api/people/${seg(userId)}`, options),
+    deletePeopleByUserIdAvatar: (userId, options) => send('DELETE', `/api/people/${seg(userId)}/avatar`, options),
+    deletePhoneKeysByKeyId: (keyId, options) => send('DELETE', `/api/phone-keys/${seg(keyId)}`, options),
+    deleteSharesByToken: (token, options) => send('DELETE', `/api/shares/${seg(token)}`, options),
+    deleteSmartAlbumsByAlbumId: (albumId, options) => send('DELETE', `/api/smart-albums/${seg(albumId)}`, options),
+    deleteStoriesByStoryId: (storyId, options) => send('DELETE', `/api/stories/${seg(storyId)}`, options),
+    deleteVisibilityFolder: (options) => send('DELETE', '/api/visibility/folder', options),
+    getAdminAiModels: (options) => send('GET', '/api/admin/ai-models', options),
+    getAdminAssignable: (options) => send('GET', '/api/admin/assignable', options),
+    getAdminAttention: (options) => send('GET', '/api/admin/attention', options),
+    getAdminBackups: (options) => send('GET', '/api/admin/backups', options),
+    getAdminComponents: (options) => send('GET', '/api/admin/components', options),
+    getAdminCopies: (options) => send('GET', '/api/admin/copies', options),
+    getAdminDatePolicy: (options) => send('GET', '/api/admin/date-policy', options),
+    getAdminDigest: (options) => send('GET', '/api/admin/digest', options),
+    getAdminDigestPreview: (options) => send('GET', '/api/admin/digest/preview', options),
+    getAdminDisks: (options) => send('GET', '/api/admin/disks', options),
+    getAdminDrives: (options) => send('GET', '/api/admin/drives', options),
+    getAdminDrivesExport: (options) => send('GET', '/api/admin/drives/export', options),
+    getAdminExactCopies: (options) => send('GET', '/api/admin/exact-copies', options),
+    getAdminExtensions: (options) => send('GET', '/api/admin/extensions', options),
+    getAdminFingerprints: (options) => send('GET', '/api/admin/fingerprints', options),
+    getAdminFirstDay: (options) => send('GET', '/api/admin/first-day', options),
+    getAdminFit: (options) => send('GET', '/api/admin/fit', options),
+    getAdminFolder: (options) => send('GET', '/api/admin/folder', options),
+    getAdminFolders: (options) => send('GET', '/api/admin/folders', options),
+    getAdminHandover: (options) => send('GET', '/api/admin/handover', options),
+    getAdminHandoverSheet: (options) => send('GET', '/api/admin/handover/sheet', options),
+    getAdminJobs: (options) => send('GET', '/api/admin/jobs', options),
+    getAdminJobsBackground: (options) => send('GET', '/api/admin/jobs/background', options),
+    getAdminJournal: (options) => send('GET', '/api/admin/journal', options),
+    getAdminJournalChanges: (options) => send('GET', '/api/admin/journal/changes', options),
+    getAdminJournalItemByAssetId: (assetId, options) => send('GET', `/api/admin/journal/item/${seg(assetId)}`, options),
+    getAdminKeepsake: (options) => send('GET', '/api/admin/keepsake', options),
+    getAdminLargeFiles: (options) => send('GET', '/api/admin/large-files', options),
+    getAdminLargeFilesCompress: (options) => send('GET', '/api/admin/large-files/compress', options),
+    getAdminLargeFilesCompressByJobId: (jobId, options) => send('GET', `/api/admin/large-files/compress/${seg(jobId)}`, options),
+    getAdminLargeFilesExtraCopies: (options) => send('GET', '/api/admin/large-files/extra-copies', options),
+    getAdminLibraries: (options) => send('GET', '/api/admin/libraries', options),
+    getAdminLibraryRelocation: (options) => send('GET', '/api/admin/library/relocation', options),
+    getAdminLocations: (options) => send('GET', '/api/admin/locations', options),
+    getAdminMigration: (options) => send('GET', '/api/admin/migration', options),
+    getAdminMigrationExport: (options) => send('GET', '/api/admin/migration/export', options),
+    getAdminMigrationRecoveryCleanup: (options) => send('GET', '/api/admin/migration/recovery-cleanup', options),
+    getAdminMugil: (options) => send('GET', '/api/admin/mugil', options),
+    getAdminMugilChecklist: (options) => send('GET', '/api/admin/mugil/checklist', options),
+    getAdminMugilFree: (options) => send('GET', '/api/admin/mugil/free', options),
+    getAdminMugilMachines: (options) => send('GET', '/api/admin/mugil/machines', options),
+    getAdminMugilOnlyOnSecondary: (options) => send('GET', '/api/admin/mugil/only-on-secondary', options),
+    getAdminMugilOptimize: (options) => send('GET', '/api/admin/mugil/optimize', options),
+    getAdminMugilRebuild: (options) => send('GET', '/api/admin/mugil/rebuild', options),
+    getAdminMugilTopology: (options) => send('GET', '/api/admin/mugil/topology', options),
+    getAdminMugilTopologyPlan: (options) => send('GET', '/api/admin/mugil/topology/plan', options),
+    getAdminMugilUpdate: (options) => send('GET', '/api/admin/mugil/update', options),
+    getAdminNotifications: (options) => send('GET', '/api/admin/notifications', options),
+    getAdminOverview: (options) => send('GET', '/api/admin/overview', options),
+    getAdminPerformance: (options) => send('GET', '/api/admin/performance', options),
+    getAdminPhoneBackups: (options) => send('GET', '/api/admin/phone-backups', options),
+    getAdminPhoneKeys: (options) => send('GET', '/api/admin/phone-keys', options),
+    getAdminPreview: (options) => send('GET', '/api/admin/preview', options),
+    getAdminPrivacy: (options) => send('GET', '/api/admin/privacy', options),
+    getAdminProblems: (options) => send('GET', '/api/admin/problems', options),
+    getAdminRepair: (options) => send('GET', '/api/admin/repair', options),
+    getAdminSafety: (options) => send('GET', '/api/admin/safety', options),
+    getAdminScreening: (options) => send('GET', '/api/admin/screening', options),
+    getAdminScrubberStatus: (options) => send('GET', '/api/admin/scrubber/status', options),
+    getAdminServer: (options) => send('GET', '/api/admin/server', options),
+    getAdminServerLog: (options) => send('GET', '/api/admin/server/log', options),
+    getAdminSettingsAll: (options) => send('GET', '/api/admin/settings/all', options),
+    getAdminSpace: (options) => send('GET', '/api/admin/space', options),
+    getAdminStorageReport: (options) => send('GET', '/api/admin/storage-report', options),
+    getAdminTuning: (options) => send('GET', '/api/admin/tuning', options),
+    getAdminTvAlbum: (options) => send('GET', '/api/admin/tv-album', options),
+    getAdminUploads: (options) => send('GET', '/api/admin/uploads', options),
+    getAdminUploadsByUploadIdPreview: (uploadId, options) => send('GET', `/api/admin/uploads/${seg(uploadId)}/preview`, options),
+    getAdminVideoTrial: (options) => send('GET', '/api/admin/video-trial', options),
+    getAdminVideoTrialByAssetIdByWhich: (assetId, which, options) => send('GET', `/api/admin/video-trial/${seg(assetId)}/${seg(which)}`, options),
+    getAdminWorkload: (options) => send('GET', '/api/admin/workload', options),
+    getAdminXmp: (options) => send('GET', '/api/admin/xmp', options),
+    getAiPlaygroundCapabilities: (options) => send('GET', '/api/ai-playground/capabilities', options),
+    getAiPlaygroundServerJobsByJobId: (jobId, options) => send('GET', `/api/ai-playground/server-jobs/${seg(jobId)}`, options),
+    getAiPlaygroundServerJobsByJobIdResult: (jobId, options) => send('GET', `/api/ai-playground/server-jobs/${seg(jobId)}/result`, options),
+    getAlbums: (options) => send('GET', '/api/albums', options),
+    getAlbumsByAlbumId: (albumId, options) => send('GET', `/api/albums/${seg(albumId)}`, options),
+    getArchiveCapacityProgress: (options) => send('GET', '/api/archive/capacity/progress', options),
+    getArchiveLogs: (options) => send('GET', '/api/archive/logs', options),
+    getArchiveManifestCsv: (options) => send('GET', '/api/archive/manifest.csv', options),
+    getArchiveRecent: (options) => send('GET', '/api/archive/recent', options),
+    getArchiveRecoveryJson: (options) => send('GET', '/api/archive/recovery.json', options),
+    getArchiveSettings: (options) => send('GET', '/api/archive/settings', options),
+    getArchiveStatus: (options) => send('GET', '/api/archive/status', options),
+    getArchiveStream: (options) => send('GET', '/api/archive/stream', options),
+    getArchiveTakeoutAlbums: (options) => send('GET', '/api/archive/takeout-albums', options),
+    getArchiveVersion: (options) => send('GET', '/api/archive/version', options),
+    getArchiveYears: (options) => send('GET', '/api/archive/years', options),
+    getAskByToken: (token, options) => send('GET', `/api/ask/${seg(token)}`, options),
+    getAskByTokenFaceByPosition: (token, position, options) => send('GET', `/api/ask/${seg(token)}/face/${seg(position)}`, options),
+    getAskByTokenPhotoByPosition: (token, position, options) => send('GET', `/api/ask/${seg(token)}/photo/${seg(position)}`, options),
+    getAskFamilyAnswers: (options) => send('GET', '/api/ask-family/answers', options),
+    getAskFamilyFaces: (options) => send('GET', '/api/ask-family/faces', options),
+    getAskFamilyQuestions: (options) => send('GET', '/api/ask-family/questions', options),
+    getAskNinaivu: (options) => send('GET', '/api/ask-ninaivu', options),
+    getAssetByAssetId: (assetId, options) => send('GET', `/api/asset/${seg(assetId)}`, options),
+    getAssetByAssetIdColour: (assetId, options) => send('GET', `/api/asset/${seg(assetId)}/colour`, options),
+    getAssetByAssetIdColourUpright: (assetId, options) => send('GET', `/api/asset/${seg(assetId)}/colour/upright`, options),
+    getAssetByAssetIdEnhance: (assetId, options) => send('GET', `/api/asset/${seg(assetId)}/enhance`, options),
+    getAssetByAssetIdLetter: (assetId, options) => send('GET', `/api/asset/${seg(assetId)}/letter`, options),
+    getAssetByAssetIdLetterVoiceWav: (assetId, options) => send('GET', `/api/asset/${seg(assetId)}/letter/voice.wav`, options),
+    getAssetByAssetIdStories: (assetId, options) => send('GET', `/api/asset/${seg(assetId)}/stories`, options),
+    getAssetByAssetIdTalk: (assetId, options) => send('GET', `/api/asset/${seg(assetId)}/talk`, options),
+    getAssets: (options) => send('GET', '/api/assets', options),
+    getAudit: (options) => send('GET', '/api/audit', options),
+    getAuthSession: (options) => send('GET', '/api/auth/session', options),
+    getAuthState: (options) => send('GET', '/api/auth/state', options),
+    getAvatarByUserId: (userId, options) => send('GET', `/api/avatar/${seg(userId)}`, options),
+    getBooks: (options) => send('GET', '/api/books', options),
+    getBooksByBookId: (bookId, options) => send('GET', `/api/books/${seg(bookId)}`, options),
+    getBooksByBookIdDownload: (bookId, options) => send('GET', `/api/books/${seg(bookId)}/download`, options),
+    getBooksIdeas: (options) => send('GET', '/api/books/ideas', options),
+    getBooksOptions: (options) => send('GET', '/api/books/options', options),
+    getCapsules: (options) => send('GET', '/api/capsules', options),
+    getCapsulesByCapsuleId: (capsuleId, options) => send('GET', `/api/capsules/${seg(capsuleId)}`, options),
+    getCloudApprovals: (options) => send('GET', '/api/cloud/approvals', options),
+    getCloudCallback: (options) => send('GET', '/api/cloud/callback', options),
+    getCloudEncryptionRecovery: (options) => send('GET', '/api/cloud/encryption/recovery', options),
+    getCloudIndexCopy: (options) => send('GET', '/api/cloud/index-copy', options),
+    getCloudRestoreStatus: (options) => send('GET', '/api/cloud/restore/status', options),
+    getCloudRestoreTests: (options) => send('GET', '/api/cloud/restore-tests', options),
+    getCloudStatus: (options) => send('GET', '/api/cloud/status', options),
+    getCopies: (options) => send('GET', '/api/copies', options),
+    getCopiesSingle: (options) => send('GET', '/api/copies/single', options),
+    getDevices: (options) => send('GET', '/api/devices', options),
+    getDevicesBrowse: (options) => send('GET', '/api/devices/browse', options),
+    getDownloadByAssetId: (assetId, options) => send('GET', `/api/download/${seg(assetId)}`, options),
+    getDownloadZip: (options) => send('GET', '/api/download/zip', options),
+    getDuplicates: (options) => send('GET', '/api/duplicates', options),
+    getEvents: (options) => send('GET', '/api/events', options),
+    getFacesAssetByAssetId: (assetId, options) => send('GET', `/api/faces/asset/${seg(assetId)}`, options),
+    getFacesClusterByClusterKey: (clusterKey, options) => send('GET', `/api/faces/cluster/${seg(clusterKey)}`, options),
+    getFacesClusters: (options) => send('GET', '/api/faces/clusters', options),
+    getFacesNotCarried: (options) => send('GET', '/api/faces/not-carried', options),
+    getFacesPeople: (options) => send('GET', '/api/faces/people', options),
+    getFacesStatus: (options) => send('GET', '/api/faces/status', options),
+    getFacesSuggestionsByPersonId: (personId, options) => send('GET', `/api/faces/suggestions/${seg(personId)}`, options),
+    getFacesThumbByFaceId: (faceId, options) => send('GET', `/api/faces/thumb/${seg(faceId)}`, options),
+    getFacets: (options) => send('GET', '/api/facets', options),
+    getFamilyTree: (options) => send('GET', '/api/family-tree', options),
+    getFestivals: (options) => send('GET', '/api/festivals', options),
+    getFestivalsByKey: (key, options) => send('GET', `/api/festivals/${seg(key)}`, options),
+    getFileByAssetId: (assetId, options) => send('GET', `/api/file/${seg(assetId)}`, options),
+    getFilms: (options) => send('GET', '/api/films', options),
+    getFilmsByFilmId: (filmId, options) => send('GET', `/api/films/${seg(filmId)}`, options),
+    getFilmsByFilmIdVideo: (filmId, options) => send('GET', `/api/films/${seg(filmId)}/video`, options),
+    getFilmsMusicOwnByName: (name, options) => send('GET', `/api/films/music/own/${seg(name)}`, options),
+    getFilmsOptions: (options) => send('GET', '/api/films/options', options),
+    getFrameNext: (options) => send('GET', '/api/frame/next', options),
+    getFramePictureByAssetId: (assetId, options) => send('GET', `/api/frame/picture/${seg(assetId)}`, options),
+    getGeoClusters: (options) => send('GET', '/api/geo/clusters', options),
+    getGeoPhotos: (options) => send('GET', '/api/geo/photos', options),
+    getGeoPlaces: (options) => send('GET', '/api/geo/places', options),
+    getGeoPoints: (options) => send('GET', '/api/geo/points', options),
+    getGeoTrail: (options) => send('GET', '/api/geo/trail', options),
+    getHandoverClaims: (options) => send('GET', '/api/handover/claims', options),
+    getHandoverMe: (options) => send('GET', '/api/handover/me', options),
+    getImportStatus: (options) => send('GET', '/api/import/status', options),
+    getLibraryBrowse: (options) => send('GET', '/api/library/browse', options),
+    getLife: (options) => send('GET', '/api/life', options),
+    getLifeByPersonId: (personId, options) => send('GET', `/api/life/${seg(personId)}`, options),
+    getLiveVideoByAssetId: (assetId, options) => send('GET', `/api/live-video/${seg(assetId)}`, options),
+    getMe: (options) => send('GET', '/api/me', options),
+    getMemoriesOnThisDay: (options) => send('GET', '/api/memories/on-this-day', options),
+    getMirrorStatus: (options) => send('GET', '/api/mirror/status', options),
+    getMoments: (options) => send('GET', '/api/moments', options),
+    getMomentsByAssetId: (assetId, options) => send('GET', `/api/moments/${seg(assetId)}`, options),
+    getMomentsByAssetIdFrame: (assetId, options) => send('GET', `/api/moments/${seg(assetId)}/frame`, options),
+    getMugilCensus: (options) => send('GET', '/api/mugil/census', options),
+    getMugilCensusFile: (options) => send('GET', '/api/mugil/census/file', options),
+    getMugilHello: (options) => send('GET', '/api/mugil/hello', options),
+    getMugilInbox: (options) => send('GET', '/api/mugil/inbox', options),
+    getMugilInboxFile: (options) => send('GET', '/api/mugil/inbox/file', options),
+    getMugilKept: (options) => send('GET', '/api/mugil/kept', options),
+    getMugilOriginals: (options) => send('GET', '/api/mugil/originals', options),
+    getMugilSurvey: (options) => send('GET', '/api/mugil/survey', options),
+    getMugilSurveyFile: (options) => send('GET', '/api/mugil/survey/file', options),
+    getMugilSurveyItems: (options) => send('GET', '/api/mugil/survey/items', options),
+    getMugilUpdate: (options) => send('GET', '/api/mugil/update', options),
+    getOccasions: (options) => send('GET', '/api/occasions', options),
+    getOffsite: (options) => send('GET', '/api/offsite', options),
+    getOurYear: (options) => send('GET', '/api/our-year', options),
+    getOurYearByYear: (year, options) => send('GET', `/api/our-year/${seg(year)}`, options),
+    getPeople: (options) => send('GET', '/api/people', options),
+    getPeopleFolders: (options) => send('GET', '/api/people/folders', options),
+    getPhoneBackupStatus: (options) => send('GET', '/api/phone-backup/status', options),
+    getPhoneKeys: (options) => send('GET', '/api/phone-keys', options),
+    getPreviewByAssetId: (assetId, options) => send('GET', `/api/preview/${seg(assetId)}`, options),
+    getPrintsCapabilities: (options) => send('GET', '/api/prints/capabilities', options),
+    getPrintsJobsByJobId: (jobId, options) => send('GET', `/api/prints/jobs/${seg(jobId)}`, options),
+    getPrintsJobsByJobIdResult: (jobId, options) => send('GET', `/api/prints/jobs/${seg(jobId)}/result`, options),
+    getProxyByAssetId: (assetId, options) => send('GET', `/api/proxy/${seg(assetId)}`, options),
+    getRecycle: (options) => send('GET', '/api/recycle', options),
+    getRecycleThumbByEntryId: (entryId, options) => send('GET', `/api/recycle/thumb/${seg(entryId)}`, options),
+    getScreeningByAssetId: (assetId, options) => send('GET', `/api/screening/${seg(assetId)}`, options),
+    getSegments: (options) => send('GET', '/api/segments', options),
+    getShareByToken: (token, options) => send('GET', `/api/share/${seg(token)}`, options),
+    getShareByTokenFileByAssetId: (token, assetId, options) => send('GET', `/api/share/${seg(token)}/file/${seg(assetId)}`, options),
+    getShareByTokenPreviewByAssetId: (token, assetId, options) => send('GET', `/api/share/${seg(token)}/preview/${seg(assetId)}`, options),
+    getShareByTokenStoriesByAssetId: (token, assetId, options) => send('GET', `/api/share/${seg(token)}/stories/${seg(assetId)}`, options),
+    getShareByTokenStoryByStoryId: (token, storyId, options) => send('GET', `/api/share/${seg(token)}/story/${seg(storyId)}`, options),
+    getShareByTokenThumbByAssetId: (token, assetId, options) => send('GET', `/api/share/${seg(token)}/thumb/${seg(assetId)}`, options),
+    getShares: (options) => send('GET', '/api/shares', options),
+    getSimilarByAssetId: (assetId, options) => send('GET', `/api/similar/${seg(assetId)}`, options),
+    getSmartAlbums: (options) => send('GET', '/api/smart-albums', options),
+    getStacksByAssetId: (assetId, options) => send('GET', `/api/stacks/${seg(assetId)}`, options),
+    getStatus: (options) => send('GET', '/api/status', options),
+    getStatusActivity: (options) => send('GET', '/api/status/activity', options),
+    getStatusScan: (options) => send('GET', '/api/status/scan', options),
+    getStatusStats: (options) => send('GET', '/api/status/stats', options),
+    getStoriesByStoryIdAudio: (storyId, options) => send('GET', `/api/stories/${seg(storyId)}/audio`, options),
+    getStraightenProposals: (options) => send('GET', '/api/straighten/proposals', options),
+    getStraightenStatus: (options) => send('GET', '/api/straighten/status', options),
+    getStreamByAssetId: (assetId, options) => send('GET', `/api/stream/${seg(assetId)}`, options),
+    getSuggest: (options) => send('GET', '/api/suggest', options),
+    getThenAndNow: (options) => send('GET', '/api/then-and-now', options),
+    getThenAndNowToday: (options) => send('GET', '/api/then-and-now/today', options),
+    getThumbByAssetId: (assetId, options) => send('GET', `/api/thumb/${seg(assetId)}`, options),
+    getTimeline: (options) => send('GET', '/api/timeline', options),
+    getVisibilityHistory: (options) => send('GET', '/api/visibility/history', options),
+    getVisibilityRules: (options) => send('GET', '/api/visibility/rules', options),
+    getVoiceSearch: (options) => send('GET', '/api/voice-search', options),
+    getYoungFaces: (options) => send('GET', '/api/young-faces', options),
+    patchAdminAssetsByAssetIdCreationDate: (assetId, options) => send('PATCH', `/api/admin/assets/${seg(assetId)}/creation-date`, options),
+    patchAlbumsByAlbumId: (albumId, options) => send('PATCH', `/api/albums/${seg(albumId)}`, options),
+    patchSmartAlbumsByAlbumId: (albumId, options) => send('PATCH', `/api/smart-albums/${seg(albumId)}`, options),
+    postAdminAiModelsByModelIdDownload: (modelId, options) => send('POST', `/api/admin/ai-models/${seg(modelId)}/download`, options),
+    postAdminBackupsNow: (options) => send('POST', '/api/admin/backups/now', options),
+    postAdminBackupsVerify: (options) => send('POST', '/api/admin/backups/verify', options),
+    postAdminComponentsByComponentIdInstall: (componentId, options) => send('POST', `/api/admin/components/${seg(componentId)}/install`, options),
+    postAdminDatePolicy: (options) => send('POST', '/api/admin/date-policy', options),
+    postAdminDigest: (options) => send('POST', '/api/admin/digest', options),
+    postAdminDigestSend: (options) => send('POST', '/api/admin/digest/send', options),
+    postAdminDisksCheck: (options) => send('POST', '/api/admin/disks/check', options),
+    postAdminDrivesAnswer: (options) => send('POST', '/api/admin/drives/answer', options),
+    postAdminDrivesAskAgain: (options) => send('POST', '/api/admin/drives/ask-again', options),
+    postAdminDrivesEject: (options) => send('POST', '/api/admin/drives/eject', options),
+    postAdminDrivesExport: (options) => send('POST', '/api/admin/drives/export', options),
+    postAdminDrivesExportStop: (options) => send('POST', '/api/admin/drives/export/stop', options),
+    postAdminDrivesImageCapture: (options) => send('POST', '/api/admin/drives/image-capture', options),
+    postAdminExactCopiesSetAside: (options) => send('POST', '/api/admin/exact-copies/set-aside', options),
+    postAdminExtensions: (options) => send('POST', '/api/admin/extensions', options),
+    postAdminFirstDay: (options) => send('POST', '/api/admin/first-day', options),
+    postAdminFoldersDelete: (options) => send('POST', '/api/admin/folders/delete', options),
+    postAdminHandover: (options) => send('POST', '/api/admin/handover', options),
+    postAdminHandoverCode: (options) => send('POST', '/api/admin/handover/code', options),
+    postAdminHandoverSheet: (options) => send('POST', '/api/admin/handover/sheet', options),
+    postAdminKeepsake: (options) => send('POST', '/api/admin/keepsake', options),
+    postAdminLargeFilesCompress: (options) => send('POST', '/api/admin/large-files/compress', options),
+    postAdminLargeFilesCompressByJobIdCancel: (jobId, options) => send('POST', `/api/admin/large-files/compress/${seg(jobId)}/cancel`, options),
+    postAdminLargeFilesExtraCopies: (options) => send('POST', '/api/admin/large-files/extra-copies', options),
+    postAdminLargeFilesKeep: (options) => send('POST', '/api/admin/large-files/keep', options),
+    postAdminLibrariesActive: (options) => send('POST', '/api/admin/libraries/active', options),
+    postAdminLibraryRelocation: (options) => send('POST', '/api/admin/library/relocation', options),
+    postAdminLocationsApply: (options) => send('POST', '/api/admin/locations/apply', options),
+    postAdminLocationsUndo: (options) => send('POST', '/api/admin/locations/undo', options),
+    postAdminMigrationCheckIndex: (options) => send('POST', '/api/admin/migration/check-index', options),
+    postAdminMigrationExport: (options) => send('POST', '/api/admin/migration/export', options),
+    postAdminMigrationImport: (options) => send('POST', '/api/admin/migration/import', options),
+    postAdminMigrationImportCancel: (options) => send('POST', '/api/admin/migration/import/cancel', options),
+    postAdminMigrationImportLook: (options) => send('POST', '/api/admin/migration/import/look', options),
+    postAdminMigrationMoveIndex: (options) => send('POST', '/api/admin/migration/move-index', options),
+    postAdminMigrationRecoveryCleanup: (options) => send('POST', '/api/admin/migration/recovery-cleanup', options),
+    postAdminMigrationReroot: (options) => send('POST', '/api/admin/migration/reroot', options),
+    postAdminMugilBringBack: (options) => send('POST', '/api/admin/mugil/bring-back', options),
+    postAdminMugilCensus: (options) => send('POST', '/api/admin/mugil/census', options),
+    postAdminMugilCode: (options) => send('POST', '/api/admin/mugil/code', options),
+    postAdminMugilFree: (options) => send('POST', '/api/admin/mugil/free', options),
+    postAdminMugilFreeStop: (options) => send('POST', '/api/admin/mugil/free/stop', options),
+    postAdminMugilJoin: (options) => send('POST', '/api/admin/mugil/join', options),
+    postAdminMugilLook: (options) => send('POST', '/api/admin/mugil/look', options),
+    postAdminMugilManual: (options) => send('POST', '/api/admin/mugil/manual', options),
+    postAdminMugilOnlyOnSecondaryBring: (options) => send('POST', '/api/admin/mugil/only-on-secondary/bring', options),
+    postAdminMugilOnlyOnSecondaryLook: (options) => send('POST', '/api/admin/mugil/only-on-secondary/look', options),
+    postAdminMugilOnlyOnSecondaryStop: (options) => send('POST', '/api/admin/mugil/only-on-secondary/stop', options),
+    postAdminMugilPair: (options) => send('POST', '/api/admin/mugil/pair', options),
+    postAdminMugilRebuild: (options) => send('POST', '/api/admin/mugil/rebuild', options),
+    postAdminMugilRebuildStop: (options) => send('POST', '/api/admin/mugil/rebuild/stop', options),
+    postAdminMugilRole: (options) => send('POST', '/api/admin/mugil/role', options),
+    postAdminMugilSend: (options) => send('POST', '/api/admin/mugil/send', options),
+    postAdminMugilStop: (options) => send('POST', '/api/admin/mugil/stop', options),
+    postAdminMugilTopologyPlan: (options) => send('POST', '/api/admin/mugil/topology/plan', options),
+    postAdminMugilTopologyProve: (options) => send('POST', '/api/admin/mugil/topology/prove', options),
+    postAdminMugilUnpair: (options) => send('POST', '/api/admin/mugil/unpair', options),
+    postAdminMugilUpdate: (options) => send('POST', '/api/admin/mugil/update', options),
+    postAdminMugilWake: (options) => send('POST', '/api/admin/mugil/wake', options),
+    postAdminMugilWelcome: (options) => send('POST', '/api/admin/mugil/welcome', options),
+    postAdminNotifications: (options) => send('POST', '/api/admin/notifications', options),
+    postAdminNotificationsTest: (options) => send('POST', '/api/admin/notifications/test', options),
+    postAdminPhoneBackupsByUserIdApprove: (userId, options) => send('POST', `/api/admin/phone-backups/${seg(userId)}/approve`, options),
+    postAdminPhoneBackupsSettings: (options) => send('POST', '/api/admin/phone-backups/settings', options),
+    postAdminPrivacy: (options) => send('POST', '/api/admin/privacy', options),
+    postAdminProblemsClear: (options) => send('POST', '/api/admin/problems/clear', options),
+    postAdminRepair: (options) => send('POST', '/api/admin/repair', options),
+    postAdminRepairSettings: (options) => send('POST', '/api/admin/repair/settings', options),
+    postAdminRepairStop: (options) => send('POST', '/api/admin/repair/stop', options),
+    postAdminRevealByAssetId: (assetId, options) => send('POST', `/api/admin/reveal/${seg(assetId)}`, options),
+    postAdminRevealFolder: (options) => send('POST', '/api/admin/reveal-folder', options),
+    postAdminScreeningDecide: (options) => send('POST', '/api/admin/screening/decide', options),
+    postAdminScrubberStart: (options) => send('POST', '/api/admin/scrubber/start', options),
+    postAdminScrubberStop: (options) => send('POST', '/api/admin/scrubber/stop', options),
+    postAdminServerConsoleNetwork: (options) => send('POST', '/api/admin/server/console-network', options),
+    postAdminServerHttps: (options) => send('POST', '/api/admin/server/https', options),
+    postAdminServerNetwork: (options) => send('POST', '/api/admin/server/network', options),
+    postAdminServerRestart: (options) => send('POST', '/api/admin/server/restart', options),
+    postAdminServerStop: (options) => send('POST', '/api/admin/server/stop', options),
+    postAdminSettings: (options) => send('POST', '/api/admin/settings', options),
+    postAdminSettingsAll: (options) => send('POST', '/api/admin/settings/all', options),
+    postAdminSettingsIndexFolder: (options) => send('POST', '/api/admin/settings/index-folder', options),
+    postAdminShutdown: (options) => send('POST', '/api/admin/shutdown', options),
+    postAdminTuning: (options) => send('POST', '/api/admin/tuning', options),
+    postAdminTvAlbumSecret: (options) => send('POST', '/api/admin/tv-album/secret', options),
+    postAdminUploadsByUploadIdApprove: (uploadId, options) => send('POST', `/api/admin/uploads/${seg(uploadId)}/approve`, options),
+    postAdminUploadsByUploadIdReject: (uploadId, options) => send('POST', `/api/admin/uploads/${seg(uploadId)}/reject`, options),
+    postAdminVideoTrialByAssetIdVerdict: (assetId, options) => send('POST', `/api/admin/video-trial/${seg(assetId)}/verdict`, options),
+    postAdminVideoTrialClear: (options) => send('POST', '/api/admin/video-trial/clear', options),
+    postAdminVideoTrialPause: (options) => send('POST', '/api/admin/video-trial/pause', options),
+    postAdminVideoTrialStart: (options) => send('POST', '/api/admin/video-trial/start', options),
+    postAdminWorkload: (options) => send('POST', '/api/admin/workload', options),
+    postAdminXmp: (options) => send('POST', '/api/admin/xmp', options),
+    postAiPlaygroundGenerate: (options) => send('POST', '/api/ai-playground/generate', options),
+    postAiPlaygroundInpaint: (options) => send('POST', '/api/ai-playground/inpaint', options),
+    postAiPlaygroundPlan: (options) => send('POST', '/api/ai-playground/plan', options),
+    postAiPlaygroundSegment: (options) => send('POST', '/api/ai-playground/segment', options),
+    postAiPlaygroundServerJobs: (options) => send('POST', '/api/ai-playground/server-jobs', options),
+    postAlbums: (options) => send('POST', '/api/albums', options),
+    postAlbumsByAlbumIdItems: (albumId, options) => send('POST', `/api/albums/${seg(albumId)}/items`, options),
+    postArchiveAdopt: (options) => send('POST', '/api/archive/adopt', options),
+    postArchiveCapacity: (options) => send('POST', '/api/archive/capacity', options),
+    postArchiveCapacityCancel: (options) => send('POST', '/api/archive/capacity/cancel', options),
+    postArchiveCourseFoldersDecision: (options) => send('POST', '/api/archive/course-folders/decision', options),
+    postArchiveGuardianRun: (options) => send('POST', '/api/archive/guardian/run', options),
+    postArchivePause: (options) => send('POST', '/api/archive/pause', options),
+    postArchiveReset: (options) => send('POST', '/api/archive/reset', options),
+    postArchiveResume: (options) => send('POST', '/api/archive/resume', options),
+    postArchiveRetryErrors: (options) => send('POST', '/api/archive/retry-errors', options),
+    postArchiveStart: (options) => send('POST', '/api/archive/start', options),
+    postArchiveStop: (options) => send('POST', '/api/archive/stop', options),
+    postArchiveTakeoutAlbums: (options) => send('POST', '/api/archive/takeout-albums', options),
+    postArchiveValidate: (options) => send('POST', '/api/archive/validate', options),
+    postAskByTokenAnswer: (token, options) => send('POST', `/api/ask/${seg(token)}/answer`, options),
+    postAskFamilyAnswersByAnswerIdAccept: (answerId, options) => send('POST', `/api/ask-family/answers/${seg(answerId)}/accept`, options),
+    postAskFamilyAnswersByAnswerIdReject: (answerId, options) => send('POST', `/api/ask-family/answers/${seg(answerId)}/reject`, options),
+    postAskFamilyQuestions: (options) => send('POST', '/api/ask-family/questions', options),
+    postAskNinaivu: (options) => send('POST', '/api/ask-ninaivu', options),
+    postAssetByAssetId: (assetId, options) => send('POST', `/api/asset/${seg(assetId)}`, options),
+    postAssetByAssetIdColour: (assetId, options) => send('POST', `/api/asset/${seg(assetId)}/colour`, options),
+    postAssetByAssetIdEditedCopy: (assetId, options) => send('POST', `/api/asset/${seg(assetId)}/edited-copy`, options),
+    postAssetByAssetIdLetterRead: (assetId, options) => send('POST', `/api/asset/${seg(assetId)}/letter/read`, options),
+    postAssetByAssetIdLetterVoice: (assetId, options) => send('POST', `/api/asset/${seg(assetId)}/letter/voice`, options),
+    postAssetByAssetIdRotate: (assetId, options) => send('POST', `/api/asset/${seg(assetId)}/rotate`, options),
+    postAssetByAssetIdStories: (assetId, options) => send('POST', `/api/asset/${seg(assetId)}/stories`, options),
+    postAssetByAssetIdTalk: (assetId, options) => send('POST', `/api/asset/${seg(assetId)}/talk`, options),
+    postAssetsBulk: (options) => send('POST', '/api/assets/bulk', options),
+    postAuthActive: (options) => send('POST', '/api/auth/active', options),
+    postAuthForgot: (options) => send('POST', '/api/auth/forgot', options),
+    postAuthLock: (options) => send('POST', '/api/auth/lock', options),
+    postAuthLogin: (options) => send('POST', '/api/auth/login', options),
+    postAuthLogout: (options) => send('POST', '/api/auth/logout', options),
+    postAuthSetup: (options) => send('POST', '/api/auth/setup', options),
+    postAuthUnlock: (options) => send('POST', '/api/auth/unlock', options),
+    postBooks: (options) => send('POST', '/api/books', options),
+    postBooksByBookIdCancel: (bookId, options) => send('POST', `/api/books/${seg(bookId)}/cancel`, options),
+    postBooksPick: (options) => send('POST', '/api/books/pick', options),
+    postCapsules: (options) => send('POST', '/api/capsules', options),
+    postCloudApprovals: (options) => send('POST', '/api/cloud/approvals', options),
+    postCloudClient: (options) => send('POST', '/api/cloud/client', options),
+    postCloudConnect: (options) => send('POST', '/api/cloud/connect', options),
+    postCloudDisconnect: (options) => send('POST', '/api/cloud/disconnect', options),
+    postCloudEncryptionImport: (options) => send('POST', '/api/cloud/encryption/import', options),
+    postCloudEncryptionKey: (options) => send('POST', '/api/cloud/encryption/key', options),
+    postCloudIndexCopyRun: (options) => send('POST', '/api/cloud/index-copy/run', options),
+    postCloudPause: (options) => send('POST', '/api/cloud/pause', options),
+    postCloudQueue: (options) => send('POST', '/api/cloud/queue', options),
+    postCloudRestorePreview: (options) => send('POST', '/api/cloud/restore/preview', options),
+    postCloudRestoreStart: (options) => send('POST', '/api/cloud/restore/start', options),
+    postCloudRestoreStop: (options) => send('POST', '/api/cloud/restore/stop', options),
+    postCloudRestoreTestsRun: (options) => send('POST', '/api/cloud/restore-tests/run', options),
+    postCloudRestoreTestsSettings: (options) => send('POST', '/api/cloud/restore-tests/settings', options),
+    postCloudRetry: (options) => send('POST', '/api/cloud/retry', options),
+    postCloudRules: (options) => send('POST', '/api/cloud/rules', options),
+    postCloudRulesPreview: (options) => send('POST', '/api/cloud/rules/preview', options),
+    postCloudSettings: (options) => send('POST', '/api/cloud/settings', options),
+    postCloudStart: (options) => send('POST', '/api/cloud/start', options),
+    postDelete: (options) => send('POST', '/api/delete', options),
+    postFacesClustersHide: (options) => send('POST', '/api/faces/clusters/hide', options),
+    postFacesClustersName: (options) => send('POST', '/api/faces/clusters/name', options),
+    postFacesClustersShow: (options) => send('POST', '/api/faces/clusters/show', options),
+    postFacesConfirm: (options) => send('POST', '/api/faces/confirm', options),
+    postFacesMerge: (options) => send('POST', '/api/faces/merge', options),
+    postFacesModels: (options) => send('POST', '/api/faces/models', options),
+    postFacesPerson: (options) => send('POST', '/api/faces/person', options),
+    postFacesPersonByPersonIdRename: (personId, options) => send('POST', `/api/faces/person/${seg(personId)}/rename`, options),
+    postFacesRegroup: (options) => send('POST', '/api/faces/regroup', options),
+    postFacesReject: (options) => send('POST', '/api/faces/reject', options),
+    postFacesScan: (options) => send('POST', '/api/faces/scan', options),
+    postFamilyTreeRelations: (options) => send('POST', '/api/family-tree/relations', options),
+    postFilms: (options) => send('POST', '/api/films', options),
+    postFilmsByFilmIdCancel: (filmId, options) => send('POST', `/api/films/${seg(filmId)}/cancel`, options),
+    postFilmsMusic: (options) => send('POST', '/api/films/music', options),
+    postFilmsPick: (options) => send('POST', '/api/films/pick', options),
+    postFilmsStoryboard: (options) => send('POST', '/api/films/storyboard', options),
+    postHandoverClaim: (options) => send('POST', '/api/handover/claim', options),
+    postHandoverClaimsByClaimIdCancel: (claimId, options) => send('POST', `/api/handover/claims/${seg(claimId)}/cancel`, options),
+    postImportLook: (options) => send('POST', '/api/import/look', options),
+    postImportStart: (options) => send('POST', '/api/import/start', options),
+    postImportStop: (options) => send('POST', '/api/import/stop', options),
+    postLibraryRoot: (options) => send('POST', '/api/library/root', options),
+    postLifeByPersonIdWords: (personId, options) => send('POST', `/api/life/${seg(personId)}/words`, options),
+    postMe: (options) => send('POST', '/api/me', options),
+    postMeAvatar: (options) => send('POST', '/api/me/avatar', options),
+    postMePassword: (options) => send('POST', '/api/me/password', options),
+    postMirrorRestore: (options) => send('POST', '/api/mirror/restore', options),
+    postMirrorSettings: (options) => send('POST', '/api/mirror/settings', options),
+    postMirrorStart: (options) => send('POST', '/api/mirror/start', options),
+    postMirrorStop: (options) => send('POST', '/api/mirror/stop', options),
+    postMirrorVerify: (options) => send('POST', '/api/mirror/verify', options),
+    postMugilCensus: (options) => send('POST', '/api/mugil/census', options),
+    postMugilHandoverRemove: (options) => send('POST', '/api/mugil/handover/remove', options),
+    postMugilHave: (options) => send('POST', '/api/mugil/have', options),
+    postMugilInboxTaken: (options) => send('POST', '/api/mugil/inbox/taken', options),
+    postMugilIntroduce: (options) => send('POST', '/api/mugil/introduce', options),
+    postMugilJoin: (options) => send('POST', '/api/mugil/join', options),
+    postMugilMove: (options) => send('POST', '/api/mugil/move', options),
+    postMugilOriginalsCopy: (options) => send('POST', '/api/mugil/originals/copy', options),
+    postMugilOriginalsVerify: (options) => send('POST', '/api/mugil/originals/verify', options),
+    postMugilPair: (options) => send('POST', '/api/mugil/pair', options),
+    postMugilSurvey: (options) => send('POST', '/api/mugil/survey', options),
+    postOffsite: (options) => send('POST', '/api/offsite', options),
+    postOffsiteRestore: (options) => send('POST', '/api/offsite/restore', options),
+    postOffsiteStart: (options) => send('POST', '/api/offsite/start', options),
+    postOffsiteStop: (options) => send('POST', '/api/offsite/stop', options),
+    postOffsiteTest: (options) => send('POST', '/api/offsite/test', options),
+    postOurYearByYearWords: (year, options) => send('POST', `/api/our-year/${seg(year)}/words`, options),
+    postPeople: (options) => send('POST', '/api/people', options),
+    postPeopleByUserId: (userId, options) => send('POST', `/api/people/${seg(userId)}`, options),
+    postPeopleByUserIdSignout: (userId, options) => send('POST', `/api/people/${seg(userId)}/signout`, options),
+    postPhoneBackupCheck: (options) => send('POST', '/api/phone-backup/check', options),
+    postPhoneBackupFiles: (options) => send('POST', '/api/phone-backup/files', options),
+    postPhoneBackupFinish: (options) => send('POST', '/api/phone-backup/finish', options),
+    postPhoneKeys: (options) => send('POST', '/api/phone-keys', options),
+    postPortraitAnalyse: (options) => send('POST', '/api/portrait/analyse', options),
+    postPrintsDetect: (options) => send('POST', '/api/prints/detect', options),
+    postPrintsFind: (options) => send('POST', '/api/prints/find', options),
+    postPrintsSave: (options) => send('POST', '/api/prints/save', options),
+    postPrivate: (options) => send('POST', '/api/private', options),
+    postRecyclePurge: (options) => send('POST', '/api/recycle/purge', options),
+    postRecycleRestore: (options) => send('POST', '/api/recycle/restore', options),
+    postRotate: (options) => send('POST', '/api/rotate', options),
+    postScan: (options) => send('POST', '/api/scan', options),
+    postScanStop: (options) => send('POST', '/api/scan/stop', options),
+    postScreening: (options) => send('POST', '/api/screening', options),
+    postSettings: (options) => send('POST', '/api/settings', options),
+    postShareByTokenUnlock: (token, options) => send('POST', `/api/share/${seg(token)}/unlock`, options),
+    postShares: (options) => send('POST', '/api/shares', options),
+    postSmartAlbums: (options) => send('POST', '/api/smart-albums', options),
+    postStacksByAssetIdApart: (assetId, options) => send('POST', `/api/stacks/${seg(assetId)}/apart`, options),
+    postStacksByAssetIdTop: (assetId, options) => send('POST', `/api/stacks/${seg(assetId)}/top`, options),
+    postStraightenApply: (options) => send('POST', '/api/straighten/apply', options),
+    postStraightenDismiss: (options) => send('POST', '/api/straighten/dismiss', options),
+    postStraightenModel: (options) => send('POST', '/api/straighten/model', options),
+    postStraightenStop: (options) => send('POST', '/api/straighten/stop', options),
+    postStraightenSurvey: (options) => send('POST', '/api/straighten/survey', options),
+    postStraightenUndo: (options) => send('POST', '/api/straighten/undo', options),
+    postThenAndNowFilm: (options) => send('POST', '/api/then-and-now/film', options),
+    postUpload: (options) => send('POST', '/api/upload', options),
+    postVisibility: (options) => send('POST', '/api/visibility', options),
+    postVisibilityFolder: (options) => send('POST', '/api/visibility/folder', options),
+    postVisibilityPreview: (options) => send('POST', '/api/visibility/preview', options),
+    postVisibilityUndo: (options) => send('POST', '/api/visibility/undo', options),
+    postVoiceSearch: (options) => send('POST', '/api/voice-search', options),
+    postYoungFacesByFaceIdNo: (faceId, options) => send('POST', `/api/young-faces/${seg(faceId)}/no`, options),
+    postYoungFacesByFaceIdYes: (faceId, options) => send('POST', `/api/young-faces/${seg(faceId)}/yes`, options),
+    putAdminTvAlbum: (options) => send('PUT', '/api/admin/tv-album', options),
+    putAssetByAssetIdLetter: (assetId, options) => send('PUT', `/api/asset/${seg(assetId)}/letter`, options),
+    putLifeByPersonIdBorn: (personId, options) => send('PUT', `/api/life/${seg(personId)}/born`, options),
+    putMugilAboutPrimary: (options) => send('PUT', '/api/mugil/about-primary', options),
+    putMugilHandover: (options) => send('PUT', '/api/mugil/handover', options),
+    putMugilInboxKeys: (options) => send('PUT', '/api/mugil/inbox/keys', options),
+    putMugilOriginals: (options) => send('PUT', '/api/mugil/originals', options),
+    putMugilUpdate: (options) => send('PUT', '/api/mugil/update', options),
+    putMugilWake: (options) => send('PUT', '/api/mugil/wake', options),
+    putPhoneBackupFilesByRowId: (rowId, options) => send('PUT', `/api/phone-backup/files/${seg(rowId)}`, options),
+    putThenAndNowBornByPersonId: (personId, options) => send('PUT', `/api/then-and-now/born/${seg(personId)}`, options),
+    putYoungFacesBornByPersonId: (personId, options) => send('PUT', `/api/young-faces/born/${seg(personId)}`, options),
   };
-
-  connect();
-  return () => {
-    clearTimeout(retry);
-    clearInterval(poll);
-    poll = null;
-    source?.close();
-  };
-}
-
-
-// Scan phases measured in items (done, total) rather than files walked.
-// When tag_total is present, these provide the human-readable progress line.
-export const SCAN_COUNTS = {
-  tagging: (done, total) => `Analysing ${done} / ${total}`,
-  videos: (done, total) => `Describing ${done} / ${total} videos`,
-  naming: (done, total) => `Naming places in ${done} / ${total}`,
-  reading: (done, total) => `Reading text in ${done} / ${total}`,
-  faces: (done, total) => `Looking for faces in ${done} / ${total}`,
-  covers: (done, total) => `Drawing pictures for ${done} / ${total} sound files`,
-};
-
-// How long is left, in the words somebody would use out loud. Rounded hard on
-// purpose: a pass measured over thousands of items is not accurate to the
-// minute, and "about 14 hours" is the answer people are actually asking for —
-// whether to leave the machine on tonight.
-export function timeLeft(seconds) {
-  if (!seconds || seconds < 0) return '';
-  if (seconds < 90) return 'nearly done';
-  const minutes = Math.round(seconds / 60);
-  if (minutes < 60) return `about ${minutes} minutes left`;
-  const hours = seconds / 3600;
-  if (hours < 2) return 'about an hour and a half left';
-  if (hours < 36) return `about ${Math.round(hours)} hours left`;
-  return `about ${Math.round(hours / 24)} days left`;
-}
-
+})();

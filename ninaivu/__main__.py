@@ -248,16 +248,16 @@ def build_parser() -> argparse.ArgumentParser:
                         "it exits (the Windows scheduled task). A restart from "
                         "the console then exits and leaves the starting to it")
     replica = p.add_argument_group(
-        "read-only replica (the Pi)",
-        "Serve the family app from the Mac's hand-over, never writing to the "
-        "library; see docs/pi-replica.md")
+        "read-only family view (the Secondary)",
+        "Serve the family app from the hand-over the Primary sends, never writing "
+        "to the library; see docs/two-computers.md")
     replica.add_argument("--replica-of", default=None, metavar="DIR",
-                         help="The hand-over folder the Mac writes (its replica.json)")
+                         help="The hand-over folder (mugil-handover/ in the state folder)")
     replica.add_argument("--replica-primary", default=None, metavar="URL",
-                         help="The Mac mini's family app address; pages are sent "
+                         help="The Primary's family app address; pages are sent "
                               "there while it is awake")
     replica.add_argument("--replica-wake", default=None, metavar="MAC",
-                         help="The Mac mini's network (MAC) address, to wake it "
+                         help="The Primary's network (MAC) address, to wake it "
                               "when somebody wants to change something")
     p.add_argument("--debug", action="store_true")
     p.add_argument("--version", action="version", version=f"{APP_NAME} {__version__}")

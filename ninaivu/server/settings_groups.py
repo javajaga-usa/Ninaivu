@@ -59,7 +59,6 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "offsite_region", "offsite_bucket", "offsite_prefix", "offsite_access_key",
         "offsite_every_hours", "scrub_every_days", "scrub_repair", "backup_every_hours",
         "backup_keep", "backup_dir", "keepsake_letter", "keepsake_folder", "keepsake_made",
-        "replica_dir", "replica_every_minutes",
         "mugil_role", "mugil_partner_url", "mugil_originals_dir", "mugil_copy_every_hours",
         "mugil_family_copy", "mugil_free_space", "mugil_copy_mode",
     ),
