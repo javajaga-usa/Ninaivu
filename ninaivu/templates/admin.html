@@ -1239,6 +1239,27 @@
         <span class="hint subtle" id="tc-paired-with"></span>
         <button class="btn ghost" id="tc-unpair" type="button" data-i18n="Unpair">Unpair</button>
       </div>
+      <div id="tc-safe" hidden>
+        <h3 data-i18n="Census, plan and proof">Census, plan and proof</h3>
+        <p class="hint subtle" id="tc-safe-standing"></p>
+        <p class="hint tc-away" id="tc-safe-warn" hidden data-i18n="Take the census on each computer before pairing, with the disk that holds the photographs plugged in: the proof afterwards compares against it, and a disk that is away is not counted.">Take the census on each computer before pairing, with the disk that holds the photographs plugged in: the proof afterwards compares against it, and a disk that is away is not counted.</p>
+        <div class="ar-actions">
+          <button class="btn" id="tc-census-go" type="button" hidden data-i18n="Take a census">Take a census</button>
+          <button class="btn" id="tc-plan-go" type="button" hidden data-i18n="Plan">Plan</button>
+          <button class="btn primary" id="tc-prove-go" type="button" hidden data-i18n="Prove nothing was lost">Prove nothing was lost</button>
+        </div>
+        <p class="hint subtle" id="tc-safe-says"></p>
+        <div id="tc-plan" hidden>
+          <ul class="tc-machines" id="tc-plan-totals"></ul>
+          <select class="input" id="tc-plan-filter" aria-label="Which files" data-i18n-label="Which files"></select>
+          <ul class="tc-machines" id="tc-plan-list"></ul>
+          <button class="btn ghost" id="tc-plan-more" type="button" hidden data-i18n="Show more">Show more</button>
+        </div>
+        <div id="tc-proof" hidden>
+          <p class="hint" id="tc-proof-says"></p>
+          <ul class="tc-machines" id="tc-proof-missing"></ul>
+        </div>
+      </div>
       <div id="tc-machines-row" hidden>
         <h3 data-i18n="The two computers">The two computers</h3>
         <ul class="tc-machines" id="tc-machines"></ul>
