@@ -1,6 +1,7 @@
 """The app's icon and pictures: one drawing, used everywhere (tools/generate_icons.py)."""
 from __future__ import annotations
 
+from js_sources import family_app
 import re
 from pathlib import Path
 
@@ -51,7 +52,7 @@ def test_mac_icon_keeps_to_apples_grid():
 def test_empty_page_picture_has_a_badge_for_each_reason():
     html = (TEMPLATES / "index.html").read_text(encoding="utf-8")
     css = (STATIC / "css" / "style.css").read_text(encoding="utf-8")
-    app = (STATIC / "js" / "app.js").read_text(encoding="utf-8")
+    app = family_app()
     for scene in ("search", "folder", "guest", "filter"):
         assert f"ea-badge-{scene}" in html
         assert f'.empty[data-scene="{scene}"] .ea-badge-{scene}' in css

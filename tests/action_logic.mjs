@@ -99,8 +99,11 @@ const sharing = {
   $: selector => selector === '#share-url-text' ? input : { addEventListener(type, handler) { handlers[selector] = handler; } },
   toast: message => messages.push(message), i18n,
 };
-vm.runInNewContext(source.slice(source.indexOf('let shareTargetItem'), source.indexOf('\nfunction openShareModal')), sharing);
-sharing.wireSharing();
+// The share dialog is a page of its own since 4.0 (pages/family/sharing.js).
+const sharingSource = readFileSync(new URL('../ninaivu/static/js/pages/family/sharing.js', import.meta.url), 'utf8')
+  .replace(/^export /gm, '');
+vm.runInNewContext(sharingSource.slice(sharingSource.indexOf('let shareTargetItem'), sharingSource.indexOf('\nfunction openShareModal')), sharing);
+sharing.wire();
 await handlers['#share-copy-btn']();
 assert.match(messages.pop(), /manually/);
 sharing.navigator.clipboard = { writeText: async () => { throw new Error('denied'); } };
@@ -133,9 +136,11 @@ const uploadContext = {
   },
   FormData: class { append() {} },
   fetch: async () => ({ ok: true, json: async () => ({ total: 0, uploaded: [], errors: [{ filename: 'bad.txt', error: 'Unsupported' }] }) }),
-  toast: message => uploadMessages.push(message), reload() {}, setTimeout() {}, i18n,
+  toast: message => uploadMessages.push(message), shell: { reload() {} }, setTimeout() {}, i18n,
 };
-vm.runInNewContext(source.slice(source.indexOf('async function handleUpload('), source.indexOf('/* -- Sharing')), uploadContext);
+// The upload dialog is a page of its own since 4.0 (pages/family/upload.js).
+const uploadSource = readFileSync(new URL('../ninaivu/static/js/pages/family/upload.js', import.meta.url), 'utf8');
+vm.runInNewContext(uploadSource.slice(uploadSource.indexOf('async function handleUpload('), uploadSource.indexOf('\n/** Open the upload dialog')), uploadContext);
 await uploadContext.handleUpload([{ name: 'bad.txt' }]);
 assert.match(uploadMessages[0], /Uploaded 0 items.*1 could not/);
 assert.match(uploadMessages[1], /Unsupported/);

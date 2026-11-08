@@ -9,6 +9,7 @@ fixes, held in place.
 
 from __future__ import annotations
 
+from js_sources import family_app
 import re
 from pathlib import Path
 
@@ -71,7 +72,7 @@ def test_tamil_group_labels_are_solid_and_readable():
 
 
 def test_a_tamil_page_says_its_counts_and_misses_in_tamil():
-    app = (JS / "app.js").read_text(encoding="utf-8")
+    app = family_app()
     assert "`${count} selected`" not in app
     assert "i18n.t('{count} selected', { count })" in app
     assert "`Nothing matched" not in app

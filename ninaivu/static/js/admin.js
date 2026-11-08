@@ -7,9 +7,11 @@
  */
 
 import {
-  accountsApi, askSecret, avatarNode, Gate, hideSecret, ProfileSheet, roleBadge, upgradeSecret,
+  accountsApi, askSecret, avatarNode, Gate, ProfileSheet, roleBadge, upgradeSecret,
 } from './accounts.js';
-import { onUnauthorized, reportUnauthorized, sessionRestored, subscribeProgress, thumbUrl, SCAN_COUNTS, timeLeft } from './api.js';
+import {
+  consoleJson as json, onUnauthorized, sessionRestored, subscribeProgress, thumbUrl, SCAN_COUNTS, timeLeft,
+} from './api.js';
 import { renderActivity, subscribeActivity } from './activity.js';
 import { ArchivePanel } from './archive.js';
 import { enterPressesTheButton } from './enter-key.js';
@@ -36,53 +38,15 @@ import { StraightenPanel } from './straighten.js';
 import { ScreeningPanel } from './screening.js';
 import { FirstDay } from './first-day.js';
 import { DrivePrompt } from './drives.js';
+import { revealItem } from './pages/console/common.js';
 import * as i18n from './i18n.js';
 import { consoleCommands, initPalette } from './palette.js';
 import { hideScrollBarsUntilUsed } from './scrollbars.js';
-
-const $ = (sel) => document.querySelector(sel);
-
-/* Like $, but never null.
- *
- * admin.html is compiled once and cached by Flask, while this file is served
- * with no-cache and updates immediately, so between an edit and a restart the
- * browser runs new JavaScript against old markup. A bare
- * `$('#missing').onclick =` throws there and abandons the rest of the function
- * it is in — which is how adding a sign-out button silently killed the
- * storage-integrity button wired forty lines below it. Handlers bound to the
- * stub simply never fire.
- */
-const DETACHED = document.createElement('div');
-const $$ = (sel) => document.querySelector(sel) || DETACHED;
-const el = (tag, className, text) => {
-  const node = document.createElement(tag);
-  if (className) node.className = className;
-  if (text != null) node.textContent = text;
-  return node;
-};
-
-async function json(url, options = {}) {
-  const response = await fetch(url, {
-    headers: {
-      Accept: 'application/json',
-      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
-    },
-    ...options,
-    body: options.body ? JSON.stringify(options.body) : undefined,
-  });
-  const text = await response.text();
-  const data = text ? JSON.parse(text) : null;
-  if (!response.ok) {
-    // A 401 carrying `needs_password` is a request asking you to confirm
-    // who you are before something irreversible — not a session that has
-    // ended. See api.js: the same 401 means two different things, and
-    // only one of them should raise the sign-in screen.
-    if (response.status === 401 && !data?.needs_password) reportUnauthorized(url);
-    throw Object.assign(new Error(i18n.fromServer(data, response.statusText)),
-      { status: response.status, data });
-  }
-  return data;
-}
+import { consoleState as state } from './store.js';
+import {
+  $, $$, askPasswordToDelete, bytesShort, consoleToast as toast, el, emphasised, plural, span,
+  strong,
+} from './ui.js';
 
 const adminApi = {
   locations: (hours) => json(`/api/admin/locations?hours=${encodeURIComponent(hours)}`),
@@ -129,44 +93,17 @@ const adminApi = {
     json('/api/visibility', { method: 'POST', body: { ids, visibility } }),
   setExplicit: (ids, nsfw) =>
     json('/api/assets/bulk', { method: 'POST', body: { ids, nsfw } }),
-  problems: (limit = 12) => json(`/api/admin/problems?limit=${limit}`),
-  backups: () => json('/api/admin/backups'),
-  backupNow: () => json('/api/admin/backups/now', { method: 'POST' }),
-  verifyBackup: () => json('/api/admin/backups/verify', { method: 'POST' }),
-  clearProblems: () => json('/api/admin/problems/clear', { method: 'POST' }),
-  recycleBin: () => json('/api/recycle'),
-  restoreDeleted: (ids) =>
-    json('/api/recycle/restore', { method: 'POST', body: { ids } }),
-  purgeDeleted: (ids, password) =>
-    json('/api/recycle/purge', { method: 'POST', body: { ids, password } }),
   startScrubber: () => json('/api/admin/scrubber/start', { method: 'POST' }),
   stopScrubber: () => json('/api/admin/scrubber/stop', { method: 'POST' }),
   scrubberStatus: () => json('/api/admin/scrubber/status'),
-  reveal: (assetId) => json(`/api/admin/reveal/${assetId}`, { method: 'POST' }),
   revealFolder: (folder) =>
     json('/api/admin/reveal-folder', { method: 'POST', body: { folder } }),
-  largeFiles: (minMb) =>
-    json(`/api/admin/large-files?min_mb=${encodeURIComponent(minMb)}`),
-  keepLargeFiles: (ids) =>
-    json('/api/admin/large-files/keep', { method: 'POST', body: { ids } }),
-  compressVideo: (id, mode, password) =>
-    json('/api/admin/large-files/compress', { method: 'POST', body: { id, mode, password } }),
-  compressJobs: () => json('/api/admin/large-files/compress'),
-  cancelCompress: (jobId) =>
-    json(`/api/admin/large-files/compress/${encodeURIComponent(jobId)}/cancel`, { method: 'POST' }),
-  extraCopies: () => json('/api/admin/large-files/extra-copies'),
-  tidyExtraCopies: (password) =>
-    json('/api/admin/large-files/extra-copies', { method: 'POST', body: { password } }),
   deleteFromFolders: (ids) =>
     json('/api/admin/folders/delete', { method: 'POST', body: { ids } }),
   deleteAssets: (ids, password) =>
     json('/api/delete', { method: 'POST', body: { ids, password } }),
 };
 
-const state = {
-  user: null, overview: null, people: [], roles: [], folders: [],
-  libraries: [], assignable: [],
-};
 let currentPreview = 'guest';
 let gate;
 let profileSheet;
@@ -539,7 +476,7 @@ function relabel() {
   }
   loadAttention();
   renderFolderScreen();
-  renderRecycleBin();
+  ifOpened('recycle-bin', (page) => page.render());
   renderLocations();
   refreshUndo();
   // The uploads list is only rebuilt when the queue changes; forget what it
@@ -547,8 +484,8 @@ function relabel() {
   uploadSignature = '';
   if (current === 'uploads') { loadPendingUploads(); loadPhoneBackups(); loadPhoneKeys(); }
   if (current === 'server') loadTvAlbum();
-  if (current === 'large-files') loadLargeFiles();
-  if (current === 'health') { loadProblems(); loadBackups(); loadDigest(); }
+  if (current === 'large-files') openPage('large-files').then((page) => page?.show());
+  if (current === 'health') openPage('health').then((page) => page?.show());
   if (current === 'activity') loadActivity();
   if (current === 'settings') refreshExtensions();
   if (current === 'ai-models') refreshExtensions();
@@ -619,74 +556,15 @@ function wireChrome() {
   $$('#full-rescan-btn').onclick = () => runScan(true);
   $$('#vis-undo-btn').onclick = undoLastVisibility;
   wireFolderScreen();
-  $$('#backup-now').onclick = async () => {
-    const button = $('#backup-now');
-    button.disabled = true;
-    const label = button.textContent;
-    button.textContent = i18n.t('Copying…');
-    try {
-      await adminApi.backupNow();
-      toast(i18n.t('A copy of the index has been kept.'));
-      await loadBackups();
-    } catch (exc) {
-      toast(exc.message, true);
-    } finally {
-      button.disabled = false;
-      button.textContent = label;
-    }
-  };
-  $$('#backup-verify').onclick = async () => {
-    const button = $('#backup-verify');
-    button.disabled = true;
-    const label = button.textContent;
-    button.textContent = i18n.t('Checking…');
-    try {
-      const result = await adminApi.verifyBackup();
-      toast(result.verified.ok ? i18n.t('The newest backup restores cleanly.')
-        : i18n.t('The newest backup would not restore: {reason}', { reason: result.verified.error }), !result.verified.ok);
-      await loadBackups();
-    } catch (exc) {
-      toast(exc.message, true);
-    } finally {
-      button.disabled = false;
-      button.textContent = label;
-    }
-  };
-  $$('#problem-refresh').onclick = () => loadProblems();
-  $$('#problem-clear').onclick = async () => {
-    try {
-      await adminApi.clearProblems();
-      await loadProblems();
-      loadAttention();
-    } catch (exc) { toast(exc.message, true); }
-  };
-  $$('#bin-refresh').onclick = () => loadRecycleBin();
-  $$('#lf-refresh').onclick = () => loadLargeFiles();
-  $$('#lf-floor').onchange = () => loadLargeFiles();
-  $$('#lf-all').onchange = () => lfChooseAll();
-  $$('#lf-replace').onclick = () => lfReplaceChosen();
-  $$('#lf-keep').onclick = () => lfKeepChosen();
-  $$('#lf-tidy').onclick = () => lfTidyCopies();
-  $$('#lf-delete').onclick = () => lfDeleteChosen();
-  $$('#bin-restore').onclick = () => restoreChosen();
-  $$('#bin-delete').onclick = () => purgeChosen();
+  // The command bar opens Health and presses these at once, so they are wired
+  // here, before the page's module has come, and hand over to it.
+  $$('#backup-now').onclick = () => openPage('health').then((page) => page?.backupNow());
+  $$('#backup-verify').onclick = () => openPage('health').then((page) => page?.verifyBackup());
   // The dialogs that ask for the password get Show/Hide in the box.
   for (const input of document.querySelectorAll('.modal .field input[type=password]')) upgradeSecret(input);
-  $$('#purge-modal').addEventListener('click', (event) => {
-    if (event.target === $('#purge-modal')) closePurge();
-  });
   $$('#lf-delete-modal').addEventListener('click', (event) => {
     if (event.target === $('#lf-delete-modal')) $('#lf-delete-cancel')?.click();
   });
-  $$('#lf-replace-modal').addEventListener('click', (event) => {
-    if (event.target === $('#lf-replace-modal')) $('#lf-replace-cancel')?.click();
-  });
-  $$('#bin-all').onclick = () => {
-    const present = binState.items.filter((row) => row.present);
-    const all = present.length && present.every((row) => binState.chosen.has(row.id));
-    binState.chosen = all ? new Set() : new Set(present.map((row) => row.id));
-    renderRecycleBin();
-  };
   $$('#fm-manual').addEventListener('input', refreshApply);
   $$('#fm-cancel').onclick = () => ($('#folder-modal').hidden = true);
   $$('#fm-apply').onclick = () => applyRoot();
@@ -769,7 +647,6 @@ function wireChrome() {
   wireScrubber();
   wireLocations();
   wireNotifications();
-  wireDigest();
   $$('#delete-cancel').onclick = () => closeDelete();
   $$('#delete-modal').addEventListener('click', (event) => {
     if (event.target === $('#delete-modal')) closeDelete();
@@ -895,6 +772,52 @@ function rememberPage(name) {
   } catch { /* an address that cannot be changed only costs the memory */ }
 }
 
+/* -- pages ----------------------------------------------------------------
+ *
+ * Each page that has a module of its own (static/js/pages/console/) is
+ * fetched the first time it is opened, and its controls are wired then. The
+ * import() calls are written out in full so the server finds them and names
+ * each at its stamped URL in the import map (server/modules.py).
+ */
+const PAGE_MODULES = {
+  health: () => import('./pages/console/health.js'),
+  'large-files': () => import('./pages/console/large-files.js'),
+  // A section of the Folders page, opened with it.
+  'recycle-bin': () => import('./pages/console/recycle-bin.js'),
+};
+const loadedPages = new Map();
+
+/** The module of page *name*, loaded and wired once; null if it has none. */
+function openPage(name) {
+  const load = PAGE_MODULES[name];
+  if (!load) return Promise.resolve(null);
+  if (!loadedPages.has(name)) {
+    loadedPages.set(name, load().then((module) => {
+      module.wire?.(shell);
+      return module;
+    }).catch((exc) => {
+      // Not kept: the next opening asks again (the server was restarting, say).
+      loadedPages.delete(name);
+      toast(exc.message, true);
+      return null;
+    }));
+  }
+  return loadedPages.get(name);
+}
+
+/** Run *use* with page *name*, if it has been opened; nothing is drawn otherwise. */
+function ifOpened(name, use) {
+  loadedPages.get(name)?.then((page) => page && use(page));
+}
+
+/** What a page may ask of the console around it. */
+const shell = {
+  showTab: (name) => showTab(name),
+  refresh: () => refresh(),
+  loadAttention: () => loadAttention(),
+  openFolderPicker: (options) => openFolderPicker(options),
+};
+
 function showTab(name) {
   const section = sectionPages[name];
   if (section) {
@@ -938,13 +861,16 @@ function showTab(name) {
   if (name === 'overview') safetyPanel?.load();
   if (name === 'uploads') { loadPendingUploads(); loadPhoneBackups(); loadPhoneKeys(); }
   if (name === 'visibility') { loadFolders(); refreshUndo(); }
-  if (name === 'folders') { loadFolderScreen(foldState.path); loadRecycleBin(); }
-  if (name === 'large-files') loadLargeFiles();
+  if (name === 'folders') {
+    loadFolderScreen(foldState.path);
+    openPage('recycle-bin').then((page) => page?.load());
+  }
+  if (name === 'large-files') openPage('large-files').then((page) => page?.show());
   // Loaded when the page opens, the way every other panel here loads —
   // not once at sign-in. A section whose only chance to fill itself was
   // the moment somebody signed in stays blank until a reload if that one
   // call fails, and cannot show what today would send.
-  if (name === 'health') { loadProblems(); loadBackups(); loadDigest(); }
+  if (name === 'health') openPage('health').then((page) => page?.show());
   if (name === 'library') { renderLibraryFolders(); loadLocations(); }
   // Only the visible tab holds an event stream open.
   if (name === 'archive') archive?.show(); else archive?.hide();
@@ -2673,15 +2599,6 @@ const FOLD_FILTERS = [
 const FOLDER_ICON =
   '<svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>';
 
-function bytesShort(n) {
-  if (!n) return '';
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  let value = n;
-  let unit = 0;
-  while (value >= 1024 && unit < units.length - 1) { value /= 1024; unit += 1; }
-  return `${value >= 10 || unit === 0 ? Math.round(value) : value.toFixed(1)} ${units[unit]}`;
-}
-
 /** Open *path*. With `keep`, read the same folder again as far down as it
  *  had been shown, so an action on page three does not snap back to page one. */
 async function loadFolderScreen(path = '', { keep = false } = {}) {
@@ -2947,8 +2864,6 @@ async function clearFolderRule(path) {
     await loadFolderScreen(foldState.path, { keep: true });
   } catch (exc) { toast(exc.message, true); }
 }
-
-function span(text) { return el('span', '', text); }
 
 function folderCard(child) {
   const card = el('button', 'fold-card');
@@ -3319,7 +3234,7 @@ function foldDelete(items) {
     await loadFolderScreen(foldState.path, { keep: true });
     if (!foldState.items.length) closeFoldViewer();
     else if (foldState.viewing >= 0) showFoldViewerItem();
-    loadRecycleBin();
+    openPage('recycle-bin').then((page) => page?.load());
   }, { password: false });
 }
 
@@ -3347,19 +3262,6 @@ function wireFolderScreen() {
     if (event.key === 'ArrowLeft') stepFoldViewer(-1);
     if (event.key === 'ArrowRight') stepFoldViewer(1);
   });
-}
-
-/** Ask the server to open its own file manager with `item` selected.
- *
- * Only ever works when the admin console and Ninaivu's server are the same
- * machine — the server says so plainly (409) when they are not, rather than
- * pretending the click did something. */
-async function revealItem(item) {
-  try {
-    await adminApi.reveal(item.id);
-  } catch (exc) {
-    toast(exc.message, true);
-  }
 }
 
 let uploadPoll;
@@ -3741,879 +3643,11 @@ function creationDateControl(item) {
   return row;
 }
 
-/* --- Large files ---------------------------------------------------------
- *
- * A worklist, not a filter: everything here still shows up everywhere else
- * in the library exactly as before. "Keep" only ever means "stop asking" —
- * see db.mark_large_files_reviewed — and "Delete" is the ordinary
- * password-gated /api/delete, the same one the gallery itself uses, so a
- * deleted file lands in the same recoverable _deleted folder either way.
- *
- * A video has one more answer: Compress & Replace makes a smaller MP4 and
- * swaps it in for the original in one step, with the original kept in the
- * bin first and the password asked for as Delete does. A copy left beside a
- * video by the old Compress button is used instead of encoding again (and
- * Tidy copies still clears extra ones). Videos run one at a time on the
- * server (media/video_compress.py) and this page polls while any is going. */
-
-const lfCompress = { unavailable: null, preset: '', jobs: new Map(), timer: null };
-const LF_ACTIVE = ['queued', 'running', 'checking'];
-
-/* One set of buttons above the list acts on the rows that are ticked, rather
- * than four buttons on every row. What is ticked survives a reload of the
- * list (the poll reloads it when a compression finishes), so long as the file
- * is still on it. */
-const lfPick = { items: new Map(), chosen: new Set() };
-
-function lfDuration(seconds) {
-  if (!seconds) return '';
-  const s = Math.round(seconds);
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const sec = String(Math.floor(s % 60)).padStart(2, '0');
-  return h ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`;
-}
-
-async function loadLargeFiles() {
-  const list = $('#lf-list');
-  const summary = $('#lf-summary');
-  const empty = $('#lf-empty');
-  const minMb = $('#lf-floor')?.value || 500;
-  summary.textContent = i18n.t('Looking…');
-  let data;
-  try {
-    data = await adminApi.largeFiles(minMb);
-  } catch (exc) {
-    toast(exc.message, true);
-    summary.textContent = '';
-    return;
-  }
-  await lfReadJobs();
-  lfCompressNote(data.items.some((item) => item.kind === 'video'));
-  list.innerHTML = '';
-  lfPick.items = new Map(data.items.map((item) => [item.id, item]));
-  lfPick.chosen = new Set([...lfPick.chosen].filter((id) => lfPick.items.has(id)));
-  $('#lf-bar').hidden = !data.items.length;
-  if (!data.items.length) {
-    summary.textContent = '';
-    empty.textContent = i18n.t('Nothing over {size} MB is waiting to be looked at.', { size: data.floor_mb });
-    empty.hidden = false;
-    lfRenderBar();
-    return;
-  }
-  empty.hidden = true;
-  summary.textContent =
-    i18n.t('{files} over {size} MB, largest first.', {
-      files: plural(data.items.length, i18n.key('1 file'), i18n.key('{count} files')), size: data.floor_mb });
-  for (const item of data.items) list.appendChild(lfRow(item));
-  lfRenderBar();
-  lfWatch();
-}
-
-/** What the server is compressing, and whether it can — one ask per load. */
-async function lfReadJobs() {
-  try {
-    const data = await adminApi.compressJobs();
-    lfCompress.unavailable = data.unavailable || null;
-    lfCompress.preset = data.preset || '';
-    lfCompress.jobs = new Map();
-    for (const job of data.jobs || []) lfCompress.jobs.set(job.asset_id, job);
-  } catch {
-    // The list is still worth showing without the compress buttons' state.
-  }
-}
-
-function lfCompressNote(hasVideos) {
-  const note = $('#lf-compress-note');
-  if (!note) return;
-  note.hidden = !hasVideos;
-  note.classList.toggle('warn', Boolean(lfCompress.unavailable));
-  note.textContent = lfCompress.unavailable
-    ? i18n.t(lfCompress.unavailable)
-    : i18n.t('For a video, Compress & Replace makes a smaller copy ({preset}), checks that it plays, and puts it in place of the original in one step. The original is kept in the bin.',
-      { preset: i18n.t(lfCompress.preset || 'MP4 (HEVC), at its own size') });
-}
-
-/** The ticked rows, in the order the list shows them (largest first). */
-function lfChosen() {
-  return [...lfPick.items.values()].filter((item) => lfPick.chosen.has(item.id));
-}
-
-/** Ticked videos that are not already being compressed, and not damaged at
- * their source (those can only be kept or deleted). */
-function lfCompressible() {
-  return lfChosen().filter((item) => item.kind === 'video' && !item.damaged
-    && !LF_ACTIVE.includes(lfCompress.jobs.get(item.id)?.state));
-}
-
-function lfRenderBar() {
-  const chosen = lfChosen();
-  const n = chosen.length;
-  const total = lfPick.items.size;
-  $('#lf-selected').textContent = n
-    ? plural(n, i18n.key('1 file chosen'), i18n.key('{count} files chosen'))
-    : i18n.t('Nothing chosen');
-  const all = $('#lf-all');
-  all.checked = total > 0 && n === total;
-  all.indeterminate = n > 0 && n < total;
-
-  const videos = lfCompressible().length;
-  const replace = $('#lf-replace');
-  replace.disabled = Boolean(lfCompress.unavailable) || videos === 0;
-  if (lfCompress.unavailable) {
-    replace.title = i18n.t(lfCompress.unavailable);
-  } else if (n && !videos) {
-    replace.title = i18n.t('Only a video that is not damaged and not already being compressed can be compressed.');
-  } else {
-    replace.title = i18n.t('Compress the video and put the smaller copy in place of the original. The original is kept in the bin.');
-  }
-  $('#lf-keep').disabled = n === 0;
-  $('#lf-keep').title = i18n.t('Stop asking about these files');
-  $('#lf-delete').disabled = n === 0;
-
-  for (const row of document.querySelectorAll('.lf-row')) {
-    const on = lfPick.chosen.has(Number(row.dataset.id));
-    row.classList.toggle('chosen', on);
-    const box = row.querySelector('.lf-check');
-    if (box) box.checked = on;
-  }
-}
-
-function lfChoose(id, on) {
-  if (on) lfPick.chosen.add(id);
-  else lfPick.chosen.delete(id);
-  lfRenderBar();
-}
-
-function lfChooseAll() {
-  const every = lfPick.items.size > 0 && lfPick.chosen.size === lfPick.items.size;
-  lfPick.chosen = every ? new Set() : new Set(lfPick.items.keys());
-  lfRenderBar();
-}
-
-/** "IMG_3165.MOV" (5.7 GB) for one file, "3 files, 17.5 GB together" for more. */
-function lfDescribe(items) {
-  if (items.length === 1) return `"${items[0].filename}" (${bytesShort(items[0].size)})`;
-  return i18n.t('{files}, {size} together', {
-    files: plural(items.length, i18n.key('1 file'), i18n.key('{count} files')),
-    size: bytesShort(items.reduce((sum, item) => sum + (item.size || 0), 0)),
-  });
-}
-
-async function lfStartCompress(item, mode, password) {
-  try {
-    const { job } = await adminApi.compressVideo(item.id, mode, password);
-    lfCompress.jobs.set(item.id, job);
-    const row = document.querySelector(`.lf-row[data-id="${item.id}"]`);
-    if (row) lfShowJob(row, job);
-    lfWatch();
-    return true;
-  } catch (exc) {
-    if ((exc.status === 401 && exc.data?.needs_password) || exc.status === 429) throw exc;
-    toast(`${item.filename}: ${i18n.t(exc.message)}`, true);
-    return false;
-  }
-}
-
-function lfShowJob(row, job) {
-  let line = row.querySelector('.lf-job');
-  if (!job) { line?.remove(); return; }
-  if (!line) {
-    line = el('div', 'lf-job');
-    line.setAttribute('role', 'status');
-    row.querySelector('.lf-info').appendChild(line);
-  }
-  line.innerHTML = '';
-  line.classList.toggle('bad', job.state === 'error');
-  const busy = LF_ACTIVE.includes(job.state);
-  let text;
-  if (job.state === 'queued') {
-    text = job.ahead
-      ? i18n.t('Waiting to compress ({count} ahead)…', { count: job.ahead })
-      : i18n.t('Starting to compress…');
-  } else if (job.state === 'running') {
-    text = i18n.t('Compressing… {percent}%', { percent: Math.round((job.progress || 0) * 100) });
-  } else if (job.state === 'checking') {
-    text = i18n.t('Checking the smaller copy…');
-  } else if (job.state === 'done' && job.result) {
-    const sizes = { from: bytesShort(job.result.old_size), to: bytesShort(job.result.new_size) };
-    text = job.result.mode === 'replace'
-      ? i18n.t('Replaced: {from} → {to}. The original is kept in the bin.', sizes)
-      : i18n.t('Smaller copy saved as {name}: {from} → {to}.', { ...sizes, name: job.result.name });
-  } else if (job.state === 'cancelled') {
-    text = i18n.t('Stopped.');
-  } else {
-    text = i18n.t(job.error || 'Could not compress this video.');
-  }
-  line.appendChild(span(text));
-  if (busy) {
-    if (job.state === 'running') {
-      const bar = document.createElement('progress');
-      bar.max = 100;
-      bar.value = Math.round((job.progress || 0) * 100);
-      line.appendChild(bar);
-    }
-    const stop = el('button', 'btn ghost small', i18n.t('Stop'));
-    stop.onclick = async () => {
-      stop.disabled = true;
-      try { await adminApi.cancelCompress(job.id); } catch (exc) { toast(exc.message, true); }
-      lfWatch();
-    };
-    line.appendChild(stop);
-  }
-}
-
-/** Poll while anything is compressing; stop when nothing is. */
-function lfWatch() {
-  clearTimeout(lfCompress.timer);
-  const going = [...lfCompress.jobs.values()].some((job) => LF_ACTIVE.includes(job.state));
-  if (!going) return;
-  lfCompress.timer = setTimeout(async () => {
-    const before = new Map(lfCompress.jobs);
-    await lfReadJobs();
-    let finished = false;
-    for (const [assetId, job] of lfCompress.jobs) {
-      const row = document.querySelector(`.lf-row[data-id="${assetId}"]`);
-      if (row) lfShowJob(row, job);
-      const was = before.get(assetId);
-      if (was && LF_ACTIVE.includes(was.state) && !LF_ACTIVE.includes(job.state)) {
-        finished = true;
-        if (job.state === 'done' && job.result) {
-          toast(job.result.mode === 'replace'
-            ? i18n.t('“{name}” is now {size}. The original is kept in the bin.',
-              { name: job.result.name, size: bytesShort(job.result.new_size) })
-            : i18n.t('Smaller copy saved as {name}.', { name: job.result.name }));
-        } else if (job.state === 'error') {
-          toast(i18n.t(job.error || 'Could not compress this video.'), true);
-        }
-      }
-    }
-    // A replaced video's size changed, and a new copy may itself be large:
-    // the list is read again so it says what is on disk now.
-    if (finished) await loadLargeFiles();
-    else { lfRenderBar(); lfWatch(); }
-  }, 1500);
-}
-
-/** Compress & Replace every ticked video: one password for all of them. The first
- * request checks it; the rest follow one after another with the same one. */
-function lfReplaceChosen() {
-  const items = lfCompressible();
-  if (!items.length) return;
-  const modal = $('#lf-replace-modal');
-  const input = $('#lf-replace-password');
-  const error = $('#lf-replace-error');
-  const confirm = $('#lf-replace-confirm');
-
-  $('#lf-replace-title').textContent = items.length === 1
-    ? i18n.t('Compress and replace this video?')
-    : i18n.t('Compress and replace these videos?');
-  $('#lf-replace-what').textContent = lfDescribe(items);
-  error.hidden = true;
-  input.value = '';
-  hideSecret(input);
-  modal.hidden = false;
-  input.focus();
-
-  const close = () => {
-    modal.hidden = true;
-    input.onkeydown = null;
-    confirm.onclick = null;
-    $('#lf-replace-cancel').onclick = null;
-  };
-
-  const attempt = async () => {
-    if (!input.value) { input.focus(); return; }
-    const password = input.value;
-    confirm.disabled = true;
-    try {
-      let checked = false;
-      for (const item of items) {
-        try {
-          if (await lfStartCompress(item, 'replace', password)) lfPick.chosen.delete(item.id);
-          checked = true;
-        } catch (exc) {
-          // A wrong password is said in the dialog, before anything started.
-          if (!checked) {
-            error.textContent = i18n.fromServer(exc.data, exc.message);
-            error.hidden = false;
-            input.value = '';
-            input.focus();
-            return;
-          }
-          toast(`${item.filename}: ${i18n.t(exc.message)}`, true);
-        }
-      }
-      close();
-      lfRenderBar();
-    } finally {
-      confirm.disabled = false;
-    }
-  };
-
-  confirm.onclick = attempt;
-  $('#lf-replace-cancel').onclick = close;
-  input.onkeydown = (event) => {
-    if (event.key === 'Enter') { event.preventDefault(); attempt(); }
-    if (event.key === 'Escape') close();
-  };
-}
-
-async function lfKeepChosen() {
-  const items = lfChosen();
-  if (!items.length) return;
-  const keep = $('#lf-keep');
-  keep.disabled = true;
-  try {
-    await adminApi.keepLargeFiles(items.map((item) => item.id));
-    for (const item of items) lfPick.chosen.delete(item.id);
-    toast(items.length === 1
-      ? i18n.t('Won’t ask about “{name}” again.', { name: items[0].filename })
-      : i18n.t('Won’t ask about these {count} files again.', { count: items.length }));
-    await loadLargeFiles();
-  } catch (exc) {
-    toast(exc.message, true);
-    lfRenderBar();
-  }
-}
-
-function lfRow(item) {
-  const row = el('div', 'lf-row');
-  row.dataset.id = item.id;
-
-  const box = document.createElement('input');
-  box.type = 'checkbox';
-  box.className = 'lf-check';
-  box.checked = lfPick.chosen.has(item.id);
-  box.setAttribute('aria-label', item.filename);
-  box.onchange = () => lfChoose(item.id, box.checked);
-  row.appendChild(box);
-  row.classList.toggle('chosen', box.checked);
-
-  if (item.thumb) {
-    const img = document.createElement('img');
-    img.className = 'lf-thumb';
-    img.src = thumbUrl(item.id, 160, item.thumb_v);
-    img.alt = '';
-    img.loading = 'lazy';
-    img.title = i18n.t('Show this file where it lives');
-    img.onclick = () => revealItem(item);
-    row.appendChild(img);
-  } else {
-    const placeholder = el('div', 'lf-thumb lf-thumb-empty', item.kind === 'video' ? '▶' : '');
-    row.appendChild(placeholder);
-  }
-
-  const info = el('div', 'lf-info');
-  info.appendChild(el('div', 'lf-name', item.filename));
-  const meta = el('div', 'lf-meta');
-  meta.appendChild(span(bytesShort(item.size)));
-  if (item.duration) meta.appendChild(span(lfDuration(item.duration)));
-  meta.appendChild(span(item.folder || i18n.t('(library root)')));
-  if (item.no_camera) meta.appendChild(el('span', 'tag warn', i18n.t('no camera info')));
-  if (item.damaged) meta.appendChild(el('span', 'tag warn', i18n.t('damaged')));
-  info.appendChild(meta);
-  if (item.damaged) {
-    info.appendChild(el('div', 'lf-job bad', i18n.t('This video is damaged at its source: the file was cut short, so its index is missing and it cannot be played or compressed. Keep it or delete it; only an older copy from elsewhere can bring it back.')));
-  }
-  row.appendChild(info);
-
-  // Anywhere on the row ticks it, except the picture (which opens the file)
-  // and the job line's Stop button.
-  row.addEventListener('click', (event) => {
-    if (event.target.closest('.lf-thumb, button, input, a')) return;
-    lfChoose(item.id, !lfPick.chosen.has(item.id));
-  });
-
-  if (item.kind === 'video' && !item.damaged && lfCompress.jobs.has(item.id)) {
-    lfShowJob(row, lfCompress.jobs.get(item.id));
-  }
-
-  return row;
-}
-
-/** Move the extra compressed copies to the bin: what the server says is
- * extra (all but the newest copy of a video, and every copy of a video
- * already replaced), shown first, then one password. */
-async function lfTidyCopies() {
-  let plan;
-  try {
-    plan = await adminApi.extraCopies();
-  } catch (exc) {
-    toast(exc.message, true);
-    return;
-  }
-  if (!plan.items.length) {
-    toast(i18n.t('No extra compressed copies to tidy.'));
-    return;
-  }
-  const modal = $('#lf-delete-modal');
-  const input = $('#lf-delete-password');
-  const error = $('#lf-delete-error');
-  const confirm = $('#lf-delete-confirm');
-
-  $('#lf-delete-title').textContent = i18n.t('Move the extra copies to the bin?');
-  $('#lf-delete-what').textContent = lfDescribe(plan.items);
-  error.hidden = true;
-  input.value = '';
-  modal.hidden = false;
-  input.focus();
-
-  const close = () => {
-    modal.hidden = true;
-    input.onkeydown = null;
-    confirm.onclick = null;
-    $('#lf-delete-cancel').onclick = null;
-  };
-
-  const attempt = async () => {
-    if (!input.value) { input.focus(); return; }
-    confirm.disabled = true;
-    try {
-      const result = await adminApi.tidyExtraCopies(input.value);
-      close();
-      toast(i18n.t('{files} moved to the bin.', {
-        files: plural(result.deleted, i18n.key('1 file'), i18n.key('{count} files')) }));
-      await loadLargeFiles();
-    } catch (exc) {
-      if (exc.status === 401 && exc.data?.needs_password) {
-        error.textContent = i18n.fromServer(exc.data, exc.message);
-        error.hidden = false;
-        input.value = '';
-        input.focus();
-        return;
-      }
-      close();
-      toast(exc.message, true);
-    } finally {
-      confirm.disabled = false;
-    }
-  };
-
-  confirm.onclick = attempt;
-  $('#lf-delete-cancel').onclick = close;
-  input.onkeydown = (event) => {
-    if (event.key === 'Enter') { event.preventDefault(); attempt(); }
-    if (event.key === 'Escape') close();
-  };
-}
-
-/** Delete every ticked file: one password, one request, all into the bin. */
-function lfDeleteChosen() {
-  const items = lfChosen();
-  if (!items.length) return;
-  askPasswordToDelete(items, async (result) => {
-    for (const item of items) lfPick.chosen.delete(item.id);
-    const failed = (result.failed || []).length;
-    if (failed) {
-      toast(i18n.t('{count} could not be moved to the bin.', { count: failed }), true);
-    } else {
-      toast(items.length === 1
-        ? i18n.t('“{name}” moved to the bin.', { name: items[0].filename })
-        : i18n.t('{count} files moved to the bin.', { count: items.length }));
-    }
-    await loadLargeFiles();
-  });
-}
-
-/** Ask for the password, then move *items* to the bin; *done* gets the
- *  server's answer. Shared by Large files and Folders. With `password` off
- *  (the Folders screen) it only asks to confirm: the files go to the bin,
- *  where Recently deleted puts them back. */
-function askPasswordToDelete(items, done, { password = true } = {}) {
-  const modal = $('#lf-delete-modal');
-  const input = $('#lf-delete-password');
-  const error = $('#lf-delete-error');
-  const confirm = $('#lf-delete-confirm');
-  input.closest('.field').hidden = !password;
-
-  $('#lf-delete-title').textContent = items.length === 1
-    ? i18n.t('Delete this file?')
-    : i18n.t('Delete these files?');
-  $('#lf-delete-what').textContent = lfDescribe(items);
-  error.hidden = true;
-  input.value = '';
-  hideSecret(input);
-  modal.hidden = false;
-  (password ? input : confirm).focus();
-
-  const close = () => {
-    modal.hidden = true;
-    input.onkeydown = null;
-    modal.onkeydown = null;
-    confirm.onclick = null;
-    $('#lf-delete-cancel').onclick = null;
-  };
-
-  const attempt = async () => {
-    if (password && !input.value) { input.focus(); return; }
-    confirm.disabled = true;
-    try {
-      const ids = items.map((item) => item.id);
-      const result = password ? await adminApi.deleteAssets(ids, input.value)
-        : await adminApi.deleteFromFolders(ids);
-      close();
-      await done(result);
-    } catch (exc) {
-      if (exc.status === 401 && exc.data?.needs_password) {
-        error.textContent = i18n.fromServer(exc.data, exc.message);
-        error.hidden = false;
-        input.value = '';
-        input.focus();
-        return;
-      }
-      close();
-      toast(exc.message, true);
-    } finally {
-      confirm.disabled = false;
-    }
-  };
-
-  confirm.onclick = attempt;
-  $('#lf-delete-cancel').onclick = close;
-  input.onkeydown = (event) => {
-    if (event.key === 'Enter') { event.preventDefault(); attempt(); }
-    if (event.key === 'Escape') close();
-  };
-  modal.onkeydown = password ? null : (event) => {
-    if (event.key === 'Escape') close();
-  };
-}
-
-/* --- anything that went wrong ------------------------------------------- */
-/*
- * The log file has everything and nobody will open it. This is the short
- * version: what has gone wrong since the machine was last started, in the one
- * place an administrator already looks when something feels off.
- */
-
-async function loadProblems() {
-  let data;
-  try {
-    data = await adminApi.problems(12);
-  } catch (exc) {
-    return;                       // the panel is a convenience, never a blocker
-  }
-
-  const list = $('#problems');
-  const rows = data.problems || [];
-  list.innerHTML = '';
-
-  // The whole count, as Needs you and the Health tab give it, not the
-  // twelve listed: the two used to disagree once there were more.
-  const total = data.total ?? rows.length;
-  const pill = $('#problem-count');
-  pill.hidden = total === 0;
-  pill.textContent = String(total);
-  $('#problems-empty').hidden = rows.length > 0;
-  $('#problem-file').textContent = data.file || i18n.t('the log file');
-
-  for (const row of rows) {
-    const line = el('div', `problem ${row.level === 'error' || row.level === 'critical' ? 'error' : ''}`);
-    line.appendChild(el('span', 'where', row.where || ''));
-    line.appendChild(el('span', 'what', row.what || ''));
-    line.appendChild(el('span', 'when', whenShort(row.at)));
-    if (row.detail) line.appendChild(el('pre', 'detail', row.detail));
-    list.appendChild(line);
-  }
-}
-
-/* --- copies of the index ------------------------------------------------- */
-
-async function loadBackups() {
-  let data;
-  try {
-    data = await adminApi.backups();
-  } catch (exc) {
-    return;
-  }
-
-  const last = data.last;
-  $('#backup-when').textContent = last ? whenShort(last.at) : i18n.t('never');
-  $('#backup-size').textContent = last ? bytesShort(last.bytes) : i18n.t('no copy yet');
-  $('#backup-count').textContent = String(data.count || 0);
-  $('#backup-keep').textContent = data.keep ? i18n.t('newest {count} kept', { count: data.keep }) : '';
-  $('#backup-every').textContent = data.every_hours
-    ? (data.every_hours === 24 ? i18n.t('day') : i18n.t('{hours} h', { hours: data.every_hours }))
-    : i18n.t('off');
-  const sharedWith = data.same_drive_as || [];
-  const driveWarning = $('#backup-drive-warning');
-  if (driveWarning) {
-    driveWarning.hidden = !sharedWith.length;
-    driveWarning.textContent = sharedWith.length
-      ? i18n.t('These copies are on the same drive as {places}. They protect against mistakes, not against that drive failing. Set NINAIVU_BACKUP_DIR, or "backup_dir" in config.json in the state folder, to a folder on another drive.',
-        { places: sharedWith.join(', ') })
-      : '';
-  }
-  $('#backup-where').textContent = data.error
-    ? i18n.t('The last attempt failed: {reason}', { reason: data.error })
-    : i18n.t('Copies are written to {folder}. To put one back, stop Ninaivu and run ninaivu restore <file>.',
-      { folder: data.folder });
-  $('#backup-now').disabled = Boolean(data.running);
-  // Every new backup is test-restored as soon as it is written; this is the
-  // line that says whether the last one would actually come back.
-  const check = $('#backup-check');
-  if (check) {
-    const verified = data.verified;
-    check.hidden = !verified;
-    check.classList.toggle('bad', Boolean(verified && !verified.ok));
-    if (verified) {
-      check.textContent = verified.ok
-        ? i18n.t('Restore check passed {when}: the newest backup unpacks, matches its checksums and opens as a library of {items}.',
-          { when: whenShort(verified.at), items: i18n.items(verified.assets) })
-        : i18n.t('Restore check FAILED {when}: {reason}. Make a new backup and check again; if it fails again, the index itself may be damaged.',
-          { when: whenShort(verified.at), reason: verified.error });
-    }
-  }
-}
-
-/* --- the recycle bin ---------------------------------------------------- */
-/*
- * Deleting already moves the file rather than erasing it, but a bin nobody
- * can look into is only half a promise. This is the other half: what went,
- * when, who by, and one button to put it back.
- */
-
-const binState = { items: [], chosen: new Set(), folders: [] };
-
-function whenShort(seconds) {
-  if (!seconds) return '';
-  const then = new Date(seconds * 1000);
-  const days = Math.floor((Date.now() - then.getTime()) / 86400000);
-  if (days <= 0) {
-    return i18n.t('today, {time}',
-      { time: then.toLocaleTimeString(i18n.locale(), { hour: '2-digit', minute: '2-digit' }) });
-  }
-  if (days === 1) return i18n.t('yesterday');
-  if (days < 7) return i18n.t('{count} days ago', { count: days });
-  return then.toLocaleDateString(i18n.locale());
-}
-
-async function loadRecycleBin() {
-  let data;
-  try {
-    data = await adminApi.recycleBin();
-  } catch (exc) {
-    // A library that has never had a deletion has no bin, and that is not an
-    // error worth a red toast on every visit to the tab.
-    binState.items = [];
-    renderRecycleBin();
-    if (exc.status && exc.status !== 404) toast(exc.message, true);
-    return;
-  }
-  binState.items = data.items || [];
-  binState.folders = data.folders || [];
-  binState.summary = data.summary || {};
-  binState.eraseAfter = data.erase_after_days || 0;
-  // Drop anything that has gone since the last look, so "Put back" can never
-  // be enabled for a row that is no longer there.
-  const live = new Set(binState.items.map((row) => row.id));
-  binState.chosen = new Set([...binState.chosen].filter((id) => live.has(id)));
-  renderRecycleBin();
-}
-
-function renderRecycleBin() {
-  const list = $('#bin-list');
-  const rows = binState.items;
-  list.innerHTML = '';
-
-  const pill = $('#bin-count');
-  pill.hidden = rows.length === 0;
-  pill.textContent = String(rows.length);
-
-  $('#bin-empty').hidden = rows.length > 0;
-  $('#bin-policy').textContent = binState.eraseAfter
-    ? ` ${i18n.t('Anything left here longer than {days} days is erased automatically when Ninaivu starts.',
-      { days: binState.eraseAfter })}`
-    : '';
-  $('#bin-foot').hidden = rows.length === 0;
-  $('#bin-note').hidden = rows.length === 0;
-
-  for (const row of rows) {
-    const line = el('label', 'bin-row');
-    if (!row.present) line.classList.add('gone');
-
-    const box = document.createElement('input');
-    box.type = 'checkbox';
-    box.checked = binState.chosen.has(row.id);
-    box.disabled = !row.present;
-    box.onchange = () => {
-      if (box.checked) binState.chosen.add(row.id);
-      else binState.chosen.delete(row.id);
-      renderBinFoot();
-    };
-    line.appendChild(box);
-
-    const preview = document.createElement('img');
-    preview.className = 'bin-thumb';
-    preview.alt = '';
-    preview.loading = 'lazy';
-    if (row.thumbnail) {
-      preview.src = row.thumbnail;
-      preview.onerror = () => preview.classList.add('missing');
-    } else {
-      preview.classList.add('missing');
-    }
-    line.appendChild(preview);
-
-    const text = el('div', 'bin-what');
-    text.appendChild(el('strong', '', row.filename));
-    text.appendChild(el('span', 'path', row.rel_path));
-    line.appendChild(text);
-
-    line.appendChild(el('span', 'bin-when', whenShort(row.deleted_at)));
-    line.appendChild(el('span', 'bin-size', bytesShort(row.size)));
-    line.appendChild(el('span', row.present ? 'bin-state' : 'bin-state missing',
-      row.present ? i18n.t('In the bin') : i18n.t('Moved or erased')));
-    list.appendChild(line);
-  }
-  renderBinFoot();
-}
-
-function renderBinFoot() {
-  const n = binState.chosen.size;
-  const held = binState.summary || {};
-  $('#bin-selected').textContent = n
-    ? plural(n, i18n.key('1 file chosen'), i18n.key('{count} files chosen'))
-    : held.items
-      ? i18n.t('{files}, {size} in the bin', {
-        files: plural(held.items, i18n.key('1 file'), i18n.key('{count} files')),
-        size: bytesShort(held.bytes || 0) })
-      : i18n.t('Nothing chosen');
-  $('#bin-restore').disabled = n === 0;
-  $('#bin-delete').disabled = n === 0;
-}
-
-/**
- * Erase the chosen files, after asking for the password.
- *
- * The password is asked here as well as in the gallery, and for a different
- * reason: the gallery's delete can be taken back from this screen, and this
- * one cannot be taken back from anywhere. An open console says somebody is
- * administering the library; it does not say they meant to lose a photograph.
- */
-function purgeChosen() {
-  const ids = [...binState.chosen];
-  if (!ids.length) return;
-
-  const modal = $('#purge-modal');
-  const input = $('#purge-password');
-  const error = $('#purge-error');
-  const confirm = $('#purge-confirm');
-
-  $('#purge-what').textContent =
-    plural(ids.length, i18n.key('1 file will be erased from the disk.'),
-      i18n.key('{count} files will be erased from the disk.'));
-  error.hidden = true;
-  input.value = '';
-  hideSecret(input);
-  modal.hidden = false;
-  input.focus();
-
-  const attempt = async () => {
-    if (!input.value) { input.focus(); return; }
-    confirm.disabled = true;
-    try {
-      const result = await adminApi.purgeDeleted(ids, input.value);
-      closePurge();
-      toast(result.purged
-        ? plural(result.purged, i18n.key('1 file is gone for good.'), i18n.key('{count} files are gone for good.'))
-        : i18n.t('Nothing could be erased.'), !result.purged);
-      for (const problem of result.failed || []) {
-        toast(`${problem.name}: ${problem.why}`, true);
-      }
-      binState.chosen.clear();
-      await loadRecycleBin();
-    } catch (exc) {
-      if (exc.status === 401 && exc.data?.needs_password) {
-        error.textContent = i18n.fromServer(exc.data, exc.message);
-        error.hidden = false;
-        input.value = '';
-        input.focus();
-        return;
-      }
-      closePurge();
-      toast(exc.message, true);
-    } finally {
-      confirm.disabled = false;
-    }
-  };
-
-  confirm.onclick = attempt;
-  $('#purge-cancel').onclick = closePurge;
-  input.onkeydown = (event) => {
-    if (event.key === 'Enter') { event.preventDefault(); attempt(); }
-    if (event.key === 'Escape') closePurge();
-  };
-}
-
-function closePurge() {
-  $('#purge-modal').hidden = true;
-  $('#purge-password').value = '';
-  $('#purge-password').onkeydown = null;
-  $('#purge-confirm').onclick = null;
-  $('#purge-cancel').onclick = null;
-}
-
-async function restoreChosen() {
-  const ids = [...binState.chosen];
-  if (!ids.length) return;
-  const button = $('#bin-restore');
-  button.disabled = true;
-  try {
-    const result = await adminApi.restoreDeleted(ids);
-    toast(result.restored
-      ? `${plural(result.restored, i18n.key('1 file is back where it was.'),
-        i18n.key('{count} files are back where they were.'))} ${
-        i18n.t('They reappear in the library after the next scan.')}`
-      : i18n.t('Nothing could be put back.'), !result.restored);
-    for (const problem of result.failed || []) {
-      toast(`${problem.name}: ${problem.why}`, true);
-    }
-    binState.chosen.clear();
-    await loadRecycleBin();
-    // Restoring puts files back on the disk but not into the index; a scan is
-    // what makes them visible again, so start one rather than leaving the
-    // household wondering where the photographs went.
-    if (result.restored) await adminApi.rescan(false).catch(() => {});
-  } catch (exc) {
-    toast(exc.message, true);
-  } finally {
-    renderBinFoot();
-  }
-}
-
 /* --- bulk visibility: ask twice, and keep the way back ------------------ */
 
 const VIS_WORDS = { public: i18n.key('everyone, guests included'),
                     family: i18n.key('family members and admins'),
                     hidden: i18n.key('admins only') };
-
-function strong(text) {
-  const node = document.createElement('strong');
-  node.textContent = text;
-  return node;
-}
-
-/* A translated sentence with nodes in it — a name in bold, say. The sentence
-   is translated whole and the nodes are put where its placeholders fall, since
-   the words either side of them are in a different order in another language.
-   Plain values fill in as text. */
-function emphasised(key, parts) {
-  return i18n.t(key).split(/(\{\w+\})/).filter(Boolean).map((piece) => {
-    const name = /^\{(\w+)\}$/.exec(piece)?.[1];
-    if (!name || !(name in parts)) return piece;
-    const part = parts[name];
-    return part instanceof Node ? part : String(part);
-  });
-}
-
-/* A count in a sentence, in the current language. `one` and `many` are keys
-   marked with i18n.key() where they are written — "1 file" and "{count}
-   files" — because the words around a number move with the language. */
-function plural(n, one, many) {
-  return n === 1 ? i18n.t(one) : i18n.t(many, { count: n.toLocaleString() });
-}
 
 /**
  * Apply a folder rule, stopping first if it would reveal anything.
@@ -4745,20 +3779,6 @@ async function undoLastVisibility() {
   } catch (exc) { toast(exc.message, true); }
 }
 
-function toast(message, isError = false) {
-  // Nothing to say while the screen is locked: nobody is there to read it,
-  // and requests refused behind the lock would pile their errors up here.
-  if (document.body.classList.contains('screen-locked')) return;
-  const node = el('div', `toast${isError ? ' error' : ''}`, message);
-  $('#toasts').appendChild(node);
-  setTimeout(() => {
-    // Fades and sinks a little on its way out (premium.css, `leaving`).
-    node.classList.add('leaving');
-    node.style.opacity = '0';
-    setTimeout(() => node.remove(), 250);
-  }, isError ? 5200 : 3200);
-}
-
 /**
  * A temporary password, easy to read out and type: three words and three
  * digits, drawn with the browser's cryptographic generator. It was two words
@@ -4881,120 +3901,6 @@ function wireNotifications() {
         !result.sent);
     } catch (exc) {
       toast(exc.message, true);
-    }
-  };
-}
-
-/* --- the weekly photograph ---------------------------------------------
- *
- * Its own section rather than another switch under Notifications, because it
- * is a different promise: those go to whoever looks after the machine and
- * never contain a photograph, and this goes to the family and is one. It
- * shares the mail server and nothing else.
- */
-
-const digestApi = {
-  get: () => json('/api/admin/digest'),
-  save: (body) => json('/api/admin/digest', { method: 'POST', body }),
-  preview: () => json('/api/admin/digest/preview'),
-  send: () => json('/api/admin/digest/send', { method: 'POST' }),
-};
-
-function describeDigest(settings) {
-  const state = $('#digest-state');
-  if (state) {
-    if (!settings.enabled) state.textContent = i18n.t('Not being sent.');
-    else if (!settings.ready) state.textContent = i18n.t('On, but there is nobody to send it to.');
-    else if (settings.last_sent) state.textContent = i18n.t('On. Last sent {when}.', { when: settings.last_sent });
-    else state.textContent = i18n.t('On. Nothing sent yet.');
-    if (settings.last_error) {
-      state.textContent += ` ${i18n.t('Last attempt failed: {reason}', { reason: settings.last_error })}`;
-    }
-  }
-  const warning = $('#digest-no-mail');
-  if (warning) warning.hidden = Boolean(settings.has_mail_server);
-}
-
-async function loadDigest() {
-  const to = $('#digest-to');
-  if (!to) return;
-  const hours = $('#digest-hour');
-  // Drawn again on every load rather than once, so a change of language
-  // reaches them; the choice survives because it is set from settings below.
-  if (hours) {
-    const chosen = hours.value;
-    hours.replaceChildren();
-    for (let h = 0; h < 24; h += 1) {
-      const option = document.createElement('option');
-      option.value = String(h);
-      // Plain words: "9 in the morning" is what somebody means by it.
-      option.textContent = h === 0 ? i18n.t('midnight') : h === 12 ? i18n.t('midday')
-        : h < 12 ? i18n.t('{hour} in the morning', { hour: h })
-          : i18n.t('{hour} in the afternoon', { hour: h - 12 });
-      hours.append(option);
-    }
-    if (chosen) hours.value = chosen;
-  }
-
-  let settings;
-  try {
-    settings = await digestApi.get();
-  } catch {
-    return;                       // not an admin, or the console is older
-  }
-  to.value = settings.to || '';
-  if ($('#digest-link')) $('#digest-link').value = settings.link || '';
-  if ($('#digest-enabled')) $('#digest-enabled').checked = Boolean(settings.enabled);
-  if ($('#digest-weekday')) $('#digest-weekday').value = String(settings.weekday);
-  if (hours) hours.value = String(settings.hour);
-  describeDigest(settings);
-
-  // What would go out today, so nobody has to wait until Sunday to find out
-  // whether this works.
-  try {
-    const seen = await digestApi.preview();
-    const line = $('#digest-preview');
-    if (!line) return;
-    const pick = { subject: seen.subject, year: seen.year, count: seen.faces,
-      from: (seen.others + 1).toLocaleString() };
-    line.textContent = !seen.ready
-      ? i18n.t('Today it would send nothing: {reason}.', { reason: seen.reason })
-      : seen.faces === 1
-        ? i18n.t('Today it would send “{subject}” — {year}, 1 person in it, chosen from {from} from this day.', pick)
-        : i18n.t('Today it would send “{subject}” — {year}, {count} people in it, chosen from {from} from this day.', pick);
-  } catch { /* the preview is a nicety, not the feature */ }
-}
-
-function wireDigest() {
-  $$('#digest-save').onclick = async () => {
-    try {
-      const result = await digestApi.save({
-        enabled: $('#digest-enabled')?.checked || false,
-        to: $('#digest-to')?.value || '',
-        link: $('#digest-link')?.value || '',
-        weekday: Number($('#digest-weekday')?.value ?? 6),
-        hour: Number($('#digest-hour')?.value ?? 9),
-      });
-      describeDigest(result.settings);
-      toast(i18n.t('Saved.'));
-    } catch (exc) {
-      toast(exc.message, true);
-    }
-  };
-
-  $$('#digest-send').onclick = async () => {
-    const button = $('#digest-send');
-    if (button) button.disabled = true;
-    try {
-      const result = await digestApi.send();
-      toast(result.sent
-        ? i18n.t('Sent: {subject}', { subject: result.subject })
-        : i18n.t('Nothing was sent: {reason}', { reason: result.reason }), !result.sent);
-      await loadDigest();
-    } catch (exc) {
-      toast(exc.message, true);
-    } finally {
-      if (button) button.disabled = false;
     }
   };
 }

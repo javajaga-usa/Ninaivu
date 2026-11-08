@@ -8,12 +8,13 @@ the studio from the gallery in a browser.
 
 from __future__ import annotations
 
+from js_sources import family_app
 import re
 from pathlib import Path
 
 STATIC = Path(__file__).resolve().parents[1] / "ninaivu" / "static"
 PAGE = (Path(__file__).resolve().parents[1] / "ninaivu" / "templates" / "index.html").read_text(encoding="utf-8")
-APP = (STATIC / "js" / "app.js").read_text(encoding="utf-8")
+APP = family_app()
 
 
 def _menu(menu_id: str) -> str:

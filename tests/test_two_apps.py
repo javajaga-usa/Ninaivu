@@ -5,6 +5,7 @@ merely refuse admin endpoints, it must not have them. A 404 rather than a 403
 means there is nothing there to attack.
 """
 
+from js_sources import family_app
 import pytest
 
 from conftest import ADMIN, FAMILY, GUEST, login
@@ -492,14 +493,13 @@ def test_the_offline_screen_offers_a_check_the_service_worker_cannot_hide(apps):
     own warning. The check opens /readyz, which the service worker leaves alone,
     so the browser shows what it really gets."""
     import re
-    from pathlib import Path
     body = apps["home"].test_client().get("/").get_data(as_text=True)
     for element_id in ("offline-check", "empty-check"):
         link = re.search(r'<a\s[^>]*id="' + element_id + r'"[^>]*>', body)
         assert link, element_id
         assert 'href="/readyz"' in link.group(0) and 'target="_blank"' in link.group(0)
     assert apps["home"].test_client().get("/readyz").status_code == 200
-    script = (Path(__file__).parents[1] / "ninaivu" / "static" / "js" / "app.js").read_text(encoding="utf-8")
+    script = family_app()
     assert "ninaivu.local" not in script.split("function setServerOffline", 1)[1].split("async function checkConnection", 1)[0], \
         "the offline message names the address actually opened, not a fixed name"
 

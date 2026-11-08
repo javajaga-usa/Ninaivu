@@ -7,6 +7,7 @@ The behaviour itself is driven in a browser by tests/modern_feel_ui.mjs.
 
 from __future__ import annotations
 
+from js_sources import console as console_js, family_app
 import json
 import re
 from pathlib import Path
@@ -18,7 +19,7 @@ JS = STATIC / "js"
 PREMIUM = (CSS / "premium.css").read_text(encoding="utf-8")
 STYLE = (CSS / "style.css").read_text(encoding="utf-8")
 PALETTE = (JS / "palette.js").read_text(encoding="utf-8")
-APP = (JS / "app.js").read_text(encoding="utf-8")
+APP = family_app()
 MOTION = (JS / "motion.js").read_text(encoding="utf-8")
 VIEWER = (JS / "viewer.js").read_text(encoding="utf-8")
 ADMIN_HTML = (ROOT / "ninaivu" / "templates" / "admin.html").read_text(encoding="utf-8")
@@ -174,7 +175,7 @@ def test_scroll_bars_stay_clear_until_a_box_scrolls():
     # Both apps mark whatever scrolls, without holding the scroll up.
     script = (JS / "scrollbars.js").read_text(encoding="utf-8")
     assert "passive: true" in script and "capture: true" in script
-    for app in (APP, (JS / "admin.js").read_text(encoding="utf-8")):
+    for app in (APP, console_js()):
         assert "hideScrollBarsUntilUsed();" in app
 
 
