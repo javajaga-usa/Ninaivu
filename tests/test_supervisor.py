@@ -284,26 +284,31 @@ def test_a_claim_makes_the_scan_stand_down(cfg):
     assert scanner.deferred is None and len(started) == 1
 
 
+class _Held:
+    """The scan's claims, as Scanner keeps them; those given as plain text
+    here were made by a reason alone (holder None)."""
+
+    def __init__(self) -> None:
+        self.claims: list = []
+
+    def defer(self, reason, holder=None):
+        self.claims.append(reason if holder is None else (reason, holder))
+
+    def resume(self, reason=None, holder=None):
+        self.claims.remove(reason if holder is None else (reason, holder))
+
+    def holding(self):
+        return [c if isinstance(c, tuple) else (c, None) for c in self.claims]
+
+    @property
+    def deferred(self):
+        return "; ".join(dict.fromkeys(r for r, _ in self.holding())) or None
+
+
 def test_a_job_that_moves_files_waits_for_another(clock):
     from ninaivu.media.scanner import CLAIM_STORAGE_CHECK
 
-    class Held:
-        """The scan's claims, as Scanner keeps them."""
-
-        def __init__(self) -> None:
-            self.claims: list[str] = []
-
-        def defer(self, reason):
-            self.claims.append(reason)
-
-        def resume(self, reason=None):
-            self.claims.remove(reason)
-
-        @property
-        def deferred(self):
-            return "; ".join(self.claims) or None
-
-    scanner = Held()
+    scanner = _Held()
     scanner.claims += ["a consolidation is running", CLAIM_STORAGE_CHECK]
     supervisor = Supervisor(scanner, clock=clock)
     ran = []
@@ -320,6 +325,68 @@ def test_a_job_that_moves_files_waits_for_another(clock):
         assert ran == [f"{CLAIM_STORAGE_CHECK}; tidying the library"]
         assert scanner.claims == [CLAIM_STORAGE_CHECK]
     finally:
+        assert supervisor.stop(timeout=5) == []
+
+
+def test_two_jobs_moving_files_for_the_same_reason_take_turns(clock):
+    """The same reason is not the same holder: the second waits for the first."""
+    scanner = _Held()
+    supervisor = Supervisor(scanner, clock=clock)
+    gate, ran = threading.Event(), []
+
+    def first() -> None:
+        ran.append("first")
+        gate.wait(5)
+
+    tidy = dict(claims={sup.LIBRARY_DISK}, reason="tidying the library", moves_files=True)
+    try:
+        supervisor.add(Job("one", first, sup.at_start(), interrupt=gate.set, **tidy))
+        until(lambda: supervisor.state("one") == sup.RUNNING)
+        supervisor.add(Job("two", lambda: ran.append("second"), sup.at_start(), **tidy))
+        clock.asleep_until("two", sup.CLAIM_LOOK_EVERY)
+        assert supervisor.state("two") == sup.WAITING
+        gate.set()
+        until(lambda: supervisor.state("one") == sup.DONE)
+        clock.advance(sup.CLAIM_LOOK_EVERY)
+        until(lambda: supervisor.state("two") == sup.DONE)
+        assert ran == ["first", "second"] and scanner.claims == []
+    finally:
+        assert supervisor.stop(timeout=5) == []
+
+
+def test_a_shared_reason_is_one_claim_per_holder(cfg):
+    """The first slice's risk: claims were keyed by reason, so a job and the
+    Storage page's check, both 'checking the library's storage', let go of
+    each other's claim and the scan came back while one of them still read."""
+    from ninaivu.media.scanner import CLAIM_STORAGE_CHECK, Scanner
+
+    scanner = Scanner(cfg)
+    scanner.watch = lambda roots=(): None
+    supervisor = Supervisor(scanner)
+    inside, carry_on = threading.Event(), threading.Event()
+
+    def check() -> None:
+        inside.set()
+        carry_on.wait(5)
+
+    try:
+        scanner.defer(CLAIM_STORAGE_CHECK)                  # the Storage page's check
+        supervisor.add(Job("check", check, sup.at_start(), claims={sup.CPU},
+                           reason=CLAIM_STORAGE_CHECK, interrupt=carry_on.set))
+        assert inside.wait(5)
+        assert scanner.deferred == CLAIM_STORAGE_CHECK      # read as one reason
+        assert len(scanner.holding()) == 2
+        scanner.resume(CLAIM_STORAGE_CHECK)                 # the page's check ends
+        assert scanner.deferred == CLAIM_STORAGE_CHECK      # the job still holds it
+        # Two jobs with one reason: each holds and lets go of its own.
+        scanner.defer(CLAIM_STORAGE_CHECK, holder="other")
+        carry_on.set()
+        until(lambda: supervisor.state("check") == sup.DONE)
+        assert scanner.holding() == [(CLAIM_STORAGE_CHECK, "other")]
+        scanner.resume(CLAIM_STORAGE_CHECK, holder="other")
+        assert scanner.deferred is None
+    finally:
+        carry_on.set()
         assert supervisor.stop(timeout=5) == []
 
 
