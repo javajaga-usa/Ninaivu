@@ -4102,15 +4102,11 @@
   "the search model is not downloaded (AI models page)": "தேடல் மாதிரி பதிவிறக்கப்படவில்லை (AI மாதிரிகள் பக்கம்)",
   "the description model is not downloaded (AI models page)": "விவரிப்பு மாதிரி பதிவிறக்கப்படவில்லை (AI மாதிரிகள் பக்கம்)",
   "Describing photographs": "புகைப்படங்களை விவரிக்கிறது",
-  "The Mac mini is asleep, so this is the copy kept on the Pi. You can look at everything; changes wait for the mini.": "மேக் மினி தூங்குகிறது, எனவே இது Pi-யில் வைத்திருக்கும் நகல். எல்லாவற்றையும் பார்க்கலாம்; மாற்றங்கள் மினி திரும்பும் வரை காத்திருக்கும்.",
   "A hand-over is already running.": "ஒரு ஒப்படைப்பு ஏற்கனவே நடந்துகொண்டிருக்கிறது.",
   "Choose a folder outside the library and outside Ninaivu's own folder.": "நூலகத்துக்கும் நினைவுவின் சொந்தக் கோப்புறைக்கும் வெளியே உள்ள ஒரு கோப்புறையைத் தேர்ந்தெடுக்கவும்.",
   "Choose a number of minutes from 0 (only when asked) to 10080.": "0 (கேட்கும்போது மட்டும்) முதல் 10080 வரை நிமிடங்களைத் தேர்ந்தெடுக்கவும்.",
   "No folder for the Pi is set (replica_dir).": "Pi-க்கான கோப்புறை அமைக்கப்படவில்லை (replica_dir).",
   "Send folder or every_minutes.": "folder அல்லது every_minutes அனுப்பவும்.",
-  "Sign in to wake the Mac mini.": "மேக் மினியை எழுப்ப உள்நுழையவும்.",
-  "The Pi was not given the Mac mini's network address (--replica-wake).": "Pi-க்கு மேக் மினியின் நெட்வொர்க் முகவரி கொடுக்கப்படவில்லை (--replica-wake).",
-  "This is the copy of the library kept on the Pi while the Mac mini sleeps. You can look at everything here; changes are made on the mini.": "மேக் மினி தூங்கும்போது Pi-யில் வைத்திருக்கும் நூலகத்தின் நகல் இது. இங்கே எல்லாவற்றையும் பார்க்கலாம்; மாற்றங்கள் மினியில் செய்யப்படும்.",
   "the index could not be snapshotted": "குறியீட்டின் நகலை எடுக்க முடியவில்லை",
   "1 minute": "1 நிமிடம்",
   "30 seconds": "30 வினாடிகள்",
@@ -5418,5 +5414,11 @@
   "Nothing has been sent to the off-site copy yet.": "வெளியிட நகலுக்கு இதுவரை எதுவும் அனுப்பப்படவில்லை.",
   "The Secondary has confirmed no file yet.": "இரண்டாம் கணினி இதுவரை எந்தக் கோப்பையும் உறுதிசெய்யவில்லை.",
   "This computer is not a paired Primary.": "இந்தக் கணினி இணைக்கப்பட்ட முதன்மைக் கணினி அல்ல.",
-  "the fingerprint differs": "கைரேகை வேறுபடுகிறது"
+  "the fingerprint differs": "கைரேகை வேறுபடுகிறது",
+  "This is the copy kept on {here} while {primary} is off. You can look at everything; changes wait for {primary}.": "{primary} அணைந்திருக்கும்போது {here}-இல் வைத்திருக்கும் நகல் இது. எல்லாவற்றையும் பார்க்கலாம்; மாற்றங்கள் {primary} திரும்பும் வரை காத்திருக்கும்.",
+  "This is the copy of the library kept on {here} while {primary} is off. You can look at everything here; changes are made on {primary}.": "{primary} அணைந்திருக்கும்போது {here}-இல் வைத்திருக்கும் நூலகத்தின் நகல் இது. இங்கே எல்லாவற்றையும் பார்க்கலாம்; மாற்றங்கள் {primary}-இல் செய்யப்படும்.",
+  "This is the copy of the library kept on {here} while {primary} is off. {primary} has been asked to wake up; try again in a minute.": "{primary} அணைந்திருக்கும்போது {here}-இல் வைத்திருக்கும் நூலகத்தின் நகல் இது. {primary}-ஐ எழுப்பக் கேட்கப்பட்டுள்ளது; ஒரு நிமிடத்தில் மீண்டும் முயலுங்கள்.",
+  "Sign in to wake {primary}.": "{primary}-ஐ எழுப்ப உள்நுழையவும்.",
+  "{here} does not know the network address to wake {primary} with.": "{primary}-ஐ எழுப்புவதற்கான நெட்வொர்க் முகவரி {here}-க்குத் தெரியாது.",
+  "the main computer": "முதன்மைக் கணினி"
 }
