@@ -81,9 +81,8 @@ new one, under the same names.
 ### What does not change
 
 The bundle identifier stays `org.ninaivu.app`, so the answers macOS keeps
-follow the app from version to version. Ninaivu run from a checkout (the
-"Ninaivu Control Panel" app that `Setup Ninaivu.command` makes) is not the
-download and is never signed: its questions about Documents are answered in
+follow the app from version to version. Ninaivu run from a checkout (`python -m ninaivu.desktop.app`, or the
+starters in `launcher/`) is not the download and is never signed: its questions about Documents are answered in
 System Settings → Privacy & Security → Files and Folders.
 
 `Ninaivu.app` never writes into itself: its Python modules are compiled when

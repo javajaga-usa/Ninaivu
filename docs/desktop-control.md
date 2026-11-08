@@ -1,60 +1,71 @@
 # The Control Panel and the tray
 
-Ninaivu has two ways to be looked after on the computer it runs on, and they
-work together: the **Control Panel**, a window of its own, and a small
-**tray** icon. Both start and stop the same server, and both find a server
-that was started another way, such as `launcher/start.py`, a service, or the
-other one.
+Ninaivu is one program on the computer it runs on: the **Control Panel**, a
+window of its own, with Ninaivu's icon in the **tray** (the menu bar on a
+Mac). The icon is the window minimised, not a second program. The panel
+starts and stops the server, and finds a server that was started another way,
+such as `launcher/start.py`, a service or a start at sign-in.
 
-**The portable downloads open the Control Panel.** On Windows it is
-`Ninaivu.exe` in the folder; on a Mac it is `Ninaivu.app`; on Linux it is
-`./ninaivu`. It is the one thing the person who runs the house needs: Start,
-Stop, Restart, the addresses, the readings and the log. The tray is there
-beside it for anyone who wants a menu in the corner — `open -a Ninaivu --args
---tray` on a Mac, `./ninaivu --tray` on Linux, or the Control Panel's own menu.
+**Each portable download has one thing to open: Ninaivu.** On Windows it is
+`Ninaivu.exe` in the folder; on a Mac, `Ninaivu.app`; on Linux, `ninaivu`
+(double-click it, or run `./ninaivu`). Opening it opens the Control Panel,
+puts the icon in the tray and starts Ninaivu. Closing the window puts it in
+the tray, and Ninaivu keeps running; a click on the icon, or opening Ninaivu
+again, brings the window back. **Quit** in the icon's menu ends the window
+and the icon, and still leaves Ninaivu running: **Stop** is what stops it.
+`--tray` (`open -a Ninaivu --args --tray` on a Mac, `./ninaivu --tray` on
+Linux) opens it minimised.
 
 ## The tray
 
-Ninaivu sits in the system tray on Windows and the menu bar on a Mac:
+The icon's menu is short, because everything else is one click away in the
+window: whether Ninaivu is running; **Show Ninaivu** (what clicking the icon
+does); **Open the family app**; **Start** or **Stop**, whichever can be
+pressed; and **Quit**. Stop asks the server to finish properly through its own
+authenticated shutdown and never force-kills it. Something begun from the
+icon while the window is hidden answers in a notification.
 
-```
-.venv\Scripts\pythonw -m ninaivu.desktop.tray      # Windows
-.venv/bin/python -m ninaivu.desktop.tray            # macOS, Linux
-```
+How each system holds the icon beside the window, in one program:
+
+- **Windows**: the icon has its own message loop, on a thread of its own.
+- **macOS**: the window and the icon share the one event loop macOS allows,
+  on the main thread. The Dock's icon also brings the window back, and Quit
+  in the Dock or ⌘Q is the panel's Quit.
+- **Linux**: the X11 tray (XEmbed), which Cinnamon, MATE, Xfce and KDE have.
+  A click on the icon shows the window, where everything is. GNOME has no
+  such tray without an extension: there is no icon, and closing the window
+  closes it, as before; Ninaivu keeps running, and opening Ninaivu again
+  brings the window back.
 
 From a checkout it needs `requirements/requirements-desktop.txt` (pystray and
-Pillow). The portable downloads (`installers/`) bring everything; **Start at sign-in** in its
-own menu keeps it there.
-
-One icon, one menu: whether Ninaivu is running; **Open the family app** and
-**Open the console**; **Start**, **Stop** and **Restart**; **How to
-update** (the version, and: stop first, then run the newer installer);
-**View the log**; **Trust the HTTPS certificate** (only while Ninaivu
-runs on HTTPS); **Start at sign-in**; **Quit the tray**. Every action reports in a notification. Stop
-asks the server to finish properly through its own authenticated shutdown
-and never force-kills it; Quit leaves the server running, since the icon was
-never what kept it up.
+Pillow). Without Tk, `python -m ninaivu.desktop.app` opens the icon alone
+with a fuller menu instead (Start, Stop, Restart, the log, the certificate,
+Start at sign-in).
 
 ## The Control Panel
 
-**Windows:** double-click **Start - Ninaivu Control Panel.vbs** in the
-Ninaivu folder. It runs the panel with the folder's `.venv`, so run
-`start.cmd` once first; if the `.venv` is missing it says so.
+The portable downloads open it (above). From a checkout, after
+`pip install -r requirements/requirements-desktop.txt` into its environment:
 
-**macOS:** run **Setup Ninaivu.command** once. It builds **Ninaivu Control
-Panel** beside the Ninaivu app in your Applications folder, a copy in the
-Ninaivu folder, and one in the main Applications folder when your account may
-write there; open it from any of them, Launchpad or Spotlight. On a Mac set up
-before the Control Panel existed, or after moving the Ninaivu folder,
-`"./Setup Ninaivu.command" --apps-only` builds both apps again without
-reinstalling anything. They are built on the Mac rather than shipped because
-macOS will not open an unsigned app that arrived as a download.
+```
+python -m ninaivu.desktop.app            # any system
+```
 
-**Linux:** run `sh "Setup Ninaivu.sh"` once for a checkout. It prepares Python,
-adds **Ninaivu** and **Ninaivu Control Panel** to the application menu and
-Desktop, and builds **Open Ninaivu** when a C compiler is available. Both menu
-entries open the Control Panel without a terminal. After moving the checkout,
-run `sh "Setup Ninaivu.sh" --apps-only` to refresh the app entries.
+`launcher\Start - Ninaivu Control Panel.vbs` (Windows) and
+`launcher/Start - Ninaivu Control Panel.sh` (Linux) open it without a
+terminal once `launcher\start.cmd` or `sh launcher/start.sh` has made the
+checkout's `.venv`; `sh launcher/start.sh --add-to-menu` puts it in a Linux
+desktop's application menu.
+
+**If you used Setup Ninaivu.command or Setup Ninaivu.sh.** They are gone in
+4.0. On a Mac or a Linux PC, use the portable download, whose `Ninaivu.app`
+or `ninaivu` is the one thing to open; it offers to bring your library across
+from the folder beside it. From a checkout, `python -m ninaivu` starts the
+server and `python -m ninaivu.desktop.app` the Control Panel. The apps
+Setup Ninaivu.command made (**Ninaivu** and **Ninaivu Control Panel** in
+Applications) still point at the checkout's old root files and no longer
+open: delete them, and on Linux run `sh launcher/start.sh --remove-from-menu`
+and then `--add-to-menu` to replace the menu entries.
 
 New Linux installations keep the index and settings in **`~/.ninaivu/` in your
 home folder**. Existing app-local libraries or earlier user data folders
@@ -71,13 +82,9 @@ next sign-in. A different portable copy cannot disable your selected copy's
 sign-in entry. If Python has no Tk, install it on Mint/Ubuntu/Debian with
 `sudo apt install python3-tk`. The portable build includes its own Tk.
 
-From a terminal, on any system: `python -m ninaivu.desktop.app` with the
-`.venv`'s Python.
-
-The window needs no terminal and starts independently of the server. It is
-the same panel on both systems. A server it starts runs in the background,
-and on a Mac in a session of its own, so closing the panel leaves Ninaivu
-running.
+The window needs no terminal. It is the same panel on every system. A
+server it starts runs in the background, and on a Mac in a session of its
+own, so closing the panel, or quitting it, leaves Ninaivu running.
 
 What it shows:
 
@@ -137,16 +144,14 @@ What it shows:
   update and shows at most 2,000 lines or 200 KB; warnings and errors are
   coloured.
 - **Trust the HTTPS certificate** (shown only while Ninaivu runs on HTTPS) and
-  **Start Ninaivu when I sign in**, which do exactly what the tray's items of
-  the same name do (below).
+  **Start Ninaivu when I sign in** (below).
 
 The console's **Server** page has the readings, the mode and the log too; the
 panel is for the times the console is not open, or not running.
 
-The panel is drawn with Tk. The Windows installer and python.org's Python
-include it. Homebrew's Python does not: `brew install python-tk@3.12` adds it
-(Setup Ninaivu does this when it installs Python with Homebrew itself). It
-also needs `psutil`, which the setup installs; without it the panel could not
+The panel is drawn with Tk. The portable downloads and python.org's Python
+include it. Homebrew's Python does not: `brew install python-tk@3.12` adds it.
+It also needs `psutil` (in `requirements-desktop.txt`); without it the panel could not
 tell whether Ninaivu is running, so it says what to install instead of
 opening.
 

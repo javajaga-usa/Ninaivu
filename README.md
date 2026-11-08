@@ -39,39 +39,31 @@ One **administrator** runs it. **Family members** see everything marked for the 
 
 Portable downloads for Windows (x64), Macs with Apple silicon and Linux (x64)
 are on the [releases page](https://github.com/javajaga-usa/Ninaivu/releases):
-one folder each, nothing installed, each carrying its own Python, opening the
-Ninaivu Control Panel. From a checkout:
+one folder each, nothing installed, each carrying its own Python and one
+thing to open, **Ninaivu** (`Ninaivu.exe`, `Ninaivu.app`, or `ninaivu` on
+Linux). It opens the Ninaivu Control Panel and starts Ninaivu; closing the
+window puts it in the tray (the menu bar on a Mac) and Ninaivu keeps running.
+From a checkout:
 
 ```bash
 git clone https://github.com/javajaga-usa/Ninaivu.git
 cd Ninaivu
 ```
 
-On Windows, double-click `start.cmd`, or run this in Command Prompt:
-
-```bat
-start.cmd "%USERPROFILE%\Pictures"
-```
-
-On macOS or Linux:
-
 ```bash
-sh launcher/start.sh ~/Pictures
+python -m pip install -e . -r requirements/requirements-desktop.txt
+python -m ninaivu ~/Pictures
 ```
 
-The launcher makes a virtual environment, installs what is missing, finds free
-ports and opens your browser. The first screen makes the administrator; after
-that, add the household under **People**.
-
-On a Mac, double-clicking **Setup Ninaivu.command** once does all of that
-without a terminal (installing Python 3.12 first if the Mac has none) and
-puts **Ninaivu** and the **Ninaivu Control Panel** in Applications. On
-Windows, **Start - Ninaivu Control Panel.vbs** opens the Control Panel, a
-window that starts and stops Ninaivu and shows its readings and log, beside
-the tray. On Linux, run `sh "Setup Ninaivu.sh"` once, then open **Ninaivu**
-from the application menu or double-click **Open Ninaivu**. New Linux apps keep
-the index in `~/.ninaivu/` in your home folder; existing libraries are preserved.
-[More on both.](docs/desktop-control.md)
+`python -m ninaivu.desktop.app` opens the Control Panel with its tray icon.
+The starters in `launcher/` do the setting up for you: `launcher\start.cmd`
+on Windows (installing Python 3.12 first if there is none) and
+`sh launcher/start.sh ~/Pictures` on macOS or Linux make a virtual
+environment, install what is missing, find free ports and open your browser.
+The first screen makes the administrator; after that, add the household under
+**People**. New Linux installations keep the index in `~/.ninaivu/` in your
+home folder; existing libraries are preserved.
+[More on the Control Panel.](docs/desktop-control.md)
 
 Docker:
 
@@ -100,12 +92,9 @@ The core AI features run on your computer. Optional [extensions](extensions/READ
 
 ## Where things are
 
-The root holds the double-click starters (`start.cmd` for Windows, `Ninaivu.command` and
-`Setup Ninaivu.command` for macOS, `Start - Ninaivu Control Panel.vbs`,
-`Start - Ninaivu Control Panel.sh` and `ninaivu_control.pyw` for the Windows and
-Linux control panel) and the files Git, GitHub, pip and
-mkdocs look for by name (`README.md`, `LICENSE`, `pyproject.toml`, `mkdocs.yml`, the
-dotfiles and `.github/`).
+The root holds only the files Git, GitHub, pip and mkdocs look for by name
+(`README.md`, `LICENSE`, `pyproject.toml`, `mkdocs.yml`, the dotfiles and
+`.github/`). The starters for a checkout are in `launcher/`.
 Everything else is in a folder for what it is:
 
 ```
