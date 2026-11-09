@@ -13,7 +13,7 @@ from PIL import Image
 from ninaivu.media import scanner as scanner_mod
 from ninaivu.media.scanner import Scanner
 from ninaivu.server import auth
-from ninaivu.storage import db, fingerprints, migrations
+from ninaivu.storage import db, fingerprints, locations, migrations
 
 
 # -- helpers -----------------------------------------------------------------
@@ -345,3 +345,135 @@ def test_locations_answer_what_the_move_finder_asks(cfg):
         "JOIN assets a ON a.id=l.asset_id WHERE l.root=? AND l.fingerprint LIKE ?",
         (str(root), f"{fingerprints.ALGO}:%"))}
     assert from_locations == asked
+
+
+# -- rebuilding and checking (second slice) ----------------------------------
+
+def _many(conn, n: int) -> list[int]:
+    db.bulk_upsert(conn, [_record(f"2024/{i // 100:02d}/p{i:05d}.jpg") for i in range(n)])
+    ids = [r[0] for r in conn.execute("SELECT id FROM assets ORDER BY id")]
+    fingerprints.store(conn, [(i, f"{i:064x}", 100, 1_700_000_000.0) for i in ids[::2]])
+    return ids
+
+
+def test_check_finds_each_difference_and_rebuild_sets_them_right(tmp_path):
+    path = tmp_path / "index.db"
+    conn = db.init_db(path)
+    try:
+        ids = _many(conn, 40)
+        assert locations.check(conn)["agrees"]
+        first_seen = dict(conn.execute("SELECT asset_id, seen_at FROM locations"))
+        with db._write_lock:                              # noqa: SLF001
+            conn.execute("PRAGMA foreign_keys=OFF")
+            # What a repair can leave: rows of only one of the tables.
+            conn.execute("DELETE FROM locations WHERE asset_id IN (?, ?)", (ids[1], ids[2]))
+            conn.execute("UPDATE locations SET fingerprint='blake3:00' WHERE asset_id=?", (ids[3],))
+            conn.execute("UPDATE locations SET fingerprint=NULL WHERE asset_id=?", (ids[4],))
+            conn.execute("UPDATE locations SET rel_path='elsewhere.jpg' WHERE asset_id=?", (ids[5],))
+            conn.execute("INSERT INTO locations(asset_id, root, rel_path) VALUES (99999, '/x', 'y')")
+            conn.commit()
+            conn.execute("PRAGMA foreign_keys=ON")
+        before = conn.execute("SELECT COUNT(*), SUM(seen_at) FROM locations").fetchone()
+        found = locations.check(conn)
+        assert not found["agrees"]
+        assert (found["missing"], found["extra"], found["wrong_fingerprint"]) == (3, 2, 2)
+        assert set(found["examples"]["missing"]) == {ids[1], ids[2], ids[5]}
+        assert found["examples"]["wrong_fingerprint"] == [ids[3], ids[4]]
+        # Only read.
+        assert conn.execute("SELECT COUNT(*), SUM(seen_at) FROM locations").fetchone() == before
+
+        assert locations.rebuild(conn) == len(ids)
+        assert locations.check(conn)["agrees"]
+        _in_step(conn)
+        # A place that was right keeps when it was first seen there.
+        now_seen = dict(conn.execute("SELECT asset_id, seen_at FROM locations"))
+        assert now_seen[ids[0]] == first_seen[ids[0]]
+    finally:
+        db.close(path)
+
+
+def test_rebuild_makes_lost_triggers_again_and_waits_for_the_migration(tmp_path):
+    path = tmp_path / "index.db"
+    conn = db.init_db(path)
+    try:
+        db.upsert_asset(conn, _record("a/one.jpg"))
+        conn.execute("DROP TRIGGER locations_follow_insert")
+        conn.commit()
+        locations.rebuild(conn)
+        db.upsert_asset(conn, _record("a/two.jpg"))
+        assert len(_in_step(conn)) == 2
+        _as_37(conn)
+        assert locations.rebuild(conn) == 0
+        assert locations.check(conn) == {"present": False, "agrees": False, "missing": 0,
+                                         "extra": 0, "wrong_fingerprint": 0, "examples": {}}
+    finally:
+        db.close(path)
+
+
+def _dbstat() -> bool:
+    import sqlite3
+    try:
+        sqlite3.connect(":memory:").execute("SELECT * FROM dbstat LIMIT 1")
+        return True
+    except sqlite3.Error:
+        return False
+
+
+def test_a_partly_salvaged_index_has_its_locations_right_afterwards(tmp_path):
+    import pytest
+    if not _dbstat():
+        pytest.skip("SQLite without dbstat")
+    import sqlite3
+    from contextlib import closing
+    from ninaivu.storage import index_check
+    path = tmp_path / "index.db"
+    conn = db.init_db(path)
+    _many(conn, 3000)
+    db.close(path)
+    db._READY.discard(str(path))                          # noqa: SLF001
+    # Pages of assets overwritten, as a failing disk leaves them: the rebuild
+    # salvages what it can of each table on its own, and locations keeps the
+    # places of photographs whose rows were lost.
+    with closing(sqlite3.connect(path)) as raw:
+        leaves = [r[0] for r in raw.execute(
+            "SELECT pageno FROM dbstat WHERE name='assets' AND pagetype='leaf'")]
+        size = raw.execute("PRAGMA page_size").fetchone()[0]
+    with path.open("r+b") as stream:
+        for page in leaves[len(leaves) // 3: len(leaves) // 3 + 3]:
+            stream.seek((page - 1) * size + 100)
+            stream.write(os.urandom(size // 4))
+    index_check.ask(tmp_path, "error")
+    result = index_check.run(tmp_path)
+    assert result["ok"] and result["repaired"] == ["index.db"], result
+    assert result["locations"]["rebuilt"] > 0
+    with closing(sqlite3.connect(path)) as raw:
+        assert 0 < raw.execute("SELECT COUNT(*) FROM assets").fetchone()[0] < 3000
+        assert locations.check(raw)["agrees"]
+        assert _locations(raw) == _expected(raw)
+
+
+def test_a_check_after_damage_was_seen_rebuilds_only_what_differs(tmp_path):
+    import sqlite3
+    from contextlib import closing
+    from ninaivu.storage import index_check
+    path = tmp_path / "index.db"
+    conn = db.init_db(path)
+    _many(conn, 10)
+    db.close(path)
+    db._READY.discard(str(path))                          # noqa: SLF001
+
+    index_check.ask(tmp_path, "error")
+    assert index_check.run(tmp_path)["locations"] == {"agrees": True}
+
+    with closing(sqlite3.connect(path)) as raw:
+        raw.execute("DELETE FROM locations WHERE asset_id = (SELECT MIN(id) FROM assets)")
+        raw.commit()
+    # A move changed no row: not looked at.
+    index_check.ask(tmp_path, "moved")
+    assert "locations" not in index_check.run(tmp_path)
+    index_check.ask(tmp_path, "error")
+    done = index_check.run(tmp_path)["locations"]
+    assert done["rebuilt"] == 10 and done["found"] == {"missing": 1, "extra": 0,
+                                                        "wrong_fingerprint": 0}
+    with closing(sqlite3.connect(path)) as raw:
+        assert locations.check(raw)["agrees"]
