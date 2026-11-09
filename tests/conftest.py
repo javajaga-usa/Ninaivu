@@ -10,14 +10,6 @@ from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-# The suite switches features on and off while its apps run, so its apps are
-# made with every feature's routes, as the route manifest is, and a feature
-# switched off answers 404 from inside them. tests/test_features.py makes apps
-# without a switched-off feature's routes, as a start does.
-from ninaivu import features as _features  # noqa: E402
-
-_features.every_route = True
-
 
 class PageClient(FlaskClient):
     """The test client as the family app's own fetch: every request carries

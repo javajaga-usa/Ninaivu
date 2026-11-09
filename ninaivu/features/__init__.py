@@ -40,16 +40,14 @@ A feature now says what it is in one :class:`Feature`, its manifest:
 the tables in before 4.0, so a fresh index is the same file it was.
 
 Every feature's routes are put on its blueprints in the very place they
-were before (the foot of ``api/api.py``), so the blueprints hold every route.
-An app leaves out the routes of a feature whose switch is off when the app is
-made (:func:`left_out`, from ``ninaivu/__init__.py`` ``_register``): they do
-not exist, and a request for one is the app's own 404. Flask cannot add a
-route once an app has answered a request, so a feature switched on in the
-console is there from the next start, and the console says so. Only the
-switch counts here: a feature waiting for its model keeps its routes, which
-answer 404 from inside until the model is downloaded, as before. The route
-manifest is built with every route (:data:`every_route`), and says which
-feature each belongs to.
+were before (the foot of ``api/api.py``), and every app has them all. While
+a feature's switch is off, one gate on each app (:func:`gate`) answers a
+request for one of its routes with the app's own 404, before the route is
+reached: a feature switched on in the console is there at once, as before
+4.0, with no restart. Only the switch counts here: a feature waiting for
+its model passes the gate, and its routes answer 404 from inside until the
+model is downloaded, as before. The route manifest says which feature each
+route belongs to.
 
 Most features have moved whole into a package of their own here, with
 ``routes.py``, ``media.py`` and ``storage.py`` for what was
@@ -68,12 +66,11 @@ extensions alike. Extensions themselves are unchanged.
 """
 from __future__ import annotations
 
-import contextlib
 import importlib
 import inspect
 import sqlite3
 from dataclasses import dataclass, field
-from typing import Any, Callable, Iterator, Mapping
+from typing import Any, Callable, Mapping
 
 from ..server.tiers import TIERS
 
@@ -150,7 +147,7 @@ class Feature:
 
     def switched_on(self, cfg: Any) -> bool:
         """Whether its switch is on in *cfg*, whatever its model: what decides
-        whether its routes are made when an app is (:func:`left_out`)."""
+        whether its routes are answered (:func:`gate`)."""
         return self.switch is None or bool(getattr(cfg, self.switch, False))
 
     def on(self, cfg: Any) -> bool:
@@ -293,12 +290,6 @@ def create_tables(conn: sqlite3.Connection) -> list[str]:
     return made
 
 
-#: True for an app made with every feature's routes, switched on or not:
-#: the route manifest's (tools/route_manifest.py) and the test suite's,
-#: which switch features on and off while the app runs.
-every_route = False
-
-
 def _blueprints() -> list[Any]:
     """The blueprints a feature's routes go on: the family API's and the
     administrator's (``api/api.py``)."""
@@ -324,54 +315,26 @@ def register_routes(name: str) -> Feature:
     return feature
 
 
-@contextlib.contextmanager
-def left_out(cfg: Any) -> Iterator[list[str]]:
-    """While an app registers its blueprints, take off them the routes of
-    every feature whose switch is off in *cfg*; yields their names. Put back
-    afterwards, for the next app (the console, or a test's)."""
-    off = {} if every_route or cfg is None else {
-        feature.routes: feature.name for feature in registry()
-        if feature.kind == "feature" and feature.routes and not feature.switched_on(cfg)}
-    kept, out = [], set()
-    for bp in _blueprints() if off else ():
-        keep = []
-        for deferred in bp.deferred_functions:
-            name = off.get(_module_of(deferred))
-            if name is None:
-                keep.append(deferred)
-            else:
-                out.add(name)
-        if len(keep) != len(bp.deferred_functions):
-            kept.append((bp, list(bp.deferred_functions)))
-            bp.deferred_functions[:] = keep
-    try:
-        yield [name for name in names() if name in out]
-    finally:
-        for bp, functions in kept:
-            bp.deferred_functions[:] = functions
+def gate(app: Any) -> None:
+    """Answer a request for a route of a feature switched off right now with
+    *app*'s own 404, before the route is reached. The switch is read on every
+    request, from the app's settings (``MV_CONFIG``), so switching a feature
+    on or off in the console takes effect on the next request."""
+    from flask import abort, request                              # noqa: PLC0415
+
+    owners: dict[str, Feature] = {}
+    for endpoint, view in app.view_functions.items():
+        name = owner(view)
+        if name and get(name).kind == "feature" and get(name).switch:
+            owners[endpoint] = get(name)
+
+    @app.before_request
+    def _feature_switched_off():
+        feature = owners.get(request.endpoint or "")
+        if feature is not None and not feature.switched_on(app.config.get("MV_CONFIG")):
+            abort(404)
 
 
-def _module_of(deferred: Any) -> str | None:
-    """The module of the view a blueprint's deferred function puts on an app
-    (Flask's ``record(lambda s: s.add_url_rule(rule, endpoint, view_func…))``),
-    or None for one that names no function."""
-    for cell in getattr(deferred, "__closure__", None) or ():
-        try:
-            found = cell.cell_contents
-        except ValueError:
-            continue
-        if inspect.isfunction(found):
-            return found.__module__
-    return None
-
-
-def left_out_of(app: Any) -> list[Feature]:
-    """The features whose routes *app* was made without."""
-    return [get(name) for name in app.config.get(LEFT_OUT, ())]
-
-
-#: Where an app keeps the names of the features it was made without.
-LEFT_OUT = "MV_FEATURES_LEFT_OUT"
 
 
 def owner(view: Any) -> str:
@@ -482,7 +445,7 @@ ORDER: tuple[str, ...] = (
     "find_print", "voice_search",
 )
 
-__all__ = ["FACES", "Feature", "HOOKS", "LEFT_OUT", "ORDER", "TIERS", "Tables", "call",
-           "create_tables", "endpoints", "every_route", "from_extension", "get", "hooked",
-           "left_out", "left_out_of", "listing", "names", "owner", "register_routes",
+__all__ = ["FACES", "Feature", "HOOKS", "ORDER", "TIERS", "Tables", "call",
+           "create_tables", "endpoints", "from_extension", "gate", "get", "hooked",
+           "listing", "names", "owner", "register_routes",
            "registry", "routed", "shape"]
