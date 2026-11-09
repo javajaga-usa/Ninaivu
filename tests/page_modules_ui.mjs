@@ -79,8 +79,14 @@ c.on('request', (r) => asked.push(r.url()));
 await signInAtConsole(c);
 await c.waitForTimeout(800);
 // common.js is what the console shell shares with its pages; it comes at start.
-const consolePages = () => pageAsked('console/').filter((url) => !url.includes('/common.js'));
+// People is loaded at sign-in, to draw the list sign-in fetches (the preview
+// needs that list too): fetched then, once, and nothing else is.
+const consolePages = () => pageAsked('console/')
+  .filter((url) => !url.includes('/common.js') && !url.includes('/people.js'));
 ok('no console page module is fetched at start', consolePages().length === 0, consolePages().join(' '));
+ok('People is fetched at sign-in, once, stamped', pageAsked('console/people.js').length === 1
+  && /\?v=/.test(pageAsked('console/people.js')[0]), pageAsked('console/people.js').join(' '));
+ok('and has drawn everyone', await c.$$eval('.admin-person', (n) => n.length) > 0);
 await c.click('#tabs button[data-tab="large-files"]');
 await c.waitForSelector('[data-panel="large-files"].active');
 await c.waitForTimeout(1200);
@@ -138,6 +144,16 @@ async function openConsolePage(tab, ready) {
 
 await openConsolePage('library', () => document.querySelectorAll('#library-list .library-item').length > 0
   && !/…/.test(document.querySelector('#loc-summary')?.textContent || '…'));
+// The command bar opens People and presses Add person in the same moment.
+await c.evaluate(() => {
+  document.querySelector('#tabs button[data-tab="people"]').click();
+  setTimeout(() => document.querySelector('#add-person-btn').click(), 0);
+});
+await c.waitForSelector('#add-person-block:not([hidden])', { timeout: 8000 })
+  .then(() => ok('Add person, pressed as People opens, opens the form', true))
+  .catch(() => ok('Add person, pressed as People opens, opens the form', false));
+ok('People is still fetched only once', pageAsked('console/people.js').length === 1);
+
 ok('and Library\'s "Change" is still wired from the start',
   await c.evaluate(() => typeof document.querySelector('#change-root')?.onclick === 'function'));
 
