@@ -105,6 +105,24 @@ def test_a_video_ffmpeg_timed_out_on_is_not_read_by_opencv(tmp_path, monkeypatch
     assert not opened
 
 
+@pytest.mark.skipif(media.cv2 is None, reason="needs OpenCV")
+def test_opencv_opens_a_video_through_ffmpeg_only(tmp_path, monkeypatch):
+    # Given no backend, OpenCV falls through to AVFoundation on a Mac, which
+    # prints "Couldn't read video stream from file" for every unreadable one.
+    from cv2 import videoio_registry
+
+    opened = []
+    monkeypatch.setattr(videoio_registry, "getBackends", lambda: [media.cv2.CAP_FFMPEG])
+    monkeypatch.setattr(media.cv2, "VideoCapture", lambda *a: opened.append(a))
+    media.open_video(tmp_path / "clip.mov")
+    assert opened == [(str(tmp_path / "clip.mov"), media.cv2.CAP_FFMPEG)]
+
+    opened.clear()
+    monkeypatch.setattr(videoio_registry, "getBackends", lambda: [])
+    media.open_video(tmp_path / "clip.mov")
+    assert opened == [(str(tmp_path / "clip.mov"),)]
+
+
 # -- a date change on a drive without hard links renames, never copies --------
 
 def test_a_move_without_hard_links_renames_on_the_same_drive(tmp_path, monkeypatch):
