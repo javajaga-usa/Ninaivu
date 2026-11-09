@@ -216,7 +216,8 @@ export class TwoComputers {
     $('#tc-census-go').onclick = () => this.topologyAct(
       () => json('/api/admin/mugil/census', { method: 'POST', body: {} }));
     $('#tc-plan-go').onclick = () => this.topologyAct(
-      () => json('/api/admin/mugil/topology/plan', { method: 'POST', body: { transition: 'pair' } }));
+      () => json('/api/admin/mugil/topology/plan', {
+        method: 'POST', body: { transition: $('#tc-plan-which').value || 'pair' } }));
     $('#tc-prove-go').onclick = () => this.topologyAct(
       () => json('/api/admin/mugil/topology/prove', { method: 'POST' }));
     $('#tc-plan-filter').onchange = () => this.loadPlan(true);
@@ -935,6 +936,7 @@ export class TwoComputers {
 
     $('#tc-census-go').hidden = Boolean(here.paired) || running;
     $('#tc-plan-go').hidden = !(here.role === 'primary' && here.paired) || running;
+    $('#tc-plan-which').hidden = $('#tc-plan-go').hidden;
     $('#tc-prove-go').hidden = !answer.can_prove || running;
 
     const lines = [];
@@ -960,7 +962,9 @@ export class TwoComputers {
     if (answer.moving) {
       lines.push(i18n.t('The plan for moving the Primary is ready: export the index now, and the plan goes with it.'));
     }
-    if (record?.state === 'planned' && answer.can_prove) {
+    if (record?.state === 'planned' && record.transition === 'replace_secondary_disk') {
+      lines.push(i18n.t('Bring in what only the Secondary\'s disk holds, put the new disk in, let the originals be sent again, then prove nothing was lost.'));
+    } else if (record?.state === 'planned' && answer.can_prove) {
       lines.push(i18n.t('Carry the change out, then prove nothing was lost.'));
     } else if (record?.state === 'planned' && record.transition === 'pair') {
       lines.push(i18n.t('Bring them in, then prove nothing was lost.'));
@@ -968,7 +972,34 @@ export class TwoComputers {
     if (record?.state === 'failed' && record.error) lines.push(i18n.fromServer(record.error));
     $('#tc-safe-says').textContent = lines.join(' ');
     this.renderPlan(record);
+    this.renderDiskPlan(record);
     this.renderProof(record);
+  }
+
+  /** Replacing the Secondary's disk: what only that disk holds, which goes
+   * with it unless it is brought in first (mugil/topology.py). */
+  renderDiskPlan(record) {
+    const plan = record?.transition === 'replace_secondary_disk' ? record.plan : null;
+    const block = $('#tc-disk-plan');
+    if (!plan || record.state === 'planning') { block.hidden = true; return; }
+    block.hidden = false;
+    const only = Number(plan.only_on_the_secondary) || 0;
+    const says = $('#tc-disk-says');
+    says.textContent = only
+      ? i18n.t('{count} files are only on the Secondary\'s disk ({size}). Bring them in on this page before the disk is replaced, or they go with it.', {
+        count: count(only), size: size(plan.only_bytes) })
+      : i18n.t('Nothing is only on the Secondary\'s disk: everything it holds is here too. The disk can be replaced, and the originals sent again.');
+    says.className = only ? 'hint tc-away' : 'hint';
+    $('#tc-disk-only').replaceChildren(...(plan.named || []).map((gone) => {
+      const row = document.createElement('li');
+      const head = document.createElement('strong');
+      head.textContent = gone.file;
+      const line = document.createElement('span');
+      line.className = 'hint subtle';
+      line.textContent = size(gone.size);
+      row.append(head, line);
+      return row;
+    }));
   }
 
   /** The plan's totals by outcome, and its files, a page at a time. */

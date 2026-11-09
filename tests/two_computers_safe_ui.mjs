@@ -6,6 +6,8 @@
  *   · paired, on the Primary: Plan, its totals by outcome, and its files,
  *     filtered by outcome
  *   · Prove nothing was lost: failed, naming the missing path; then passed
+ *   · Replacing the Secondary's disk, chosen beside Plan: what only that disk
+ *     holds, by path, and what to do before the disk goes
  *
  * The server's census, plan and proof are fakes (page.route): what is tested
  * is what the page asks and says, not mugil/topology.py (tests/test_topology.py).
@@ -46,6 +48,9 @@ await page.route((url) => url.pathname.startsWith('/api/admin/mugil/topology')
   const url = new URL(request.url());
   if (request.method() === 'POST') {
     world.posts.push(url.pathname);
+    if (url.pathname === '/api/admin/mugil/topology/plan') {
+      world.transition = JSON.parse(request.postData() || '{}').transition;
+    }
     world.running = true;
     world.job = { '/api/admin/mugil/census': 'census', '/api/admin/mugil/topology/plan': 'plan' }[url.pathname] || 'prove';
     world.progress = world.job === 'census' ? { files: 1200, bytes: 3 * 1024 ** 3 } : {};
@@ -72,6 +77,15 @@ const finish = {
       paired: false, taken_at: now() - 60, files: 48211, bytes: 912 * 1024 ** 3, unreadable: 0, away: [] }];
   },
   plan: () => {
+    if (world.transition === 'replace_secondary_disk') {
+      world.record = { id: 'p2', transition: 'replace_secondary_disk', state: 'planned', planned: now(),
+        to: { role: 'primary', paired: true }, plan_file: 'mugil-plan-p2.jsonl.gz',
+        plan: { only_on_the_secondary: 1, only_bytes: 30 * 1024 ** 2, files: 9, bytes: 4096,
+          named: [{ computer: 'Linux PC', role: 'secondary', file: `${N300}/2026/11/04/linux-only.jpg`,
+            size: 30 * 1024 ** 2 }] } };
+      world.can_prove = true;
+      return;
+    }
     world.record = { id: 'p1', transition: 'pair', state: 'planned', planned: now(),
       to: { role: 'primary', paired: true }, plan_file: 'mugil-plan-p1.jsonl.gz',
       plan: { who: 'Linux PC',
@@ -124,6 +138,9 @@ world.standing = { role: 'primary', paired: true };
 await open();
 ok('paired: no census and no warning', !(await page.isVisible('#tc-census-go')) && !(await page.isVisible('#tc-safe-warn')));
 ok('paired: the Primary plans', await page.isVisible('#tc-plan-go'));
+ok('paired: and chooses which change', await page.isVisible('#tc-plan-which')
+  && (await page.$$eval('#tc-plan-which option', (o) => o.map((x) => x.value))).join()
+    === 'pair,replace_secondary_disk,move_primary,unpair');
 await page.click('#tc-plan-go');
 await until('#tc-safe-says', /Making the plan/);
 await page.waitForSelector('#tc-plan:not([hidden])', { timeout: 15000 });
@@ -152,6 +169,23 @@ await page.click('#tc-prove-go');
 await until('#tc-proof-says', /Passed: nothing was lost\. All 11 files/);
 ok('proof: nothing missing is listed', (await page.$$('#tc-proof-missing li')).length === 0);
 ok('proof: done is done', !(await page.isVisible('#tc-prove-go')));
+
+ok('plan: the pairing was asked for', world.transition === 'pair', world.transition);
+
+// --- replacing the Secondary's disk --------------------------------------------------------
+
+world.can_prove = false;
+await page.selectOption('#tc-plan-which', 'replace_secondary_disk');
+await page.click('#tc-plan-go');
+await page.waitForSelector('#tc-disk-plan:not([hidden])', { timeout: 15000 });
+ok('disk: that change was asked for', world.transition === 'replace_secondary_disk', world.transition);
+ok('disk: what only that disk holds is counted', /1 files are only on the Secondary's disk \(30 MB\)/
+  .test(await text('#tc-disk-says')), await text('#tc-disk-says'));
+ok('disk: and named by path', (await text('#tc-disk-only')).includes(`${N300}/2026/11/04/linux-only.jpg`));
+ok('disk: what to do before the disk goes', /put the new disk in/.test(await text('#tc-safe-says')),
+  await text('#tc-safe-says'));
+ok('disk: no pairing totals', await page.isHidden('#tc-plan'));
+ok('disk: then prove', await page.isVisible('#tc-prove-go'));
 
 // --- a phone ---------------------------------------------------------------------------
 

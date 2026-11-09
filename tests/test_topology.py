@@ -347,6 +347,9 @@ def test_replacing_the_secondary_disk_lists_what_only_it_holds(apart):
     only = sorted(Path(m["file"]).name for m in record["plan"]["named"])
     assert only == ["IMG_1.jpg", "IMG_9.jpg", "deleted-on-mac.jpg", "linux-only.jpg",
                     "linux-only.jpg.xmp", "old.jpg"]
+    # The page says how much that is: the bytes only that disk holds.
+    assert record["plan"]["only_on_the_secondary"] == 6
+    assert record["plan"]["only_bytes"] == sum(int(m["size"]) for m in record["plan"]["named"])
 
 
 # -- unpairing: each computer keeps its part, and proves it ------------------------------

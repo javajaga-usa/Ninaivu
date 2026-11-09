@@ -911,7 +911,7 @@ def prove(before: list[Path], after_: list[Path], missing_to: Path | None = None
     algos = {h.get("algo") for h in [*heads_before, *heads_after]}
     result: dict[str, Any] = {"before": [p.name for p in before], "after": [p.name for p in after_],
                               "proved_at": time.time(), "checked": 0, "bytes": 0,
-                              "by_name": 0, "missing_count": 0, "missing": [],
+                              "by_name": 0, "missing_count": 0, "missing_bytes": 0, "missing": [],
                               "away_before": [t["top"] for h in heads_before for t in h["tops"]
                                               if t.get("away")]}
     if len(algos) != 1:
@@ -952,6 +952,7 @@ def prove(before: list[Path], after_: list[Path], missing_to: Path | None = None
                             "file": _where(header, entry), "size": entry["s"],
                             "digest": entry.get("d")}
                     result["missing_count"] += 1
+                    result["missing_bytes"] += int(entry["s"])
                     if len(result["missing"]) < NAMED:
                         result["missing"].append(gone)
                     if handle is not None:
@@ -1314,6 +1315,7 @@ class Topology:
                 # lost with the old disk unless it is brought in first.
                 only = prove([mine, theirs], [mine], missing_to=plan_file)
                 record["plan"] = {"only_on_the_secondary": only["missing_count"],
+                                  "only_bytes": only["missing_bytes"],
                                   "files": only["checked"], "bytes": only["bytes"],
                                   "named": only["missing"]}
                 record["plan_file"] = plan_file.name if only["missing_count"] else None
