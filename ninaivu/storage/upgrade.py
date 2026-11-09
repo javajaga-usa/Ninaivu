@@ -21,6 +21,8 @@ again, so it is guarded here, before anything opens either database:
 * a database written by a newer Ninaivu than this one (its schema number is
   higher than this version knows) is not opened at all. Starting would have
   run this version's schema over it and written the older schema number back.
+  That is how going back from 4.0 works: 4.0 records schema 7, so 3.x refuses
+  the index and says how to restore the copy taken before the update.
 
 The photographs are never read or written by any of this.
 """

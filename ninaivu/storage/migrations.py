@@ -26,6 +26,19 @@ Those changes are written here, as numbered steps per database:
   steps only add, and *Go back* restores the copy made before the update when
   an older version must have the database as it was.
 
+What is kept with 3.x (decided 9 November 2026):
+
+* **A 3.x index always upgrades.** Migration 1 stays "what 3.7 has", and
+  every later version opens a 3.x index and steps it forward.
+* **A 3.x Ninaivu does not open an index 4.0 has opened.** 4.0 records
+  schema 7 (:data:`db.SCHEMA_VERSION`), which 3.x does not know, so 3.x
+  stops before touching it and says how to restore the copy taken before
+  the update. That restore is what going back is. So a step here may change
+  or remove what 3.x had, not only add, as long as a 3.x index still upgrades.
+* **The old module paths go in 4.1** (``ninaivu.api.api_films`` and the
+  other names kept for code that moved into ``ninaivu/features``):
+  tests/test_migrations.py fails once the version says 4.1 and one is left.
+
 A step is a function of the connection. It may call ``executescript`` only
 with statements that do not commit (no ``BEGIN``/``COMMIT``/``VACUUM``):
 :func:`run` holds the transaction.

@@ -145,3 +145,68 @@ def test_db_still_names_everything_that_moved():
               for t in n.targets if isinstance(t, ast.Name)}
     assert "set_visibility" in names and "with_companions" in names
     assert [n for n in sorted(names) if getattr(db, n, None) is not getattr(db_visibility, n)] == []
+
+
+# -- what is kept with 3.x (decided 9 November 2026) ---------------------------
+
+def _a_37_home(tmp_path):
+    """A state folder as 3.7 left it: schema 6, no step recorded."""
+    state = tmp_path / "state"
+    state.mkdir()
+    path = state / "index.db"
+    conn = db.init_db(path)
+    db.set_meta(conn, "household", "ours")
+    conn.execute("UPDATE meta SET value='6' WHERE key='schema_version'")
+    conn.commit()
+    conn.execute("PRAGMA user_version = 0")
+    conn.commit()
+    db.close(path)
+    db._READY.discard(str(path))                    # noqa: SLF001
+    (state / "version.json").write_text('{"version": "3.7.0", "shape": "x"}', encoding="utf-8")
+    return state
+
+
+def test_a_37_index_upgrades_after_a_copy_is_made(tmp_path):
+    from ninaivu.storage import upgrade
+    state = _a_37_home(tmp_path)
+    done = upgrade.prepare(state, version="4.0.0")
+    assert done["from"] == "3.7.0" and done["backup"]
+    conn = db.init_db(state / "index.db")
+    try:
+        assert db.get_meta(conn, "schema_version") == str(db.SCHEMA_VERSION)
+        assert db.get_meta(conn, "household") == "ours"
+        assert migrations.recorded(conn) == migrations.latest(migrations.INDEX)
+    finally:
+        db.close(state / "index.db")
+
+
+def test_37_does_not_open_an_index_40_has_opened(tmp_path, monkeypatch):
+    """3.7 knows schema 6. It refuses the index and names the copy to restore."""
+    from ninaivu.storage import upgrade
+    state = _a_37_home(tmp_path)
+    upgrade.prepare(state, version="4.0.0")
+    db.init_db(state / "index.db")                         # 4.0 opens it
+    db.close(state / "index.db")
+    assert db.SCHEMA_VERSION == 7
+    monkeypatch.setattr(db, "SCHEMA_VERSION", 6)            # as 3.7 reads it
+    before = (state / "index.db").read_bytes()
+    with pytest.raises(upgrade.NewerDataError, match="restore the copy taken before that update"):
+        upgrade.prepare(state, version="3.7.0")
+    assert (state / "index.db").read_bytes() == before
+
+
+def _version(text):
+    return tuple(int(part) for part in text.split(".")[:2])
+
+
+def test_the_old_module_paths_go_in_41():
+    """Code that moved into ninaivu/features kept its old import path for 4.0
+    only. Once the version says 4.1, every one of them must be gone."""
+    from pathlib import Path
+    import ninaivu
+    package = Path(ninaivu.__file__).parent
+    kept = sorted(str(p.relative_to(package.parent)) for p in package.rglob("*.py")
+                  if "sys.modules[__name__] = " in p.read_text(encoding="utf-8"))
+    assert kept, "the 4.0 names are found by the line that makes them the moved module"
+    if _version(ninaivu.__version__) >= (4, 1):
+        assert kept == [], "4.1 removes the old module paths: " + ", ".join(kept)

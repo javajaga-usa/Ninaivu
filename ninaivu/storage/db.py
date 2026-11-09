@@ -32,7 +32,13 @@ from . import roots as roots_kit
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 6
+#: The index's shape, as every version reads it before opening it
+#: (storage/upgrade.py). 7 is 4.0: a 3.x Ninaivu finds a number it does not
+#: know and does not open the index, and says how to restore the copy taken
+#: before the update. Going back from 4.0 is that restore (Go back in the
+#: Control Panel does it), not 3.x running over an index 4.0 has stepped on;
+#: the shape changes themselves are the numbered steps in migrations.py.
+SCHEMA_VERSION = 7
 
 _local = threading.local()
 
