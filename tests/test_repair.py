@@ -182,6 +182,22 @@ def test_the_check_runs_by_itself_at_night_when_due(lib):
     assert started and callable(started[0])
 
 
+def test_the_schedule_is_kept_by_the_supervisor(lib):
+    """The nightly check's clock is a supervisor job (4.0, proposal 2): the
+    console lists it, and stopping a repair leaves it running, as before."""
+    from ninaivu.server.supervisor import Supervisor
+    repairer = Repairer(lib["cfg"], lambda: db.connect(lib["cfg"].db_path))
+    repairer.supervisor = Supervisor()
+    repairer.keep()
+    try:
+        assert repairer.supervisor.state(Repairer.SCHEDULE) not in (None, "stopped")
+        repairer.stop()                                  # a repair's stop, not shutdown
+        assert repairer.supervisor.state(Repairer.SCHEDULE) != "stopped"
+    finally:
+        repairer.stop(join=True)
+    assert repairer.supervisor.state(Repairer.SCHEDULE) == "stopped"
+
+
 def test_after_a_check_what_it_found_is_repaired(lib):
     copy_to_mirror(lib)
     rot(lib["path"])

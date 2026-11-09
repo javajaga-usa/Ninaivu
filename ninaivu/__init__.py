@@ -460,6 +460,8 @@ class Services:
         for keeper in (self.mugil_courier, self.mugil_waker, self.mugil_display,
                        self.mugil_handover, self.mugil_family_view):
             keeper.supervisor = self.supervisor
+        # The schedule of the nightly storage check.
+        self.repairer.supervisor = self.supervisor
         # The AI passes: descriptions, voice stories and moments in videos.
         for keeper in (self.describer, self.transcriber, self.moment_finder):
             keeper.supervisor = self.supervisor

@@ -118,11 +118,11 @@ class Repairer:
         self._stop = threading.Event()
         #: The Drive download a repair is waiting on, so Stop can stop it too.
         self._fetching = None
-        #: The schedule's own stop, apart from a repair's: stopping a repair
-        #: must not end the nightly check until the next restart.
-        self._asleep = threading.Event()
         self._thread: threading.Thread | None = None
-        self._timer: threading.Thread | None = None
+        #: The supervisor its schedule runs on; Ninaivu gives it its own. The
+        #: schedule stops apart from a repair: stopping a repair must not end
+        #: the nightly check until the next restart.
+        self.supervisor = None
         self._state: dict[str, Any] = {
             "running": False, "total": 0, "done": 0, "repaired": 0, "failed": 0,
             "current": "", "message": "", "problems": [], "finished_at": 0.0,
@@ -196,10 +196,11 @@ class Repairer:
         if fetching is not None:
             fetching.stop()
         if join:
-            self._asleep.set()
-            for thread in (self._thread, self._timer):
-                if thread is not None and thread is not threading.current_thread():
-                    thread.join(10)
+            from ..server.supervisor import supervisor_of        # noqa: PLC0415
+            supervisor_of(self).stop_job(self.SCHEDULE, timeout=10)
+            thread = self._thread
+            if thread is not None and thread is not threading.current_thread():
+                thread.join(10)
 
     def join(self, timeout: float | None = None) -> None:
         if self._thread:
@@ -446,21 +447,17 @@ class Repairer:
 
     # -- the schedule -----------------------------------------------------
 
-    def keep(self) -> None:
-        """Watch the clock for the next scheduled storage check."""
-        if self._timer is not None and self._timer.is_alive():
-            return
-        self._asleep.clear()
-        self._timer = threading.Thread(target=self._loop, name="ninaivu-check-schedule",
-                                       daemon=True)
-        self._timer.start()
+    #: The schedule's job on the supervisor, and its thread's name, as before.
+    SCHEDULE = "ninaivu-check-schedule"
 
-    def _loop(self) -> None:
-        while not self._asleep.wait(TICK):
-            try:
-                self.tick()
-            except Exception:                               # noqa: BLE001
-                log.exception("the storage check schedule")
+    def keep(self) -> None:
+        """Watch the clock for the next scheduled storage check: a look every
+        TICK, kept by the supervisor (server/supervisor.py). retry_most=0: a
+        look that fails is tried at the next, as before."""
+        from ..server.supervisor import Job, every, supervisor_of  # noqa: PLC0415
+        supervisor_of(self).add(Job(
+            self.SCHEDULE, self.tick, every(TICK), log=log,
+            failure="the storage check schedule", retry_most=0))
 
     def check_due(self) -> bool:
         if not self.every or self._start_check is None or self._check_running():
