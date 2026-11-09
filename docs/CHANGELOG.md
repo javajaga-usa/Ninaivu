@@ -1,5 +1,64 @@
 # Changelog
 
+## 4.0.0 — beta, not released
+
+4.0 is being built in ten parts. Each is described below as it stands; what is not finished is said where it belongs. The version number stays 3.7.0 until the release.
+
+### One program to open, and its tray icon
+
+- **Each download has one thing to open**: `Ninaivu.exe` on Windows, `Ninaivu.app` on a Mac, and `ninaivu` at the top of the Linux folder. It opens the Control Panel and starts Ninaivu. Opening it again brings the window that is already open to the front instead of starting a second one.
+- **The tray icon belongs to the Control Panel.** Closing the window puts it in the tray, the icon brings it back, and **Quit** leaves Ninaivu running for the family. The tray used to be a program of its own beside the panel; `--tray` now opens the same program, minimised. Where the desktop has no tray (some Linux desktops), closing the window closes it, Ninaivu keeps running, and opening Ninaivu again brings the window back.
+- **The Linux folder holds `ninaivu`, `app` and `logs`.** `ninaivu` is a small program, so a file manager runs it on a double-click where it used to open a script in a text editor. `./ninaivu --server`, `--where`, `--bring` and the rest work as before. *Open Ninaivu* is gone.
+- **The Setup scripts are retired.** `Setup Ninaivu.command` and `Setup Ninaivu.sh` are removed. A checkout starts with `python -m ninaivu`, and its other starters (`start.cmd`, `start.sh`, `Ninaivu.command`, the Control Panel double-clicks) are in `launcher/`.
+- **Every release is checked by opening its one starter**, as a double-click does: the panel must come up and start Ninaivu, and the check then sees Ninaivu answering. A missing tray icon on a build machine with no desktop is reported to check by hand.
+- The console's Stop dialog no longer says to start Ninaivu again with `start.cmd`: it says to use the tray icon, or to open Ninaivu again (`Ninaivu.exe` in its folder on Windows).
+
+### The Secondary shows the family app while the Primary is off
+
+- **A paired Secondary serves the family's view from its own Ninaivu**, on its own family app, with nothing to set up there: no service file, no `--map` and no sudo. While the Primary does not answer, the family browses the read-only copy the Primary last sent, and the page says so. While the Primary is awake, a page opened on the Secondary is sent to the same page on the Primary. The photographs are the Secondary's own originals; nothing on the originals disk is written.
+- **Untick it on the Primary and it is withdrawn.** The Primary tells the Secondary over the pairing, and the Secondary stops serving the view and removes its copy (`mugil-handover/` and `mugil-family-view/`), never the originals. If the Secondary is away, the Primary asks again every five minutes. The Secondary also stops on its own once the Primary has not been heard from for 7 days.
+- **The read-only copy names the household's computers.** Its banner and its refusals speak of the Primary and of this computer by their names ("the main computer" when the Primary gave none), not of a Pi and a Mac mini.
+- **A family setting changed on its own reaches the Secondary.** Changing only the content filter or open browsing now makes a new hand-over.
+
+### Switching to two computers, with proof that nothing was lost
+
+- **A census, a plan and a proof** are on the Two computers page. *Take a census* lists every photograph on this computer with its fingerprint, with its progress shown. On the paired Primary, *Plan* says what will happen to each file, with totals and a filter by outcome. *Prove nothing was lost* checks that every fingerprint seen before the change is on at least one of the two computers after it, says passed or failed, and names every missing file. Only a passing proof marks the change done. None of it moves or changes a file.
+- **The two-computers guide gives the safe order** for making a pair of two one-computer Ninaivus: a census on both computers with the disk plugged in, then pair, plan, bring the photographs in, and prove.
+- **Moving the Primary to another computer, and unpairing, are planned and proved the same way.** Moving the Primary lists what only the old Primary holds; the plan and both censuses travel in the full export, so the new Primary proves every photograph is on it or on the Secondary. Unpairing says what each computer keeps, and each then proves its own side.
+- **An unplugged drive's empty mount folder counts as away, not as an empty library**, so a census taken with the disk unplugged can never let a proof pass having checked nothing.
+- Replacing the Secondary's disk is named as a change the plan can make, on the console's routes; the Two computers page does not offer it yet.
+
+### How many photographs are in at least two places
+
+- **Every copy is counted the same way.** The second disk, the Secondary, the off-site copy and Google Drive each record, as they confirm a copy, which photographs (by fingerprint) they hold. From that record Ninaivu says how many photographs are in at least two places, of all of them, and each copy's own status and counts. A photograph not fingerprinted yet is counted in the total but never as in two places, since nobody can say where its copies are.
+- **Each copy can be test-restored.** The off-site copy brings three random files back into a temporary folder and compares their fingerprints; the Secondary is asked to read three kept originals back from its disk and report theirs.
+- **Not finished:** the console answers this (`/api/admin/copies`), but the Copies page that shows it is not built yet.
+
+### The Raspberry Pi publisher is retired
+
+- **The Primary no longer writes a hand-over into a shared folder for a Pi.** The Secondary is the always-on computer now. `ninaivu replica publish`, the hand-over folder routes, and the `replica_dir` and `replica_every_minutes` settings are gone, with the Pi page of the guide. A Pi or a Secondary already serving the view as a service of its own (`ninaivu replica unit`) keeps working, and the guide marks that as the old way.
+
+### Underneath
+
+These change nothing a household sees; they make the next changes smaller and safer.
+
+- **Numbered migrations.** A change to the index's shape is a numbered step, applied once, in order, in one transaction, and recorded in the database itself. Step 1 is what 3.7 has, so a 3.7 index is up to date as it opens. Step 2 adds where each photograph is, step 3 the record of copies. A failed step changes nothing and stops the start; an index a newer Ninaivu has stepped further is never stepped back.
+- **Settings declared once.** Each setting's environment variable, range and precedence is written beside it, and the settings page of the docs is made from those declarations. All 62 variables give the same settings as before.
+- **The route manifest and one visibility gate.** Every one of Ninaivu's routes says who may call it, and the app will not start with one that does not. The list of all of them is kept with the tests, so a change to who may call what shows up in review as a changed line. What a person may see (private items, folders, date limits, the shields) is decided in one place for every gallery list, single photograph, album, person, place, story and share, with each answer the same as before, request for request.
+- **The supervisor.** Nineteen background jobs (the backups, the drive watch, the second and off-site copies, the sidecars, the AI passes, the two computers' keepers and others) run on one supervisor that says what each needs of the computer, how far it has got and its last error. Still on their own threads: the scan, the archive job, the cloud upload, the job engine, the model host, the hand-over keeper, the check schedule, the replica's keepers and the tailnet certificate.
+- **Feature modules.** Photo books, memory films and letters read aloud are each one package with a manifest saying their routes, tables, settings and the computer they need. The other features are not moved yet.
+- **Fingerprints and locations.** A photograph up to 64 MB is fingerprinted while it is being indexed, from the bytes already read for its thumbnails, instead of in a later pass. Large videos, and every photograph of an index made before 4.0, are still fingerprinted by the later pass. The new locations record says where each photograph is, kept up to date by the database itself, even by 3.7 after *Go back*; for now the only place it records is the library.
+- **The copy contract and the ledger.** The four kinds of copy answer to one contract, and each writes the ledger as it confirms a copy, without changing how it copies. A failure to write the ledger never stops a copy. The ledger is also filled from each copy's own records every half hour.
+- **Front-end page modules and the generated `api.js`.** `api.js` is now made from the route manifest, one function per route. The console's Large files, Health and recycle bin, and the family app's map, upload, sharing and duplicates review, are page modules fetched the first time they are opened. The rest of both apps is not moved yet.
+
+### Before you update
+
+- **The first start copies the index first.** 4.0 adds two steps to the index, so its first start makes the usual copy in `backups/before-update` before changing anything. Leave room for it on the index's disk: a start that cannot make the copy does not go ahead.
+- **Going back.** *Go back* in the Control Panel gives the older folder its library again, as the copy before the update left it. Nothing done in 4.0 since is kept, and the photographs are not touched either way.
+- **Both computers of a pair must be on 4.0.** Serving the family view from the Secondary, withdrawing it, the census and proof, and the Secondary's test restore are asked for over the pairing, and a 3.x Secondary does not answer them.
+- **Remake the Mac apps the old Setup made.** The *Ninaivu* and *Ninaivu Control Panel* apps that `Setup Ninaivu.command` put in Applications point at files that are gone and no longer open: delete them and use the portable download's `Ninaivu.app`. On Linux, `sh launcher/start.sh --remove-from-menu` and then `--add-to-menu` replace the menu entries.
+- **Turn off an old replica service on port 80.** If a Secondary served the view as a service of its own (`ninaivu-replica`), stop it with `sudo systemctl disable --now ninaivu-replica` once the Secondary is on 4.0: both would answer on port 80.
+
 ## Unreleased
 
 ### Two computers with HTTPS on the Secondary
