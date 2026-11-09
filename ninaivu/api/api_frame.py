@@ -1,57 +1,12 @@
-"""The living photo frame (media/frame.py, static/js/frame.js).
+"""The living photo frame moved to ninaivu/features/frame/routes.py in 4.0 (core and
+feature modules, proposal 1).
 
-Two routes, both off until ``photo_frame`` is switched on, when they answer
-404 as if they did not exist. The batch is whatever the viewer may see, for
-whoever the frame is signed in as, guests included: a frame in the hall shows
-what that profile would see in the gallery, and nothing else.
+This name is kept, and it is the very same module object, not a copy of its
+names: everything that imports it from here, and every test that patches
+something on it, reaches the one module that does the work.
 """
+import sys
 
-from __future__ import annotations
+from ..features.frame import routes as _moved
 
-from flask import abort, jsonify, request
-
-from ..media import frame
-from ..server.auth import current_user
-from ..server import visibility
-from ..storage import db
-from .api import (_asset_file, _cfg, _conn, _gate, _ids_from_csv, _int_arg,
-                  _viewing_copy, bp)
-
-
-def _switched_on() -> None:
-    if not _cfg().photo_frame:
-        abort(404)
-
-
-@bp.get("/api/frame/next")
-def frame_next():
-    """The next photographs to show: ``n`` of them (12), shuffled with
-    ``seed``, avoiding the ids in ``shown`` (the frame's recent history)."""
-    _switched_on()
-    shown = _ids_from_csv(request.args.get("shown", ""), 400)
-    gate = visibility.current()
-    found = frame.batch(_conn(), gate.roots, gate.limits(), count=_int_arg("n", frame.BATCH),
-                        seed=_int_arg("seed", 0), shown=shown)
-    user = current_user()
-    if user.is_guest:
-        # A guest, or a visitor with open browsing on, is never told who is in
-        # a photograph or where it was taken anywhere else (the faces routes
-        # need family, the gallery leaves the town out), so not here either
-        # (audit C-09). The focus comes from the faces, so it goes too.
-        for item in found["items"]:
-            item.update(people=[], more_people=0, place="", focus=None)
-    found["signed_in"] = bool(user.id)
-    return jsonify(found)
-
-
-@bp.get("/api/frame/picture/<int:asset_id>")
-def frame_picture(asset_id: int):
-    """One photograph at the size a screen needs, upright and with no
-    metadata in it: the viewing copy the share page shows (at most 2560 px)."""
-    _switched_on()
-    row = _gate(db.get_asset(_conn(), asset_id))
-    if (row.get("kind") or "") != "picture":
-        abort(404)
-    response = _viewing_copy(row, _asset_file(row), max_age=86400, turned=True)
-    response.headers["Vary"] = "Cookie"
-    return response
+sys.modules[__name__] = _moved

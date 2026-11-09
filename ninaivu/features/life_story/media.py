@@ -169,7 +169,7 @@ def _stories(conn: sqlite3.Connection, ids: Sequence[int]) -> dict[int, list[dic
     """Every story told about these photographs, oldest first, with its words
     as far as anybody knows them."""
     from ...storage import story_words                              # noqa: PLC0415
-    from ...media.frame import _excerpt                             # noqa: PLC0415
+    from ..frame.media import _excerpt                              # noqa: PLC0415
     rows: list[dict[str, Any]] = []
     for piece in _chunks(ids):
         marks = ",".join("?" * len(piece))

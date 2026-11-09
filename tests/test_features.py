@@ -34,9 +34,10 @@ HEADER = ("# A fresh index's sqlite_master, row by row: type | name | table | ro
 TABLES_IN_37 = ["smart", "ask_family", "family_tree", "books", "handover", "stories", "capsules",
                 "screening", "descriptions", "colour_copies", "video_moments", "then_and_now",
                 "life_story", "letters", "stacks", "journal"]
-#: The order api/api.py imported the features' routes in, in 3.7.
+#: The order api/api.py imported the features' routes in, in 3.7 (with those
+#: that have no tables, which were not features then, in their places).
 ROUTES_IN_37 = ["smart", "ask_family", "family_tree", "books", "films", "handover", "stories",
-                "screening", "capsules", "life_story", "letters", "stacks", "colour_copies",
+                "screening", "capsules", "frame", "life_story", "letters", "stacks", "colour_copies",
                 "video_moments", "then_and_now"]
 
 #: Old module name -> where it lives now.
@@ -60,6 +61,10 @@ MOVED = {
     "ninaivu.storage.then_and_now": "ninaivu.features.then_and_now.storage",
     "ninaivu.api.api_stacks": "ninaivu.features.stacks.routes",
     "ninaivu.storage.stacks": "ninaivu.features.stacks.storage",
+    "ninaivu.api.api_capsules": "ninaivu.features.capsules.routes",
+    "ninaivu.storage.capsules": "ninaivu.features.capsules.storage",
+    "ninaivu.api.api_frame": "ninaivu.features.frame.routes",
+    "ninaivu.media.frame": "ninaivu.features.frame.media",
 }
 
 

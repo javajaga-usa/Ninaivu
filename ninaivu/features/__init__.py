@@ -186,7 +186,8 @@ def _here(name: str, title: str, *, routes: str | None, tables: Tables | None,
 
 
 def _manifests() -> tuple[Feature, ...]:
-    from . import books, films, letters, life_story, stacks, then_and_now  # noqa: PLC0415
+    from . import books, capsules, films, frame, letters, life_story  # noqa: PLC0415
+    from . import stacks, then_and_now                            # noqa: PLC0415
     return (
         _here("smart", "Smart albums", routes="ninaivu.api.api_smart",
               tables=Tables("ninaivu.storage.smart")),
@@ -200,8 +201,8 @@ def _manifests() -> tuple[Feature, ...]:
               tables=Tables("ninaivu.storage.handover"), blueprints=WITH_THE_CONSOLE),
         _here("stories", "Voice stories", routes="ninaivu.api.api_stories",
               tables=Tables("ninaivu.storage.stories")),
-        _here("capsules", "Time capsules", routes="ninaivu.api.api_capsules",
-              tables=Tables("ninaivu.storage.capsules"), switch="time_capsules"),
+        capsules.MANIFEST,
+        frame.MANIFEST,
         _here("screening", "Sent for screening", routes="ninaivu.api.api_screening",
               tables=Tables("ninaivu.storage.screening"), blueprints=WITH_THE_CONSOLE),
         _here("descriptions", "Descriptions of photographs", routes=None,
@@ -326,8 +327,8 @@ def from_extension(ext: Any) -> Feature:
 #: The loader's order, by name. The same order init_db made the tables in.
 ORDER: tuple[str, ...] = (
     "smart", "ask_family", "family_tree", "books", "films", "handover", "stories", "capsules",
-    "screening", "descriptions", "colour_copies", "video_moments", "then_and_now", "life_story",
-    "letters", "stacks", "journal",
+    "frame", "screening", "descriptions", "colour_copies", "video_moments", "then_and_now",
+    "life_story", "letters", "stacks", "journal",
 )
 
 __all__ = ["FACES", "Feature", "ORDER", "TIERS", "Tables", "create_tables", "endpoints",

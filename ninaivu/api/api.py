@@ -3892,7 +3892,7 @@ from . import api_scan_prints  # noqa: E402,F401 - registers routes
 # Family moments, each off until switched on: the living photo frame and
 # time capsules.
 _feature("capsules")
-from . import api_frame  # noqa: E402,F401
+_feature("frame")
 
 # Ask Ninaivu: questions about the photographs, answered on this computer.
 from . import api_ask_ninaivu  # noqa: E402,F401
