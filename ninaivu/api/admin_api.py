@@ -173,6 +173,11 @@ def settings_all_change():
                 # Off: the model process and its memory go now, not when idle.
                 services.close_model_host()
     restart = set(changed) & RESTART_SETTINGS
+    # A feature switched on whose routes this server was started without
+    # (ninaivu/features left_out): they are made at the next start.
+    from .. import features as feature_list                  # noqa: PLC0415
+    restart |= {feature.switch for feature in feature_list.left_out_of(current_app)
+                if feature.switch in changed and feature.switched_on(cfg)}
     if "ai_runtime" in changed and _search_engine_changes(cfg):
         # Search is the one part of the engine chosen at start-up: the image
         # model is loaded then, on PyTorch or in the engine.
@@ -4005,6 +4010,17 @@ def fingerprints_status():
                     **fingerprints.summary(conn),
                     "duplicates": groups,
                     "spare_bytes": sum(g["spare_bytes"] for g in groups)})
+
+
+@admin_bp.get("/api/admin/locations/health")
+@require_admin
+def locations_health():
+    """Where each photograph is (4.0, proposal 3; storage/locations.py):
+    photographs, how many have a fingerprint of the file as it is now and how
+    many wait for one, and whether ``locations`` agrees with the index. Only
+    reads: a disagreement is set right by the index check at the next start."""
+    from ..storage import locations                           # noqa: PLC0415
+    return jsonify(locations.health(_conn()))
 
 
 @admin_bp.get("/api/admin/space")

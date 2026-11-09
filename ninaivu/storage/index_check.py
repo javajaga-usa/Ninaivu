@@ -639,18 +639,57 @@ def run(state: Path | str, tell: Tell = lambda *_said: None) -> dict:
     finally:
         if ahead is not None:
             ahead.stop.set()
+    places = _locations(state / "index.db", databases, light)
     result = {"at": time.time(), "seconds": round(time.time() - began, 1),
               "reason": why.get("reason"), "detail": why.get("detail", ""),
               "light": light,
               "databases": databases, "ok": all(d["ok"] for d in databases),
               "repaired": [d["name"] for d in databases if d.get("how")],
               "pace": {**pace, **measured_all}}
+    if places:
+        result["locations"] = places
     _write(state / RESULT, result)
     (state / WANTED).unlink(missing_ok=True)
     _say("all sound" if result["ok"] and not result["repaired"] else
          f"repaired {', '.join(result['repaired'])}" if result["ok"] else
          "a database could not be repaired; restore it from a backup")
     return result
+
+
+def _locations(path: Path, databases: list[dict], light: bool) -> dict:
+    """Set ``locations`` right after the check (storage/locations.py).
+
+    A repair puts each table together on its own, from what could be read,
+    and the triggers that keep ``locations`` in step see none of it: after
+    one it is rebuilt. Otherwise, when this check was asked for (damage seen
+    while Ninaivu ran, or an administrator's asking) it is compared, and
+    rebuilt only if it differs. A move (*light*) changed no row. Never stops
+    the start: what the triggers keep is set right again by the next start
+    that checks.
+    """
+    index = next((d for d in databases if d["name"] == "index.db"), None)
+    if index is None or not index["ok"] or (light and not index.get("how")):
+        return {}
+    from . import locations                              # noqa: PLC0415
+    try:
+        with closing(sqlite3.connect(path, timeout=60)) as conn:
+            if not locations.present(conn):
+                return {}
+            found = None if index.get("how") else locations.check(conn)
+            if found is not None and found["agrees"]:
+                return {"agrees": True}
+            rebuilt = locations.rebuild(conn)
+    except sqlite3.Error as exc:
+        _say(f"the places of the photographs could not be set right: {exc}")
+        return {"agrees": False, "error": str(exc)}
+    _say(f"the places of {rebuilt} photographs written again"
+         + (f" ({found['missing']} missing, {found['extra']} extra, "
+            f"{found['wrong_fingerprint']} with the wrong fingerprint)" if found else
+            " after the repair"))
+    out = {"agrees": True, "rebuilt": rebuilt}
+    if found is not None:
+        out["found"] = {k: found[k] for k in ("missing", "extra", "wrong_fingerprint")}
+    return out
 
 
 def _check_one(name: str, path: Path, done: int, share: int, whole: int, tell: Tell,

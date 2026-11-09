@@ -12,4 +12,7 @@ MANIFEST = Feature(
     blueprints=ON_THE_FAMILY_API, routes="ninaivu.features.letters.routes",
     tables=Tables("ninaivu.features.letters.storage", "create"),
     settings=("letters_aloud",), switch="letters_aloud",
+    hooks={"bin_swept": "ninaivu.features.letters.storage:swept",
+           "readings_forgotten": "ninaivu.features.letters.storage:forget_read",
+           "reading_aloud": "ninaivu.features.letters.media"},
 )

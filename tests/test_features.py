@@ -34,10 +34,12 @@ HEADER = ("# A fresh index's sqlite_master, row by row: type | name | table | ro
 TABLES_IN_37 = ["smart", "ask_family", "family_tree", "books", "handover", "stories", "capsules",
                 "screening", "descriptions", "colour_copies", "video_moments", "then_and_now",
                 "life_story", "letters", "stacks", "journal"]
-#: The order api/api.py imported the features' routes in, in 3.7.
+#: The order api/api.py imported the features' routes in, in 3.7 (with those
+#: that have no tables, which were not features then, in their places).
 ROUTES_IN_37 = ["smart", "ask_family", "family_tree", "books", "films", "handover", "stories",
-                "screening", "capsules", "life_story", "letters", "stacks", "colour_copies",
-                "video_moments", "then_and_now"]
+                "screening", "scan_prints", "capsules", "frame", "ask_ninaivu", "our_year",
+                "life_story", "photo_talk", "festivals", "letters", "young_faces", "find_print",
+                "stacks", "colour_copies", "voice_search", "video_moments", "then_and_now"]
 
 #: Old module name -> where it lives now.
 MOVED = {
@@ -52,6 +54,45 @@ MOVED = {
     "ninaivu.api.api_letters": "ninaivu.features.letters.routes",
     "ninaivu.media.letters": "ninaivu.features.letters.media",
     "ninaivu.storage.letters": "ninaivu.features.letters.storage",
+    "ninaivu.api.api_life_story": "ninaivu.features.life_story.routes",
+    "ninaivu.media.life_story": "ninaivu.features.life_story.media",
+    "ninaivu.storage.life_story": "ninaivu.features.life_story.storage",
+    "ninaivu.api.api_then_and_now": "ninaivu.features.then_and_now.routes",
+    "ninaivu.media.then_and_now": "ninaivu.features.then_and_now.media",
+    "ninaivu.storage.then_and_now": "ninaivu.features.then_and_now.storage",
+    "ninaivu.api.api_stacks": "ninaivu.features.stacks.routes",
+    "ninaivu.storage.stacks": "ninaivu.features.stacks.storage",
+    "ninaivu.api.api_capsules": "ninaivu.features.capsules.routes",
+    "ninaivu.storage.capsules": "ninaivu.features.capsules.storage",
+    "ninaivu.api.api_frame": "ninaivu.features.frame.routes",
+    "ninaivu.media.frame": "ninaivu.features.frame.media",
+    "ninaivu.api.api_colour": "ninaivu.features.colour_copies.routes",
+    "ninaivu.storage.colour_copies": "ninaivu.features.colour_copies.storage",
+    "ninaivu.api.api_video_moments": "ninaivu.features.video_moments.routes",
+    "ninaivu.media.video_moments": "ninaivu.features.video_moments.media",
+    "ninaivu.storage.video_moments": "ninaivu.features.video_moments.storage",
+    "ninaivu.api.api_smart": "ninaivu.features.smart.routes",
+    "ninaivu.storage.smart": "ninaivu.features.smart.storage",
+    "ninaivu.api.api_ask_family": "ninaivu.features.ask_family.routes",
+    "ninaivu.storage.ask_family": "ninaivu.features.ask_family.storage",
+    "ninaivu.api.api_family_tree": "ninaivu.features.family_tree.routes",
+    "ninaivu.storage.family_tree": "ninaivu.features.family_tree.storage",
+    "ninaivu.api.api_handover": "ninaivu.features.handover.routes",
+    "ninaivu.storage.handover": "ninaivu.features.handover.storage",
+    "ninaivu.api.api_stories": "ninaivu.features.stories.routes",
+    "ninaivu.storage.stories": "ninaivu.features.stories.storage",
+    "ninaivu.api.api_screening": "ninaivu.features.screening.routes",
+    "ninaivu.storage.screening": "ninaivu.features.screening.storage",
+    "ninaivu.api.api_our_year": "ninaivu.features.our_year.routes",
+    "ninaivu.api.api_photo_talk": "ninaivu.features.photo_talk.routes",
+    "ninaivu.api.api_festivals": "ninaivu.features.festivals.routes",
+    "ninaivu.api.api_young_faces": "ninaivu.features.young_faces.routes",
+    "ninaivu.api.api_find_print": "ninaivu.features.find_print.routes",
+    "ninaivu.api.api_voice_search": "ninaivu.features.voice_search.routes",
+    "ninaivu.media.our_year": "ninaivu.features.our_year.media",
+    "ninaivu.media.photo_talk": "ninaivu.features.photo_talk.media",
+    "ninaivu.media.festivals": "ninaivu.features.festivals.media",
+    "ninaivu.media.find_print": "ninaivu.features.find_print.media",
 }
 
 
@@ -131,10 +172,9 @@ def test_tables_are_made_in_order(monkeypatch):
     made = []
     monkeypatch.setattr(features.Tables, "__call__", lambda self, conn: made.append(self.module))
     assert features.create_tables(sqlite3.connect(":memory:")) == TABLES_IN_37
-    assert [m.rsplit(".", 1)[-1] for m in made] == [
-        "smart", "ask_family", "family_tree", "storage", "handover", "stories", "capsules",
-        "screening", "descriptions", "colour_copies", "video_moments", "then_and_now",
-        "life_story", "storage", "stacks", "journal"]
+    # ninaivu.features.<name>.storage, or ninaivu.storage.<name> for one not moved.
+    assert [m.split(".")[2] if m.startswith("ninaivu.features.") else m.rsplit(".", 1)[-1]
+            for m in made] == TABLES_IN_37
 
 
 def test_routes_are_put_on_in_the_old_order():
@@ -203,8 +243,86 @@ def test_each_features_routes_are_on_the_blueprints_it_names(apps):
 
 
 def test_a_switched_off_feature_still_answers_404(app, as_family):
+    """In an app made with every route (the suite's), from inside the route,
+    in the very words a route that is not there is answered with."""
     app.config["MV_CONFIG"].memory_films = False
-    assert as_family.get("/api/films").status_code == 404
+    inside = as_family.get("/api/films")
+    assert inside.status_code == 404
+    assert inside.get_json() == as_family.get("/api/no-such-thing").get_json()
+
+
+# --- A switched-off feature's routes are left out ------------------------------
+
+@pytest.fixture()
+def started(scanned, monkeypatch, request):
+    """An app made as a start makes it: memory films and young faces off,
+    colour on but waiting for its model."""
+    cfg = scanned[0]
+    cfg.memory_films = False
+    cfg.young_faces = False
+    cfg.colour_photos = True
+    monkeypatch.setattr(switches, "_why_not", lambda need: "not downloaded")
+    switches.forget()
+    monkeypatch.setattr(features, "every_route", False)
+    return request.getfixturevalue("app")
+
+
+def test_a_switched_off_feature_has_no_routes(started, request):
+    app = started
+    out = [f.name for f in features.left_out_of(app)]
+    assert {"films", "young_faces"} <= set(out) and "books" not in out
+    assert not features.endpoints(app, features.get("films"))
+    assert not any(r.rule.startswith("/api/films") for r in app.url_map.iter_rules())
+    family = request.getfixturevalue("as_family")
+    gone = family.get("/api/films")
+    # The same 404, and the same words, as the route itself answered.
+    assert gone.status_code == 404
+    assert gone.get_json() == family.get("/api/no-such-thing").get_json()
+    # A feature waiting for its model keeps its routes, and says 404 itself.
+    assert features.endpoints(app, features.get("colour_copies"))
+    assert features.endpoints(app, features.get("books"))
+
+
+def test_the_blueprints_are_put_back_for_the_next_app(monkeypatch):
+    from ninaivu.api import bp
+    before = list(bp.deferred_functions)
+    monkeypatch.setattr(features, "every_route", False)
+    with features.left_out(SimpleNamespace(memory_films=False)) as out:
+        assert "films" in out and "books" not in out
+        assert len(bp.deferred_functions) < len(before)
+        assert not any(features._module_of(d) == "ninaivu.features.films.routes"  # noqa: SLF001
+                       for d in bp.deferred_functions)
+    assert bp.deferred_functions == before
+    with features.left_out(None) as out:
+        assert out == []
+    monkeypatch.setattr(features, "every_route", True)
+    with features.left_out(SimpleNamespace(memory_films=False)) as out:
+        assert out == []
+
+
+def test_the_console_says_a_restart_is_needed(started, request):
+    admin = request.getfixturevalue("as_admin")
+    said = admin.post("/api/admin/settings/all", json={"settings": {"young_faces": True}})
+    assert said.status_code == 200, said.get_json()
+    assert "young_faces" in said.get_json()["restart"]
+    # Not offered to the family until then: its routes are not there.
+    assert admin.get("/api/status?stats=0").get_json()["moments"]["young_faces"] is False
+    # Switched off, a feature's routes answer 404 from inside straight away.
+    said = admin.post("/api/admin/settings/all", json={"settings": {"our_year": False}})
+    assert "our_year" not in said.get_json()["restart"]
+
+
+def test_the_route_manifest_says_whose_each_route_is():
+    lines = (ROOT / "tests" / "data" / "route_manifest.txt").read_text(encoding="utf-8")
+    owners = {}
+    for line in lines.splitlines():
+        if line.startswith("#"):
+            continue
+        parts = [part.strip() for part in line.split("|")]
+        owners[parts[2]] = parts[-1]
+    assert owners["/api/films"] == "films" and owners["/api/young-faces"] == "young_faces"
+    assert owners["/api/status"] == "-"
+    assert set(owners.values()) - {"-"} == {f.name for f in features.registry() if f.routes}
 
 
 # --- The old module names -----------------------------------------------------
@@ -221,6 +339,84 @@ def test_patching_the_old_name_patches_the_module(monkeypatch):
     monkeypatch.setattr(films, "MAX_COUNT", 7)
     assert media.MAX_COUNT == 7
 
+
+def test_a_moved_module_still_finds_the_static_folder():
+    """A module one folder deeper than it was must look two folders up."""
+    from ninaivu.features.books import media
+    from ninaivu.features.handover import routes
+    static = ROOT / "ninaivu" / "static"
+    assert routes.LOCALES == static / "i18n" and routes.LOCALES.is_dir()
+    assert media._font_dirs()[0] == static / "fonts"
+
+
+# --- Hooks: where the core calls into a feature ---------------------------------
+
+def test_every_hook_is_known_and_answered():
+    for feature in features.registry():
+        for hook in feature.hooks:
+            assert hook in features.HOOKS, (feature.name, hook)
+    for hook in features.HOOKS:
+        assert features.hooked(hook), hook
+        for _, answer in features.hooked(hook):
+            assert callable(answer) or hasattr(answer, "runs"), hook
+    with pytest.raises(KeyError):
+        features.hooked("nothing")
+    bad = features.Feature(name="x", title="X", hooks={"nothing": "a:b:c"})
+    assert "hook 'nothing'" in " / ".join(bad.problems())
+
+
+def test_hooks_are_called_in_the_old_order():
+    def who(hook):
+        return [feature.name for feature, _ in features.hooked(hook)]
+    assert who("carry_on") == ["books", "films"]
+    assert who("stand_down") == ["books", "films"]
+    assert who("profile_deleted") == ["books", "films"]
+    # db_visibility forgot these in this order before 4.0.
+    assert who("readings_forgotten") == ["descriptions", "video_moments", "letters"]
+    assert who("bin_swept") == ["letters"]
+    from ninaivu.features.letters import media as letters_media
+    assert features.hooked("reading_aloud") == [(features.get("letters"), letters_media)]
+
+
+def test_a_hook_reaches_a_patch_on_the_old_name(monkeypatch):
+    from ninaivu.media import books, films
+    called = []
+    monkeypatch.setattr(films, "stand_down", lambda: called.append("films"))
+    monkeypatch.setattr(books, "stand_down", lambda: called.append("books"))
+    features.call("stand_down")
+    assert called == ["books", "films"]
+
+
+def test_the_bin_swept_hook_sweeps_the_letters_readings(monkeypatch, tmp_path):
+    from ninaivu.storage import letters
+    seen = []
+    monkeypatch.setattr(letters, "sweep_readings", lambda folder, conn: seen.append((folder, conn)))
+    features.call("bin_swept", str(tmp_path), "conn")
+    assert seen == [(tmp_path / "letters", "conn")]
+
+
+def test_the_profile_deleted_hook_removes_its_books_films_and_songs(monkeypatch, tmp_path):
+    from ninaivu.storage import books, films
+    book, film = books.books_dir(tmp_path) / "b.pdf", films.films_dir(tmp_path) / "f.mp4"
+    for path in (book, film):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"x")
+    songs = []
+    monkeypatch.setattr(films, "forget_songs", lambda state, owner: songs.append((state, owner)))
+    features.call("profile_deleted", tmp_path, 7,
+                  {"book_files": ["b.pdf", "../escape.pdf"], "film_files": ["f.mp4"]})
+    assert not book.exists() and not film.exists()
+    assert songs == [(tmp_path, 7)]
+
+
+def test_the_readings_forgotten_hook_reaches_every_reading(monkeypatch):
+    from ninaivu.storage import descriptions, letters, video_moments
+    seen = []
+    for module, name in ((descriptions, "forget"), (video_moments, "forget"),
+                         (letters, "forget_read")):
+        monkeypatch.setattr(module, name, lambda conn, ids, m=module: seen.append((m, list(ids))))
+    features.call("readings_forgotten", "conn", [1, 2])
+    assert seen == [(descriptions, [1, 2]), (video_moments, [1, 2]), (letters, [1, 2])]
 
 # --- Extensions in the same shape ---------------------------------------------
 

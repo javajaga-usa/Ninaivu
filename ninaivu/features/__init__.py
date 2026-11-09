@@ -39,18 +39,28 @@ A feature now says what it is in one :class:`Feature`, its manifest:
 :data:`ORDER` is the loader's order, and it is the order ``init_db`` made
 the tables in before 4.0, so a fresh index is the same file it was.
 
-In this pass every feature's routes are still registered at every start, in
-the very place they were before (the foot of ``api/api.py``), and a feature
-that is switched off still answers 404 from inside its routes. Leaving a
-switched-off feature's routes out altogether is the next step; the route
-manifest (``tests/data/route_manifest.txt``) would then show it.
+Every feature's routes are put on its blueprints in the very place they
+were before (the foot of ``api/api.py``), so the blueprints hold every route.
+An app leaves out the routes of a feature whose switch is off when the app is
+made (:func:`left_out`, from ``ninaivu/__init__.py`` ``_register``): they do
+not exist, and a request for one is the app's own 404. Flask cannot add a
+route once an app has answered a request, so a feature switched on in the
+console is there from the next start, and the console says so. Only the
+switch counts here: a feature waiting for its model keeps its routes, which
+answer 404 from inside until the model is downloaded, as before. The route
+manifest is built with every route (:data:`every_route`), and says which
+feature each belongs to.
 
-Three features have moved whole into a package of their own here
-(``books``, ``films``, ``letters``), each with ``routes.py``, ``media.py``
-and ``storage.py`` for what was ``api/api_<name>.py``, ``media/<name>.py``
-and ``storage/<name>.py``. Their old module names are kept as the very same
-modules (see ``api/api_books.py``), so nothing that imports them changed.
-The others are described here and have not moved yet.
+Most features have moved whole into a package of their own here, with
+``routes.py``, ``media.py`` and ``storage.py`` for what was
+``api/api_<name>.py``, ``media/<name>.py`` and ``storage/<name>.py``. Their
+old module names are kept as the very same modules (see
+``api/api_books.py``), so nothing that imports them changed. Four have not
+moved: the descriptions of photographs and the change journal, which have no
+routes and are read and written by the core's search, scanner and console;
+Ask Ninaivu, beside its ``ninaivu/ask`` package; and scanning old prints,
+whose print scanner the core's scanner shares. Where the core still calls
+into a feature it does so through a hook (:data:`HOOKS`).
 
 An extension (``ninaivu/extensions.py``) can be described by the same shape
 (:func:`from_extension`), so the console can one day list features and
@@ -58,11 +68,12 @@ extensions alike. Extensions themselves are unchanged.
 """
 from __future__ import annotations
 
+import contextlib
 import importlib
 import inspect
 import sqlite3
 from dataclasses import dataclass, field
-from typing import Any, Callable, Mapping
+from typing import Any, Callable, Iterator, Mapping
 
 from ..server.tiers import TIERS
 
@@ -127,9 +138,20 @@ class Feature:
     tier: str = "basic"
     #: ``feature``, or ``extension`` for one described by :func:`from_extension`.
     kind: str = "feature"
+    #: What the core asks of it, by hook (:data:`HOOKS`): the hook's name, and
+    #: ``module:function`` (or a ``module``) that answers it. Named rather than
+    #: imported, as its tables are. Every feature's hooks are called, on or off.
+    hooks: Mapping[str, str] = field(default_factory=dict)
+    #: One of what it makes, in a sentence ("film"), for the core's log.
+    noun: str = ""
     #: True only for an extension that can send something off this computer.
     #: No feature may: that is the core's first promise.
     data_leaves_the_machine: bool = False
+
+    def switched_on(self, cfg: Any) -> bool:
+        """Whether its switch is on in *cfg*, whatever its model: what decides
+        whether its routes are made when an app is (:func:`left_out`)."""
+        return self.switch is None or bool(getattr(cfg, self.switch, False))
 
     def on(self, cfg: Any) -> bool:
         """Whether it is on for *cfg*: its switch, and the model it needs
@@ -161,6 +183,11 @@ class Feature:
             found.append(f"tier {self.tier!r} is not one of {TIERS}")
         if self.kind not in ("feature", "extension"):
             found.append(f"kind {self.kind!r} is not feature or extension")
+        for hook, where in self.hooks.items():
+            if hook not in HOOKS:
+                found.append(f"hook {hook!r} is not one of {sorted(HOOKS)}")
+            if not where or where.count(":") > 1:
+                found.append(f"hook {hook!r} names {where!r}, not module:function")
         if self.kind == "feature" and self.data_leaves_the_machine:
             found.append("a feature may not send anything off this computer; that is an extension")
         return found
@@ -173,55 +200,57 @@ class Feature:
             "routes": self.routes, "tables": self.tables is not None,
             "settings": list(self.settings), "switch": self.switch, "needs": self.needs,
             "tier": self.tier, "data_leaves_the_machine": self.data_leaves_the_machine,
+            "hooks": sorted(self.hooks),
         }
 
 
 def _here(name: str, title: str, *, routes: str | None, tables: Tables | None,
           blueprints: Mapping[str, tuple[str, ...]] = ON_THE_FAMILY_API,
-          switch: str | None = None, needs: str | None = None) -> Feature:
-    """A feature that has not moved into this package yet."""
+          switch: str | None = None, needs: str | None = None,
+          hooks: Mapping[str, str] | None = None) -> Feature:
+    """A feature whose code has not moved into this package."""
     return Feature(name=name, title=title, blueprints=blueprints if routes else {},
                    routes=routes, tables=tables, settings=(switch,) if switch else (),
-                   switch=switch, needs=needs)
+                   switch=switch, needs=needs, hooks=dict(hooks or {}))
 
 
 def _manifests() -> tuple[Feature, ...]:
-    from . import books, films, letters                           # noqa: PLC0415
+    from . import ask_family, books, capsules, colour_copies, family_tree, festivals  # noqa: PLC0415
+    from . import films, find_print, frame, handover, letters, life_story  # noqa: PLC0415
+    from . import our_year, photo_talk, screening, smart, stacks, stories  # noqa: PLC0415
+    from . import then_and_now, video_moments, voice_search, young_faces  # noqa: PLC0415
     return (
-        _here("smart", "Smart albums", routes="ninaivu.api.api_smart",
-              tables=Tables("ninaivu.storage.smart")),
-        _here("ask_family", "\"Who is this?\" links", routes="ninaivu.api.api_ask_family",
-              tables=Tables("ninaivu.storage.ask_family")),
-        _here("family_tree", "The family tree", routes="ninaivu.api.api_family_tree",
-              tables=Tables("ninaivu.storage.family_tree")),
+        smart.MANIFEST,
+        ask_family.MANIFEST,
+        family_tree.MANIFEST,
         books.MANIFEST,
         films.MANIFEST,
-        _here("handover", "The handover plan", routes="ninaivu.api.api_handover",
-              tables=Tables("ninaivu.storage.handover"), blueprints=WITH_THE_CONSOLE),
-        _here("stories", "Voice stories", routes="ninaivu.api.api_stories",
-              tables=Tables("ninaivu.storage.stories")),
-        _here("capsules", "Time capsules", routes="ninaivu.api.api_capsules",
-              tables=Tables("ninaivu.storage.capsules"), switch="time_capsules"),
-        _here("screening", "Sent for screening", routes="ninaivu.api.api_screening",
-              tables=Tables("ninaivu.storage.screening"), blueprints=WITH_THE_CONSOLE),
+        handover.MANIFEST,
+        stories.MANIFEST,
+        capsules.MANIFEST,
+        frame.MANIFEST,
+        screening.MANIFEST,
         _here("descriptions", "Descriptions of photographs", routes=None,
-              tables=Tables("ninaivu.storage.descriptions", "create"), switch="describe_photos"),
-        _here("colour_copies", "Colour for black-and-white photographs",
-              routes="ninaivu.api.api_colour",
-              tables=Tables("ninaivu.storage.colour_copies", "create"),
-              switch="colour_photos", needs="colour"),
-        _here("video_moments", "Moments inside videos", routes="ninaivu.api.api_video_moments",
-              tables=Tables("ninaivu.storage.video_moments", "create"),
-              switch="video_moments", needs=""),
-        _here("then_and_now", "Then and now", routes="ninaivu.api.api_then_and_now",
-              tables=Tables("ninaivu.storage.then_and_now", "create"), switch="then_and_now"),
-        _here("life_story", "A life in photographs", routes="ninaivu.api.api_life_story",
-              tables=Tables("ninaivu.storage.life_story", "create"), switch="life_story"),
+              tables=Tables("ninaivu.storage.descriptions", "create"), switch="describe_photos",
+              hooks={"readings_forgotten": "ninaivu.storage.descriptions:forget"}),
+        colour_copies.MANIFEST,
+        video_moments.MANIFEST,
+        then_and_now.MANIFEST,
+        life_story.MANIFEST,
         letters.MANIFEST,
-        _here("stacks", "Photo stacks", routes="ninaivu.api.api_stacks",
-              tables=Tables("ninaivu.storage.stacks", "create"), switch="photo_stacks"),
+        stacks.MANIFEST,
         _here("journal", "The change journal", routes=None,
               tables=Tables("ninaivu.storage.journal", "create"), switch="change_journal"),
+        # Those with no tables, which were not features before 4.0.
+        _here("scan_prints", "Scan old prints", routes="ninaivu.api.api_scan_prints", tables=None),
+        _here("ask_ninaivu", "Ask Ninaivu", routes="ninaivu.api.api_ask_ninaivu", tables=None,
+              switch="ask_ninaivu", needs="writing"),
+        our_year.MANIFEST,
+        photo_talk.MANIFEST,
+        festivals.MANIFEST,
+        young_faces.MANIFEST,
+        find_print.MANIFEST,
+        voice_search.MANIFEST,
     )
 
 
@@ -264,6 +293,21 @@ def create_tables(conn: sqlite3.Connection) -> list[str]:
     return made
 
 
+#: True for an app made with every feature's routes, switched on or not:
+#: the route manifest's (tools/route_manifest.py) and the test suite's,
+#: which switch features on and off while the app runs.
+every_route = False
+
+
+def _blueprints() -> list[Any]:
+    """The blueprints a feature's routes go on: the family API's and the
+    administrator's (``api/api.py``)."""
+    from flask import Blueprint                                    # noqa: PLC0415
+
+    from ..api import api as api_module                            # noqa: PLC0415
+    return [value for value in vars(api_module).values() if isinstance(value, Blueprint)]
+
+
 def register_routes(name: str) -> Feature:
     """Put feature *name*'s routes on its blueprints, by importing its routes
     module. Called from the foot of ``api/api.py``, in the place each was
@@ -278,6 +322,65 @@ def register_routes(name: str) -> Feature:
     if name not in _routed:
         _routed.append(name)
     return feature
+
+
+@contextlib.contextmanager
+def left_out(cfg: Any) -> Iterator[list[str]]:
+    """While an app registers its blueprints, take off them the routes of
+    every feature whose switch is off in *cfg*; yields their names. Put back
+    afterwards, for the next app (the console, or a test's)."""
+    off = {} if every_route or cfg is None else {
+        feature.routes: feature.name for feature in registry()
+        if feature.kind == "feature" and feature.routes and not feature.switched_on(cfg)}
+    kept, out = [], set()
+    for bp in _blueprints() if off else ():
+        keep = []
+        for deferred in bp.deferred_functions:
+            name = off.get(_module_of(deferred))
+            if name is None:
+                keep.append(deferred)
+            else:
+                out.add(name)
+        if len(keep) != len(bp.deferred_functions):
+            kept.append((bp, list(bp.deferred_functions)))
+            bp.deferred_functions[:] = keep
+    try:
+        yield [name for name in names() if name in out]
+    finally:
+        for bp, functions in kept:
+            bp.deferred_functions[:] = functions
+
+
+def _module_of(deferred: Any) -> str | None:
+    """The module of the view a blueprint's deferred function puts on an app
+    (Flask's ``record(lambda s: s.add_url_rule(rule, endpoint, view_func…))``),
+    or None for one that names no function."""
+    for cell in getattr(deferred, "__closure__", None) or ():
+        try:
+            found = cell.cell_contents
+        except ValueError:
+            continue
+        if inspect.isfunction(found):
+            return found.__module__
+    return None
+
+
+def left_out_of(app: Any) -> list[Feature]:
+    """The features whose routes *app* was made without."""
+    return [get(name) for name in app.config.get(LEFT_OUT, ())]
+
+
+#: Where an app keeps the names of the features it was made without.
+LEFT_OUT = "MV_FEATURES_LEFT_OUT"
+
+
+def owner(view: Any) -> str:
+    """The feature a view function belongs to, or "" for the core's."""
+    module = getattr(view, "__module__", None)
+    for feature in registry():
+        if feature.routes and feature.routes == module:
+            return feature.name
+    return ""
 
 
 def routed() -> list[str]:
@@ -298,6 +401,49 @@ def shape() -> list[Any]:
     ``storage/upgrade.py`` :func:`index_shape`."""
     return [(feature.name, feature.tables.shape() if isinstance(feature.tables, Tables)
              else repr(feature.tables)) for feature in registry() if feature.tables is not None]
+
+
+#: Where the core calls into the features, by name, and what each is given.
+#: A feature answers a hook in its manifest (``Feature.hooks``); the core
+#: calls :func:`hooked` and never names the feature.
+HOOKS: Mapping[str, str] = {
+    "carry_on": "Ninaivu has started: make again what a restart cut short. Given "
+                "resume.wanted(), db_path= and state_dir=; answers the ids started "
+                "(ninaivu/__init__.py).",
+    "stand_down": "Ninaivu is stopping: end what is being made without recording it "
+                  "as failed, so carry_on makes it again. Given nothing.",
+    "bin_swept": "The recycle bin was swept: let go of what went with its photographs. "
+                 "Given the state folder and the connection.",
+    "profile_deleted": "A profile was deleted (accounts_api): the files on disk its "
+                       "rows named go too. Given the state folder, the profile's id and "
+                       "what auth.delete_user removed.",
+    "readings_forgotten": "What was read off these photographs is forgotten "
+                          "(storage/db_visibility.py). Given the connection and the ids.",
+    "reading_aloud": "The module whose runs() and spoken() a voice reads text with "
+                     "(runtime/voice.py).",
+}
+
+
+def _resolve(where: str) -> Any:
+    module, _, name = where.partition(":")
+    found = importlib.import_module(module)
+    return getattr(found, name) if name else found
+
+
+def hooked(hook: str) -> list[tuple[Feature, Any]]:
+    """Every feature that answers *hook*, in :data:`ORDER`, on or off, with
+    what answers it."""
+    if hook not in HOOKS:
+        raise KeyError(hook)
+    return [(feature, _resolve(feature.hooks[hook])) for feature in registry()
+            if hook in feature.hooks]
+
+
+def call(hook: str, *args: Any, **kwargs: Any) -> list[Any]:
+    """Call every feature's answer to *hook*, in order, and return what each
+    said. An exception is the caller's: the core decided before 4.0 which of
+    these calls were guarded, and it still does."""
+    return [answer(*args, **kwargs) for _, answer in hooked(hook)]
 
 
 def listing(cfg: Any) -> list[dict[str, Any]]:
@@ -329,10 +475,14 @@ def from_extension(ext: Any) -> Feature:
 #: The loader's order, by name. The same order init_db made the tables in.
 ORDER: tuple[str, ...] = (
     "smart", "ask_family", "family_tree", "books", "films", "handover", "stories", "capsules",
-    "screening", "descriptions", "colour_copies", "video_moments", "then_and_now", "life_story",
-    "letters", "stacks", "journal",
+    "frame", "screening", "descriptions", "colour_copies", "video_moments", "then_and_now",
+    "life_story", "letters", "stacks", "journal",
+    # No tables: in the order their routes are put on.
+    "scan_prints", "ask_ninaivu", "our_year", "photo_talk", "festivals", "young_faces",
+    "find_print", "voice_search",
 )
 
-__all__ = ["FACES", "Feature", "ORDER", "TIERS", "Tables", "create_tables", "endpoints",
-           "from_extension", "get", "listing", "names", "register_routes", "registry",
-           "routed", "shape"]
+__all__ = ["FACES", "Feature", "HOOKS", "LEFT_OUT", "ORDER", "TIERS", "Tables", "call",
+           "create_tables", "endpoints", "every_route", "from_extension", "get", "hooked",
+           "left_out", "left_out_of", "listing", "names", "owner", "register_routes",
+           "registry", "routed", "shape"]

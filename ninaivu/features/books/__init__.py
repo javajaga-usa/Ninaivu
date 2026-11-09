@@ -12,4 +12,8 @@ MANIFEST = Feature(
     name="books", title="Photo books",
     blueprints=ON_THE_FAMILY_API, routes="ninaivu.features.books.routes",
     tables=Tables("ninaivu.features.books.storage"),
+    hooks={"carry_on": "ninaivu.features.books.media:carry_on",
+           "stand_down": "ninaivu.features.books.media:stand_down",
+           "profile_deleted": "ninaivu.features.books.storage:forget_owner"},
+    noun="photo book",
 )

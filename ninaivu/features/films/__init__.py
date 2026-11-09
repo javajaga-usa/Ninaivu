@@ -17,4 +17,8 @@ MANIFEST = Feature(
     name="films", title="Memory films",
     blueprints=ON_THE_FAMILY_API, routes="ninaivu.features.films.routes",
     tables=None, settings=("memory_films",), switch="memory_films",
+    hooks={"carry_on": "ninaivu.features.films.media:carry_on",
+           "stand_down": "ninaivu.features.films.media:stand_down",
+           "profile_deleted": "ninaivu.features.films.storage:forget_owner"},
+    noun="film",
 )

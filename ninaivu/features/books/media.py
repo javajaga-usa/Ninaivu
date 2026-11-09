@@ -133,7 +133,7 @@ _UNMAPPED = "\U0010FFFD"
 
 
 def _font_dirs() -> list[Path]:
-    dirs = [Path(__file__).resolve().parent.parent / "static" / "fonts"]
+    dirs = [Path(__file__).resolve().parents[2] / "static" / "fonts"]
     home = Path.home()
     if sys.platform == "darwin":
         dirs += [Path("/System/Library/Fonts/Supplemental"), Path("/System/Library/Fonts"),

@@ -97,8 +97,8 @@ def _source() -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
     elif kind == "festival":
         # Every year of a festival album (api/api_festivals.py), as this
         # viewer may see it; nothing while the albums are switched off.
-        from ...media import festivals                        # noqa: PLC0415
-        from ...api.api_festivals import _albums                   # noqa: PLC0415
+        from ..festivals import media as festivals            # noqa: PLC0415
+        from ..festivals.routes import _albums                # noqa: PLC0415
         key = festivals.key_of(sid)
         if key is None or not getattr(_cfg(), "festival_albums", False):
             abort(404)
@@ -118,8 +118,8 @@ def _source() -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
         filters["person"] = sid
         meta["name"] = known[sid] or ""
     else:
-        from ...storage import smart                          # noqa: PLC0415
-        from ...api.api_smart import apply_rules                   # noqa: PLC0415
+        from ..smart import storage as smart                  # noqa: PLC0415
+        from ..smart.routes import apply_rules                # noqa: PLC0415
         rules: dict[str, Any] = {"text": "", "people": None, "place": "", "kinds": None,
                                  "favorites": False, "date_from": "", "date_to": "",
                                  "camera": "", "tag": "", "folder": "", "album": None}

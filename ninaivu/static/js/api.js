@@ -298,6 +298,7 @@ export const admin = (() => {
     getAdminLibraries: (options) => send('GET', '/api/admin/libraries', options),
     getAdminLibraryRelocation: (options) => send('GET', '/api/admin/library/relocation', options),
     getAdminLocations: (options) => send('GET', '/api/admin/locations', options),
+    getAdminLocationsHealth: (options) => send('GET', '/api/admin/locations/health', options),
     getAdminMigration: (options) => send('GET', '/api/admin/migration', options),
     getAdminMigrationExport: (options) => send('GET', '/api/admin/migration/export', options),
     getAdminMigrationRecoveryCleanup: (options) => send('GET', '/api/admin/migration/recovery-cleanup', options),
