@@ -459,6 +459,8 @@ class Services:
         # Primary, and the display copies.
         for keeper in (self.mugil_courier, self.mugil_waker, self.mugil_display):
             keeper.supervisor = self.supervisor
+        # The schedule of the nightly storage check.
+        self.repairer.supervisor = self.supervisor
         # The AI passes: descriptions, voice stories and moments in videos.
         for keeper in (self.describer, self.transcriber, self.moment_finder):
             keeper.supervisor = self.supervisor
