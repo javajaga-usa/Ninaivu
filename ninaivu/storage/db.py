@@ -3268,8 +3268,7 @@ def library_stats(conn: sqlite3.Connection, roots: Sequence[str] | str | None = 
         gate_sql, gate_params = gate.sql("a")
         where = [gate_sql, "a.trashed = 0"]
         params: list[Any] = list(gate_params)
-        # The analysed count below is by folder alone, as it always was, and
-        # the caller's own "Only to me" count by folder and sub-folder.
+        # The caller's own "Only to me" count is by folder and sub-folder.
         roots, scope = gate.roots, gate.scope
         roots_sql, roots_params = roots_clause("a", roots)
         if int(max_visibility) < 2:
@@ -3324,12 +3323,15 @@ def library_stats(conn: sqlite3.Connection, roots: Sequence[str] | str | None = 
     dupes = row["dupes"]
 
     # Written by the tagger, which the library's number does not follow, so
-    # kept until the analysed items' own number moves.
+    # kept until the analysed items' own number moves. Counted within what
+    # this viewer may see, like every other number here: it was counted by
+    # folder alone, so a member was told how many items were analysed among
+    # the private, hidden and flagged ones too (decided 9 November 2026).
     embedded = cached_aggregate(
-        conn, ("embedded", roots_sql, tuple(roots_params)),
+        conn, ("embedded", where_sql, tuple(params)),
         lambda: conn.execute(
             f"SELECT COUNT(*) n FROM embeddings e JOIN assets a ON a.id = e.asset_id "
-            f"WHERE {roots_sql}", roots_params,
+            f"WHERE {where_sql}", params,
         ).fetchone()["n"], also=(EMBEDDINGS_GENERATION_KEY,))
 
     # From this person's favourites outward, not from the library inward.
