@@ -152,6 +152,10 @@ class FamilyView:
         self.view_cfg = None
         self.error = ""
         self._wanted = (0.0, False)
+        #: The copy could not all be removed when the view was withdrawn (a
+        #: connection on another thread still held a file, as Windows
+        #: refuses): removed at the next look instead.
+        self._leftover = False
         self._lock = threading.Lock()
         self._stop = threading.Event()
         self._thread: threading.Thread | None = None
@@ -271,6 +275,8 @@ class FamilyView:
         hand-over. Returns whether the view is served. Never raises."""
         from ..replica.receive import ReplicaError                 # noqa: PLC0415
         if not self.wanted():
+            if self._leftover:
+                self._clear_leftover()
             return False
         try:
             with self._lock:
@@ -317,14 +323,39 @@ class FamilyView:
         with self._lock:
             if self.front is not None:
                 self.front.stop()
-            if self.view_cfg is not None:
-                db.retire(self.view_cfg.db_path)
+            db.release_within(self.state, *([self.view_cfg.db_path] if self.view_cfg else []))
             self.app = self.replica = self.front = self.view_cfg = None
             self._wanted = (0.0, False)
             self.error = ""
+            # The hand-over's manifest first, on its own: it is what says the
+            # view is wanted, and nothing holds it open. Gone, the view is not
+            # served again from what is left, until a new hand-over comes.
+            from ..replica import MANIFEST                         # noqa: PLC0415
+            try:
+                (self.source() / MANIFEST).unlink(missing_ok=True)
+            except OSError as exc:
+                log.warning("the hand-over's manifest could not be removed: %s", exc)
             gone = clear_copy(self.cfg.state_dir)
-        log.info("the Primary took the family view down: %s removed", ", ".join(gone) or "nothing")
+            self._leftover = self._copy_left()
+        log.info("the Primary took the family view down: %s removed%s", ", ".join(gone) or "nothing",
+                 "; the rest is removed once nothing holds it" if self._leftover else "")
         return gone
+
+    def _copy_left(self) -> bool:
+        from .handover import FOLDER                               # noqa: PLC0415
+        return (Path(self.cfg.state_dir) / FOLDER).is_dir() or self.state.is_dir()
+
+    def _clear_leftover(self) -> None:
+        from ..storage import db                                   # noqa: PLC0415
+        from .handover import clear_copy                           # noqa: PLC0415
+        with self._lock:
+            if self.app is not None:
+                return
+            db.release_within(self.state)
+            gone = clear_copy(self.cfg.state_dir)
+            self._leftover = self._copy_left()
+        if gone:
+            log.info("the rest of the withdrawn family view was removed: %s", ", ".join(gone))
 
     def keep(self) -> None:
         if self._thread is not None and self._thread.is_alive():

@@ -159,6 +159,20 @@ def retire(db_path: Path | str) -> None:
         del _retired[:-8]
 
 
+def release_within(folder: Path | str, *also: Path | str) -> None:
+    """Let go of the databases in *folder* before it is removed: this thread's
+    connections to them are closed now, and *also* (the ones other threads
+    may hold) are retired, so each thread closes its own at its next connect.
+    Windows does not remove a file a connection still holds."""
+    for path in also:
+        retire(path)
+    root = os.path.normcase(os.path.abspath(str(folder)))
+    for key in list(getattr(_local, "conns", None) or {}):
+        if os.path.normcase(os.path.abspath(key)).startswith(root + os.sep):
+            retire(key)
+            close(key)
+
+
 def connect(db_path: Path | str) -> sqlite3.Connection:
     """Return this thread's connection to ``db_path``, creating it if needed."""
     key = str(db_path)
