@@ -5452,5 +5452,17 @@
   "This is the copy of the library kept on {here} while {primary} is off. {primary} has been asked to wake up; try again in a minute.": "{primary} அணைந்திருக்கும்போது {here}-இல் வைத்திருக்கும் நூலகத்தின் நகல் இது. {primary}-ஐ எழுப்பக் கேட்கப்பட்டுள்ளது; ஒரு நிமிடத்தில் மீண்டும் முயலுங்கள்.",
   "Sign in to wake {primary}.": "{primary}-ஐ எழுப்ப உள்நுழையவும்.",
   "{here} does not know the network address to wake {primary} with.": "{primary}-ஐ எழுப்புவதற்கான நெட்வொர்க் முகவரி {here}-க்குத் தெரியாது.",
-  "the main computer": "முதன்மைக் கணினி"
+  "the main computer": "முதன்மைக் கணினி",
+  "Copies": "நகல்கள்",
+  "How many photographs are in at least two places: here, and on the second disk, the Secondary, the off-site copy or Google Drive. Counted from what each copy has confirmed it keeps.": "எத்தனை புகைப்படங்கள் குறைந்தது இரண்டு இடங்களில் உள்ளன: இங்கேயும், இரண்டாவது வட்டு, இரண்டாம் கணினி, வெளியிட நகல் அல்லது Google Drive-இலும். ஒவ்வொரு நகலும் தான் வைத்திருப்பதாக உறுதிசெய்தவற்றிலிருந்து எண்ணப்படுகிறது.",
+  "Second disk": "இரண்டாவது வட்டு",
+  "The Secondary": "இரண்டாம் கணினி",
+  "Off-site copy": "வெளியிட நகல்",
+  "Google Drive": "Google Drive",
+  "Copying now": "இப்போது நகலெடுக்கிறது",
+  "Last done {when}": "கடைசியாக {when} செய்யப்பட்டது",
+  "Not done yet": "இன்னும் செய்யப்படவில்லை",
+  "{two} of {total} photographs are in at least two places": "{total} புகைப்படங்களில் {two} குறைந்தது இரண்டு இடங்களில் உள்ளன",
+  "No photographs yet": "இன்னும் புகைப்படங்கள் இல்லை",
+  "{count} are not fingerprinted yet: they are counted, but not as in two places until they are.": "{count} இன்னும் கைரேகை எடுக்கப்படவில்லை: அவை எண்ணப்படுகின்றன, ஆனால் கைரேகை எடுக்கப்படும் வரை இரண்டு இடங்களில் உள்ளவையாக அல்ல."
 }

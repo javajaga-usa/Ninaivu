@@ -5166,5 +5166,17 @@
   "kept where it is": "kept where it is",
   "to carry to the new Primary": "to carry to the new Primary",
   "This is the copy kept on {here} while {primary} is off. You can look at everything; changes wait for {primary}.": "This is the copy kept on {here} while {primary} is off. You can look at everything; changes wait for {primary}.",
-  "the main computer": "the main computer"
+  "the main computer": "the main computer",
+  "Copies": "Copies",
+  "How many photographs are in at least two places: here, and on the second disk, the Secondary, the off-site copy or Google Drive. Counted from what each copy has confirmed it keeps.": "How many photographs are in at least two places: here, and on the second disk, the Secondary, the off-site copy or Google Drive. Counted from what each copy has confirmed it keeps.",
+  "Second disk": "Second disk",
+  "The Secondary": "The Secondary",
+  "Off-site copy": "Off-site copy",
+  "Google Drive": "Google Drive",
+  "Copying now": "Copying now",
+  "Last done {when}": "Last done {when}",
+  "Not done yet": "Not done yet",
+  "{two} of {total} photographs are in at least two places": "{two} of {total} photographs are in at least two places",
+  "No photographs yet": "No photographs yet",
+  "{count} are not fingerprinted yet: they are counted, but not as in two places until they are.": "{count} are not fingerprinted yet: they are counted, but not as in two places until they are."
 }
