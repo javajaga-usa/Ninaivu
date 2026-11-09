@@ -457,7 +457,8 @@ class Services:
             keeper.supervisor = self.supervisor
         # The two computers' keepers: sending the originals, waking the
         # Primary, and the display copies.
-        for keeper in (self.mugil_courier, self.mugil_waker, self.mugil_display):
+        for keeper in (self.mugil_courier, self.mugil_waker, self.mugil_display,
+                       self.mugil_handover, self.mugil_family_view):
             keeper.supervisor = self.supervisor
         # The schedule of the nightly storage check.
         self.repairer.supervisor = self.supervisor
