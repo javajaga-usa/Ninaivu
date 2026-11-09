@@ -183,7 +183,9 @@ def speak(kept: dict[str, Any], *, sentences: Sequence[dict[str, Any]], language
     """
     import numpy as np                                         # noqa: PLC0415
 
-    from ..media import letters                                # noqa: PLC0415
+    from .. import features                                    # noqa: PLC0415
+    # The text helpers of the feature that reads aloud (letters read aloud).
+    letters = features.hooked("reading_aloud")[0][1]
     main = _voice(kept, language)
     rate = main.rate
     pieces: list[Any] = []

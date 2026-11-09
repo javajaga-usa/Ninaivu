@@ -13,6 +13,7 @@ checked again before it is handed out; they are never used to serve anything.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
@@ -24,7 +25,7 @@ from typing import Any
 
 __all__ = ["SCHEMA", "STATES", "create", "get", "listed", "set_state", "delete",
            "films_dir", "file_of", "may_open", "MAX_SONG_BYTES", "MAX_SONGS_EACH", "add_song", "songs_of",
-           "song_path", "delete_song", "forget_songs"]
+           "song_path", "delete_song", "forget_songs", "forget_owner"]
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS memory_films (
@@ -228,3 +229,14 @@ def forget_songs(state_dir: Path | str, owner_id: int) -> None:
     """Every song of a profile that is being removed."""
     for song in songs_of(state_dir, owner_id):
         delete_song(state_dir, owner_id, song["token"])
+
+
+def forget_owner(state_dir: Path | str, owner_id: int, removed: dict[str, Any]) -> None:
+    """A profile was deleted (the ``profile_deleted`` hook): its songs, and
+    the films whose rows went with it (``removed["film_files"]``)."""
+    forget_songs(state_dir, owner_id)
+    for name in removed.get("film_files") or []:
+        path = file_of(state_dir, {"file": name})
+        if path is not None:
+            with contextlib.suppress(OSError):
+                path.unlink(missing_ok=True)

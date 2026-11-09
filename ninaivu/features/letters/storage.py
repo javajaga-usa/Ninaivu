@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Any, Sequence
 
 __all__ = ["SCHEMA", "create", "get", "put", "keep_reading", "remove", "forget_read",
-           "sweep_readings", "SOURCES"]
+           "sweep_readings", "swept", "SOURCES"]
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS letter_words (
@@ -157,3 +157,9 @@ def sweep_readings(folder: str | Path, conn: sqlite3.Connection) -> int:
             (folder / name).unlink()
             removed += 1
     return removed
+
+
+def swept(state_dir: Path | str, conn: sqlite3.Connection) -> int:
+    """The recycle bin was swept (the ``bin_swept`` hook): the readings aloud
+    kept in the state folder's ``letters`` whose words went with it."""
+    return sweep_readings(Path(state_dir) / "letters", conn)

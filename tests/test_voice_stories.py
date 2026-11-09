@@ -374,9 +374,9 @@ def test_a_local_backup_carries_the_recordings(as_family, scanned, tmp_path):
 
 def test_nothing_about_stories_reaches_an_outside_ai(as_family):
     """No route of this feature names a cloud service; no speech-to-text."""
+    # Both live in ninaivu/features/stories since 4.0.
     source = (Path(stories.__file__).read_text(encoding="utf-8")
-              + Path(stories.__file__).parent.parent.joinpath("api", "api_stories.py")
-              .read_text(encoding="utf-8"))
+              + Path(stories.__file__).parent.joinpath("routes.py").read_text(encoding="utf-8"))
     for word in ("gemini", "requests", "urllib", "http.client", "openai", "whisper"):
         assert word not in source.lower().replace("outside service", "")
 

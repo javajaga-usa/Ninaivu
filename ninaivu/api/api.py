@@ -781,6 +781,17 @@ def certificate_authority():
 # Status / config
 # ---------------------------------------------------------------------------
 
+#: The family moments /api/status offers, by the switch of the feature that
+#: answers each.
+_MOMENT_SWITCHES = {
+    "frame": "photo_frame", "capsules": "time_capsules", "ask": "ask_ninaivu",
+    "year": "our_year", "voice": "voice_search", "colour": "colour_photos",
+    "video_moments": "video_moments", "then_now": "then_and_now", "life": "life_story",
+    "talk": "photo_talk", "festivals": "festival_albums", "letters": "letters_aloud",
+    "young_faces": "young_faces", "find_print": "find_print", "stacks": "photo_stacks",
+}
+
+
 @bp.get("/api/status")
 def status():
     cfg = _cfg()
@@ -857,6 +868,13 @@ def status():
             "watch": cfg.watch,
         },
     }
+    # A feature switched on after this server started has no routes until the
+    # next start (ninaivu/features left_out): not offered until then.
+    from .. import features as feature_list                     # noqa: PLC0415
+    absent = {f.switch for f in feature_list.left_out_of(current_app)}
+    for key, switch in _MOMENT_SWITCHES.items():
+        if switch in absent:
+            payload["moments"][key] = False
     # The counts are the one part of this that grows with the library, and
     # the gallery does not need them to draw a photograph. `?stats=0` leaves
     # them out so the page can render and fill the sidebar afterwards; see
@@ -3278,9 +3296,10 @@ def _clear_after_purge(conn, result: dict) -> None:
         except OSError:
             pass
     recycle.erase_face_crops(conn, cfg.state_dir, result.pop("asset_ids", []))
-    # A letter's reading aloud, kept beside the index, goes with its words.
-    from ..storage import letters as letters_store              # noqa: PLC0415
-    letters_store.sweep_readings(Path(cfg.state_dir) / "letters", conn)
+    # A letter's reading aloud, kept beside the index, goes with its words
+    # (the bin_swept hook, ninaivu/features).
+    from .. import features as feature_hooks                    # noqa: PLC0415
+    feature_hooks.call("bin_swept", cfg.state_dir, conn)
 
 
 @admin_only.get("/api/recycle")
@@ -3887,35 +3906,35 @@ _feature("screening")
 from . import ai_playground_api  # noqa: E402,F401 - registers routes
 
 # Scan old prints: the family's, so on `bp` too (paths under /api/prints).
-from . import api_scan_prints  # noqa: E402,F401 - registers routes
+_feature("scan_prints")
 
 # Family moments, each off until switched on: the living photo frame and
 # time capsules.
 _feature("capsules")
-from . import api_frame  # noqa: E402,F401
+_feature("frame")
 
 # Ask Ninaivu: questions about the photographs, answered on this computer.
-from . import api_ask_ninaivu  # noqa: E402,F401
+_feature("ask_ninaivu")
 
 # Our Year: the family's year in photographs, as cards.
-from . import api_our_year  # noqa: E402,F401
+_feature("our_year")
 
 # A life in photographs: one person's life, decade by decade.
 _feature("life_story")
 
 # Talk about this photo: questions about the photograph open in the viewer.
-from . import api_photo_talk  # noqa: E402,F401
+_feature("photo_talk")
 # Festival albums: every Deepavali, every Pongal, found from the calendar.
-from . import api_festivals  # noqa: E402,F401
+_feature("festivals")
 
 # Letters read aloud: an old letter's words, written out and spoken.
 _feature("letters")
 
 # Young faces, older names: who an unnamed child in an old photograph may be.
-from . import api_young_faces  # noqa: E402,F401
+_feature("young_faces")
 
 # Find this print: the library photograph a framed print is a copy of.
-from . import api_find_print  # noqa: E402,F401
+_feature("find_print")
 
 # Photo stacks: a burst, or a photograph and its copies, as one tile.
 _feature("stacks")
@@ -3923,7 +3942,7 @@ _feature("stacks")
 # Speaking to search, and colour for black-and-white photographs: each off
 # until switched on, each answered on this computer.
 _feature("colour_copies")
-from . import api_voice_search  # noqa: E402,F401
+_feature("voice_search")
 
 # Moments inside videos: search finds the second inside a long clip.
 _feature("video_moments")

@@ -15,6 +15,7 @@ photograph.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import sqlite3
 import time
@@ -22,7 +23,7 @@ from pathlib import Path
 from typing import Any
 
 __all__ = ["SCHEMA", "STATES", "create", "get", "listed", "set_state", "delete",
-           "books_dir", "file_of"]
+           "books_dir", "file_of", "forget_owner"]
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS photo_books (
@@ -143,3 +144,13 @@ def delete(conn: sqlite3.Connection, state_dir: Path | str, book: dict[str, Any]
         path.with_name(path.name + ".part").unlink(missing_ok=True)
     conn.execute("DELETE FROM photo_books WHERE id=?", (int(book["id"]),))
     conn.commit()
+
+
+def forget_owner(state_dir: Path | str, owner_id: int, removed: dict[str, Any]) -> None:
+    """A profile was deleted (the ``profile_deleted`` hook): the PDFs of its
+    books go too, whose rows went with it (``removed["book_files"]``)."""
+    for name in removed.get("book_files") or []:
+        path = file_of(state_dir, {"file": name})
+        if path is not None:
+            with contextlib.suppress(OSError):
+                path.unlink(missing_ok=True)

@@ -1444,20 +1444,10 @@ def delete_person(user_id: int):
     for part in parts:
         with suppress(OSError):
             part.unlink(missing_ok=True)
-    # Their photo books' PDFs: the rows went with the profile.
-    from ..storage import books as book_store                 # noqa: PLC0415
-    for name in removed.get("book_files") or []:
-        path = book_store.file_of(_cfg().state_dir, {"file": name})
-        if path is not None:
-            with suppress(OSError):
-                path.unlink(missing_ok=True)
-    from ..storage import films as film_store                 # noqa: PLC0415
-    film_store.forget_songs(_cfg().state_dir, user_id)
-    for name in removed.get("film_files") or []:
-        path = film_store.file_of(_cfg().state_dir, {"file": name})
-        if path is not None:
-            with suppress(OSError):
-                path.unlink(missing_ok=True)
+    # Their photo books' PDFs, their films and songs: the rows went with the
+    # profile (the profile_deleted hook, ninaivu/features).
+    from .. import features as feature_hooks                  # noqa: PLC0415
+    feature_hooks.call("profile_deleted", _cfg().state_dir, user_id, removed)
 
     auth.audit(conn, admin.id, "delete_person",
                f"{removed['username']} ({removed['role']})")

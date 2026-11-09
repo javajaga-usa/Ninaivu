@@ -173,6 +173,11 @@ def settings_all_change():
                 # Off: the model process and its memory go now, not when idle.
                 services.close_model_host()
     restart = set(changed) & RESTART_SETTINGS
+    # A feature switched on whose routes this server was started without
+    # (ninaivu/features left_out): they are made at the next start.
+    from .. import features as feature_list                  # noqa: PLC0415
+    restart |= {feature.switch for feature in feature_list.left_out_of(current_app)
+                if feature.switch in changed and feature.switched_on(cfg)}
     if "ai_runtime" in changed and _search_engine_changes(cfg):
         # Search is the one part of the engine chosen at start-up: the image
         # model is loaded then, on PyTorch or in the engine.

@@ -618,16 +618,12 @@ def _forget_rows(conn: sqlite3.Connection, rows, vocabulary: set[str]  # noqa: A
     found = [u[2] for u in updates]
     dropped = 0
     conn.executemany("UPDATE assets SET tags=?, caption=? WHERE id=?", updates)
-    # The on-device engine's descriptions, which are a reading too.
-    from . import descriptions                        # noqa: PLC0415
-    descriptions.forget(conn, found)
-    # And the moments found inside its video (storage/video_moments.py).
-    from . import video_moments                       # noqa: PLC0415
-    video_moments.forget(conn, found)
-    # And the words the text reader read off a letter (storage/letters.py);
-    # words somebody typed are theirs, and stay as a caption does.
-    from . import letters                             # noqa: PLC0415
-    letters.forget_read(conn, found)
+    # The features' readings too, in order (the readings_forgotten hook,
+    # ninaivu/features): the on-device engine's descriptions, the moments
+    # found inside its video, and the words the text reader read off a
+    # letter; words somebody typed are theirs, and stay as a caption does.
+    from .. import features                           # noqa: PLC0415
+    features.call("readings_forgotten", conn, found)
     # In pieces: a whole library folder set to admins only is tens of
     # thousands of ids, past what one statement may be given.
     for at in range(0, len(found), 500):
