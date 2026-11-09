@@ -129,8 +129,10 @@ def reroot_index(index: Path | str, mapping: dict[str, str]) -> int:
 def _build_app(view_cfg, replica, front):
     """The family app over the view's own copy of the index, as the old
     ``--replica-of`` process built it (ninaivu/__main__.py), never started."""
-    from .. import __version__, build_services, create_home_app   # noqa: PLC0415
-    services = build_services(view_cfg)
+    from .. import Services, __version__, create_home_app         # noqa: PLC0415
+    # A guest in the Secondary's process: the archive's record and the watch
+    # for a damaged index stay the Secondary's own.
+    services = Services(view_cfg, guest=True)
     services.replica = replica
     services.replica_front = front
     app = create_home_app(services)

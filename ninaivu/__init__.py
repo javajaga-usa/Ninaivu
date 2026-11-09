@@ -132,7 +132,12 @@ class _VisionOnceLoaded:
 class Services:
     """Everything both apps share: config, scanner and AI engine."""
 
-    def __init__(self, cfg: Config) -> None:
+    def __init__(self, cfg: Config, *, guest: bool = False) -> None:
+        """*guest*: built inside another Ninaivu's process, over a folder of
+        its own (the Secondary's family view, mugil/family_view.py). What is
+        set once for the whole process stays the host's: the archive's record
+        and the watch for a damaged index pointed at the guest's folder moved
+        the Secondary's own there, and withdrawing the view deleted it."""
         from . import ai as ai_mod
         from . import archive
         from .archive.guardian import ArchiveGuardian
@@ -148,7 +153,8 @@ class Services:
         # A database found damaged while Ninaivu runs is checked and repaired
         # at the next start, before anything opens it (storage/index_check.py).
         from .storage import index_check                            # noqa: PLC0415
-        index_check.watch(cfg.state_dir)
+        if not guest:
+            index_check.watch(cfg.state_dir)
         from .utils.files import open_file_limit                    # noqa: PLC0415
         limit = open_file_limit()
         if limit is not None:
@@ -190,9 +196,10 @@ class Services:
         # it has copied and verified. Point it at Ninaivu's state directory so
         # that record lives with everything else Ninaivu owns, and survives
         # reinstalling the application.
-        archive.configure(cfg.state_dir, cfg.min_media_bytes,
-                          cfg.import_voice_audio_only, cfg.import_copy_workers)
-        archive.database.init_db()
+        if not guest:
+            archive.configure(cfg.state_dir, cfg.min_media_bytes,
+                              cfg.import_voice_audio_only, cfg.import_copy_workers)
+            archive.database.init_db()
 
         from .storage import BackupKeeper                 # noqa: PLC0415
         self.backups = BackupKeeper(cfg)
