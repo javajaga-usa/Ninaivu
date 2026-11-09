@@ -174,3 +174,24 @@ def test_the_tailnet_name_gets_tailscales_certificate_and_the_house_ninaivus(tmp
     assert served_certificate(context, NAME) == NAME
     assert served_certificate(context, NAME.upper() + ".") == NAME
     assert served_certificate(context, "ninaivu.local") == "localhost"
+
+
+def test_the_refresh_is_kept_by_the_supervisor(tmp_path):
+    """Fetched at once, then every few hours, as a supervisor job (4.0,
+    proposal 2): the console lists it, and a stop ends it."""
+    import time
+    from ninaivu.server.supervisor import Supervisor
+    tailscale = Tailscale()
+    cert = holder(tmp_path, tailscale)
+    cert.supervisor = Supervisor()
+    cert.watch(every=3600)
+    try:
+        deadline = time.monotonic() + 5
+        while cert.context is None and time.monotonic() < deadline:
+            time.sleep(0.02)
+        assert cert.context is not None and cert.name == NAME, "fetched at once"
+        assert cert.supervisor.state(cert.JOB) not in (None, "stopped")
+    finally:
+        cert.stop()
+        cert.supervisor.stop_job(cert.JOB, timeout=5)
+    assert cert.supervisor.state(cert.JOB) == "stopped"

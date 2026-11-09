@@ -34,7 +34,6 @@ import shutil
 import ssl
 import subprocess
 import sys
-import threading
 from pathlib import Path
 from typing import Any, Callable
 
@@ -126,8 +125,9 @@ class TailnetCertificate:
         self.context: ssl.SSLContext | None = None
         self._runner = runner
         self._cli = cli
-        self._stop = threading.Event()
-        self._thread: threading.Thread | None = None
+        #: The supervisor its refresh runs on (server/supervisor.py); Ninaivu
+        #: gives it the services' own, or it makes one of its own.
+        self.supervisor = None
 
     @property
     def files(self) -> tuple[Path, Path, Path]:
@@ -194,25 +194,26 @@ class TailnetCertificate:
         context.sni_callback = self.choose
         return context
 
+    #: Its job on the supervisor, and its thread's name, as before it moved.
+    JOB = "ninaivu-tailnet-cert"
+
     def watch(self, every: float = REFRESH_SECONDS) -> None:
-        """Fetch now, off the start-up path, and again every *every* seconds."""
-        if self._thread is not None:
-            return
+        """Fetch now, off the start-up path, and again every *every* seconds,
+        kept by the supervisor. A refresh that fails is tried at the next."""
+        from ..server.supervisor import NETWORK, Job, every as each, supervisor_of  # noqa: PLC0415
+        supervisor_of(self).add(Job(
+            self.JOB, self._refresh_quietly, each(every, first=0), claims={NETWORK}, log=log,
+            retry_most=0))
 
-        def loop() -> None:
-            while True:
-                try:
-                    self.refresh()
-                except Exception:                    # noqa: BLE001 - try again later
-                    log.debug("could not refresh the tailnet certificate", exc_info=True)
-                if self._stop.wait(every):
-                    return
-
-        self._thread = threading.Thread(target=loop, name="ninaivu-tailnet-cert", daemon=True)
-        self._thread.start()
+    def _refresh_quietly(self) -> None:
+        try:
+            self.refresh()
+        except Exception:                            # noqa: BLE001 - try again later
+            log.debug("could not refresh the tailnet certificate", exc_info=True)
 
     def stop(self) -> None:
-        self._stop.set()
+        from ..server.supervisor import supervisor_of            # noqa: PLC0415
+        supervisor_of(self).stop_job(self.JOB, timeout=0)
 
 
 def _write_private(path: Path, text: str) -> None:
