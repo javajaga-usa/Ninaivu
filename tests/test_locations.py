@@ -477,3 +477,43 @@ def test_a_check_after_damage_was_seen_rebuilds_only_what_differs(tmp_path):
                                                         "wrong_fingerprint": 0}
     with closing(sqlite3.connect(path)) as raw:
         assert locations.check(raw)["agrees"]
+
+
+# -- readers of locations ----------------------------------------------------
+
+from test_copy_contract import recorded  # noqa: E402,F401  (fixture)
+
+
+def test_the_ledger_maps_paths_to_fingerprints_through_locations_as_it_did_before(
+        recorded, monkeypatch):                           # noqa: F811
+    """The ledger's join on ``locations`` gives what its join on
+    ``content_fingerprints`` at the file's size and time gave: the same rows
+    filled from every record, and the same headline, with a file edited since
+    its fingerprint and one never fingerprinted among them."""
+    from ninaivu.copies import ledger
+    conn, roots = recorded.conn, [str(r) for r in recorded.cfg.roots]
+    with db._write_lock:                                  # noqa: SLF001
+        # Taken of an earlier version of a file the copies still record as it is.
+        conn.execute("UPDATE content_fingerprints SET mtime = mtime - 7 WHERE asset_id=?",
+                     (recorded.b["id"],))
+        conn.execute("DELETE FROM content_fingerprints WHERE asset_id=?", (recorded.c["id"],))
+        conn.commit()
+    _in_step(conn)
+    sources = ["mirror", "offsite", "drive"]
+
+    def filled() -> tuple:
+        with db._write_lock:                              # noqa: SLF001
+            conn.execute("DELETE FROM copies")
+            kept = ledger.fill(conn, only=sources)
+            rows = sorted(conn.execute("SELECT fingerprint, destination, state, size FROM copies"))
+            conn.rollback()
+        return kept, rows, ledger.headline(conn, roots)
+
+    now = filled()
+    monkeypatch.setattr(ledger, "_FINGERPRINTED", "JOIN content_fingerprints f ON "
+                        "f.asset_id = a.id AND f.size = a.size AND f.mtime = a.mtime")
+    monkeypatch.setattr(ledger, "_FP", "(f.algo || ':' || f.digest)")
+    before = filled()
+    assert now[:2] == before[:2]
+    assert now[1] and now[2]["unfingerprinted"] >= 1
+    assert recorded.b["fp"] not in {r[0] for r in now[1]}

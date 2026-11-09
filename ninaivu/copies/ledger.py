@@ -23,9 +23,10 @@ never stops the copy: the engine's own record is still the one it acts on.
 
 The ledger is also filled *from* those records (:func:`fill`), for what was
 copied before the engines wrote it and for what they no longer confirm: read
-only, mapped from path to fingerprint through ``content_fingerprints``, and
-only where the file is still the file the record was made for (the same
-size and modified time). A record whose file has changed since says nothing
+only, mapped from path to fingerprint through ``locations`` (index
+migration 2, which carries a fingerprint only while it is of the file as it
+is now), and only where the file is still the file the record was made for
+(the same size and modified time). A record whose file has changed since says nothing
 about the photograph as it is now, and is left out. Nothing is sent, re-sent
 or forgotten by filling it. The index migration fills it once; after that a
 supervisor job does (ninaivu/copies/__init__.py), never a page's read.
@@ -66,14 +67,16 @@ UNCONFIRMED = "unconfirmed"
 SENT = "mugil-sent.db"
 
 #: A file in the library, joined to its fingerprint when the fingerprint is
-#: of the file as it is now. ``a`` is ``assets``, ``f`` its fingerprint.
-_FINGERPRINTED = ("JOIN content_fingerprints f ON f.asset_id = a.id "
-                  "AND f.size = a.size AND f.mtime = a.mtime")
+#: of the file as it is now: its place in ``locations``, which carries one
+#: only then (the triggers of migration 2 keep it so; storage/locations.py
+#: sets it right after a repair). ``a`` is ``assets``, ``l`` its place.
+_FINGERPRINTED = ("JOIN locations l ON l.asset_id = a.id AND l.place = 'library' "
+                  "AND l.fingerprint IS NOT NULL")
 
 #: The fingerprint as the ledger and ``locations`` both write it, ``algo:digest``
 #: ("blake3:9f…"), so one made without BLAKE3 can never be taken for one made
 #: with it, and the two tables can be joined.
-_FP = "(f.algo || ':' || f.digest)"
+_FP = "l.fingerprint"
 
 
 def _has_table(conn: sqlite3.Connection, name: str, schema: str = "main") -> bool:
@@ -118,7 +121,7 @@ def _from_mirror(conn: sqlite3.Connection, **_: Any) -> bool:
         "INSERT OR IGNORE INTO temp.copies_found(fingerprint, size, verified_at) "
         "SELECT " + _FP + ", a.size, MAX(MAX(m.copied_at, ?)) FROM mirror_copies m "
         "JOIN assets a ON a.root = m.root AND a.rel_path = m.rel_path AND a.size = m.size "
-        f"AND ABS(a.mtime - m.mtime) < 0.001 {_FINGERPRINTED} GROUP BY f.algo, f.digest", (checked,))
+        f"AND ABS(a.mtime - m.mtime) < 0.001 {_FINGERPRINTED} GROUP BY 1", (checked,))
     return True
 
 
@@ -136,7 +139,7 @@ def _from_offsite(conn: sqlite3.Connection, *, offsite_where: str | None = None,
         "INSERT OR IGNORE INTO temp.copies_found(fingerprint, size, verified_at) "
         "SELECT " + _FP + ", a.size, MAX(o.uploaded_at) FROM offsite_copies o "
         "JOIN assets a ON a.root = o.root AND a.rel_path = o.rel_path AND a.size = o.size "
-        f"AND ABS(a.mtime - o.mtime) < 0.001 {_FINGERPRINTED} GROUP BY f.algo, f.digest")
+        f"AND ABS(a.mtime - o.mtime) < 0.001 {_FINGERPRINTED} GROUP BY 1")
     return True
 
 
@@ -155,7 +158,7 @@ def _from_drive(conn: sqlite3.Connection, **_: Any) -> bool:
         "INSERT OR IGNORE INTO temp.copies_found(fingerprint, size, verified_at) "
         "SELECT " + _FP + ", a.size, MAX(c.done_at) FROM cloud_uploads c "
         "JOIN assets a ON a.root = c.root AND a.rel_path = c.rel_path AND a.size = c.size "
-        f"{since}{_FINGERPRINTED} WHERE c.state = 'done' GROUP BY f.algo, f.digest")
+        f"{since}{_FINGERPRINTED} WHERE c.state = 'done' GROUP BY 1")
     return True
 
 
@@ -189,7 +192,8 @@ def _from_secondary(conn: sqlite3.Connection, *, state_dir: Path | str | None = 
             "SELECT " + _FP + ", a.size, MAX(s.sent_at) FROM temp.copies_sent s "
             "JOIN assets a ON a.root = s.root AND a.rel_path = s.rel_path AND a.size = s.size "
             f"AND ABS(a.mtime - s.mtime) < 0.001 {_FINGERPRINTED} "
-            "WHERE f.algo != s.algo OR f.digest = s.digest GROUP BY f.algo, f.digest")
+            "WHERE substr(l.fingerprint, 1, length(s.algo) + 1) != s.algo || ':' "
+            "OR l.fingerprint = s.algo || ':' || s.digest GROUP BY 1")
     finally:
         conn.execute("DROP TABLE IF EXISTS temp.copies_sent")
     return True
@@ -215,7 +219,7 @@ def fill(conn: sqlite3.Connection, *, state_dir: Path | str | None = None,
     tables of this connection.
     """
     kept: dict[str, int] = {}
-    if not (_has_table(conn, "assets") and _has_table(conn, "content_fingerprints")):
+    if not (_has_table(conn, "assets") and _has_table(conn, "locations")):
         return kept
     names = list(only) if only is not None else list(SOURCES)
     for name in names:
@@ -272,8 +276,8 @@ def confirm(conn: sqlite3.Connection, destination: str,
     it (*mtime* None when the engine does not record one). Returns the rows
     written.
 
-    The fingerprint is the file's in ``content_fingerprints``, and only when
-    it is of the file as it is now and as it was copied (the same size, and
+    The fingerprint is the file's in ``locations``, and only when it is of
+    the file as it is now and as it was copied (the same size, and
     the same modified time where one is given). *expect*, one per file, is
     the ``algo:digest`` the other end confirmed; a different one is no row.
     A file with no fingerprint yet gets no row: the supervisor's refill
@@ -283,7 +287,7 @@ def confirm(conn: sqlite3.Connection, destination: str,
     copy is made and recorded by its engine whatever happens here.
     """
     try:
-        if not _has_table(conn, "copies") or not _has_table(conn, "content_fingerprints"):
+        if not _has_table(conn, "copies") or not _has_table(conn, "locations"):
             return 0
         written = 0
         wanted = list(expect) if expect is not None else None
@@ -326,7 +330,7 @@ def headline(conn: sqlite3.Connection, roots: Sequence[str]) -> dict[str, int]:
     cannot say where it is kept, and says so (``unfingerprinted``).
     """
     marks, args = _roots_clause(roots)
-    if not _has_table(conn, "copies"):
+    if not (_has_table(conn, "copies") and _has_table(conn, "locations")):
         return {"two_places": 0, "total": 0, "unfingerprinted": 0}
     known = conn.execute(
         "SELECT COUNT(*), COALESCE(SUM(EXISTS (SELECT 1 FROM copies c "
@@ -335,8 +339,8 @@ def headline(conn: sqlite3.Connection, roots: Sequence[str]) -> dict[str, int]:
         f"WHERE a.trashed = 0 AND a.root IN ({marks})) d", (*HELD, *args)).fetchone()
     bare = conn.execute(
         f"SELECT COUNT(*) FROM assets a WHERE a.trashed = 0 AND a.root IN ({marks}) "
-        "AND NOT EXISTS (SELECT 1 FROM content_fingerprints f WHERE f.asset_id = a.id "
-        "AND f.size = a.size AND f.mtime = a.mtime)", args).fetchone()[0]
+        "AND NOT EXISTS (SELECT 1 FROM locations l WHERE l.asset_id = a.id "
+        "AND l.place = 'library' AND l.fingerprint IS NOT NULL)", args).fetchone()[0]
     return {"two_places": int(known[1]), "total": int(known[0]) + int(bare),
             "unfingerprinted": int(bare)}
 
