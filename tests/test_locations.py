@@ -517,3 +517,55 @@ def test_the_ledger_maps_paths_to_fingerprints_through_locations_as_it_did_befor
     assert now[:2] == before[:2]
     assert now[1] and now[2]["unfingerprinted"] >= 1
     assert recorded.b["fp"] not in {r[0] for r in now[1]}
+
+
+def _let_go(conn, rel: str, digest: str) -> None:
+    conn.execute("INSERT INTO mugil_let_go(root, rel_path, size, mtime, algo, digest, let_go_at) "
+                 "VALUES ('/library', ?, 100, 1700000000.0, ?, ?, 1.0)",
+                 (rel, fingerprints.ALGO, digest))
+    conn.commit()
+
+
+def test_a_let_go_original_is_known_by_its_path_and_after_a_move_by_its_fingerprint(tmp_path):
+    path = tmp_path / "index.db"
+    conn = db.init_db(path)
+    try:
+        kept, moved, copy, plain = (db.upsert_asset(conn, _record(f"a/{n}.jpg"))
+                                    for n in ("kept", "moved", "copy", "plain"))
+        _fingerprint(conn, kept, "11" * 32)
+        _fingerprint(conn, copy, "11" * 32)               # the same bytes as kept
+        _fingerprint(conn, moved, "22" * 32)
+        _let_go(conn, "a/kept.jpg", "11" * 32)
+        _let_go(conn, "a/moved.jpg", "22" * 32)
+        # As 3.x read it: by path.
+        assert locations.let_go_paths(conn, "/library") == {"a/kept.jpg", "a/moved.jpg"}
+        assert locations.let_go_paths(conn, "/elsewhere") == set()
+
+        # The row moved by a writer that left the let-go record where it was.
+        with db._write_lock:                              # noqa: SLF001
+            conn.execute("UPDATE assets SET rel_path='b/moved.jpg' WHERE id=?", (moved,))
+            conn.commit()
+        assert locations.let_go_paths(conn, "/library") == {
+            "a/kept.jpg", "a/moved.jpg", "b/moved.jpg"}
+
+        # None of the four files is on the disk: the let-go ones stay, and the
+        # copy with the let-go bytes is not taken for the original, whose row
+        # is where its record says.
+        db.delete_missing(conn, "/library", set(), complete=True, force=True)
+        assert {r[0] for r in conn.execute("SELECT id FROM assets")} == {kept, moved}
+        assert len(_in_step(conn)) == 2
+    finally:
+        db.close(path)
+
+
+def test_a_let_go_record_two_rows_share_bytes_with_names_neither(tmp_path):
+    path = tmp_path / "index.db"
+    conn = db.init_db(path)
+    try:
+        one, two = (db.upsert_asset(conn, _record(f"b/{n}.jpg")) for n in ("one", "two"))
+        _fingerprint(conn, one, "33" * 32)
+        _fingerprint(conn, two, "33" * 32)
+        _let_go(conn, "a/was.jpg", "33" * 32)             # no row is at its path
+        assert locations.let_go_paths(conn, "/library") == {"a/was.jpg"}
+    finally:
+        db.close(path)
