@@ -255,9 +255,12 @@ def test_a_proof_that_fails_names_the_file(apart):
     record = finish(apart.primary)["record"]
     assert record["state"] == "failed"
     assert record["proof"]["passed"] is False
-    assert [m["file"] for m in record["proof"]["missing"]] == [str(gone)]
+    # Compared as the same file, not as the same spelling: on Windows a
+    # temporary folder can be named short (RUNNER~1) one way and long the other.
+    same = lambda files: [os.path.normcase(Path(f).resolve()) for f in files]  # noqa: E731
+    assert same(m["file"] for m in record["proof"]["missing"]) == same([gone])
     with gzip.open(apart.mac.state_dir / record["missing_file"], "rt") as handle:
-        assert [json.loads(line)["file"] for line in handle] == [str(gone)]
+        assert same(json.loads(line)["file"] for line in handle) == same([gone])
     # Put back, the proof can be run again, and passes.
     put(gone, b"\xff\xd8 deleted on the mac")
     apart.primary.prove()
