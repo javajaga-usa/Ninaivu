@@ -243,8 +243,86 @@ def test_each_features_routes_are_on_the_blueprints_it_names(apps):
 
 
 def test_a_switched_off_feature_still_answers_404(app, as_family):
+    """In an app made with every route (the suite's), from inside the route,
+    in the very words a route that is not there is answered with."""
     app.config["MV_CONFIG"].memory_films = False
-    assert as_family.get("/api/films").status_code == 404
+    inside = as_family.get("/api/films")
+    assert inside.status_code == 404
+    assert inside.get_json() == as_family.get("/api/no-such-thing").get_json()
+
+
+# --- A switched-off feature's routes are left out ------------------------------
+
+@pytest.fixture()
+def started(scanned, monkeypatch, request):
+    """An app made as a start makes it: memory films and young faces off,
+    colour on but waiting for its model."""
+    cfg = scanned[0]
+    cfg.memory_films = False
+    cfg.young_faces = False
+    cfg.colour_photos = True
+    monkeypatch.setattr(switches, "_why_not", lambda need: "not downloaded")
+    switches.forget()
+    monkeypatch.setattr(features, "every_route", False)
+    return request.getfixturevalue("app")
+
+
+def test_a_switched_off_feature_has_no_routes(started, request):
+    app = started
+    out = [f.name for f in features.left_out_of(app)]
+    assert {"films", "young_faces"} <= set(out) and "books" not in out
+    assert not features.endpoints(app, features.get("films"))
+    assert not any(r.rule.startswith("/api/films") for r in app.url_map.iter_rules())
+    family = request.getfixturevalue("as_family")
+    gone = family.get("/api/films")
+    # The same 404, and the same words, as the route itself answered.
+    assert gone.status_code == 404
+    assert gone.get_json() == family.get("/api/no-such-thing").get_json()
+    # A feature waiting for its model keeps its routes, and says 404 itself.
+    assert features.endpoints(app, features.get("colour_copies"))
+    assert features.endpoints(app, features.get("books"))
+
+
+def test_the_blueprints_are_put_back_for_the_next_app(monkeypatch):
+    from ninaivu.api import bp
+    before = list(bp.deferred_functions)
+    monkeypatch.setattr(features, "every_route", False)
+    with features.left_out(SimpleNamespace(memory_films=False)) as out:
+        assert "films" in out and "books" not in out
+        assert len(bp.deferred_functions) < len(before)
+        assert not any(features._module_of(d) == "ninaivu.features.films.routes"  # noqa: SLF001
+                       for d in bp.deferred_functions)
+    assert bp.deferred_functions == before
+    with features.left_out(None) as out:
+        assert out == []
+    monkeypatch.setattr(features, "every_route", True)
+    with features.left_out(SimpleNamespace(memory_films=False)) as out:
+        assert out == []
+
+
+def test_the_console_says_a_restart_is_needed(started, request):
+    admin = request.getfixturevalue("as_admin")
+    said = admin.post("/api/admin/settings/all", json={"settings": {"young_faces": True}})
+    assert said.status_code == 200, said.get_json()
+    assert "young_faces" in said.get_json()["restart"]
+    # Not offered to the family until then: its routes are not there.
+    assert admin.get("/api/status?stats=0").get_json()["moments"]["young_faces"] is False
+    # Switched off, a feature's routes answer 404 from inside straight away.
+    said = admin.post("/api/admin/settings/all", json={"settings": {"our_year": False}})
+    assert "our_year" not in said.get_json()["restart"]
+
+
+def test_the_route_manifest_says_whose_each_route_is():
+    lines = (ROOT / "tests" / "data" / "route_manifest.txt").read_text(encoding="utf-8")
+    owners = {}
+    for line in lines.splitlines():
+        if line.startswith("#"):
+            continue
+        parts = [part.strip() for part in line.split("|")]
+        owners[parts[2]] = parts[-1]
+    assert owners["/api/films"] == "films" and owners["/api/young-faces"] == "young_faces"
+    assert owners["/api/status"] == "-"
+    assert set(owners.values()) - {"-"} == {f.name for f in features.registry() if f.routes}
 
 
 # --- The old module names -----------------------------------------------------

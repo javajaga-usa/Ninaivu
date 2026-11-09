@@ -781,6 +781,17 @@ def certificate_authority():
 # Status / config
 # ---------------------------------------------------------------------------
 
+#: The family moments /api/status offers, by the switch of the feature that
+#: answers each.
+_MOMENT_SWITCHES = {
+    "frame": "photo_frame", "capsules": "time_capsules", "ask": "ask_ninaivu",
+    "year": "our_year", "voice": "voice_search", "colour": "colour_photos",
+    "video_moments": "video_moments", "then_now": "then_and_now", "life": "life_story",
+    "talk": "photo_talk", "festivals": "festival_albums", "letters": "letters_aloud",
+    "young_faces": "young_faces", "find_print": "find_print", "stacks": "photo_stacks",
+}
+
+
 @bp.get("/api/status")
 def status():
     cfg = _cfg()
@@ -857,6 +868,13 @@ def status():
             "watch": cfg.watch,
         },
     }
+    # A feature switched on after this server started has no routes until the
+    # next start (ninaivu/features left_out): not offered until then.
+    from .. import features as feature_list                     # noqa: PLC0415
+    absent = {f.switch for f in feature_list.left_out_of(current_app)}
+    for key, switch in _MOMENT_SWITCHES.items():
+        if switch in absent:
+            payload["moments"][key] = False
     # The counts are the one part of this that grows with the library, and
     # the gallery does not need them to draw a photograph. `?stats=0` leaves
     # them out so the page can render and fill the sidebar afterwards; see
