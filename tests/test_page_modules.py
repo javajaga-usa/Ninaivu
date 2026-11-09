@@ -63,3 +63,24 @@ def test_the_shared_modules_are_preloaded_at_start(app):
     preloaded = re.findall(r'<link rel="modulepreload" href="([^"]+)">', html)
     for module in ("ui.js", "store.js", "api.js", "http.js"):
         assert f"/static/js/{module}?v=s" in preloaded, module
+
+
+#: The family's moments and the things it makes: fetched when first opened.
+FEATURES = ("ask-family.js", "family-tree.js", "books.js", "films.js", "our-year.js",
+            "life-story.js", "festivals.js", "young-faces.js", "then-and-now.js", "frame.js",
+            "capsules.js", "ask-ninaivu.js")
+
+
+def test_the_family_features_are_not_in_the_gallerys_start(app):
+    """Not imported by the gallery at start, so not preloaded: about 200 KB a
+    phone no longer fetches before the first photograph. Still in the import
+    map, stamped, for when one is opened."""
+    from ninaivu.server.modules import page_modules, static_graph
+
+    start = {p.name for p in static_graph(JS / "app.js", JS)}
+    assert not start & set(FEATURES), sorted(start & set(FEATURES))
+    with app.test_request_context("/"):
+        html = str(page_modules(STATIC, "/static/js/app.js", lambda u: f"{u}?v=s"))
+    importmap = re.search(r'<script type="importmap">(.*?)</script>', html, re.S).group(1)
+    for name in FEATURES:
+        assert f'"/static/js/{name}":"/static/js/{name}?v=s"' in importmap, name

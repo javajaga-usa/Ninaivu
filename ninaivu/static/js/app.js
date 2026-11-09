@@ -20,23 +20,68 @@ import { ScreenLock } from './lock.js';
 import { DowntimeNotice } from './downtime.js';
 import { familyCommands, initPalette } from './palette.js';
 import { hideScrollBarsUntilUsed } from './scrollbars.js';
-import { openAskFamily } from './ask-family.js';
-import { openFamilyTree } from './family-tree.js';
-import { openBookSheet, openBooksList } from './books.js';
-import { filmsAvailable, openFilmSheet } from './films.js';
-import { openOurYear } from './our-year.js';
-import { openLifeStory } from './life-story.js';
-import { openFestivals } from './festivals.js';
-import { openYoungFaces } from './young-faces.js';
-import { hideThenNowStrip, openThenAndNow, showThenNowStrip } from './then-and-now.js';
 import { claimBanner } from './handover.js';
-import { frameAsked, openFrame } from './frame.js';
-import { announceCapsules, openCapsules, openSealSheet } from './capsules.js';
-import { openAsk } from './ask-ninaivu.js';
 import { VoiceSearch } from './voice-search.js';
 import { VideoMoments } from './video-moments.js';
 import { state, store } from './store.js';
 import { $, closeMenus, humanBytes, toast, wireMenu } from './ui.js';
+
+/* The family's moments and the things it makes (the frame, time capsules,
+ * books, films, Our year, Then and now, a life story, festivals, young faces,
+ * Ask Ninaivu, asking the family and the family tree) are fetched the first
+ * time one is opened, not with the gallery: about 200 KB a phone no longer
+ * downloads before the first photograph. Each import() is written out in
+ * full so the server names it at its stamped URL (server/modules.py). */
+const features = {
+  askFamily: () => import('./ask-family.js'),
+  familyTree: () => import('./family-tree.js'),
+  books: () => import('./books.js'),
+  films: () => import('./films.js'),
+  ourYear: () => import('./our-year.js'),
+  lifeStory: () => import('./life-story.js'),
+  festivals: () => import('./festivals.js'),
+  youngFaces: () => import('./young-faces.js'),
+  thenAndNow: () => import('./then-and-now.js'),
+  frame: () => import('./frame.js'),
+  capsules: () => import('./capsules.js'),
+  ask: () => import('./ask-ninaivu.js'),
+};
+
+/** *name* from feature *which*, fetched when first called; a fetch that
+ *  fails (the server restarting) is said, and asked again next time. */
+function later(which, name) {
+  return (...args) => features[which]().then((module) => module[name](...args), (err) => {
+    toast(err.message, true);
+    return undefined;
+  });
+}
+
+const openAskFamily = later('askFamily', 'openAskFamily');
+const openFamilyTree = later('familyTree', 'openFamilyTree');
+const openBookSheet = later('books', 'openBookSheet');
+const openBooksList = later('books', 'openBooksList');
+const filmsAvailable = later('films', 'filmsAvailable');
+const openFilmSheet = later('films', 'openFilmSheet');
+const openOurYear = later('ourYear', 'openOurYear');
+const openLifeStory = later('lifeStory', 'openLifeStory');
+const openFestivals = later('festivals', 'openFestivals');
+const openYoungFaces = later('youngFaces', 'openYoungFaces');
+const openThenAndNow = later('thenAndNow', 'openThenAndNow');
+const showThenNowStrip = later('thenAndNow', 'showThenNowStrip');
+const openFrame = later('frame', 'openFrame');
+const announceCapsules = later('capsules', 'announceCapsules');
+const openCapsules = later('capsules', 'openCapsules');
+const openSealSheet = later('capsules', 'openSealSheet');
+const openAsk = later('ask', 'openAsk');
+
+/** The photo frame asked for by the page's address (frame.js says the same). */
+const frameAsked = () => location.hash === '#frame';
+
+/** Then and now's strip hidden, without fetching it to hide what it never drew. */
+function hideThenNowStrip() {
+  const banner = document.getElementById('then-now-banner');
+  if (banner) banner.hidden = true;
+}
 
 // What the Primary is called on the Secondary's copy when the pairing does
 // not name it (replica/front.py), so a Tamil page says it in Tamil.
