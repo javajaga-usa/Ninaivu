@@ -820,7 +820,7 @@ export class ServerPanel {
   async confirmStop() {
     const yes = await this.ask({
       title: i18n.t('Stop Ninaivu?'),
-      text: i18n.t('The family app and this console both go offline. There is no Start button here to bring them back: start Ninaivu again from the Ninaivu tray or start.cmd on the computer it runs on.'),
+      text: i18n.t('The family app and this console both go offline. There is no Start button here to bring them back: start Ninaivu again on the computer it runs on, from its tray icon or by opening it again (on Windows, Ninaivu.exe in its folder).'),
       confirm: i18n.t('Stop Ninaivu'),
       danger: true,
     });
@@ -829,7 +829,7 @@ export class ServerPanel {
       await api.stop();
       this.phase = 'stopped';
       this.stopTimer();
-      this.renderWaiting(i18n.t('Ninaivu is stopping. Start it again from the Ninaivu tray or start.cmd on the computer it runs on.'));
+      this.renderWaiting(i18n.t('Ninaivu is stopping. Start it again on the computer it runs on, from its tray icon or by opening it again (on Windows, Ninaivu.exe in its folder).'));
     } catch (error) {
       this.toast(i18n.t('Could not stop: {reason}', { reason: error.message }), true);
     }

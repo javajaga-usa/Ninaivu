@@ -253,3 +253,55 @@ def test_the_check_finds_each_systems_one_starter(tmp_path, monkeypatch):
     assert check_portable.starter(linux) == linux / "ninaivu"
     with pytest.raises(check_portable.Failed):
         check_portable.starter(tmp_path)
+
+
+def test_the_panel_started_by_the_check_asks_for_the_checks_ports(tmp_path, monkeypatch):
+    """#408: the check put --port and --admin-port in the panel's settings,
+    the panel leaves those out (they are one start's), and the server it
+    started asked for port 80 with --strict-port and ended. The ports are now
+    the configured ones, and the panel's start uses them. The folders are
+    Ninaivu.exe's (data\\control, data, logs); the server is not started."""
+    monkeypatch.syspath_prepend(str(ROOT / "tools"))
+    check_portable = importlib.import_module("check_portable")
+    from types import SimpleNamespace
+
+    from ninaivu.desktop import control
+    from ninaivu.server.config import Config
+
+    folder = tmp_path / "Ninaivu-4.0.0-windows-x64-portable"
+    data = folder / "data"
+    (data / "control").mkdir(parents=True)
+    (data / "config.json").write_text('{"cloud_folder_name": "Rajendran"}', encoding="utf-8")
+    for name in ("NINAIVU_PORT", "NINAIVU_ADMIN_PORT", "NINAIVU_PYTHON"):
+        monkeypatch.delenv(name, raising=False)
+    env = dict(NINAIVU_HOME=str(data / "control"), NINAIVU_STATE_DIR=str(data),
+               NINAIVU_AI_MODELS_DIR=str(data / "ai-models"), NINAIVU_LOG_DIR=str(folder / "logs"),
+               NINAIVU_PORTABLE="1", NINAIVU_PORTABLE_ROOT=str(folder),
+               NINAIVU_PROGRAM_DIR=str(folder / "app"))
+    for name, value in env.items():
+        monkeypatch.setenv(name, value)
+    portable = SimpleNamespace(env=env, state=data)
+    check_portable.set_the_panel_up(portable, tmp_path / "Photos", 45991, 45992)
+
+    started = []
+
+    class Started(Exception):
+        pass
+
+    def popen(command, **kwargs):
+        started.append((command, kwargs))
+        raise Started
+
+    monkeypatch.setattr(control.subprocess, "Popen", popen)
+    controller = control.Controller()
+    with pytest.raises(Started):
+        controller.start()
+    command, kwargs = started[0]
+    assert command[1:3] == ["-m", "ninaivu"]
+    assert str(tmp_path / "Photos") in command and "--strict-port" in command
+    # What the server reads its ports from when none is on its command line.
+    assert "--port" not in command and "--admin-port" not in command
+    monkeypatch.setenv("NINAIVU_STATE_DIR", kwargs["env"]["NINAIVU_STATE_DIR"])
+    cfg = Config.load()
+    assert (cfg.port, cfg.admin_port) == (45991, 45992)
+    assert cfg.cloud_folder_name == "Rajendran", "the household's other settings are kept"
