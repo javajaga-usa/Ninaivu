@@ -52,6 +52,9 @@ MOVED = {
     "ninaivu.api.api_letters": "ninaivu.features.letters.routes",
     "ninaivu.media.letters": "ninaivu.features.letters.media",
     "ninaivu.storage.letters": "ninaivu.features.letters.storage",
+    "ninaivu.api.api_life_story": "ninaivu.features.life_story.routes",
+    "ninaivu.media.life_story": "ninaivu.features.life_story.media",
+    "ninaivu.storage.life_story": "ninaivu.features.life_story.storage",
 }
 
 
@@ -131,10 +134,9 @@ def test_tables_are_made_in_order(monkeypatch):
     made = []
     monkeypatch.setattr(features.Tables, "__call__", lambda self, conn: made.append(self.module))
     assert features.create_tables(sqlite3.connect(":memory:")) == TABLES_IN_37
-    assert [m.rsplit(".", 1)[-1] for m in made] == [
-        "smart", "ask_family", "family_tree", "storage", "handover", "stories", "capsules",
-        "screening", "descriptions", "colour_copies", "video_moments", "then_and_now",
-        "life_story", "storage", "stacks", "journal"]
+    # ninaivu.features.<name>.storage, or ninaivu.storage.<name> for one not moved.
+    assert [m.split(".")[2] if m.startswith("ninaivu.features.") else m.rsplit(".", 1)[-1]
+            for m in made] == TABLES_IN_37
 
 
 def test_routes_are_put_on_in_the_old_order():
