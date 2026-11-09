@@ -45,10 +45,35 @@ except Exception:  # pragma: no cover - optional
 else:
     # The env var above covers the FFmpeg backend; this covers OpenCV's own
     # logger. Neither is load-bearing, so a version that lacks it is fine.
+    # cv2.setLogLevel is gone from current wheels (4.14 has only the
+    # cv2.utils.logging form), so each is tried.
+    for _set_level in (getattr(getattr(getattr(cv2, "utils", None), "logging", None),
+                               "setLogLevel", None),
+                       getattr(cv2, "setLogLevel", None)):
+        if _set_level is None:
+            continue
+        try:
+            _set_level(0)           # SILENT
+            break
+        except Exception:  # pragma: no cover - older or trimmed builds
+            pass
+
+
+def open_video(path: str | Path):
+    """``cv2.VideoCapture`` of *path* through OpenCV's FFmpeg backend only.
+
+    Given no backend, OpenCV tries FFmpeg, then AVFoundation on a Mac, then an
+    image-sequence reader. A file FFmpeg cannot read (one cut off in a copy, its
+    index never written) is unreadable to the others too, and AVFoundation says
+    so on stderr past any log level: "OpenCV: Couldn't read video stream from
+    file", once per try. A build without FFmpeg keeps OpenCV's own order."""
     try:
-        cv2.setLogLevel(0)          # SILENT
-    except Exception:  # pragma: no cover - older or trimmed builds
-        pass
+        from cv2 import videoio_registry  # type: ignore
+        if cv2.CAP_FFMPEG in videoio_registry.getBackends():
+            return cv2.VideoCapture(str(path), cv2.CAP_FFMPEG)
+    except Exception as exc:  # pragma: no cover - trimmed builds
+        log.debug("%s: %s", __name__, exc)
+    return cv2.VideoCapture(str(path))
 
 # Not shutil.which: on a Mac, Homebrew's ffmpeg is not on the PATH an app
 # opened from Finder inherits (components.MAC_TOOL_FOLDERS).
@@ -634,7 +659,7 @@ def probe_video(path: str | Path) -> dict[str, Any]:
         # inside this process, where nothing can time it out or stop it.
         cap = None
         try:
-            cap = cv2.VideoCapture(str(path))
+            cap = open_video(path)
             fps = cap.get(cv2.CAP_PROP_FPS) or 0
             frames = cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0
             if fps > 0 and frames > 0:
@@ -983,7 +1008,7 @@ def extract_video_frame(path: str | Path, offset: float = 1.0, *,
     if cv2 is not None and os.access(path, os.R_OK):
         cap = None
         try:
-            cap = cv2.VideoCapture(str(path))
+            cap = open_video(path)
             fps = cap.get(cv2.CAP_PROP_FPS) or 25
             cap.set(cv2.CAP_PROP_POS_FRAMES, int(fps * offset))
             ok, frame = cap.read()
