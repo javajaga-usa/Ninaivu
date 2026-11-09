@@ -630,7 +630,14 @@ def _place(header: dict[str, Any], entry: dict[str, Any]) -> tuple[str, str]:
 
 
 def _where(header: dict[str, Any], entry: dict[str, Any]) -> str:
-    return os.path.join(header["tops"][entry["t"]]["top"], entry["p"])
+    """A census entry's file, written the way the computer that holds it
+    writes paths: a census keeps the part under its folder with ``/``, and a
+    Windows folder joined to that by ``os.path.join`` named a missing file
+    ``C:\\...\\Ninaivu Archive/2026/11/04/x.jpg``."""
+    top = str(header["tops"][entry["t"]]["top"])
+    sep = "\\" if "\\" in top and "/" not in top else "/"
+    rel = str(entry["p"]).replace("/", sep)
+    return top + rel if top.endswith(("/", "\\")) else top + sep + rel
 
 
 # -- the plan --------------------------------------------------------------------

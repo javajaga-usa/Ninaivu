@@ -25,7 +25,7 @@ the console shows up on the home app immediately.
 """
 
 from __future__ import annotations
-from .words import refusal
+from .words import refusal, said
 
 import functools
 import logging
@@ -413,18 +413,18 @@ class Services:
         self._quick_host = None
         self.transcriber = Transcriber(cfg, lambda: db.connect(cfg.db_path),
                                        host=self.model_host,
-                                       hold=lambda: self.workload.hold("analysis"))
+                                       hold=self.analysis_hold)
         # And a description of every photograph, from the same host.
         from .runtime.describer import Describer                  # noqa: PLC0415
         self.describer = Describer(cfg, lambda: db.connect(cfg.db_path),
                                    host=self.model_host,
-                                   hold=lambda: self.workload.hold("analysis"))
+                                   hold=self.analysis_hold)
         # The moments inside long videos, by the gallery's picture-search
         # model, while video_moments is on (media/video_moments.py).
         from .media.video_moments import MomentFinder             # noqa: PLC0415
         self.moment_finder = MomentFinder(cfg, lambda: db.connect(cfg.db_path),
                                           engine=lambda: self.engine,
-                                          hold=lambda: self.workload.hold("analysis"))
+                                          hold=self.analysis_hold)
         # The video frames kept for what was said in videos, a feature the
         # household asked to be gone (October 2026), go with its words
         # (storage/db.py drops those).
@@ -458,6 +458,22 @@ class Services:
         self.engine = None
         self._ai_mod = ai_mod
         self._started = False
+
+    def analysis_hold(self) -> str | None:
+        """Why the AI passes (descriptions, voice stories, moments in videos)
+        wait right now, or None: the household's workload, then a scan of the
+        library, which goes first (decided 9 November 2026).
+
+        They wait for the scan rather than make it wait (no ``cpu`` claim on
+        the supervisor): a night of descriptions would otherwise keep the
+        day's new photographs out of the gallery until morning. They look
+        again every few seconds, so they carry on as soon as it is done."""
+        why = self.workload.hold("analysis")
+        if why:
+            return why
+        if self.scanner.running:
+            return said("new photographs are being added first")
+        return None
 
     def model_host(self):
         """The on-device engine's model host, made on first use (runtime/host.py).

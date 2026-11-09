@@ -799,3 +799,32 @@ def test_an_ai_pass_woken_before_it_is_kept_looks_at_once(tmp_path):
         assert looked.wait(5), "the wake was lost until the first look"
     finally:
         assert describer.supervisor.stop(timeout=5) == []
+
+
+# -- the AI passes and the scan (decided 9 November 2026) -------------------------
+
+def test_the_ai_passes_wait_for_the_scan_and_never_hold_it(cfg, monkeypatch):
+    """A scan goes first: the AI passes wait while it runs and claim no cpu,
+    so a night of descriptions never keeps new photographs out."""
+    from ninaivu import build_services
+    cfg.watch = False
+    services = build_services(cfg)
+    try:
+        for keeper in (services.describer, services.transcriber, services.moment_finder):
+            assert keeper._hold == services.analysis_hold                    # noqa: SLF001
+        monkeypatch.setattr(services.workload, "hold", lambda job: None)
+        monkeypatch.setattr(type(services.scanner), "running", property(lambda self: True))
+        assert services.analysis_hold() == "new photographs are being added first"
+        monkeypatch.setattr(type(services.scanner), "running", property(lambda self: False))
+        assert services.analysis_hold() is None
+        monkeypatch.setattr(services.workload, "hold", lambda job: "someone is watching a video")
+        assert services.analysis_hold() == "someone is watching a video"
+        services.describer.keep()
+        services.transcriber.keep()
+        services.moment_finder.keep()
+        for name in (services.describer.JOB, services.transcriber.JOB, services.moment_finder.JOB):
+            job = services.supervisor._jobs[name].job                        # noqa: SLF001
+            assert not job.yields_the_scan, name
+    finally:
+        services.supervisor.stop(timeout=5)
+        services.scanner.stop()

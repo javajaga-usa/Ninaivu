@@ -32,7 +32,13 @@ from . import roots as roots_kit
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 6
+#: The index's shape, as every version reads it before opening it
+#: (storage/upgrade.py). 7 is 4.0: a 3.x Ninaivu finds a number it does not
+#: know and does not open the index, and says how to restore the copy taken
+#: before the update. Going back from 4.0 is that restore (Go back in the
+#: Control Panel does it), not 3.x running over an index 4.0 has stepped on;
+#: the shape changes themselves are the numbered steps in migrations.py.
+SCHEMA_VERSION = 7
 
 _local = threading.local()
 
@@ -157,6 +163,20 @@ def retire(db_path: Path | str) -> None:
     if key not in _retired:
         _retired.append(key)
         del _retired[:-8]
+
+
+def release_within(folder: Path | str, *also: Path | str) -> None:
+    """Let go of the databases in *folder* before it is removed: this thread's
+    connections to them are closed now, and *also* (the ones other threads
+    may hold) are retired, so each thread closes its own at its next connect.
+    Windows does not remove a file a connection still holds."""
+    for path in also:
+        retire(path)
+    root = os.path.normcase(os.path.abspath(str(folder)))
+    for key in list(getattr(_local, "conns", None) or {}):
+        if os.path.normcase(os.path.abspath(key)).startswith(root + os.sep):
+            retire(key)
+            close(key)
 
 
 def connect(db_path: Path | str) -> sqlite3.Connection:
@@ -3262,8 +3282,7 @@ def library_stats(conn: sqlite3.Connection, roots: Sequence[str] | str | None = 
         gate_sql, gate_params = gate.sql("a")
         where = [gate_sql, "a.trashed = 0"]
         params: list[Any] = list(gate_params)
-        # The analysed count below is by folder alone, as it always was, and
-        # the caller's own "Only to me" count by folder and sub-folder.
+        # The caller's own "Only to me" count is by folder and sub-folder.
         roots, scope = gate.roots, gate.scope
         roots_sql, roots_params = roots_clause("a", roots)
         if int(max_visibility) < 2:
@@ -3318,12 +3337,15 @@ def library_stats(conn: sqlite3.Connection, roots: Sequence[str] | str | None = 
     dupes = row["dupes"]
 
     # Written by the tagger, which the library's number does not follow, so
-    # kept until the analysed items' own number moves.
+    # kept until the analysed items' own number moves. Counted within what
+    # this viewer may see, like every other number here: it was counted by
+    # folder alone, so a member was told how many items were analysed among
+    # the private, hidden and flagged ones too (decided 9 November 2026).
     embedded = cached_aggregate(
-        conn, ("embedded", roots_sql, tuple(roots_params)),
+        conn, ("embedded", where_sql, tuple(params)),
         lambda: conn.execute(
             f"SELECT COUNT(*) n FROM embeddings e JOIN assets a ON a.id = e.asset_id "
-            f"WHERE {roots_sql}", roots_params,
+            f"WHERE {where_sql}", params,
         ).fetchone()["n"], also=(EMBEDDINGS_GENERATION_KEY,))
 
     # From this person's favourites outward, not from the library inward.

@@ -415,6 +415,36 @@ def test_the_sidebar_counts_through_the_gate_as_before(app, furnished, policy):
     assert len(set(keys.values())) == len(keys)
 
 
+def test_the_analysed_count_is_of_what_the_viewer_may_see(app, house):
+    """Counted by folder alone until 4.0, so a member learnt how many of the
+    hidden, flagged and other people's private items had been analysed."""
+    conn, ids, members = house
+    analysed = ("2023/05/12/shot0.jpg",          # seen by everybody signed in
+                "2023/06/11/shot1.jpg",          # hidden
+                "2023/08/10/shot3.jpg",          # flagged
+                "2023/07/11/shot2.jpg",          # Maya's own "Only to me"
+                "2023/09/09/shot4.jpg")          # in the bin
+    conn.executemany("INSERT INTO embeddings(asset_id, model, dim, vector) "
+                     "VALUES (?, 'm', 1, x'00')", [(ids[rel],) for rel in analysed])
+    conn.commit()
+    counted = {}
+    for name, user in members.items():
+        with app.test_request_context("/api/status/stats"):
+            g.user = user
+            viewer = visibility.current()
+            clause, params = viewer.sql("a")
+            seen = {r[0] for r in conn.execute(
+                f"SELECT a.rel_path FROM assets a WHERE {clause} AND a.trashed = 0 "
+                f"AND (a.nsfw = 0 OR ? >= 2)", (*params, viewer.max_visibility))}
+            counted[name] = db.library_stats(conn, gate=viewer)["embedded"]
+            assert counted[name] == len(seen & set(analysed)), name
+    # As the sidebar's other numbers: "Only to me" items are counted apart, in
+    # "private", and the bin not at all.
+    assert counted["family"] == 1
+    assert counted["admin"] == 4        # everything outside the bin
+    assert counted["anon"] == 1         # shot0 is public
+
+
 def test_every_open_read_of_photographs_is_the_gates():
     """The manifest says so for every open route that reads the library."""
     from ninaivu.server import routes

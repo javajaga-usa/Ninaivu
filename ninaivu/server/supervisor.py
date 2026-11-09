@@ -58,7 +58,9 @@ CLAIMS = frozenset({LIBRARY_DISK, ARCHIVE_DISK, CPU, INDEX_WRITE, NETWORK})
 #: background-work.md): the disk it walks and the cores it analyses with.
 #: ``index_write`` and ``network`` are declared and shown, not arbitrated:
 #: SQLite already lets one writer in at a time, and nothing else contends
-#: for the network.
+#: for the network. The AI passes (descriptions, voice stories, moments in
+#: videos) claim no ``cpu``: they wait for the scan instead, which goes first
+#: (Services.analysis_hold, decided 9 November 2026).
 SCAN_YIELDS_TO = frozenset({LIBRARY_DISK, ARCHIVE_DISK, CPU})
 
 #: How often a job that moves files looks again while something else that
