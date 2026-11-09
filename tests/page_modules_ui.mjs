@@ -182,5 +182,19 @@ ok('People is still fetched only once', pageAsked('console/people.js').length ==
 ok('and Library\'s "Change" is still wired from the start',
   await c.evaluate(() => typeof document.querySelector('#change-root')?.onclick === 'function'));
 
+// The uploads queue is asked for at sign-in and polled; its list is drawn by
+// the Uploads module once the page is opened.
+await openConsolePage('uploads', () => document.querySelector('#pending-uploads')?.children.length > 0
+  && document.querySelector('#pb-people')?.children.length > 0);
+ok('Uploads draws the queue or says it is empty',
+  (await c.textContent('#pending-uploads')).trim().length > 0);
+ok('and Refresh is wired', await c.evaluate(() => typeof document.querySelector('#uploads-refresh')?.onclick === 'function'));
+// The Server page's TV album comes with the same module, not fetched again.
+await c.click('#tabs button[data-tab="server"]');
+await c.waitForFunction(() => document.querySelectorAll('#tv-album-select option').length > 0,
+  null, { timeout: 10000 }).catch(() => {});
+ok('the Server page fills the TV album choices', await c.$$eval('#tv-album-select option', (n) => n.length) > 0);
+ok('from the module already loaded', pageAsked('console/uploads.js').length === 1);
+
 ok('no script errors', errors.length === 0, errors.join(' | '));
 await done(b);
