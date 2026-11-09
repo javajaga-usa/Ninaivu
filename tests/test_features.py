@@ -270,6 +270,76 @@ def test_a_moved_module_still_finds_the_static_folder():
     assert routes.LOCALES == static / "i18n" and routes.LOCALES.is_dir()
     assert media._font_dirs()[0] == static / "fonts"
 
+
+# --- Hooks: where the core calls into a feature ---------------------------------
+
+def test_every_hook_is_known_and_answered():
+    for feature in features.registry():
+        for hook in feature.hooks:
+            assert hook in features.HOOKS, (feature.name, hook)
+    for hook in features.HOOKS:
+        assert features.hooked(hook), hook
+        for _, answer in features.hooked(hook):
+            assert callable(answer) or hasattr(answer, "runs"), hook
+    with pytest.raises(KeyError):
+        features.hooked("nothing")
+    bad = features.Feature(name="x", title="X", hooks={"nothing": "a:b:c"})
+    assert "hook 'nothing'" in " / ".join(bad.problems())
+
+
+def test_hooks_are_called_in_the_old_order():
+    def who(hook):
+        return [feature.name for feature, _ in features.hooked(hook)]
+    assert who("carry_on") == ["books", "films"]
+    assert who("stand_down") == ["books", "films"]
+    assert who("profile_deleted") == ["books", "films"]
+    # db_visibility forgot these in this order before 4.0.
+    assert who("readings_forgotten") == ["descriptions", "video_moments", "letters"]
+    assert who("bin_swept") == ["letters"]
+    from ninaivu.features.letters import media as letters_media
+    assert features.hooked("reading_aloud") == [(features.get("letters"), letters_media)]
+
+
+def test_a_hook_reaches_a_patch_on_the_old_name(monkeypatch):
+    from ninaivu.media import books, films
+    called = []
+    monkeypatch.setattr(films, "stand_down", lambda: called.append("films"))
+    monkeypatch.setattr(books, "stand_down", lambda: called.append("books"))
+    features.call("stand_down")
+    assert called == ["books", "films"]
+
+
+def test_the_bin_swept_hook_sweeps_the_letters_readings(monkeypatch, tmp_path):
+    from ninaivu.storage import letters
+    seen = []
+    monkeypatch.setattr(letters, "sweep_readings", lambda folder, conn: seen.append((folder, conn)))
+    features.call("bin_swept", str(tmp_path), "conn")
+    assert seen == [(tmp_path / "letters", "conn")]
+
+
+def test_the_profile_deleted_hook_removes_its_books_films_and_songs(monkeypatch, tmp_path):
+    from ninaivu.storage import books, films
+    book, film = books.books_dir(tmp_path) / "b.pdf", films.films_dir(tmp_path) / "f.mp4"
+    for path in (book, film):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"x")
+    songs = []
+    monkeypatch.setattr(films, "forget_songs", lambda state, owner: songs.append((state, owner)))
+    features.call("profile_deleted", tmp_path, 7,
+                  {"book_files": ["b.pdf", "../escape.pdf"], "film_files": ["f.mp4"]})
+    assert not book.exists() and not film.exists()
+    assert songs == [(tmp_path, 7)]
+
+
+def test_the_readings_forgotten_hook_reaches_every_reading(monkeypatch):
+    from ninaivu.storage import descriptions, letters, video_moments
+    seen = []
+    for module, name in ((descriptions, "forget"), (video_moments, "forget"),
+                         (letters, "forget_read")):
+        monkeypatch.setattr(module, name, lambda conn, ids, m=module: seen.append((m, list(ids))))
+    features.call("readings_forgotten", "conn", [1, 2])
+    assert seen == [(descriptions, [1, 2]), (video_moments, [1, 2]), (letters, [1, 2])]
+
 # --- Extensions in the same shape ---------------------------------------------
 
 def test_an_extension_is_described_by_the_same_manifest():

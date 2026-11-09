@@ -994,13 +994,14 @@ class Services:
     def _carry_on_the_makers(self) -> None:
         """Make again the memory film and photo book a restart cut short.
 
-        Each wrote down what it is made from when it started
-        (media/films.py, media/books.py); stopping Ninaivu ends it without
-        crossing that off. Never on the Pi, which only serves a copy.
+        Each wrote down what it is made from when it started; stopping
+        Ninaivu ends it without crossing that off. Every feature that makes
+        something this way answers the ``carry_on`` hook (ninaivu/features).
+        Never on the Pi, which only serves a copy.
         """
         if self.replica is not None:
             return
-        from .media import books, films                          # noqa: PLC0415
+        from . import features                                   # noqa: PLC0415
         from .storage import db, resume                          # noqa: PLC0415
 
         log = logging.getLogger(__name__)
@@ -1009,10 +1010,11 @@ class Services:
         except Exception:                                        # noqa: BLE001
             log.exception("could not read which films and books to carry on")
             return
-        for maker, what in ((films, "film"), (books, "photo book")):
+        for feature, carry_on in features.hooked("carry_on"):
+            what = feature.noun or feature.title
             try:
-                for made in maker.carry_on(wanted, db_path=self.cfg.db_path,
-                                           state_dir=self.cfg.state_dir):
+                for made in carry_on(wanted, db_path=self.cfg.db_path,
+                                     state_dir=self.cfg.state_dir):
                     log.info("%s %s was being made when Ninaivu stopped; it is "
                              "being made again", what, made)
             except Exception:                                    # noqa: BLE001
@@ -1209,10 +1211,10 @@ class Services:
                         pass
                 recycle.erase_face_crops(conn, self.cfg.state_dir,
                                          result.get("asset_ids", []))
-            # A letter read aloud whose photograph or words went while
-            # Ninaivu was not looking (api/api_letters.py).
-            from .storage import letters as letters_store  # noqa: PLC0415
-            letters_store.sweep_readings(Path(self.cfg.state_dir) / "letters", conn)
+            # What a feature kept beside a photograph that went while Ninaivu
+            # was not looking: a letter's reading aloud (ninaivu/features).
+            from . import features                       # noqa: PLC0415
+            features.call("bin_swept", self.cfg.state_dir, conn)
         except Exception:                                # noqa: BLE001
             logging.getLogger(__name__).exception(
                 "could not sweep the recycle bin")
@@ -1576,10 +1578,9 @@ class Services:
         if getattr(self, "catchup", None) is not None:
             attempt("the daily catch-up", functools.partial(self.catchup.stop, join=True))
         # A film or book being made is ended without being recorded as
-        # failed, so the next start makes it again.
-        from .media import books, films                          # noqa: PLC0415
-        films.stand_down()
-        books.stand_down()
+        # failed, so the next start makes it again (the stand_down hook).
+        from . import features                                   # noqa: PLC0415
+        features.call("stand_down")
         attempt("the library scan", lambda: (self.scanner.close()
                                              if hasattr(self.scanner, "close")
                                              else self.scanner.stop(join=True)))

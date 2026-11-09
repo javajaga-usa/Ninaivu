@@ -127,6 +127,12 @@ class Feature:
     tier: str = "basic"
     #: ``feature``, or ``extension`` for one described by :func:`from_extension`.
     kind: str = "feature"
+    #: What the core asks of it, by hook (:data:`HOOKS`): the hook's name, and
+    #: ``module:function`` (or a ``module``) that answers it. Named rather than
+    #: imported, as its tables are. Every feature's hooks are called, on or off.
+    hooks: Mapping[str, str] = field(default_factory=dict)
+    #: One of what it makes, in a sentence ("film"), for the core's log.
+    noun: str = ""
     #: True only for an extension that can send something off this computer.
     #: No feature may: that is the core's first promise.
     data_leaves_the_machine: bool = False
@@ -161,6 +167,11 @@ class Feature:
             found.append(f"tier {self.tier!r} is not one of {TIERS}")
         if self.kind not in ("feature", "extension"):
             found.append(f"kind {self.kind!r} is not feature or extension")
+        for hook, where in self.hooks.items():
+            if hook not in HOOKS:
+                found.append(f"hook {hook!r} is not one of {sorted(HOOKS)}")
+            if not where or where.count(":") > 1:
+                found.append(f"hook {hook!r} names {where!r}, not module:function")
         if self.kind == "feature" and self.data_leaves_the_machine:
             found.append("a feature may not send anything off this computer; that is an extension")
         return found
@@ -173,16 +184,18 @@ class Feature:
             "routes": self.routes, "tables": self.tables is not None,
             "settings": list(self.settings), "switch": self.switch, "needs": self.needs,
             "tier": self.tier, "data_leaves_the_machine": self.data_leaves_the_machine,
+            "hooks": sorted(self.hooks),
         }
 
 
 def _here(name: str, title: str, *, routes: str | None, tables: Tables | None,
           blueprints: Mapping[str, tuple[str, ...]] = ON_THE_FAMILY_API,
-          switch: str | None = None, needs: str | None = None) -> Feature:
-    """A feature that has not moved into this package yet."""
+          switch: str | None = None, needs: str | None = None,
+          hooks: Mapping[str, str] | None = None) -> Feature:
+    """A feature whose code has not moved into this package."""
     return Feature(name=name, title=title, blueprints=blueprints if routes else {},
                    routes=routes, tables=tables, settings=(switch,) if switch else (),
-                   switch=switch, needs=needs)
+                   switch=switch, needs=needs, hooks=dict(hooks or {}))
 
 
 def _manifests() -> tuple[Feature, ...]:
@@ -202,7 +215,8 @@ def _manifests() -> tuple[Feature, ...]:
         frame.MANIFEST,
         screening.MANIFEST,
         _here("descriptions", "Descriptions of photographs", routes=None,
-              tables=Tables("ninaivu.storage.descriptions", "create"), switch="describe_photos"),
+              tables=Tables("ninaivu.storage.descriptions", "create"), switch="describe_photos",
+              hooks={"readings_forgotten": "ninaivu.storage.descriptions:forget"}),
         colour_copies.MANIFEST,
         video_moments.MANIFEST,
         then_and_now.MANIFEST,
@@ -299,6 +313,49 @@ def shape() -> list[Any]:
              else repr(feature.tables)) for feature in registry() if feature.tables is not None]
 
 
+#: Where the core calls into the features, by name, and what each is given.
+#: A feature answers a hook in its manifest (``Feature.hooks``); the core
+#: calls :func:`hooked` and never names the feature.
+HOOKS: Mapping[str, str] = {
+    "carry_on": "Ninaivu has started: make again what a restart cut short. Given "
+                "resume.wanted(), db_path= and state_dir=; answers the ids started "
+                "(ninaivu/__init__.py).",
+    "stand_down": "Ninaivu is stopping: end what is being made without recording it "
+                  "as failed, so carry_on makes it again. Given nothing.",
+    "bin_swept": "The recycle bin was swept: let go of what went with its photographs. "
+                 "Given the state folder and the connection.",
+    "profile_deleted": "A profile was deleted (accounts_api): the files on disk its "
+                       "rows named go too. Given the state folder, the profile's id and "
+                       "what auth.delete_user removed.",
+    "readings_forgotten": "What was read off these photographs is forgotten "
+                          "(storage/db_visibility.py). Given the connection and the ids.",
+    "reading_aloud": "The module whose runs() and spoken() a voice reads text with "
+                     "(runtime/voice.py).",
+}
+
+
+def _resolve(where: str) -> Any:
+    module, _, name = where.partition(":")
+    found = importlib.import_module(module)
+    return getattr(found, name) if name else found
+
+
+def hooked(hook: str) -> list[tuple[Feature, Any]]:
+    """Every feature that answers *hook*, in :data:`ORDER`, on or off, with
+    what answers it."""
+    if hook not in HOOKS:
+        raise KeyError(hook)
+    return [(feature, _resolve(feature.hooks[hook])) for feature in registry()
+            if hook in feature.hooks]
+
+
+def call(hook: str, *args: Any, **kwargs: Any) -> list[Any]:
+    """Call every feature's answer to *hook*, in order, and return what each
+    said. An exception is the caller's: the core decided before 4.0 which of
+    these calls were guarded, and it still does."""
+    return [answer(*args, **kwargs) for _, answer in hooked(hook)]
+
+
 def listing(cfg: Any) -> list[dict[str, Any]]:
     """Every feature, and whether it is on for *cfg*."""
     return [{**feature.describe(), "on": feature.on(cfg)} for feature in registry()]
@@ -335,6 +392,6 @@ ORDER: tuple[str, ...] = (
     "find_print", "voice_search",
 )
 
-__all__ = ["FACES", "Feature", "ORDER", "TIERS", "Tables", "create_tables", "endpoints",
-           "from_extension", "get", "listing", "names", "register_routes", "registry",
-           "routed", "shape"]
+__all__ = ["FACES", "Feature", "HOOKS", "ORDER", "TIERS", "Tables", "call", "create_tables",
+           "endpoints", "from_extension", "get", "hooked", "listing", "names",
+           "register_routes", "registry", "routed", "shape"]

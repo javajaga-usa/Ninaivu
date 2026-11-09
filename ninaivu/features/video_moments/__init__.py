@@ -13,4 +13,5 @@ MANIFEST = Feature(
     blueprints=ON_THE_FAMILY_API, routes="ninaivu.features.video_moments.routes",
     tables=Tables("ninaivu.features.video_moments.storage", "create"),
     settings=("video_moments",), switch="video_moments", needs="",
+    hooks={"readings_forgotten": "ninaivu.features.video_moments.storage:forget"},
 )
