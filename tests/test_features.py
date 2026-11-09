@@ -65,6 +65,11 @@ MOVED = {
     "ninaivu.storage.capsules": "ninaivu.features.capsules.storage",
     "ninaivu.api.api_frame": "ninaivu.features.frame.routes",
     "ninaivu.media.frame": "ninaivu.features.frame.media",
+    "ninaivu.api.api_colour": "ninaivu.features.colour_copies.routes",
+    "ninaivu.storage.colour_copies": "ninaivu.features.colour_copies.storage",
+    "ninaivu.api.api_video_moments": "ninaivu.features.video_moments.routes",
+    "ninaivu.media.video_moments": "ninaivu.features.video_moments.media",
+    "ninaivu.storage.video_moments": "ninaivu.features.video_moments.storage",
 }
 
 

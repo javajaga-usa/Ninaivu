@@ -186,8 +186,8 @@ def _here(name: str, title: str, *, routes: str | None, tables: Tables | None,
 
 
 def _manifests() -> tuple[Feature, ...]:
-    from . import books, capsules, films, frame, letters, life_story  # noqa: PLC0415
-    from . import stacks, then_and_now                            # noqa: PLC0415
+    from . import books, capsules, colour_copies, films, frame, letters  # noqa: PLC0415
+    from . import life_story, stacks, then_and_now, video_moments  # noqa: PLC0415
     return (
         _here("smart", "Smart albums", routes="ninaivu.api.api_smart",
               tables=Tables("ninaivu.storage.smart")),
@@ -207,13 +207,8 @@ def _manifests() -> tuple[Feature, ...]:
               tables=Tables("ninaivu.storage.screening"), blueprints=WITH_THE_CONSOLE),
         _here("descriptions", "Descriptions of photographs", routes=None,
               tables=Tables("ninaivu.storage.descriptions", "create"), switch="describe_photos"),
-        _here("colour_copies", "Colour for black-and-white photographs",
-              routes="ninaivu.api.api_colour",
-              tables=Tables("ninaivu.storage.colour_copies", "create"),
-              switch="colour_photos", needs="colour"),
-        _here("video_moments", "Moments inside videos", routes="ninaivu.api.api_video_moments",
-              tables=Tables("ninaivu.storage.video_moments", "create"),
-              switch="video_moments", needs=""),
+        colour_copies.MANIFEST,
+        video_moments.MANIFEST,
         then_and_now.MANIFEST,
         life_story.MANIFEST,
         letters.MANIFEST,
