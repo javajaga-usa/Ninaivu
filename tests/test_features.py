@@ -251,7 +251,7 @@ def test_a_switched_off_feature_still_answers_404(app, as_family):
     assert inside.get_json() == as_family.get("/api/no-such-thing").get_json()
 
 
-# --- A switched-off feature's routes are left out ------------------------------
+# --- A switched-off feature is answered 404 by the gate, live -------------------
 
 @pytest.fixture()
 def started(scanned, monkeypatch, request):
@@ -263,53 +263,37 @@ def started(scanned, monkeypatch, request):
     cfg.colour_photos = True
     monkeypatch.setattr(switches, "_why_not", lambda need: "not downloaded")
     switches.forget()
-    monkeypatch.setattr(features, "every_route", False)
     return request.getfixturevalue("app")
 
 
-def test_a_switched_off_feature_has_no_routes(started, request):
+def test_a_switched_off_feature_is_the_apps_own_404_before_its_route(started, request):
     app = started
-    out = [f.name for f in features.left_out_of(app)]
-    assert {"films", "young_faces"} <= set(out) and "books" not in out
-    assert not features.endpoints(app, features.get("films"))
-    assert not any(r.rule.startswith("/api/films") for r in app.url_map.iter_rules())
+    assert features.endpoints(app, features.get("films"))      # every route is made
     family = request.getfixturevalue("as_family")
     gone = family.get("/api/films")
-    # The same 404, and the same words, as the route itself answered.
+    # The same 404, and the same words, as a route that is not there.
     assert gone.status_code == 404
     assert gone.get_json() == family.get("/api/no-such-thing").get_json()
-    # A feature waiting for its model keeps its routes, and says 404 itself.
+    # A feature waiting for its model passes the gate, and says 404 itself.
     assert features.endpoints(app, features.get("colour_copies"))
-    assert features.endpoints(app, features.get("books"))
 
 
-def test_the_blueprints_are_put_back_for_the_next_app(monkeypatch):
-    from ninaivu.api import bp
-    before = list(bp.deferred_functions)
-    monkeypatch.setattr(features, "every_route", False)
-    with features.left_out(SimpleNamespace(memory_films=False)) as out:
-        assert "films" in out and "books" not in out
-        assert len(bp.deferred_functions) < len(before)
-        assert not any(features._module_of(d) == "ninaivu.features.films.routes"  # noqa: SLF001
-                       for d in bp.deferred_functions)
-    assert bp.deferred_functions == before
-    with features.left_out(None) as out:
-        assert out == []
-    monkeypatch.setattr(features, "every_route", True)
-    with features.left_out(SimpleNamespace(memory_films=False)) as out:
-        assert out == []
-
-
-def test_the_console_says_a_restart_is_needed(started, request):
+def test_a_feature_switched_on_in_the_console_is_there_at_once(started, request):
+    """4.0's first slice made a switched-on feature wait for the next start;
+    as before 4.0, it is there on the next request, and off again at once."""
     admin = request.getfixturevalue("as_admin")
-    said = admin.post("/api/admin/settings/all", json={"settings": {"young_faces": True}})
+    family = request.getfixturevalue("as_family")
+    assert family.get("/api/films").status_code == 404
+    said = admin.post("/api/admin/settings/all", json={"settings": {"memory_films": True}})
     assert said.status_code == 200, said.get_json()
-    assert "young_faces" in said.get_json()["restart"]
-    # Not offered to the family until then: its routes are not there.
+    assert "memory_films" not in said.get_json()["restart"]
+    assert family.get("/api/films").status_code == 200
     assert admin.get("/api/status?stats=0").get_json()["moments"]["young_faces"] is False
-    # Switched off, a feature's routes answer 404 from inside straight away.
-    said = admin.post("/api/admin/settings/all", json={"settings": {"our_year": False}})
-    assert "our_year" not in said.get_json()["restart"]
+    admin.post("/api/admin/settings/all", json={"settings": {"young_faces": True}})
+    assert admin.get("/api/status?stats=0").get_json()["moments"]["young_faces"] is True
+    said = admin.post("/api/admin/settings/all", json={"settings": {"memory_films": False}})
+    assert "memory_films" not in said.get_json()["restart"]
+    assert family.get("/api/films").status_code == 404
 
 
 def test_the_route_manifest_says_whose_each_route_is():

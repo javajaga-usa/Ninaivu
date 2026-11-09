@@ -24,9 +24,7 @@ def build() -> str:
     # left behind in a temporary folder is the system's to clear.
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as state:
         os.environ["NINAIVU_STATE_DIR"] = state
-        from ninaivu import build_services, create_admin_app, create_home_app, features
-        # Every route, a switched-off feature's too (ninaivu/features left_out).
-        was, features.every_route = features.every_route, True
+        from ninaivu import build_services, create_admin_app, create_home_app
         from ninaivu.server import routes
         from ninaivu.server.config import Config
         cfg = Config.load()
@@ -37,7 +35,6 @@ def build() -> str:
             found = routes.manifest([("home", create_home_app(services)),
                                      ("admin", create_admin_app(services))])
         finally:
-            features.every_route = was
             from ninaivu.archive import database as archive_db
             from ninaivu.storage import db
             db.close_all()

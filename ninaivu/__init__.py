@@ -2355,14 +2355,14 @@ def _declared(app: Flask, face: str) -> None:
 
 
 def _register(app: Flask, blueprints) -> None:
-    """Register *blueprints* on *app*, without the routes of a feature
-    switched off as the app is made (ninaivu/features ``left_out``): they
-    are there from the next start after it is switched on."""
+    """Register *blueprints* on *app*, every feature's routes with them, and
+    the gate that answers 404 for those of a feature switched off right now
+    (ninaivu/features ``gate``): switched on in the console, it is there at
+    once."""
     from . import features                                       # noqa: PLC0415
-    with features.left_out(app.config.get("MV_CONFIG")) as out:
-        for blueprint in blueprints:
-            app.register_blueprint(blueprint)
-    app.config[features.LEFT_OUT] = tuple(out)
+    for blueprint in blueprints:
+        app.register_blueprint(blueprint)
+    features.gate(app)
 
 
 def _console_blueprints() -> tuple:
