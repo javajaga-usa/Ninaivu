@@ -1111,7 +1111,9 @@ then `ninaivu list-backups "<state>/backups/before-update"` and
 from just before the update. Anything done after the update (new albums,
 names) is not in that copy; the photographs are not affected either way.
 Versions up to 1.0.4 do not have this check, so going back to one of those
-needs the restore first.
+needs the restore first. Going back from 4.0 to any 3.x always takes this
+restore: 3.x does not open an index 4.0 has opened. Every 3.x index still
+opens in 4.0 and later, which bring it up to date themselves.
 
 ## Moving the index to another folder
 
