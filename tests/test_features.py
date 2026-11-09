@@ -76,6 +76,12 @@ MOVED = {
     "ninaivu.storage.ask_family": "ninaivu.features.ask_family.storage",
     "ninaivu.api.api_family_tree": "ninaivu.features.family_tree.routes",
     "ninaivu.storage.family_tree": "ninaivu.features.family_tree.storage",
+    "ninaivu.api.api_handover": "ninaivu.features.handover.routes",
+    "ninaivu.storage.handover": "ninaivu.features.handover.storage",
+    "ninaivu.api.api_stories": "ninaivu.features.stories.routes",
+    "ninaivu.storage.stories": "ninaivu.features.stories.storage",
+    "ninaivu.api.api_screening": "ninaivu.features.screening.routes",
+    "ninaivu.storage.screening": "ninaivu.features.screening.storage",
 }
 
 
@@ -244,6 +250,14 @@ def test_patching_the_old_name_patches_the_module(monkeypatch):
     monkeypatch.setattr(films, "MAX_COUNT", 7)
     assert media.MAX_COUNT == 7
 
+
+def test_a_moved_module_still_finds_the_static_folder():
+    """A module one folder deeper than it was must look two folders up."""
+    from ninaivu.features.books import media
+    from ninaivu.features.handover import routes
+    static = ROOT / "ninaivu" / "static"
+    assert routes.LOCALES == static / "i18n" and routes.LOCALES.is_dir()
+    assert media._font_dirs()[0] == static / "fonts"
 
 # --- Extensions in the same shape ---------------------------------------------
 

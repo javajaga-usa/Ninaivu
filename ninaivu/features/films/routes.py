@@ -25,7 +25,8 @@ from flask import abort, current_app, jsonify, make_response, request, send_file
 from ...api.api import _cfg, _conn, _safe_under, _thumb_version, _visible_ids, bp
 from ...server import features, visibility
 from ...server.auth import current_user, require_family
-from ...storage import db, stories as story_store
+from ...storage import db
+from ..stories import storage as story_store
 from ...words import Said, refusal
 from ..books import media as book_maker
 from ..books.routes import (MAX_CANDIDATES, _CHUNK, _faces, _human_caption, _in_chunks, _screens,

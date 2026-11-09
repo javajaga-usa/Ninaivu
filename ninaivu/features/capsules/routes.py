@@ -130,7 +130,7 @@ def capsules_seal():
 
 
 def capsules_clean(value: Any, limit: int) -> str:
-    from ...storage import stories                              # noqa: PLC0415
+    from ..stories import storage as stories                    # noqa: PLC0415
     try:
         return stories.clean_text(value, limit)
     except ValueError as exc:
