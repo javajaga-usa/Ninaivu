@@ -256,6 +256,9 @@ def test_unticking_withdraws_the_view_and_removes_only_the_copy(two):
     assert sender.withdraw_due() is True
     assert sender.withdraw() is True
     state = Path(two.cfg.state_dir)
+    # Not served again from what is left, and what a connection on another
+    # thread still held (Windows) is gone by the next look.
+    assert two.view.look() is False
     assert not (state / handover.FOLDER).exists()
     assert not (state / family_view.STATE).exists()
     assert _snapshot(Path(two.cfg.mugil_originals_dir)) == originals
@@ -267,6 +270,29 @@ def test_unticking_withdraws_the_view_and_removes_only_the_copy(two):
     publish(cfg, handover.folder(two.cfg.state_dir))
     two.view._wanted = (0.0, False)                              # noqa: SLF001
     assert sender.withdraw_due() is False and two.view.look() is True
+
+
+def test_a_copy_a_thread_still_holds_is_removed_at_the_next_look(two, monkeypatch):
+    """Windows will not remove a file another thread's connection holds: the
+    withdrawal removes what it can, and the next look the rest."""
+    from ninaivu.mugil import handover as handover_module
+    assert two.view.look() is True
+    real = handover_module.clear_copy
+    held = {"once": True}
+
+    def held_once(state_dir):
+        if held.pop("once", False):
+            return []                                     # as rmtree left it
+        return real(state_dir)
+
+    monkeypatch.setattr(handover_module, "clear_copy", held_once)
+    two.view.withdraw()
+    state = Path(two.cfg.state_dir)
+    assert (state / family_view.STATE).exists() and two.view._leftover   # noqa: SLF001
+    assert two.view.look() is False
+    assert not (state / family_view.STATE).exists()
+    assert not (state / handover.FOLDER).exists()
+    assert two.view._leftover is False                                   # noqa: SLF001
 
 
 def test_a_withdrawal_the_secondary_misses_is_asked_again(two):
