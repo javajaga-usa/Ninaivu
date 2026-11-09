@@ -799,7 +799,11 @@ function openPage(name) {
 
 /** Run *use* with page *name*, if it has been opened; nothing is drawn otherwise. */
 function ifOpened(name, use) {
-  loadedPages.get(name)?.then((page) => page && use(page));
+  // A page that throws while drawing what a poll brought is said in the
+  // console, as the poll's own try/catch said it before the page was a module,
+  // rather than left as an unhandled rejection.
+  loadedPages.get(name)?.then((page) => page && use(page))
+    .catch((exc) => console.debug(`The ${name} page could not draw this`, exc?.message || exc));
 }
 
 /** What a page may ask of the console around it. */
