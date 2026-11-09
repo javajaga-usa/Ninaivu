@@ -248,6 +248,20 @@ def _primary_unticked(two):
     return cfg
 
 
+def test_the_view_leaves_the_secondarys_own_records_where_they_are(two):
+    """Built inside the Secondary's process, the view pointed the archive's
+    record and the watch for a damaged index at its own folder: the
+    Secondary's imports were recorded where withdrawing the view deletes."""
+    import logging
+    from ninaivu.archive import database as archive_db
+    from ninaivu.storage import index_check
+    state = Path(two.cfg.state_dir).resolve()
+    assert two.view.look() is True
+    assert Path(archive_db.DB_PATH).resolve().parent == state
+    (watch,) = [h for h in logging.getLogger().handlers if isinstance(h, index_check.Watch)]
+    assert Path(watch.state).resolve() == state
+
+
 def test_unticking_withdraws_the_view_and_removes_only_the_copy(two):
     assert two.view.look() is True
     originals = _snapshot(Path(two.cfg.mugil_originals_dir))
