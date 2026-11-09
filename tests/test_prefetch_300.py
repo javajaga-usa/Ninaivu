@@ -8,6 +8,8 @@ hovering the date rail fetched 455 around that place, where it fetched none."""
 import re
 from pathlib import Path
 
+from js_sources import family_app
+
 ROOT = Path(__file__).resolve().parents[1]
 BASE = (ROOT / "ninaivu/static/js/grid-base.js").read_text(encoding="utf-8")
 GRID = (ROOT / "ninaivu/static/js/grid.js").read_text(encoding="utf-8")
@@ -44,4 +46,4 @@ def test_the_pointer_gets_its_place_ready():
     rail = APP[APP.index("function wireScrubber()"):]
     assert "grid.prefetchAround(max * ratio)" in rail
     assert "event.pointerType !== 'mouse'" in rail
-    assert "button.onpointerenter = () => grid.prefetchAround(" in APP
+    assert "button.onpointerenter = () => grid.prefetchAround(" in family_app()

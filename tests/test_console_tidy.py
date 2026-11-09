@@ -63,5 +63,5 @@ def test_the_storage_check_can_be_stopped_and_shows_progress():
     assert 'id="scrub-progress-bar"' in ADMIN
     assert "Bitrot" not in re.sub(r"<!--.*?-->", "", ADMIN, flags=re.DOTALL)
     js = console_js()
-    assert "'/api/admin/scrubber/stop'" in js
+    assert "admin.postAdminScrubberStop()" in js
     assert "showScrubberProgress(data?.progress)" in js

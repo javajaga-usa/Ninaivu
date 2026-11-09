@@ -7,10 +7,11 @@
  */
 
 import {
-  accountsApi, askSecret, avatarNode, Gate, ProfileSheet, roleBadge, upgradeSecret,
+  accountsApi, avatarNode, Gate, ProfileSheet, upgradeSecret,
 } from './accounts.js';
 import {
-  consoleJson as json, onUnauthorized, sessionRestored, subscribeProgress, thumbUrl, SCAN_COUNTS, timeLeft,
+  admin, consoleJson as json, onUnauthorized, sessionRestored, subscribeProgress, thumbUrl,
+  SCAN_COUNTS, timeLeft,
 } from './api.js';
 import { renderActivity, subscribeActivity } from './activity.js';
 import { ArchivePanel } from './archive.js';
@@ -38,7 +39,7 @@ import { StraightenPanel } from './straighten.js';
 import { ScreeningPanel } from './screening.js';
 import { FirstDay } from './first-day.js';
 import { DrivePrompt } from './drives.js';
-import { revealItem } from './pages/console/common.js';
+import { labelled, revealItem } from './pages/console/common.js';
 import * as i18n from './i18n.js';
 import { consoleCommands, initPalette } from './palette.js';
 import { hideScrollBarsUntilUsed } from './scrollbars.js';
@@ -49,9 +50,6 @@ import {
 } from './ui.js';
 
 const adminApi = {
-  locations: (hours) => json(`/api/admin/locations?hours=${encodeURIComponent(hours)}`),
-  applyLocations: (body) => json('/api/admin/locations/apply', { method: 'POST', body }),
-  undoLocations: () => json('/api/admin/locations/undo', { method: 'POST', body: {} }),
   overview: () => json('/api/admin/overview'),
   folders: () => json('/api/admin/folders'),
   preview: (query) => json(`/api/admin/preview?${new URLSearchParams(query)}`),
@@ -75,12 +73,6 @@ const adminApi = {
   setRoot: (path) => json('/api/library/root', { method: 'POST', body: { path } }),
   rescan: (full) => json('/api/scan', { method: 'POST', body: { full } }),
   libraries: () => json('/api/admin/libraries'),
-  removeLibrary: (path, force, letGo = false) =>
-    json(`/api/admin/libraries?path=${encodeURIComponent(path)}${force ? '&force=1' : ''}`
-      + `${letGo ? '&let_go=1' : ''}`,
-      { method: 'DELETE' }),
-  setActiveLibrary: (path) =>
-    json('/api/admin/libraries/active', { method: 'POST', body: { path } }),
   assignable: () => json('/api/admin/assignable'),
   folder: (path, show = 'all', deep = false, offset = 0) =>
     json(`/api/admin/folder?folder=${encodeURIComponent(path || '')}`
@@ -93,9 +85,6 @@ const adminApi = {
     json('/api/visibility', { method: 'POST', body: { ids, visibility } }),
   setExplicit: (ids, nsfw) =>
     json('/api/assets/bulk', { method: 'POST', body: { ids, nsfw } }),
-  startScrubber: () => json('/api/admin/scrubber/start', { method: 'POST' }),
-  stopScrubber: () => json('/api/admin/scrubber/stop', { method: 'POST' }),
-  scrubberStatus: () => json('/api/admin/scrubber/status'),
   revealFolder: (folder) =>
     json('/api/admin/reveal-folder', { method: 'POST', body: { folder } }),
   deleteFromFolders: (ids) =>
@@ -470,26 +459,26 @@ function relabel() {
   if (state.overview) {
     renderOverview();
     renderLibrary();
-    renderPeople();
+    ifOpened('people', (page) => page.renderPeople());
     renderFolderTree();
     renderPreview(currentPreview);
   }
   loadAttention();
   renderFolderScreen();
   ifOpened('recycle-bin', (page) => page.render());
-  renderLocations();
+  ifOpened('library', (page) => page.relabel());
   refreshUndo();
   // The uploads list is only rebuilt when the queue changes; forget what it
   // last drew so the next look draws it again in the new language.
-  uploadSignature = '';
-  if (current === 'uploads') { loadPendingUploads(); loadPhoneBackups(); loadPhoneKeys(); }
-  if (current === 'server') loadTvAlbum();
+  ifOpened('uploads', (page) => page.relabel());
+  if (current === 'uploads') { loadPendingUploads(); openPage('uploads').then((page) => page?.show()); }
+  if (current === 'server') openPage('uploads').then((page) => page?.loadTvAlbum());
   if (current === 'large-files') openPage('large-files').then((page) => page?.show());
   if (current === 'health') openPage('health').then((page) => page?.show());
   if (current === 'activity') loadActivity();
   if (current === 'settings') refreshExtensions();
   if (current === 'ai-models') refreshExtensions();
-  if (lastNotifications) describeNotifications(lastNotifications);
+  ifOpened('notifications', (page) => page.relabel());
   pollScrubber();
 }
 
@@ -505,10 +494,10 @@ function wireLanguage() {
 function wireChrome() {
   // Enter in a field does what the button beside it does, everywhere.
   enterPressesTheButton();
-  $$('#uploads-refresh').onclick = () => { loadPendingUploads(); loadPhoneBackups(); loadPhoneKeys(); };
-  $$('#tv-save').onclick = () => saveTvAlbum();
-  $$('#tv-secret').onclick = () => newTvAddresses();
-  $$('#pb-trusted').onchange = (event) => savePhoneBackupTrust(event.target.checked);
+  $$('#uploads-refresh').onclick = () => {
+    loadPendingUploads();
+    openPage('uploads').then((page) => page?.show());
+  };
   renderAppLinks();
   $$('#open-home').onclick = () => renderAppLinks();
   // Every handler below is bound with `?.` on purpose. These elements live in
@@ -550,7 +539,8 @@ function wireChrome() {
     } catch { /* the session may already be gone; land on the door either way */ }
     window.location.reload();
   };
-  $$('#add-person-btn').onclick = () => toggleAddPerson();
+  // Pressed by the command bar as it opens the page: handed over to the page.
+  $$('#add-person-btn').onclick = () => openPage('people').then((page) => page?.toggleAddPerson());
   $$('#change-root').onclick = () => openFolderPicker();
   $$('#rescan-btn').onclick = () => runScan(false);
   $$('#full-rescan-btn').onclick = () => runScan(true);
@@ -645,12 +635,6 @@ function wireChrome() {
     if (event.target === $('#faces-review')) $('#faces-review').hidden = true;
   });
   wireScrubber();
-  wireLocations();
-  wireNotifications();
-  $$('#delete-cancel').onclick = () => closeDelete();
-  $$('#delete-modal').addEventListener('click', (event) => {
-    if (event.target === $('#delete-modal')) closeDelete();
-  });
   $$('#profile-sheet').addEventListener('click', (event) => {
     if (event.target === $('#profile-sheet')) $('#profile-sheet').hidden = true;
   });
@@ -782,6 +766,14 @@ function rememberPage(name) {
 const PAGE_MODULES = {
   health: () => import('./pages/console/health.js'),
   'large-files': () => import('./pages/console/large-files.js'),
+  library: () => import('./pages/console/library.js'),
+  // Uploads, phone backups and keys, and the Server page's TV album.
+  uploads: () => import('./pages/console/uploads.js'),
+  // Loaded at sign-in, to draw the list loadPeople fetches.
+  people: () => import('./pages/console/people.js'),
+  // Sections of the Health page: fetched at sign-in, drawn once it is opened.
+  notifications: () => import('./pages/console/notifications.js'),
+  scrubber: () => import('./pages/console/scrubber.js'),
   // A section of the Folders page, opened with it.
   'recycle-bin': () => import('./pages/console/recycle-bin.js'),
 };
@@ -807,7 +799,11 @@ function openPage(name) {
 
 /** Run *use* with page *name*, if it has been opened; nothing is drawn otherwise. */
 function ifOpened(name, use) {
-  loadedPages.get(name)?.then((page) => page && use(page));
+  // A page that throws while drawing what a poll brought is said in the
+  // console, as the poll's own try/catch said it before the page was a module,
+  // rather than left as an unhandled rejection.
+  loadedPages.get(name)?.then((page) => page && use(page))
+    .catch((exc) => console.debug(`The ${name} page could not draw this`, exc?.message || exc));
 }
 
 /** What a page may ask of the console around it. */
@@ -816,6 +812,18 @@ const shell = {
   refresh: () => refresh(),
   loadAttention: () => loadAttention(),
   openFolderPicker: (options) => openFolderPicker(options),
+  notifications: () => lastNotifications,
+  scrubber: () => lastScrub,
+  loadPeople: () => loadPeople(),
+  loadPendingUploads: () => loadPendingUploads(),
+  get uploads() { return uploads; },
+  renderPreview: () => renderPreview(currentPreview),
+  // The overview's numbers changed: draw what shows them again.
+  overviewChanged: async () => {
+    state.overview = await adminApi.overview();
+    renderOverview();
+    ifOpened('library', (page) => page.renderLibraryFolders());
+  },
 };
 
 function showTab(name) {
@@ -859,7 +867,7 @@ function showTab(name) {
     (panel) => panel.classList.toggle('active', panel.dataset.panel === name));
   if (name === 'activity') loadActivity();
   if (name === 'overview') safetyPanel?.load();
-  if (name === 'uploads') { loadPendingUploads(); loadPhoneBackups(); loadPhoneKeys(); }
+  if (name === 'uploads') { loadPendingUploads(); openPage('uploads').then((page) => page?.show()); }
   if (name === 'visibility') { loadFolders(); refreshUndo(); }
   if (name === 'folders') {
     loadFolderScreen(foldState.path);
@@ -871,7 +879,8 @@ function showTab(name) {
   // the moment somebody signed in stays blank until a reload if that one
   // call fails, and cannot show what today would send.
   if (name === 'health') openPage('health').then((page) => page?.show());
-  if (name === 'library') { renderLibraryFolders(); loadLocations(); }
+  if (name === 'health') { openPage('notifications'); openPage('scrubber'); }
+  if (name === 'library') openPage('library').then((page) => page?.show());
   // Only the visible tab holds an event stream open.
   if (name === 'archive') archive?.show(); else archive?.hide();
   if (name === 'cloud') cloud?.show(); else cloud?.hide();
@@ -883,7 +892,10 @@ function showTab(name) {
   if (name === 'health') journalPanel?.show();
   // The AI server page is Creative Studio's; without it, there is nothing to ask.
   if (name === 'ai-server' && activeExtensions.has('creative-studio')) aiServer?.show();
-  if (name === 'server') { serverPanel?.show(); loadTvAlbum(); } else serverPanel?.hide();
+  if (name === 'server') {
+    serverPanel?.show();
+    openPage('uploads').then((page) => page?.loadTvAlbum());
+  } else serverPanel?.hide();
   if (name === 'performance') performancePanel?.show(); else performancePanel?.hide();
   if (name === 'tuning') tuningPanel?.show(); else tuningPanel?.hide();
   if (name === 'ai-models') aiModels?.show(); else aiModels?.hide();
@@ -1034,89 +1046,9 @@ async function loadAssignable() {
   } catch { state.assignable = []; }
 }
 
-function renderLibraryFolders() {
-  const list = $('#library-list');
-  if (!list) return;
-  const folders = state.overview?.library?.folders || [];
-  list.innerHTML = '';
-
-  if (!folders.length) {
-    list.appendChild(el('p', 'hint', i18n.t('No folders yet — add one to get started.')));
-    return;
-  }
-
-  for (const folder of folders) {
-    const row = el('div', `library-item${folder.exists ? '' : ' missing'}`);
-
-    const main = el('div', 'li-main');
-    const title = el('div', 'li-name');
-    title.appendChild(el('strong', null, folder.name));
-    if (folder.active) title.appendChild(el('span', 'tag family', i18n.t('default')));
-    if (!folder.exists) title.appendChild(el('span', 'tag hidden', i18n.t('missing')));
-    main.appendChild(title);
-    main.appendChild(el('code', 'li-path', folder.path));
-    const bits = [i18n.items(folder.count)];
-    if (folder.assigned) {
-      bits.push(folder.assigned === 1 ? i18n.t('1 person assigned')
-        : i18n.t('{count} people assigned', { count: folder.assigned }));
-    }
-    main.appendChild(el('div', 'li-meta', bits.join(' · ')));
-    row.appendChild(main);
-
-    const actions = el('div', 'li-actions');
-    if (!folder.active) {
-      const makeDefault = el('button', 'btn small ghost', i18n.t('Make default'));
-      makeDefault.type = 'button';
-      makeDefault.title = i18n.t('The folder the Visibility tab works on');
-      makeDefault.onclick = async () => {
-        try {
-          await adminApi.setActiveLibrary(folder.path);
-          await refresh();
-        } catch (exc) { toast(exc.message, true); }
-      };
-      actions.appendChild(makeDefault);
-    }
-    const remove = el('button', 'btn small ghost', i18n.t('Remove'));
-    remove.type = 'button';
-    remove.title = i18n.t('Stop indexing this folder. Your files are not touched.');
-    remove.onclick = () => removeLibrary(folder);
-    actions.appendChild(remove);
-    row.appendChild(actions);
-
-    list.appendChild(row);
-  }
-}
-
-async function removeLibrary(folder, letGo = false) {
-  try {
-    await adminApi.removeLibrary(folder.path, false, letGo);
-    toast(i18n.t('{name} is no longer indexed. Your files were not touched.', { name: folder.name }));
-    await refresh();
-  } catch (exc) {
-    if (exc.status === 409 && exc.data?.let_go && !letGo) {
-      // Originals of it are kept only on the Secondary: asked on its own,
-      // so agreeing to it never also agrees to what is asked next.
-      if (confirm(`${exc.message}\n\n${i18n.t('Remove it anyway?')}`)) await removeLibrary(folder, true);
-      return;
-    }
-    if (exc.status === 409) {
-      // Someone is assigned to it, or its photographs carry stories, albums
-      // and names that go with it: say which, and let the admin decide.
-      if (!confirm(`${exc.message}\n\n${i18n.t('Remove it anyway?')}`)) return;
-      try {
-        await adminApi.removeLibrary(folder.path, true, letGo);
-        toast(i18n.t('{name} is no longer indexed. Your files were not touched.', { name: folder.name }));
-        await refresh();
-      } catch (inner) { toast(inner.message, true); }
-      return;
-    }
-    toast(exc.message, true);
-  }
-}
-
 function renderLibrary() {
   const data = state.overview;
-  renderLibraryFolders();
+  ifOpened('library', (page) => page.renderLibraryFolders());
   // Open the console from a laptop against the machine in the study and
   const box = $('#overview-library');
   box.innerHTML = '';
@@ -1630,6 +1562,8 @@ async function renderPreview(key) {
 }
 
 /* -- People -------------------------------------------------------------- */
+/* The page itself is pages/console/people.js. The list is fetched here, at
+   sign-in and after every change, because the preview needs it too. */
 
 async function loadPeople() {
   try {
@@ -1640,415 +1574,9 @@ async function loadPeople() {
     toast(exc.message, true);
     return;
   }
-  renderPeople();
+  await openPage('people').then((page) => page?.renderPeople());
 }
 
-function renderPeople() {
-  state.libraryCount = (state.overview?.library?.folders || []).length;
-  const list = $('#people-list');
-  list.innerHTML = '';
-  for (const person of state.people) list.appendChild(personCard(person));
-}
-
-function personCard(person) {
-  const card = el('div', `admin-person${person.active ? '' : ' disabled'}`);
-
-  const head = el('div', 'ap-head');
-  head.appendChild(avatarNode(person, 44));
-  const identity = el('div', 'ap-identity');
-  const line = el('div', 'ap-name');
-  line.appendChild(el('strong', null, person.name));
-  line.appendChild(roleBadge(person.role, i18n.role(person.role_label)));
-  if (person.id === state.user.id) line.appendChild(el('span', 'you-tag', i18n.t('you')));
-  if (!person.active) line.appendChild(el('span', 'off-tag', i18n.t('disabled')));
-  // "Forgot password?" on the sign-in screen (accounts_api.forgot); cleared
-  // once they have a new password or PIN.
-  if (person.help_asked && person.active) {
-    const help = el('span', 'help-tag', i18n.t('asked for help signing in'));
-    help.title = i18n.t('Asked {when}. Give them a temporary password, or a new PIN.',
-      { when: new Date(person.help_asked * 1000).toLocaleString() });
-    line.appendChild(help);
-  }
-  identity.appendChild(line);
-
-  const bits = [`@${person.username}`];
-  if (person.role === 'admin') bits.push(i18n.t('every folder'));
-  else if (person.library) bits.push(i18n.t('only {folder}', { folder: person.library }));
-  else if (person.scope) bits.push(i18n.t('only {folder}', { folder: person.scope }));
-  else bits.push(i18n.t('all library folders'));
-  if (typeof person.visible_count === 'number') {
-    bits.push(person.visible_count === 1 ? i18n.t('1 item visible')
-      : i18n.t('{count} items visible', { count: person.visible_count.toLocaleString() }));
-  }
-  const entry = {
-    password: i18n.key('password required'), pin: i18n.key('PIN required'), open: i18n.key('tap to enter'),
-  }[person.entry];
-  if (entry) bits.push(i18n.t(entry));
-  if (person.sessions) {
-    bits.push(person.sessions === 1 ? i18n.t('1 device')
-      : i18n.t('{count} devices', { count: person.sessions }));
-  }
-  identity.appendChild(el('div', 'ap-meta', bits.join(' · ')));
-  head.appendChild(identity);
-  card.appendChild(head);
-
-  const controls = el('div', 'ap-controls');
-
-  controls.appendChild(labelled(i18n.t('Role'), (() => {
-    const select = el('select', 'select');
-    for (const role of state.roles) {
-      const option = el('option', null, i18n.role(role.label));
-      option.value = role.value;
-      if (role.value === person.role) option.selected = true;
-      select.appendChild(option);
-    }
-    select.onchange = async () => {
-      const body = { role: select.value };
-      // An administrator signs in on the console, which only takes a
-      // password, so one without a password could never sign in.
-      if (select.value === 'admin' && person.role !== 'admin' && !person.has_password) {
-        const password = await askSecret({
-          title: i18n.t('Temporary password'),
-          hint: i18n.t('{name} has no password yet. Temporary password for them — they’ll choose their own on first sign-in.', { name: person.name }),
-          label: i18n.t('Temporary password'),
-          value: randomPassword(),
-          shown: true,
-        });
-        if (!password) { select.value = person.role; return; }
-        body.password = password;
-      }
-      patchPerson(person.id, body);
-    };
-    return select;
-  })()));
-
-  controls.appendChild(labelled(i18n.t('Library folder'), (() => {
-    const select = el('select', 'select wide');
-    const all = el('option', null,
-      state.libraryCount > 1 ? i18n.t('All library folders') : i18n.t('The whole library'));
-    all.value = '';
-    select.appendChild(all);
-
-    for (const folder of state.assignable) {
-      const option = el('option', null,
-        `${'\u00a0\u00a0'.repeat(folder.depth)}${folder.is_root ? '📁 ' : ''}${folder.label} (${folder.count})`);
-      option.value = folder.path;
-      if (samePath(folder.path, person.library)) option.selected = true;
-      select.appendChild(option);
-    }
-
-    // A folder that no longer exists must still show, or saving would
-    // silently move them somewhere else.
-    if (person.library && !state.assignable.some(
-      (f) => samePath(f.path, person.library))) {
-      const orphan = el('option', null, i18n.t('{folder} (missing)', { folder: person.library }));
-      orphan.value = person.library;
-      orphan.selected = true;
-      select.appendChild(orphan);
-    }
-
-    select.disabled = person.role === 'admin';
-    select.title = person.role === 'admin'
-      ? i18n.t('Admins always see every library folder')
-      : i18n.t('The only folder this profile can see');
-    select.onchange = () => patchPerson(person.id, { library: select.value });
-    return select;
-  })()));
-
-  if (person.role === 'admin') {
-    // An administrator's tile on the family app's picker, or none and the
-    // username login instead. On by default.
-    controls.appendChild(labelled(i18n.t('Family app sign-in'), (() => {
-      const row = el('label', 'toggle');
-      const input = el('input');
-      input.type = 'checkbox';
-      input.checked = person.on_picker !== false;
-      input.onchange = () => patchPerson(person.id, { on_picker: input.checked });
-      row.append(input, el('span', null, i18n.t('Show on the sign-in screen')));
-      return row;
-    })()));
-  }
-
-  if (person.role !== 'admin') {
-    controls.appendChild(labelled(i18n.t('Entry'), (() => {
-      const wrap = el('div', 'row');
-      const select = el('select', 'select');
-      for (const [value, text] of [['open', i18n.t('Tap to enter')], ['pin', i18n.t('PIN')]]) {
-        const option = el('option', null, text);
-        option.value = value;
-        if ((person.entry === 'pin' ? 'pin' : 'open') === value) option.selected = true;
-        select.appendChild(option);
-      }
-      select.onchange = async () => {
-        if (select.value === 'open') {
-          await patchPerson(person.id, { pin: '' });
-          return;
-        }
-        const pin = await askSecret({
-          title: i18n.t('Set a PIN for {name} (4–8 digits).', { name: person.name }),
-          label: i18n.t('PIN (4–8 digits)'),
-          pin: true,
-        });
-        if (!pin) { select.value = person.entry === 'pin' ? 'pin' : 'open'; return; }
-        await patchPerson(person.id, { pin });
-      };
-      wrap.appendChild(select);
-      return wrap;
-    })()));
-  }
-
-  const actions = el('div', 'ap-actions');
-  const toggle = el('button', 'btn small ghost', person.active ? i18n.t('Disable') : i18n.t('Enable'));
-  toggle.type = 'button';
-  toggle.disabled = person.id === state.user.id;
-  toggle.onclick = () => patchPerson(person.id, { active: !person.active });
-  actions.appendChild(toggle);
-
-  const reset = el('button', person.help_asked ? 'btn small primary' : 'btn small ghost',
-    i18n.t('Reset password'));
-  reset.type = 'button';
-  reset.onclick = async () => {
-    const password = await askSecret({
-      title: i18n.t('Reset password'),
-      hint: i18n.t('Temporary password for {name}. They’ll choose their own on first sign-in.', { name: person.name }),
-      label: i18n.t('Temporary password'),
-      value: randomPassword(),
-      confirm: i18n.t('Reset password'),
-      shown: true,
-    });
-    if (!password) return;
-    try {
-      await accountsApi.updatePerson(person.id, { password });
-      toast(i18n.t('New password for {name}: {password}', { name: person.name, password }));
-      loadPeople();
-    } catch (exc) { toast(exc.message, true); }
-  };
-  actions.appendChild(reset);
-
-  if (person.sessions) {
-    const signout = el('button', 'btn small ghost', i18n.t('Sign out everywhere'));
-    signout.type = 'button';
-    signout.onclick = async () => {
-      await accountsApi.signOutPerson(person.id);
-      toast(i18n.t('{name} was signed out.', { name: person.name }));
-      loadPeople();
-    };
-    actions.appendChild(signout);
-  }
-
-  // Deleting is irreversible, so it sits apart from the reversible actions
-  // and always asks first.
-  const remove = el('button', 'btn small danger', i18n.t('Delete'));
-  remove.type = 'button';
-  remove.dataset.action = 'delete-person';
-  remove.dataset.person = String(person.id);
-  if (person.id === state.user.id) {
-    remove.disabled = true;
-    remove.title = i18n.t('You can’t delete the profile you’re signed in with.');
-  } else {
-    remove.title = i18n.t('Remove {name} permanently', { name: person.name });
-    remove.onclick = () => confirmDelete(person);
-  }
-  actions.appendChild(remove);
-
-  controls.appendChild(actions);
-  card.appendChild(controls);
-  return card;
-}
-
-/** Ask before removing a profile, and say exactly what goes with it. */
-function confirmDelete(person) {
-  const modal = $('#delete-modal');
-  const losses = [];
-  if (person.favorites) {
-    losses.push(person.favorites === 1 ? i18n.t('1 favourite')
-      : i18n.t('{count} favourites', { count: person.favorites.toLocaleString() }));
-  }
-  if (person.sessions) {
-    losses.push(person.sessions === 1 ? i18n.t('1 signed-in device')
-      : i18n.t('{count} signed-in devices', { count: person.sessions }));
-  }
-
-  $('#delete-who').textContent = `${person.name} (@${person.username})`;
-  $('#delete-loses').textContent = !losses.length
-    ? i18n.t('They have no favourites or open sessions.')
-    : losses.length === 1 ? i18n.t('Their {what} will be removed with them.', { what: losses[0] })
-      : i18n.t('Their {first} and {second} will be removed with them.', { first: losses[0], second: losses[1] });
-
-  const confirm = $('#delete-confirm');
-  confirm.onclick = async () => {
-    confirm.disabled = true;
-    try {
-      const result = await accountsApi.deletePerson(person.id);
-      closeDelete();
-      const gone = result.removed?.favorites
-        ? i18n.t('{name}’s profile and {count} favourites were deleted.', { name: person.name, count: result.removed.favorites })
-        : i18n.t('{name}’s profile was deleted.', { name: person.name });
-      toast(gone);
-      await refresh();
-    } catch (exc) {
-      toast(exc.message, true);
-    } finally {
-      confirm.disabled = false;
-    }
-  };
-
-  modal.hidden = false;
-  confirm.focus();
-}
-
-function closeDelete() {
-  $('#delete-modal').hidden = true;
-}
-
-/** Path equality that tolerates slashes and Windows case. */
-function samePath(a, b) {
-  if (!a || !b) return false;
-  const norm = (p) => {
-    const t = String(p).replace(/\\/g, '/').replace(/\/+$/, '');
-    return /^[a-zA-Z]:/.test(t) ? t.toLowerCase() : t;
-  };
-  return norm(a) === norm(b);
-}
-
-function labelled(label, control) {
-  const wrap = el('label', 'field');
-  wrap.appendChild(el('span', null, label));
-  wrap.appendChild(control);
-  return wrap;
-}
-
-async function patchPerson(id, body) {
-  try {
-    await accountsApi.updatePerson(id, body);
-    toast(i18n.t('Saved.'));
-  } catch (exc) {
-    toast(exc.message, true);
-  }
-  // Assignment counts and "what they see" both live on the overview payload,
-  // so re-read it rather than leaving the Library tab showing stale numbers.
-  try {
-    state.overview = await adminApi.overview();
-    renderOverview();
-    renderLibraryFolders();
-  } catch { /* the toast above already reported it */ }
-  await loadPeople();
-  renderPreview(currentPreview);
-}
-
-function toggleAddPerson() {
-  const block = $('#add-person-block');
-  if (!block.hidden) { block.hidden = true; return; }
-  block.hidden = false;
-  block.innerHTML = '';
-  block.appendChild(el('h2', null, i18n.t('Add someone')));
-
-  const form = el('form', 'add-form');
-  const grid = el('div', 'add-grid');
-
-  const name = input('name', i18n.t('Name'));
-  const username = input('username', i18n.t('username'));
-  username.required = true;
-  username.autocapitalize = 'none';
-
-  const role = el('select', 'select');
-  role.name = 'role';
-  for (const option of state.roles) {
-    const node = el('option', null, i18n.role(option.label));
-    node.value = option.value;
-    if (option.value === 'family') node.selected = true;
-    role.appendChild(node);
-  }
-
-  const scope = el('select', 'select');
-  scope.name = 'library';
-  const all = el('option', null, i18n.t('All library folders'));
-  all.value = '';
-  scope.appendChild(all);
-  for (const folder of state.assignable) {
-    const option = el('option', null,
-      `${'\u00a0\u00a0'.repeat(folder.depth)}${folder.is_root ? '\u{1F4C1} ' : ''}${folder.label} (${folder.count})`);
-    option.value = folder.path;
-    scope.appendChild(option);
-  }
-
-  const entry = el('select', 'select');
-  entry.name = 'entry';
-  for (const [value, text] of [
-    ['open', i18n.t('Tap to enter — no secret')],
-    ['pin', i18n.t('PIN')],
-    ['password', i18n.t('Username + password')],
-  ]) {
-    const option = el('option', null, text);
-    option.value = value;
-    entry.appendChild(option);
-  }
-
-  const secret = input('secret', i18n.t('PIN or password'));
-  secret.hidden = true;
-  entry.onchange = () => {
-    secret.hidden = entry.value === 'open';
-    secret.placeholder = entry.value === 'pin' ? i18n.t('4–8 digits') : i18n.t('at least 8 characters');
-    secret.value = entry.value === 'pin' ? '' : randomPassword();
-  };
-
-  grid.append(
-    labelled(i18n.t('Name'), name), labelled(i18n.t('Username'), username),
-    labelled(i18n.t('Role'), role), labelled(i18n.t('Library folder'), scope),
-    labelled(i18n.t('How they sign in'), entry), labelled(i18n.t('PIN / password'), secret),
-  );
-  form.appendChild(grid);
-
-  // Tap to enter is right for a shared tablet, and it is also a profile any
-  // device at home can open. Said where the choice is made.
-  const openNote = el('p', 'hint warn-note',
-    i18n.t('Anyone with a phone or computer on your home network can open a tap-to-enter profile. Give it a PIN if it can see anything private.'));
-  const showOpenNote = () => { openNote.hidden = entry.value !== 'open'; };
-  entry.addEventListener('change', showOpenNote);
-  showOpenNote();
-  form.appendChild(openNote);
-
-  const error = el('p', 'gate-error');
-  error.hidden = true;
-  form.appendChild(error);
-
-  const submit = el('button', 'btn primary', i18n.t('Create profile'));
-  submit.type = 'submit';
-  form.appendChild(submit);
-
-  form.onsubmit = async (event) => {
-    event.preventDefault();
-    error.hidden = true;
-    const body = {
-      name: name.value,
-      username: username.value,
-      role: role.value,
-      library: scope.value,
-      password: entry.value === 'password' ? secret.value : '',
-      pin: entry.value === 'pin' ? secret.value : '',
-    };
-    try {
-      await accountsApi.createPerson(body);
-      const who = body.name || body.username;
-      toast(entry.value === 'open' ? i18n.t('{name} added — no secret needed', { name: who })
-        : entry.value === 'pin' ? i18n.t('{name} added — PIN: {secret}', { name: who, secret: secret.value })
-          : i18n.t('{name} added — password: {secret}', { name: who, secret: secret.value }));
-      block.hidden = true;
-      await loadPeople();
-    } catch (exc) {
-      error.textContent = exc.message;
-      error.hidden = false;
-    }
-  };
-  block.appendChild(form);
-}
-
-function input(name, placeholder) {
-  const node = el('input', 'input');
-  node.name = name;
-  node.placeholder = placeholder;
-  return node;
-}
 
 /* -- Visibility ---------------------------------------------------------- */
 
@@ -2199,119 +1727,6 @@ function folderRow(folder, hasChildren = false) {
   }
   row.appendChild(picker);
   return row;
-}
-
-/* -- Locations filled in ------------------------------------------------- */
-/* Photographs without a location, taken close in time to one with; given its
-   place in the index only (storage/geo.py), and all of it undoable. */
-
-const locations = { data: null, shown: 30 };
-
-/* "India" for IN, from the browser, in the console's language; the code
-   itself if it cannot say. */
-function countryLabel(code) {
-  if (!code) return '';
-  try {
-    return new Intl.DisplayNames([i18n.locale()], { type: 'region' }).of(code) || code;
-  } catch {
-    return code;
-  }
-}
-
-async function loadLocations() {
-  const summary = $('#loc-summary');
-  if (!summary) return;
-  const hours = $('#loc-hours').value;
-  summary.textContent = i18n.t('Looking…');
-  try {
-    locations.data = await adminApi.locations(hours);
-  } catch (exc) {
-    summary.textContent = exc.message;
-    return;
-  }
-  locations.shown = 30;
-  renderLocations();
-}
-
-function renderLocations() {
-  const data = locations.data;
-  if (!data) return;
-  const span = $('#loc-hours').selectedOptions[0]?.textContent.toLowerCase() || '';
-  const found = i18n.t('{count} photographs taken {span} of one with a location, on {groups} days and places.',
-    { count: data.total.toLocaleString(), span, groups: data.groups.length.toLocaleString() });
-  const already = i18n.t('{count} already have a filled-in location.',
-    { count: (data.inferred || 0).toLocaleString() });
-  $('#loc-summary').textContent = data.total
-    ? (data.inferred ? `${found} ${already}` : found)
-    : (data.inferred
-      ? i18n.t('Nothing more to fill in. {count} photographs have a filled-in location.',
-        { count: data.inferred.toLocaleString() })
-      : i18n.t('Nothing to fill in: no photograph without a location was taken that close to one with.'));
-  const all = $('#loc-apply-all');
-  all.hidden = !data.total;
-  all.textContent = i18n.t('Give all {count} their place', { count: data.total.toLocaleString() });
-  $('#loc-undo').hidden = !data.inferred;
-
-  const list = $('#loc-list');
-  list.innerHTML = '';
-  for (const group of data.groups.slice(0, locations.shown)) {
-    const row = el('div', 'loc-row');
-    const text = el('div', 'loc-text');
-    const place = [group.city, countryLabel(group.country)].filter(Boolean).join(', ')
-      || i18n.t('a place with no name');
-    const photographs = group.count === 1 ? i18n.t('1 photograph')
-      : i18n.t('{count} photographs', { count: group.count.toLocaleString() });
-    text.append(el('strong', null, `${group.date || i18n.t('No date')} · ${place}`),
-      el('span', 'hint', `${photographs} · ${i18n.t('up to {minutes} min from one with a location',
-        { minutes: Math.round(group.max_minutes) })}`));
-    const thumbs = el('div', 'loc-thumbs');
-    for (const id of group.ids.slice(0, 5)) {
-      const img = el('img');
-      img.loading = 'lazy';
-      img.alt = '';
-      img.src = thumbUrl(id, 160);
-      thumbs.appendChild(img);
-    }
-    const apply = el('button', 'btn ghost small', i18n.t('Give them this place'));
-    apply.type = 'button';
-    apply.onclick = () => applyLocations({ ids: group.ids }, apply);
-    row.append(text, thumbs, apply);
-    list.appendChild(row);
-  }
-  const more = $('#loc-more');
-  more.hidden = data.groups.length <= locations.shown;
-}
-
-async function applyLocations(body, button) {
-  if (button) button.disabled = true;
-  try {
-    const done = await adminApi.applyLocations({ hours: Number($('#loc-hours').value), ...body });
-    toast(i18n.t('{count} photographs given their place.', { count: done.applied.toLocaleString() }));
-  } catch (exc) {
-    toast(exc.message, true);
-  }
-  await loadLocations();
-}
-
-function wireLocations() {
-  $('#loc-hours')?.addEventListener('change', loadLocations);
-  $('#loc-apply-all')?.addEventListener('click', (event) => applyLocations({ all: true }, event.target));
-  $('#loc-more')?.addEventListener('click', () => {
-    locations.shown += 30;
-    renderLocations();
-  });
-  $('#loc-undo')?.addEventListener('click', async () => {
-    const count = locations.data?.inferred || 0;
-    if (!window.confirm(i18n.t('Take back the filled-in location of {count} photographs?',
-      { count: count.toLocaleString() }))) return;
-    try {
-      const done = await adminApi.undoLocations();
-      toast(i18n.t('{count} filled-in locations taken back.', { count: done.undone.toLocaleString() }));
-    } catch (exc) {
-      toast(exc.message, true);
-    }
-    await loadLocations();
-  });
 }
 
 /* -- Library ------------------------------------------------------------- */
@@ -3265,196 +2680,19 @@ function wireFolderScreen() {
 }
 
 let uploadPoll;
-let uploadSignature = '';
-let uploadActionBusy = false;
 const seenUploads = new Set();
-
-/* -- Phone backups (ninaivu/media/phone_backup.py) --------------------------- */
-
-async function loadPhoneBackups() {
-  const box = $('#pb-people');
-  if (!box) return;
-  let data;
-  try {
-    data = await json('/api/admin/phone-backups');
-  } catch (err) {
-    // A server from before phone backup has no such endpoint.
-    if (err.status === 404) { $('#pb-block').hidden = true; return; }
-    toast(err.message, true);
-    return;
-  }
-  $('#pb-trusted').checked = Boolean(data.trusted);
-  box.replaceChildren();
-  if (!data.people.length) {
-    box.appendChild(el('p', 'hint subtle', i18n.t('Nobody has backed up a phone yet.')));
-    return;
-  }
-  for (const person of data.people) {
-    const row = el('div', 'pb-person');
-    const when = person.last_backup
-      ? i18n.t('last backup {when}', { when: new Date(person.last_backup * 1000).toLocaleString(i18n.locale()) })
-      : i18n.t('nothing finished yet');
-    const phones = person.phones === 1 ? i18n.t('1 phone')
-      : i18n.t('{count} phones', { count: person.phones });
-    row.appendChild(el('span', 'pb-who', person.name));
-    row.appendChild(el('span', 'hint',
-      `${i18n.t('{count} safe', { count: Number(person.safe || 0).toLocaleString() })} · ${phones} · ${when}`));
-    if (person.waiting) {
-      const approve = el('button', 'btn small',
-        i18n.t('Approve all {count}', { count: person.waiting.toLocaleString() }));
-      approve.type = 'button';
-      approve.onclick = async () => {
-        approve.disabled = true;
-        try {
-          const result = await json(`/api/admin/phone-backups/${person.user_id}/approve`,
-            { method: 'POST' });
-          const filed = { count: result.approved.toLocaleString(), name: person.name, failed: result.failed };
-          toast(result.failed
-            ? i18n.t('Filed {count} of {name}’s backups; {failed} could not be filed.', filed)
-            : i18n.t('Filed {count} of {name}’s backups.', filed), result.failed > 0);
-          loadPendingUploads();
-          loadPhoneBackups();
-        } catch (err) {
-          toast(err.message, true);
-          approve.disabled = false;
-        }
-      };
-      row.appendChild(approve);
-    }
-    box.appendChild(row);
-  }
-}
-
-/* -- Phone keys (ninaivu/media/phone_keys.py) --------------------------------- */
-
-async function loadPhoneKeys() {
-  const box = $('#pk-list');
-  if (!box) return;
-  let data;
-  try {
-    data = await json('/api/admin/phone-keys');
-  } catch (err) {
-    if (err.status !== 404) toast(err.message, true);
-    return;
-  }
-  box.replaceChildren();
-  if (!data.keys.length) {
-    box.appendChild(el('p', 'hint subtle', i18n.t('No phone keys yet.')));
-    return;
-  }
-  for (const item of data.keys) {
-    const row = el('div', 'pb-person');
-    row.appendChild(el('span', 'pb-who', `${item.person} · ${item.name}`));
-    const used = item.last_used_at
-      ? i18n.t('{count} sent · last used {when}', {
-        count: Number(item.files || 0).toLocaleString(),
-        when: new Date(item.last_used_at * 1000).toLocaleString(i18n.locale()),
-      })
-      : i18n.t('Not used yet');
-    row.appendChild(el('span', 'hint', `…${item.hint} · ${used}`));
-    const revoke = el('button', 'btn small danger', i18n.t('Revoke'));
-    revoke.type = 'button';
-    revoke.onclick = async () => {
-      if (!window.confirm(i18n.t('Revoke the key for {name}? The app on that phone will stop backing up until it has a new key.', { name: item.name }))) return;
-      revoke.disabled = true;
-      try {
-        await json(`/api/admin/phone-keys/${item.id}`, { method: 'DELETE' });
-        toast(i18n.t('Key revoked'));
-      } catch (err) {
-        toast(err.message, true);
-      }
-      loadPhoneKeys();
-    };
-    row.appendChild(revoke);
-    box.appendChild(row);
-  }
-}
-
-/* -- The TV album (ninaivu/server/tv_album.py) --------------------------------- */
-
-function showTvStatus(status) {
-  $('#tv-port').value = status.port || '';
-  const select = $('#tv-album-select');
-  if (select) select.value = String(status.album_id || 0);
-  let line;
-  if (!status.album_id) line = i18n.t('Off. Choose an album to show it on the TVs at home.');
-  else if (status.running) {
-    line = i18n.t('Showing “{name}” ({count} photos and videos) to the TVs at home.',
-      { name: status.album_name || '', count: Number(status.items || 0).toLocaleString() });
-  } else {
-    line = i18n.t('Not running: {reason}', { reason: status.problem || i18n.t('starting…') });
-  }
-  $('#tv-status').textContent = line;
-  const list = $('#tv-addresses');
-  list.replaceChildren();
-  for (const address of status.addresses || []) list.appendChild(el('li', '', address));
-  $('#tv-secret').disabled = !status.album_id;
-}
-
-async function loadTvAlbum() {
-  if (!$('#tv-block')) return;
-  let status;
-  let albums;
-  try {
-    [status, albums] = await Promise.all([json('/api/admin/tv-album'), json('/api/albums')]);
-  } catch (err) {
-    if (err.status === 404) { $('#tv-block').hidden = true; return; }
-    toast(err.message, true);
-    return;
-  }
-  const select = $('#tv-album-select');
-  select.replaceChildren(el('option', '', i18n.t('Off')));
-  select.firstChild.value = '0';
-  for (const album of albums.albums || []) {
-    const option = el('option', '', album.name);         // family-written, as text
-    option.value = String(album.id);
-    select.appendChild(option);
-  }
-  showTvStatus(status);
-}
-
-async function saveTvAlbum() {
-  const button = $('#tv-save');
-  button.disabled = true;
-  try {
-    const body = { album_id: Number($('#tv-album-select').value) || 0 };
-    const port = Number($('#tv-port').value);
-    if (port) body.port = port;
-    showTvStatus(await json('/api/admin/tv-album', { method: 'PUT', body }));
-    toast(body.album_id ? i18n.t('TV album saved') : i18n.t('TV album turned off'));
-  } catch (err) {
-    toast(err.message, true);
-  } finally {
-    button.disabled = false;
-  }
-}
-
-async function newTvAddresses() {
-  if (!window.confirm(i18n.t('Give the TV album new addresses? TVs find it again by themselves; any address typed in by hand stops working.'))) return;
-  try {
-    showTvStatus(await json('/api/admin/tv-album/secret', { method: 'POST' }));
-  } catch (err) {
-    toast(err.message, true);
-  }
-}
-
-async function savePhoneBackupTrust(trusted) {
-  try {
-    await json('/api/admin/phone-backups/settings', { method: 'POST', body: { trusted } });
-    toast(trusted ? i18n.t('Family phone backups are filed without asking')
-      : i18n.t('Family phone backups wait for approval'));
-  } catch (err) {
-    toast(err.message, true);
-  }
-  loadPhoneBackups();
-}
+// The uploads queue as last fetched, and whether an approval is under way;
+// the Uploads page's module (pages/console/uploads.js) draws the one and sets
+// the other.
+const uploads = { last: null, busy: false };
 
 let uploadTotal = null;
 
 async function loadPendingUploads() {
-  if (uploadActionBusy) return;
+  if (uploads.busy) return;
   try {
-    const data = await json('/api/admin/uploads');
+    const data = await admin.getAdminUploads();
+    uploads.last = data;
     // The tab's count and the section mark are loadAttention's, which counts
     // every queue; asked again when this one has moved, so an approved
     // upload takes its number and its dot with it.
@@ -3466,104 +2704,7 @@ async function loadPendingUploads() {
       toast(incoming.length === 1 ? i18n.t('1 family upload awaiting approval. Open Uploads to review.')
         : i18n.t('{count} family uploads awaiting approval. Open Uploads to review.', { count: incoming.length }));
     }
-    const signature = JSON.stringify(data.items);
-    if (signature === uploadSignature) return;
-    uploadSignature = signature;
-    const list = $('#pending-uploads');
-    const drafts = new Map([...list.querySelectorAll('input[data-upload]')].map(input => [input.dataset.upload, input.value]));
-    list.replaceChildren();
-    if (!data.items.length) list.appendChild(el('p', 'hint', i18n.t('No uploads awaiting approval.')));
-    for (const item of data.items) {
-      const card = el('div', 'pending-upload');
-      if (item.has_thumb) {
-        const img = el('img');
-        img.src = `/api/admin/uploads/${item.id}/preview?thumb=1`;
-        img.alt = item.filename;
-        img.loading = 'lazy';
-        card.appendChild(img);
-      }
-      // An edit saved from the Playground is not a new photograph arriving, and
-      // reviewing it is a different judgement: say so before the filename, which
-      // is generated and tells an administrator nothing on its own.
-      if (item.edited_from) {
-        const badge = el('span', 'pending-kind', i18n.t('Edited copy'));
-        card.appendChild(badge);
-        card.appendChild(el('strong', null, i18n.t('Edit of {name}', { name: item.edited_from })));
-        card.appendChild(el('p', 'hint', i18n.t('Edited by {who} · {size} · saved as {file}',
-          { who: item.uploader, size: bytesShort(item.size), file: item.filename })));
-      } else {
-        card.appendChild(el('strong', null, item.filename));
-        card.appendChild(el('p', 'hint', i18n.t('Uploaded by {who} · {size}',
-          { who: item.uploader, size: bytesShort(item.size) })));
-      }
-      const preview = el('a', 'btn small ghost', i18n.t('Preview file'));
-      preview.href = `/api/admin/uploads/${item.id}/preview`;
-      preview.target = '_blank';
-      preview.rel = 'noopener';
-      card.appendChild(preview);
-      const input = el('input', 'input');
-      input.type = 'date';
-      // Only a by-date filing needs one. A derivative goes beside its source
-      // whatever the date says, so demanding one would be asking for a decision
-      // that changes nothing.
-      input.required = item.files_by_date;
-      input.dataset.upload = String(item.id);
-      input.value = drafts.get(String(item.id)) || item.creation_date || '';
-      card.appendChild(labelled(item.files_by_date ? i18n.t('Creation date') : i18n.t('Creation date (optional)'), input));
-      card.appendChild(el('p', 'hint', item.files_by_date
-        ? i18n.t('Date source: {source}. Destination: {destination}.',
-          { source: item.date_source, destination: item.destination })
-        : i18n.t('Keeps the original’s date and who may see it. Destination: {destination}, beside its source.',
-          { destination: item.destination })));
-      const approve = el('button', 'btn', i18n.t('Approve and file'));
-      approve.type = 'button';
-      approve.onclick = async () => {
-        if (!input.reportValidity() || uploadActionBusy) return;
-        uploadActionBusy = true;
-        approve.disabled = true;
-        try {
-          // An empty date is not a date: send the key only when there is one,
-          // or the server rejects the blank a derivative is allowed to leave.
-          const result = await json(`/api/admin/uploads/${item.id}/approve`, {
-            method: 'POST', body: input.value ? { creation_date: input.value } : {},
-          });
-          toast(item.edited_from
-            ? i18n.t('Approved the edit of {name}. Filed in {folder}.', { name: item.edited_from, folder: result.item.folder })
-            : i18n.t('Approved {name}. Filed in {folder}.', { name: item.filename, folder: result.item.folder }));
-        } catch (exc) { toast(exc.message, true); }
-        finally {
-          uploadActionBusy = false;
-          approve.disabled = false;
-          await loadPendingUploads();
-        }
-      };
-      // Not every upload belongs in the library. Refusing one deletes the
-      // uploaded file; the queue keeps no copy, and nothing is filed.
-      const reject = el('button', 'btn ghost danger', i18n.t('Delete'));
-      reject.type = 'button';
-      reject.onclick = async () => {
-        if (uploadActionBusy) return;
-        const what = item.edited_from
-          ? i18n.t('the edit of {name}', { name: item.edited_from }) : item.filename;
-        if (!window.confirm(`${i18n.t('Delete {what}?', { what })}\n\n`
-          + i18n.t('It will not be added to the library, and the uploaded file is removed from this computer. This cannot be undone.'))) return;
-        uploadActionBusy = true;
-        reject.disabled = true;
-        try {
-          await json(`/api/admin/uploads/${item.id}/reject`, { method: 'POST', body: {} });
-          toast(i18n.t('Deleted {what}. It was not added to the library.', { what }));
-        } catch (exc) { toast(exc.message, true); }
-        finally {
-          uploadActionBusy = false;
-          reject.disabled = false;
-          await loadPendingUploads();
-        }
-      };
-      const actions = el('div', 'pending-upload-actions');
-      actions.append(approve, reject);
-      card.appendChild(actions);
-      list.appendChild(card);
-    }
+    ifOpened('uploads', (page) => page.render(data));
   } catch (exc) {
     if (exc.status !== 401) console.debug('Upload review refresh unavailable', exc.message);
   }
@@ -3779,130 +2920,23 @@ async function undoLastVisibility() {
   } catch (exc) { toast(exc.message, true); }
 }
 
-/**
- * A temporary password, easy to read out and type: three words and three
- * digits, drawn with the browser's cryptographic generator. It was two words
- * of twelve and a two-digit number from Math.random — 12,816 passwords in
- * all, a guessable set even behind the sign-in limits.
- */
-function randomPassword() {
-  const words = ['river', 'maple', 'copper', 'lantern', 'harbour', 'meadow',
-    'cedar', 'amber', 'summit', 'willow', 'cobalt', 'ember', 'falcon', 'orchid',
-    'pebble', 'saffron', 'tamarind', 'monsoon', 'jasmine', 'coconut', 'mango',
-    'banyan', 'lotus', 'peacock', 'kestrel', 'granite', 'thistle', 'juniper',
-    'canyon', 'glacier', 'meteor', 'harvest', 'lagoon', 'compass', 'quartz',
-    'violet', 'cinder', 'breeze', 'marble', 'aurora', 'nectar', 'tundra',
-    'velvet', 'walnut', 'zephyr', 'cypress', 'heron', 'indigo', 'kettle',
-    'lilac', 'magnet', 'nutmeg', 'olive', 'pepper', 'quill', 'raven', 'sparrow',
-    'tulip', 'umber', 'vanilla', 'wicker', 'yarrow', 'acorn', 'basil'];
-  const random = new Uint32Array(4);
-  crypto.getRandomValues(random);
-  const pick = (i) => words[random[i] % words.length];
-  const digits = String(random[3] % 1000).padStart(3, '0');
-  return `${pick(0)}-${pick(1)}-${pick(2)}-${digits}`;
-}
 
 /* ── Ninaivu 5.0 Bitrot Scrubber ────────────────────────────────────────── */
 
-const notifyApi = {
-  get: () => json('/api/admin/notifications'),
-  save: (body) => json('/api/admin/notifications', { method: 'POST', body }),
-  test: () => json('/api/admin/notifications/test', { method: 'POST' }),
-};
-
-// The last answer, so a change of language can say it again without asking.
+// The notification settings, asked for at sign-in and drawn by the Health
+// page's module (pages/console/notifications.js) once it is opened.
 let lastNotifications = null;
-
-function describeNotifications(data) {
-  lastNotifications = data;
-  const state = $('#notify-state');
-  if (!state) return;
-  state.textContent = data.configured
-    ? i18n.t('Notifications are on.')
-    : i18n.t('Nothing is being sent — add a webhook or an email address.');
-}
 
 // Runs from start(), not wireChrome(): the console wires itself before anyone
 // has signed in, and asking then was a 401 that announced "Your session has
 // ended" to someone who never had one, and left this list empty afterwards.
 async function loadNotifications() {
-  const box = $('#notify-events');
-  if (!box) return;
-
-  let settings;
   try {
-    settings = await notifyApi.get();
+    lastNotifications = await admin.getAdminNotifications();
   } catch {
     return;                       // not an admin, or the console is older
   }
-
-  const chosen = new Set(settings.events || []);
-  box.innerHTML = '';
-  for (const [key, description] of Object.entries(settings.known_events || {})) {
-    const row = el('label', 'toggle');
-    const input = el('input');
-    input.type = 'checkbox';
-    input.value = key;
-    input.checked = chosen.has(key);
-    // Kept as the English key too, so a change of language retranslates it.
-    const words = el('span', null, i18n.t(description));
-    words.dataset.i18n = description;
-    row.append(input, words);
-    box.appendChild(row);
-  }
-  fillNotificationForm(settings.form);
-  describeNotifications(settings);
-}
-
-// What was saved, in the fields. Opened empty, the form sent empty strings
-// for everything on Save, so changing one tick box wiped the webhook and the
-// email setup. The password never comes back; a blank one keeps it.
-function fillNotificationForm(form) {
-  if (!form) return;              // a server from before it said
-  const set = (id, value) => { const input = $(id); if (input) input.value = value ?? ''; };
-  set('#notify-webhook', form.webhook);
-  set('#notify-smtp-host', form.smtp_host);
-  set('#notify-smtp-port', form.smtp_port || 587);
-  set('#notify-smtp-user', form.smtp_user);
-  set('#notify-smtp-to', form.smtp_to);
-  const password = $('#notify-smtp-password');
-  if (password) {
-    password.value = '';
-    password.placeholder = form.smtp_password_saved ? i18n.t('saved — leave blank to keep') : i18n.t('password');
-  }
-}
-
-function wireNotifications() {
-  $$('#notify-save').onclick = async () => {
-    const events = [...document.querySelectorAll('#notify-events input:checked')].map((i) => i.value);
-    try {
-      const result = await notifyApi.save({
-        webhook: $('#notify-webhook')?.value || '',
-        smtp_host: $('#notify-smtp-host')?.value || '',
-        smtp_port: Number($('#notify-smtp-port')?.value || 587),
-        smtp_user: $('#notify-smtp-user')?.value || '',
-        smtp_password: $('#notify-smtp-password')?.value || '',
-        smtp_to: $('#notify-smtp-to')?.value || '',
-        events,
-      });
-      describeNotifications(result.settings);
-      toast(i18n.t('Saved.'));
-    } catch (exc) {
-      toast(exc.message, true);
-    }
-  };
-
-  $$('#notify-test').onclick = async () => {
-    try {
-      const result = await notifyApi.test();
-      toast(result.sent
-        ? i18n.t('Sent. Check wherever you pointed it.')
-        : i18n.t('Nothing was sent: {reason}', { reason: result.reason || result.webhook || result.email }),
-        !result.sent);
-    } catch (exc) {
-      toast(exc.message, true);
-    }
-  };
+  ifOpened('notifications', (page) => page.render(lastNotifications));
 }
 
 function wireScrubber() {
@@ -3910,7 +2944,7 @@ function wireScrubber() {
   startBtn?.addEventListener('click', async () => {
     startBtn.disabled = true;
     try {
-      const res = await adminApi.startScrubber();
+      const res = await admin.postAdminScrubberStart();
       // The server's two answers are fixed sentences, so they are said here in
       // the console's language rather than repeated in English.
       toast(res.ok === false ? i18n.t('Scrubber is already running') : i18n.t('Scrubber started'));
@@ -3924,7 +2958,7 @@ function wireScrubber() {
   stopBtn?.addEventListener('click', async () => {
     stopBtn.disabled = true;
     try {
-      await adminApi.stopScrubber();
+      await admin.postAdminScrubberStop();
       toast(i18n.t('The storage check stops after the file it is reading. Check every file carries on from there.'));
     } catch (err) {
       toast(err.message, true);
@@ -3933,114 +2967,22 @@ function wireScrubber() {
   });
 }
 
-/** How far a running check has got, and the buttons that go with it. */
-function showScrubberProgress(progress) {
-  const running = !!progress?.running;
-  const startBtn = $('#scrubber-start-btn');
-  const stopBtn = $('#scrubber-stop-btn');
-  if (startBtn) {
-    startBtn.disabled = running;
-    startBtn.textContent = !running && Number(progress?.stopped_at) > 0
-      ? i18n.t('Carry on checking') : i18n.t('Check every file');
-  }
-  if (stopBtn) {
-    stopBtn.hidden = !running;
-    if (!running) stopBtn.disabled = false;
-  }
-  const box = $('#scrub-progress');
-  if (!box) return;
-  box.hidden = !running;
-  if (!running) return;
-  const total = Number(progress.total) || 0;
-  const done = Math.min(Number(progress.processed) || 0, total || Infinity);
-  const bar = $('#scrub-progress-bar');
-  if (bar) { bar.max = Math.max(total, 1); bar.value = done; }
-  const text = $('#scrub-progress-text');
-  if (text) {
-    text.textContent = total
-      ? i18n.t('Checked {done} of {total} files', { done: done.toLocaleString(), total: total.toLocaleString() })
-      : i18n.t('Getting ready…');
-  }
-}
-
-// What the storage check found, in the words the server uses for it.
-const SCRUB_STATES = {
-  corrupt: i18n.key('corrupt'),
-  missing: i18n.key('missing'),
-  unreadable: i18n.key('unreadable'),
-};
-
+// The storage check's status, asked for at sign-in and every two seconds
+// while a check runs; drawn by the Health page's module
+// (pages/console/scrubber.js) once it is opened.
+let lastScrub;
 let scrubberPollTimer = null;
 async function pollScrubber() {
   clearTimeout(scrubberPollTimer);
-  const data = await loadScrubberStatus();
-  showScrubberProgress(data?.progress);
-  if (data?.progress?.running) scrubberPollTimer = setTimeout(pollScrubber, 2000);
-}
-
-async function loadScrubberStatus() {
+  let data;
   try {
-    const data = await adminApi.scrubberStatus();
-    const set = (id, value) => {
-      const node = $(id);
-      if (node) node.textContent = String(value || 0);
-    };
-    set('#scrub-total', data.total_assets);
-    set('#scrub-verified', data.verified);
-    set('#scrub-baseline', data.baseline);
-    set('#scrub-changed', data.changed);
-    set('#scrub-corrupt', data.corrupt);
-    set('#scrub-missing', data.missing);
-    set('#scrub-unreadable', data.unreadable);
-
-    // Only the three that need somebody to go and look turn red. "Edited" and
-    // "fingerprinted" are ordinary states, not problems.
-    const alarm = (id, n) => {
-      const card = $(id);
-      if (card) card.classList.toggle('bad', (n || 0) > 0);
-    };
-    alarm('#scrub-corrupt-card', data.corrupt);
-    alarm('#scrub-missing-card', data.missing);
-    alarm('#scrub-unreadable-card', data.unreadable);
-
-    const issues = data.recent_issues || [];
-    const wrap = $('#scrubber-issues-wrap');
-    const tbody = $('#scrubber-issues-tbody');
-    if (issues.length && wrap && tbody) {
-      wrap.hidden = false;
-      tbody.innerHTML = '';
-      // Built as nodes rather than with innerHTML: these strings are
-      // filenames off the disk, and a photograph called
-      // `<img src=x onerror=...>.jpg` would otherwise run in the console.
-      issues.forEach((iss) => {
-        const tr = document.createElement('tr');
-
-        const pathCell = document.createElement('td');
-        const path = document.createElement('code');
-        path.textContent = iss.rel_path || '';
-        pathCell.appendChild(path);
-
-        const statusCell = document.createElement('td');
-        const tag = document.createElement('span');
-        tag.className = `tag ${iss.status === 'corrupt' ? 'danger' : 'warn'}`;
-        tag.textContent = SCRUB_STATES[iss.status] ? i18n.t(SCRUB_STATES[iss.status]) : (iss.status || '');
-        statusCell.appendChild(tag);
-
-        const whenCell = document.createElement('td');
-        whenCell.textContent = iss.checked_at
-          ? new Date(iss.checked_at * 1000).toLocaleString(i18n.locale())
-          : i18n.t('Just now');
-
-        tr.append(pathCell, statusCell, whenCell);
-        tbody.appendChild(tr);
-      });
-    } else if (wrap) {
-      wrap.hidden = true;
-    }
-    return data;
+    data = await admin.getAdminScrubberStatus();
   } catch (err) {
     console.debug('Scrubber status fetch note:', err);
   }
+  lastScrub = data;
+  ifOpened('scrubber', (page) => page.show(data));
+  if (data?.progress?.running) scrubberPollTimer = setTimeout(pollScrubber, 2000);
 }
 
 /* ======================================================================== */
