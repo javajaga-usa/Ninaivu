@@ -72,6 +72,31 @@ await press(p, '.side-item[data-view="all"]');
 await p.waitForTimeout(800);
 ok('leaving Duplicates puts the banner away', await p.$eval('#duplicates-banner', (n) => n.hidden));
 
+/** Fetched once, at a stamped URL. */
+const familyOnce = (name) => {
+  const urls = pageAsked(`family/${name}.js`);
+  ok(`${name} was fetched once, stamped`, urls.length === 1 && /\?v=/.test(urls[0]), urls.join(' '));
+};
+
+// Jump to: the button is there from the start, its list comes when opened.
+await p.waitForSelector('#jump:not([hidden])', { timeout: 15000 }).catch(() => {});
+if (await p.isVisible('#jump')) {
+  ok('the Jump to list is not fetched before it is opened', pageAsked('family/jump.js').length === 0);
+  await p.click('#jump-btn');
+  await p.waitForSelector('#jump-pop:not([hidden])', { timeout: 8000 });
+  ok('Jump to lists the years', await p.$$eval('#jump-years button', (n) => n.length) > 0);
+  ok('and the months, some to choose', await p.$$eval('#jump-months button:not(:disabled)', (n) => n.length) > 0);
+  await p.keyboard.press('Escape');
+  ok('Escape closes it', await p.isHidden('#jump-pop'));
+  await p.click('#jump-btn');
+  await p.waitForSelector('#jump-pop:not([hidden])', { timeout: 8000 });
+  await p.click('#jump-months button:not(:disabled)');
+  ok('choosing a month closes it', await p.isHidden('#jump-pop'));
+  familyOnce('jump');
+} else {
+  ok('Jump to is shown for this library', false);
+}
+
 /* ---------- the console ---------- */
 const c = await b.newPage({ viewport: { width: 1400, height: 900 } });
 c.on('pageerror', (e) => errors.push(e.message));

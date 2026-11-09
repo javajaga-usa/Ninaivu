@@ -2,11 +2,14 @@
 
 Faint over the photographs until pointed at, so it never hides one; whole on
 hover, focus or while open. Its list comes from the view's own sections, so
-it offers only the years and months there are (app.js, jumpIndex).
+it offers only the years and months there are (app.js, jumpIndex; the list
+itself is pages/family/jump.js).
 """
 
 import re
 from pathlib import Path
+
+from js_sources import family_app
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -28,7 +31,7 @@ def test_it_is_faint_at_rest_and_whole_when_pointed_at():
 
 
 def test_only_months_the_view_has_are_offered():
-    script = (ROOT / "ninaivu/static/js/app.js").read_text(encoding="utf-8")
+    script = family_app()
     assert "function jumpIndex()" in script and "button.disabled = !header" in script
     # And only in date order: names and sizes have no months to jump between.
     assert "['date_desc', 'date_asc']" in script
@@ -48,7 +51,7 @@ def test_every_year_can_be_scrolled_to():
     # And five years tall, scrolling to the rest: not a tall list.
     assert "--year-row:" in years and "5 * var(--year-row)" in years
     assert "overscroll-behavior: contain" in years
-    script = (ROOT / "ninaivu/static/js/app.js").read_text(encoding="utf-8")
+    script = family_app()
     assert "function stepJumpYear(step)" in script
     # A Mac hides scroll bars at rest, so the list fades at an end with more.
     assert "function shadeJumpYears()" in script
