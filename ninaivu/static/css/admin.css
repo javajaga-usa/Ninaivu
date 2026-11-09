@@ -919,6 +919,10 @@ body.admin .ios-install-banner {
 .scrub-progress { display: flex; align-items: center; gap: 12px; }
 .scrub-progress[hidden] { display: none; }
 .scrub-progress progress { flex: 1; max-width: 420px; height: 6px; accent-color: var(--accent); }
+/* The Health page's Copies: photographs in at least two places. */
+.copies-headline { font-size: 1.1rem; font-weight: 600; margin: 4px 0 8px; }
+.copies-bar { display: block; width: 100%; max-width: 420px; height: 6px; margin-bottom: 12px; accent-color: var(--accent); }
+.copies-bar[hidden] { display: none; }
 .setting-field .row { display: flex; gap: 8px; }
 .setting-field .row .input { flex: 1; min-width: 0; }
 /* A setting's title, whether a label or a heading, is one size — a heading

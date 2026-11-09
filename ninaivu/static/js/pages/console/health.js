@@ -1,6 +1,6 @@
 /**
- * The console's Health page: what went wrong, the copies of the index and
- * the weekly photograph. Loaded when it is first opened (admin.js, openPage).
+ * The console's Health page: how many photographs are in two places, what
+ * went wrong, the copies of the index and the weekly photograph. Loaded when it is first opened (admin.js, openPage).
  * The drives, storage checks and the scrubber on the same page are still
  * drawn by admin.js and the panels it starts.
  */
@@ -11,6 +11,7 @@ import { $, $$, bytesShort, consoleToast as toast, el, whenShort } from '../../u
 
 const adminApi = {
   problems: (limit = 12) => admin.getAdminProblems({ query: { limit } }),
+  copies: () => admin.getAdminCopies(),
   backups: () => admin.getAdminBackups(),
   backupNow: () => admin.postAdminBackupsNow(),
   verifyBackup: () => admin.postAdminBackupsVerify(),
@@ -19,6 +20,77 @@ const adminApi = {
 
 /** The console around the page (admin.js). */
 let shell;
+
+/* --- photographs in two places ------------------------------------------ */
+/*
+ * Every copy (the second disk, the Secondary, the off-site copy, Google
+ * Drive) writes down, as it confirms a copy, which photographs it keeps
+ * (ninaivu/copies). This reads that record: nothing is sent or checked by
+ * opening the page.
+ */
+
+const COPY_NAMES = {
+  mirror: i18n.key('Second disk'),
+  secondary: i18n.key('The Secondary'),
+  offsite: i18n.key('Off-site copy'),
+  drive: i18n.key('Google Drive'),
+};
+
+function copyCard(dest) {
+  const card = el('div', 'card');
+  const name = COPY_NAMES[dest.name] ? i18n.t(COPY_NAMES[dest.name]) : dest.name;
+  card.appendChild(el('div', 'card-label', name));
+  const kept = Number(dest.ledger?.kept) || 0;
+  card.appendChild(el('div', 'card-value', dest.on || kept ? kept.toLocaleString(i18n.locale()) : '—'));
+  let said;
+  if (!dest.on) {
+    said = i18n.t('Off');
+  } else if (dest.problems?.length) {
+    said = dest.problems[0];
+    card.classList.add('bad');
+  } else if (dest.error) {
+    said = i18n.t('The last attempt failed: {reason}', { reason: dest.error });
+    card.classList.add('bad');
+  } else if (dest.running) {
+    said = i18n.t('Copying now');
+  } else if (dest.last_finished) {
+    said = i18n.t('Last done {when}', { when: whenShort(dest.last_finished) });
+    card.classList.add('good');
+  } else {
+    said = i18n.t('Not done yet');
+  }
+  card.appendChild(el('div', 'card-sub', said));
+  return card;
+}
+
+async function loadCopies() {
+  let data;
+  try {
+    data = await adminApi.copies();
+  } catch (exc) {
+    return;                       // the panel is a convenience, never a blocker
+  }
+  const head = data.headline || {};
+  const total = Number(head.total) || 0;
+  const two = Math.min(Number(head.two_places) || 0, total);
+  $('#copies-headline').textContent = total
+    ? i18n.t('{two} of {total} photographs are in at least two places',
+      { two: two.toLocaleString(i18n.locale()), total: total.toLocaleString(i18n.locale()) })
+    : i18n.t('No photographs yet');
+  const bar = $('#copies-bar');
+  bar.hidden = !total;
+  bar.max = Math.max(total, 1);
+  bar.value = two;
+  const bare = Number(head.unfingerprinted) || 0;
+  const note = $('#copies-unfingerprinted');
+  note.hidden = !bare;
+  note.textContent = bare
+    ? i18n.t('{count} are not fingerprinted yet: they are counted, but not as in two places until they are.',
+      { count: bare.toLocaleString(i18n.locale()) })
+    : '';
+  const cards = $('#copies-destinations');
+  cards.replaceChildren(...(data.destinations || []).map(copyCard));
+}
 
 /* --- anything that went wrong ------------------------------------------- */
 /*
@@ -274,6 +346,7 @@ export function wire(context) {
 
 /** The page has been opened, or the language changed while it is open. */
 export function show() {
+  loadCopies();
   loadProblems();
   loadBackups();
   loadDigest();

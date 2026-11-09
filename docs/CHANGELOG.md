@@ -32,7 +32,7 @@
 
 - **Every copy is counted the same way.** The second disk, the Secondary, the off-site copy and Google Drive each record, as they confirm a copy, which photographs (by fingerprint) they hold. From that record Ninaivu says how many photographs are in at least two places, of all of them, and each copy's own status and counts. A photograph not fingerprinted yet is counted in the total but never as in two places, since nobody can say where its copies are.
 - **Each copy can be test-restored.** The off-site copy brings three random files back into a temporary folder and compares their fingerprints; the Secondary is asked to read three kept originals back from its disk and report theirs.
-- **Not finished:** the console answers this (`/api/admin/copies`), but the Copies page that shows it is not built yet.
+- **On the Health page, under Copies:** how many photographs are in at least two places, of all of them, with a line for each copy (the second disk, the Secondary, the off-site copy, Google Drive) saying how many it keeps and when it last finished, or that it is off or has a problem. Opening it only reads the record; nothing is sent or checked.
 
 ### The Raspberry Pi publisher is retired
 
