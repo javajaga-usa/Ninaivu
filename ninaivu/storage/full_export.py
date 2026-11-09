@@ -564,6 +564,31 @@ class _Both(io.TextIOBase):
                 pass
 
 
+def settle_arrival(state_dir: Path | str) -> list[str]:
+    """After a full export from another computer is in place here, by the
+    console's import or by ``ninaivu restore``: when this is the Primary of a
+    pair now, take over from the computer the index came from, and put in
+    place the plan for moving the Primary that the export carried, so this
+    computer can prove nothing was lost. Returns what to tell the person."""
+    said: list[str] = []
+    from ..mugil import pairing                             # noqa: PLC0415
+    try:
+        if pairing.mark_moved(state_dir):
+            said.append("This computer is the Primary of two computers now: it takes over "
+                        "from the one the index came from when it first reaches the "
+                        "Secondary.")
+    except OSError:
+        log.exception("could not mark the pairing as moved")
+    from ..mugil import topology                            # noqa: PLC0415
+    try:
+        if topology.arrive(state_dir):
+            said.append("The plan for moving the Primary came with the index: prove "
+                        "nothing was lost on the Two computers page.")
+    except (OSError, ValueError):
+        log.exception("could not put the plan for moving the Primary in place")
+    return said
+
+
 def _library_folders(state_dir: Path | str) -> list[str]:
     """The library folders this computer's settings name, before an import
     replaces them with the other computer's."""
@@ -634,21 +659,8 @@ def apply_pending(state_dir: Path | str) -> bool | None:
         done, error = False, "The import failed part-way; Ninaivu's log says why."
     mapped: dict[str, str] = {}
     if done:
-        from ..mugil import pairing                         # noqa: PLC0415
-        try:
-            if pairing.mark_moved(state_dir):
-                print("  • This computer is the Primary of two computers now: it takes "
-                      "over from the one the index came from when it first reaches the "
-                      "Secondary.", flush=True)
-        except OSError:
-            log.exception("could not mark the pairing as moved")
-        from ..mugil import topology                        # noqa: PLC0415
-        try:
-            if topology.arrive(state_dir):
-                print("  • The plan for moving the Primary came with the index: prove "
-                      "nothing was lost on the Two computers page.", flush=True)
-        except (OSError, ValueError):
-            log.exception("could not put the plan for moving the Primary in place")
+        for line in settle_arrival(state_dir):
+            print(f"  • {line}", flush=True)
         starting.step("bringing in the index from the other computer: finding the library")
         from . import library_id                           # noqa: PLC0415
         try:

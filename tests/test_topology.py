@@ -396,7 +396,8 @@ def test_after_unpairing_each_computer_proves_its_own_side(apart):
 
 # -- moving the Primary: the plan goes with the index -----------------------------------
 
-def moved(world, tmp_path, monkeypatch, *, leave_behind: str | None = None):
+def moved(world, tmp_path, monkeypatch, *, leave_behind: str | None = None,
+          by_hand: bool = False):
     """Plan the move on the old Mac, export its index, copy its library to the
     new Mac by hand, and import the index there, as the household does."""
     from ninaivu.cli import backup_restore
@@ -413,8 +414,12 @@ def moved(world, tmp_path, monkeypatch, *, leave_behind: str | None = None):
     new = computer(tmp_path, "New Mac", [new_lib])
     (new.state_dir / "config.json").write_text(json.dumps({"home_name": "New Mac"}))
     monkeypatch.setattr(backup_restore.Config, "load", lambda: SimpleNamespace(state_dir=new.state_dir))
-    full_export.ask_for_import(new.state_dir, bundle)
-    assert full_export.apply_pending(new.state_dir) is True
+    if by_hand:
+        # `ninaivu restore <export>` on the new computer, not the console's import.
+        assert backup_restore.main(["restore", str(bundle)]) == 0
+    else:
+        full_export.ask_for_import(new.state_dir, bundle)
+        assert full_export.apply_pending(new.state_dir) is True
     new.mugil_role, new.mugil_partner_url = "primary", "http://linux-pc"
     return new, Topology(new, lambda: sqlite3.connect(new.db_path), wait=0.01,
                          partner=through(world.secondary)), bundle
@@ -450,6 +455,19 @@ def test_the_export_carries_the_plan_and_the_new_primary_proves_it(apart, tmp_pa
     record = finish(there)["record"]
     assert record["state"] == "done", record
     assert record["proof"]["passed"] and record["proof"]["checked"] == 11
+
+
+def test_the_plan_arrives_with_ninaivu_restore_too(apart, tmp_path, monkeypatch):
+    """The export brought in by hand (`ninaivu restore`) settles as the
+    console's import does: the pairing taken over, the plan put in place."""
+    from ninaivu.mugil import pairing
+    new, there, _ = moved(apart, tmp_path, monkeypatch, by_hand=True)
+    assert not topology.moving(new.state_dir)
+    record = there.status()["record"]
+    assert record["transition"] == "move_primary" and record["moved_in"]
+    assert (pairing.load(new.state_dir) or {}).get("moved_in_at")
+    there.prove()
+    assert finish(there)["record"]["state"] == "done"
 
 
 def test_a_file_left_on_the_old_primary_fails_the_proof_by_name(apart, tmp_path, monkeypatch):

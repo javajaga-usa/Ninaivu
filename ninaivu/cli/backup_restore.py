@@ -325,10 +325,15 @@ def _keep_local_secrets(local: Path, copied: Path, target: Path) -> None:
                       encoding="utf-8")
 
 
-def restore_backup(archive_path: Path, progress: Progress | None = None) -> bool:
+def restore_backup(archive_path: Path, progress: Progress | None = None, *,
+                   arrive: bool = False) -> bool:
     """Prepare verified state, then swap directories with rollback on failure.
 
-    *progress* hears how far the unpacking and the checking have got."""
+    *progress* hears how far the unpacking and the checking have got. With
+    *arrive* (``ninaivu restore``), a full export from another computer is
+    settled here as the console's import settles it
+    (full_export.settle_arrival): the pairing taken over, and a plan for
+    moving the Primary put in place to be proved."""
     if not archive_path.is_file():
         fail(f"Backup archive not found: {archive_path}")
         return False
@@ -380,6 +385,7 @@ def restore_backup(archive_path: Path, progress: Progress | None = None) -> bool
             fail(f"Failed to extract tar archive: {exc}")
             return False
 
+        kind = _bundle_kind(extracted_state)
         try:
             ok("All archived files and databases verified.")
             state_dir.parent.mkdir(parents=True, exist_ok=True)
@@ -414,6 +420,10 @@ def restore_backup(archive_path: Path, progress: Progress | None = None) -> bool
             fail(f"Restore failed: {exc}")
             return False
 
+    if arrive and kind == backup_lib.FULL_KIND:
+        from ..storage import full_export                   # noqa: PLC0415
+        for line in full_export.settle_arrival(state_dir):
+            say(line)
     if progress is None:
         ok("Restore completed successfully! Please restart Ninaivu to load restored state.")
     else:
@@ -475,7 +485,7 @@ def main(argv: list[str] | None = None) -> int:
         res = create_backup(args.out, without_secrets=args.without_secrets, full=args.full)
         return 0 if res else 1
     elif args.command == "restore":
-        res = restore_backup(args.archive)
+        res = restore_backup(args.archive, arrive=True)
         return 0 if res else 1
     elif args.command == "list":
         list_backups(args.dir)
