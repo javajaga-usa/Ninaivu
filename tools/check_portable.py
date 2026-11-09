@@ -645,12 +645,7 @@ def open_the_starter(portable: Portable, photos: Path, logs: Path) -> None:
     program = starter(portable.folder)
     step(f"Opening {program.relative_to(portable.folder)}, the download's one starter")
     port, admin_port = free_ports(2)
-    control = Path(portable.env["NINAIVU_HOME"]) / ".ninaivu-control"
-    control.mkdir(parents=True, exist_ok=True)
-    (control / "settings.json").write_text(json.dumps({"arguments": [
-        str(photos), "--http", "--no-mdns", "--strict-port", "--port", str(port),
-        "--admin-port", str(admin_port), "--ai", "off", "--no-watch", "--allow-sleep", "--local-only"]}),
-        encoding="utf-8")
+    set_the_panel_up(portable, photos, port, admin_port)
     report = WORK / "opened.json"
     report.unlink(missing_ok=True)
     # The starter sets the folders itself, as on a double-click.
@@ -672,6 +667,33 @@ def open_the_starter(portable: Portable, photos: Path, logs: Path) -> None:
             if opened.poll() is None:
                 opened.kill()
             _stop_by_run_file(portable, port, admin_port)
+
+
+def set_the_panel_up(portable: Portable, photos: Path, port: int, admin_port: int) -> None:
+    """The library and ports the panel's start is to use, kept where a
+    household's are.
+
+    The arguments go in the panel's settings.json. The ports do not: the
+    panel leaves ``--port`` and ``--admin-port`` out of those (they are the
+    ports one start ended up on, desktop/control.py ONE_SHOT_OPTIONS), so put
+    there they were dropped and the server asked for the default 80 with
+    ``--strict-port``, which a runner refuses (a privileged port on Linux,
+    most likely taken on Windows) and the server ended within seconds (#408). They are
+    the configured ports instead, in the index folder's config.json, as the
+    console's settings keep them."""
+    control = Path(portable.env["NINAIVU_HOME"]) / ".ninaivu-control"
+    control.mkdir(parents=True, exist_ok=True)
+    (control / "settings.json").write_text(json.dumps({"arguments": [
+        str(photos), "--http", "--no-mdns", "--strict-port", "--ai", "off", "--no-watch",
+        "--allow-sleep", "--local-only"]}), encoding="utf-8")
+    stored = portable.state / "config.json"
+    try:
+        config = json.loads(stored.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        config = {}
+    config.update(port=port, admin_port=admin_port)
+    portable.state.mkdir(parents=True, exist_ok=True)
+    stored.write_text(json.dumps(config, indent=2), encoding="utf-8")
 
 
 def _report_the_panel_start(report: Path, port: int, opened: subprocess.Popen) -> None:
