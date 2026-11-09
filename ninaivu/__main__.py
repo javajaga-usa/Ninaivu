@@ -1194,6 +1194,7 @@ def _serve(home, admin, cfg, args, ssl_files=None, awake=None,
     if ssl_files and remote.resolve(cfg).serves_certificate:
         from .utils import tailnet, tls as tls_mod                # noqa: PLC0415
         tailnet_cert = tailnet.TailnetCertificate(tls_mod.tls_dir(cfg.state_dir))
+        tailnet_cert.supervisor = getattr(services, "supervisor", None)
         tailnet_cert.load_saved()
         tailnet_cert.watch()
 
