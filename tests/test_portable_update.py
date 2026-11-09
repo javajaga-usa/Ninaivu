@@ -244,6 +244,46 @@ def test_going_back_after_the_update_changed_the_index_puts_the_older_index_back
     assert (older_path / "data" / "thumbs" / "2024" / "a.webp").is_file()
 
 
+def test_the_same_version_with_an_index_of_another_shape_puts_the_older_index_back(
+        here, tmp_path, monkeypatch):
+    """A build made before its version is raised (4.0 while it still says
+    3.7.0) changes the index's shape under the same number. Handed back as
+    it was, the older version refused it (schema 7): Go back puts back the
+    copy that build's first start took."""
+    older_path = _folder(tmp_path, "Ninaivu-1.12.0", version="1.12.0", words="as it was")
+    (older_path / "data" / upgrade.VERSION_FILE).write_text(
+        json.dumps({"version": "1.12.0", "shape": "the older shape"}))
+    portable.bring_here(portable.older_beside(version="1.12.0"), version="1.12.0",
+                        stop_older=_no_stop)
+    state = here / "data"
+    monkeypatch.setattr(upgrade, "index_shape", lambda: "the newer shape")
+    made = upgrade.prepare(state, version="1.12.0", environ={})["backup"]
+    assert made is not None
+    _index(state / "index.db", "changed by the newer build")
+
+    done = portable.go_back(version="1.12.0", stop_this=_no_stop)
+    assert done["index_put_back"] == made
+    assert _words(older_path / "data" / "index.db") == "as it was"
+
+
+def test_the_same_version_that_changed_nothing_hands_the_index_back_as_it_is(here, tmp_path):
+    """A copy the older folder made at an update of its own, before the
+    library came here, is never put back over what was done since."""
+    older_path = _folder(tmp_path, "Ninaivu-1.12.0", version="1.12.0", words="as it was")
+    (older_path / "data" / upgrade.VERSION_FILE).write_text(json.dumps(
+        {"version": "1.12.0", "shape": upgrade.index_shape(), "since": 1_000.0,
+         "backup": str(older_path / "data" / "backups" / "before-update" / "old.tar.gz")}))
+    portable.bring_here(portable.older_beside(version="1.12.0"), version="1.12.0",
+                        stop_older=_no_stop)
+    state = here / "data"
+    assert upgrade.prepare(state, version="1.12.0", environ={})["backup"] is None
+    _index(state / "index.db", "a caption added since")
+
+    done = portable.go_back(version="1.12.0", stop_this=_no_stop)
+    assert done["index_put_back"] is None
+    assert _words(older_path / "data" / "index.db") == "a caption added since"
+
+
 def test_going_back_without_the_copy_moves_nothing(here, tmp_path):
     older_path = _folder(tmp_path, "Ninaivu-1.11.0", version="1.11.0", words="the family")
     portable.bring_here(portable.older_beside(version="1.12.0"), version="1.12.0",
