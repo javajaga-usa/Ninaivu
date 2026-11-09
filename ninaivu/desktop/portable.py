@@ -690,6 +690,18 @@ def _copy_before(state: Path, version: str) -> Path | None:
     return None
 
 
+def _changed_since(last: dict[str, Any] | None, record: dict[str, Any]) -> bool:
+    """Whether this folder's program changed the index after the library was
+    brought here: its first start after the bring made the copy before an
+    update (storage/upgrade.py records when, and which copy)."""
+    if not last or not last.get("backup"):
+        return False
+    try:
+        return float(last.get("since") or 0) > float(record.get("at") or 0)
+    except (TypeError, ValueError):
+        return False
+
+
 def _put_back_index(state: Path, bundle: Path) -> None:
     """The databases and settings in *state* replaced by those in *bundle*,
     checked first; nothing else in the folder is touched."""
@@ -753,8 +765,19 @@ def go_back(folder: Folder | None = None, *, version: str | None = None,
     with _exclusive_libraries(folder.state, target_state):
         bundle = kept = None
         last = upgrade.recorded(folder.state)
-        if last and last.get("version") != record.get("version"):
+        newer = bool(last) and last.get("version") != record.get("version")
+        if newer:
             bundle = _copy_before(folder.state, str(last.get("version")))
+        elif _changed_since(last, record):
+            # The same version number with an index of another shape (a
+            # build made before its version is raised): its first start here
+            # took a copy, and that copy is what the older one can read.
+            # Handing the index back as it is left the older version an index
+            # it refuses (from 4.0, 3.x does not open one 4.0 has opened).
+            made = Path(str(last.get("backup")))
+            bundle = made if made.is_file() else None
+            newer = True
+        if newer:
             if bundle is None:
                 raise PortableError(
                     "No copy of the index from before this update was found, so the older "
