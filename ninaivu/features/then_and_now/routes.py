@@ -33,7 +33,8 @@ from flask import abort, jsonify, make_response
 
 from ...server import features, visibility
 from ...server.auth import current_user, require_family
-from ...storage import db, family_tree
+from ...storage import db
+from ..family_tree import storage as family_tree
 from ...words import Said, refusal
 from ...api._body import json_object
 from ...api.api import _cfg, _conn, _safe_under, _thumb_version, bp

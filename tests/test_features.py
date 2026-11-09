@@ -70,6 +70,12 @@ MOVED = {
     "ninaivu.api.api_video_moments": "ninaivu.features.video_moments.routes",
     "ninaivu.media.video_moments": "ninaivu.features.video_moments.media",
     "ninaivu.storage.video_moments": "ninaivu.features.video_moments.storage",
+    "ninaivu.api.api_smart": "ninaivu.features.smart.routes",
+    "ninaivu.storage.smart": "ninaivu.features.smart.storage",
+    "ninaivu.api.api_ask_family": "ninaivu.features.ask_family.routes",
+    "ninaivu.storage.ask_family": "ninaivu.features.ask_family.storage",
+    "ninaivu.api.api_family_tree": "ninaivu.features.family_tree.routes",
+    "ninaivu.storage.family_tree": "ninaivu.features.family_tree.storage",
 }
 
 

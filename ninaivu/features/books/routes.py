@@ -118,8 +118,8 @@ def _source() -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
         filters["person"] = sid
         meta["name"] = known[sid] or ""
     else:
-        from ...storage import smart                          # noqa: PLC0415
-        from ...api.api_smart import apply_rules                   # noqa: PLC0415
+        from ..smart import storage as smart                  # noqa: PLC0415
+        from ..smart.routes import apply_rules                # noqa: PLC0415
         rules: dict[str, Any] = {"text": "", "people": None, "place": "", "kinds": None,
                                  "favorites": False, "date_from": "", "date_to": "",
                                  "camera": "", "tag": "", "folder": "", "album": None}

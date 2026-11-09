@@ -32,7 +32,8 @@ from flask import abort, current_app, jsonify, request
 
 from ... import runtime
 from ...server.auth import current_user, require_family
-from ...storage import db, family_tree
+from ...storage import db
+from ..family_tree import storage as family_tree
 from ...words import Said
 from ...api import _long_calls
 from ...api._body import json_object

@@ -186,15 +186,13 @@ def _here(name: str, title: str, *, routes: str | None, tables: Tables | None,
 
 
 def _manifests() -> tuple[Feature, ...]:
-    from . import books, capsules, colour_copies, films, frame, letters  # noqa: PLC0415
-    from . import life_story, stacks, then_and_now, video_moments  # noqa: PLC0415
+    from . import ask_family, books, capsules, colour_copies, family_tree, films  # noqa: PLC0415
+    from . import frame, letters, life_story, smart, stacks, then_and_now  # noqa: PLC0415
+    from . import video_moments                                   # noqa: PLC0415
     return (
-        _here("smart", "Smart albums", routes="ninaivu.api.api_smart",
-              tables=Tables("ninaivu.storage.smart")),
-        _here("ask_family", "\"Who is this?\" links", routes="ninaivu.api.api_ask_family",
-              tables=Tables("ninaivu.storage.ask_family")),
-        _here("family_tree", "The family tree", routes="ninaivu.api.api_family_tree",
-              tables=Tables("ninaivu.storage.family_tree")),
+        smart.MANIFEST,
+        ask_family.MANIFEST,
+        family_tree.MANIFEST,
         books.MANIFEST,
         films.MANIFEST,
         _here("handover", "The handover plan", routes="ninaivu.api.api_handover",
