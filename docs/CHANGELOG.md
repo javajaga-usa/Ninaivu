@@ -51,7 +51,7 @@ These change nothing a household sees; they make the next changes smaller and sa
 - **The copy contract and the ledger.** The four kinds of copy answer to one contract, and each writes the ledger as it confirms a copy, without changing how it copies. A failure to write the ledger never stops a copy. The ledger is also filled from each copy's own records every half hour.
 - **Front-end page modules and the generated `api.js`.** `api.js` is now made from the route manifest, one function per route. The console's Large files, Health and recycle bin, and the family app's map, upload, sharing and duplicates review, are page modules fetched the first time they are opened. The rest of both apps is not moved yet.
 - **New photographs come before the AI passes.** Descriptions, voice stories and the moments in videos wait while the library is being scanned, and carry on once it is done; the console says "new photographs are being added first". They never make the scan wait.
-- **The analysed count is of what you may see.** The family app's count of analysed items counted every item in the folder, hidden, flagged and other people's "Only to me" ones too; it now counts what that person may see, like every other number beside it.
+- **The analysed count is of what that person may see.** The library counts sent to the family app included how many items had been analysed, counted over the whole folder: hidden, flagged and other people's "Only to me" items too. It now counts only what that person may see, like every other number there.
 
 ### Before you update
 
