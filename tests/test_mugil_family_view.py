@@ -343,3 +343,17 @@ def test_without_a_name_the_primary_is_the_main_computer(two):
     assert two.view.look() is True
     refused = _signed_in(two.app).post("/api/albums", json={"name": "x"}).get_json()
     assert refused["params"]["primary"] == "the main computer"
+
+
+def test_the_view_sits_behind_the_proxy_fix(scanned):
+    """With a reverse proxy declared, a request the family view answers has its
+    forwarded headers read too: the view is put behind ProxyFix, not in front."""
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    from ninaivu import build_services, create_home_app
+    from ninaivu.mugil import family_view
+
+    cfg, _, _ = scanned
+    cfg.trusted_proxies = 1
+    app = create_home_app(build_services(cfg))
+    assert isinstance(app.wsgi_app, ProxyFix) and app.wsgi_app.x_for == 1
+    assert isinstance(app.wsgi_app.app, family_view._Dispatch)

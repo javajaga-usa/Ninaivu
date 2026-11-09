@@ -381,6 +381,15 @@ class _Dispatch:
 
 
 def install(app, view: FamilyView) -> None:
-    """Put the family view in front of *app*, the Secondary's family app."""
+    """Put the family view in front of *app*, the Secondary's family app.
+
+    Behind the proxy fix when there is one (``trusted_proxies``), not in front
+    of it: a request the view answers has its forwarded headers read too, and
+    the address it came from is the visitor's, not the proxy's.
+    """
+    from werkzeug.middleware.proxy_fix import ProxyFix          # noqa: PLC0415
     app.config["MV_FAMILY_VIEW"] = view
-    app.wsgi_app = _Dispatch(app.wsgi_app, view)
+    if isinstance(app.wsgi_app, ProxyFix):
+        app.wsgi_app.app = _Dispatch(app.wsgi_app.app, view)
+    else:
+        app.wsgi_app = _Dispatch(app.wsgi_app, view)

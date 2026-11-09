@@ -191,7 +191,7 @@ def test_an_approval_leaves_an_analysis_running(cfg):
 def test_the_next_library_folder_waits_for_a_hold(cfg, tmp_path):
     scanner = Scanner(cfg)
     second = tmp_path / "second"
-    scanner._claims.append("an import is copying into the library")
+    scanner._claims.append(("an import is copying into the library", None))      # (reason, holder)
     assert scanner._held_before([second], False, {}) is True
     assert scanner._defer_pending == ([second], False)
     assert scanner.progress.snapshot()["status"] == "paused"
@@ -230,7 +230,7 @@ def test_an_analysis_only_scan_reads_nothing(scanned, monkeypatch):
 
 def test_a_scan_stopped_for_a_hold_says_it_is_paused(cfg):
     scanner = Scanner(cfg)
-    scanner._claims.append("checking the library's storage")
+    scanner._claims.append(("checking the library's storage", None))      # (reason, holder)
     scanner._finish("idle", "Cancelled")
     snap = scanner.progress.snapshot()
     assert snap["status"] == "paused"
