@@ -329,13 +329,18 @@ def check(older_archive: Path, newer_archive: Path, work: Path) -> None:
 
     step("The newer Ninaivu starts on it")
     new_version = built_version(new_env)
+    update_copies = new_state / "backups" / "before-update"
+    copies_before = set(update_copies.glob("*"))
     serve(new_env, photos, logs / "newer.log", until=lambda: last_version(new_state) == new_version)
     expect(last_version(new_state) == new_version, f"newer version {new_version} took the index over")
     expect(indexed(new_state) == PHOTOS, f"it has all {PHOTOS} photographs")
     expect(caption(new_state) == CAPTION, "the family's caption came across")
+    # Its first start copies the index before changing it: on a new version,
+    # and on the same version number with an index of another shape (a pull
+    # request before the version is raised).
+    changed_index = bool(set(update_copies.glob("*")) - copies_before)
     if new_version != old_version:
-        copies = list((new_state / "backups" / "before-update").glob("*"))
-        expect(bool(copies), "the index was copied before it was upgraded")
+        expect(changed_index, "the index was copied before it was upgraded")
     set_caption(new_state, CHANGED)
 
     step("Go back to the older version")
@@ -344,10 +349,10 @@ def check(older_archive: Path, newer_archive: Path, work: Path) -> None:
     if not shared:
         expect(not (new_state / "index.db").exists(), "and gone from the newer one")
     expect(not (older / "LIBRARY-MOVED.txt").exists(), "the moved note is gone")
-    # Put back from the copy only when the newer version changed the index's
-    # shape; the same version (a pull request before the version is raised)
-    # hands it back with what was done since.
-    kept = CAPTION if new_version != old_version else CHANGED
+    # Put back from the copy when the newer version changed the index; one
+    # that did not (the same version and the same shape) hands it back with
+    # what was done since.
+    kept = CAPTION if new_version != old_version or changed_index else CHANGED
     expect(caption(old_state) == kept, "the index is as the older version can read it")
 
     step("The older Ninaivu starts on it again")
