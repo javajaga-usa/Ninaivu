@@ -13,7 +13,7 @@ from PIL import Image
 from ninaivu.media import scanner as scanner_mod
 from ninaivu.media.scanner import Scanner
 from ninaivu.server import auth
-from ninaivu.storage import db, fingerprints, migrations
+from ninaivu.storage import db, fingerprints, locations, migrations
 
 
 # -- helpers -----------------------------------------------------------------
@@ -345,3 +345,263 @@ def test_locations_answer_what_the_move_finder_asks(cfg):
         "JOIN assets a ON a.id=l.asset_id WHERE l.root=? AND l.fingerprint LIKE ?",
         (str(root), f"{fingerprints.ALGO}:%"))}
     assert from_locations == asked
+
+
+# -- rebuilding and checking (second slice) ----------------------------------
+
+def _many(conn, n: int) -> list[int]:
+    db.bulk_upsert(conn, [_record(f"2024/{i // 100:02d}/p{i:05d}.jpg") for i in range(n)])
+    ids = [r[0] for r in conn.execute("SELECT id FROM assets ORDER BY id")]
+    fingerprints.store(conn, [(i, f"{i:064x}", 100, 1_700_000_000.0) for i in ids[::2]])
+    return ids
+
+
+def test_check_finds_each_difference_and_rebuild_sets_them_right(tmp_path):
+    path = tmp_path / "index.db"
+    conn = db.init_db(path)
+    try:
+        ids = _many(conn, 40)
+        assert locations.check(conn)["agrees"]
+        first_seen = dict(conn.execute("SELECT asset_id, seen_at FROM locations"))
+        with db._write_lock:                              # noqa: SLF001
+            conn.execute("PRAGMA foreign_keys=OFF")
+            # What a repair can leave: rows of only one of the tables.
+            conn.execute("DELETE FROM locations WHERE asset_id IN (?, ?)", (ids[1], ids[2]))
+            conn.execute("UPDATE locations SET fingerprint='blake3:00' WHERE asset_id=?", (ids[3],))
+            conn.execute("UPDATE locations SET fingerprint=NULL WHERE asset_id=?", (ids[4],))
+            conn.execute("UPDATE locations SET rel_path='elsewhere.jpg' WHERE asset_id=?", (ids[5],))
+            conn.execute("INSERT INTO locations(asset_id, root, rel_path) VALUES (99999, '/x', 'y')")
+            conn.commit()
+            conn.execute("PRAGMA foreign_keys=ON")
+        before = conn.execute("SELECT COUNT(*), SUM(seen_at) FROM locations").fetchone()
+        found = locations.check(conn)
+        assert not found["agrees"]
+        assert (found["missing"], found["extra"], found["wrong_fingerprint"]) == (3, 2, 2)
+        assert set(found["examples"]["missing"]) == {ids[1], ids[2], ids[5]}
+        assert found["examples"]["wrong_fingerprint"] == [ids[3], ids[4]]
+        # Only read.
+        assert conn.execute("SELECT COUNT(*), SUM(seen_at) FROM locations").fetchone() == before
+
+        assert locations.rebuild(conn) == len(ids)
+        assert locations.check(conn)["agrees"]
+        _in_step(conn)
+        # A place that was right keeps when it was first seen there.
+        now_seen = dict(conn.execute("SELECT asset_id, seen_at FROM locations"))
+        assert now_seen[ids[0]] == first_seen[ids[0]]
+    finally:
+        db.close(path)
+
+
+def test_rebuild_makes_lost_triggers_again_and_waits_for_the_migration(tmp_path):
+    path = tmp_path / "index.db"
+    conn = db.init_db(path)
+    try:
+        db.upsert_asset(conn, _record("a/one.jpg"))
+        conn.execute("DROP TRIGGER locations_follow_insert")
+        conn.commit()
+        locations.rebuild(conn)
+        db.upsert_asset(conn, _record("a/two.jpg"))
+        assert len(_in_step(conn)) == 2
+        _as_37(conn)
+        assert locations.rebuild(conn) == 0
+        assert locations.check(conn) == {"present": False, "agrees": False, "missing": 0,
+                                         "extra": 0, "wrong_fingerprint": 0, "examples": {}}
+    finally:
+        db.close(path)
+
+
+def _dbstat() -> bool:
+    import sqlite3
+    try:
+        sqlite3.connect(":memory:").execute("SELECT * FROM dbstat LIMIT 1")
+        return True
+    except sqlite3.Error:
+        return False
+
+
+def test_a_partly_salvaged_index_has_its_locations_right_afterwards(tmp_path):
+    import pytest
+    if not _dbstat():
+        pytest.skip("SQLite without dbstat")
+    import sqlite3
+    from contextlib import closing
+    from ninaivu.storage import index_check
+    path = tmp_path / "index.db"
+    conn = db.init_db(path)
+    _many(conn, 3000)
+    db.close(path)
+    db._READY.discard(str(path))                          # noqa: SLF001
+    # Pages of assets overwritten, as a failing disk leaves them: the rebuild
+    # salvages what it can of each table on its own, and locations keeps the
+    # places of photographs whose rows were lost.
+    with closing(sqlite3.connect(path)) as raw:
+        leaves = [r[0] for r in raw.execute(
+            "SELECT pageno FROM dbstat WHERE name='assets' AND pagetype='leaf'")]
+        size = raw.execute("PRAGMA page_size").fetchone()[0]
+    with path.open("r+b") as stream:
+        for page in leaves[len(leaves) // 3: len(leaves) // 3 + 3]:
+            stream.seek((page - 1) * size + 100)
+            stream.write(os.urandom(size // 4))
+    index_check.ask(tmp_path, "error")
+    result = index_check.run(tmp_path)
+    assert result["ok"] and result["repaired"] == ["index.db"], result
+    assert result["locations"]["rebuilt"] > 0
+    with closing(sqlite3.connect(path)) as raw:
+        assert 0 < raw.execute("SELECT COUNT(*) FROM assets").fetchone()[0] < 3000
+        assert locations.check(raw)["agrees"]
+        assert _locations(raw) == _expected(raw)
+
+
+def test_a_check_after_damage_was_seen_rebuilds_only_what_differs(tmp_path):
+    import sqlite3
+    from contextlib import closing
+    from ninaivu.storage import index_check
+    path = tmp_path / "index.db"
+    conn = db.init_db(path)
+    _many(conn, 10)
+    db.close(path)
+    db._READY.discard(str(path))                          # noqa: SLF001
+
+    index_check.ask(tmp_path, "error")
+    assert index_check.run(tmp_path)["locations"] == {"agrees": True}
+
+    with closing(sqlite3.connect(path)) as raw:
+        raw.execute("DELETE FROM locations WHERE asset_id = (SELECT MIN(id) FROM assets)")
+        raw.commit()
+    # A move changed no row: not looked at.
+    index_check.ask(tmp_path, "moved")
+    assert "locations" not in index_check.run(tmp_path)
+    index_check.ask(tmp_path, "error")
+    done = index_check.run(tmp_path)["locations"]
+    assert done["rebuilt"] == 10 and done["found"] == {"missing": 1, "extra": 0,
+                                                        "wrong_fingerprint": 0}
+    with closing(sqlite3.connect(path)) as raw:
+        assert locations.check(raw)["agrees"]
+
+
+# -- readers of locations ----------------------------------------------------
+
+from test_copy_contract import recorded  # noqa: E402,F401  (fixture)
+
+
+def test_the_ledger_maps_paths_to_fingerprints_through_locations_as_it_did_before(
+        recorded, monkeypatch):                           # noqa: F811
+    """The ledger's join on ``locations`` gives what its join on
+    ``content_fingerprints`` at the file's size and time gave: the same rows
+    filled from every record, and the same headline, with a file edited since
+    its fingerprint and one never fingerprinted among them."""
+    from ninaivu.copies import ledger
+    conn, roots = recorded.conn, [str(r) for r in recorded.cfg.roots]
+    with db._write_lock:                                  # noqa: SLF001
+        # Taken of an earlier version of a file the copies still record as it is.
+        conn.execute("UPDATE content_fingerprints SET mtime = mtime - 7 WHERE asset_id=?",
+                     (recorded.b["id"],))
+        conn.execute("DELETE FROM content_fingerprints WHERE asset_id=?", (recorded.c["id"],))
+        conn.commit()
+    _in_step(conn)
+    sources = ["mirror", "offsite", "drive"]
+
+    def filled() -> tuple:
+        with db._write_lock:                              # noqa: SLF001
+            conn.execute("DELETE FROM copies")
+            kept = ledger.fill(conn, only=sources)
+            rows = sorted(conn.execute("SELECT fingerprint, destination, state, size FROM copies"))
+            conn.rollback()
+        return kept, rows, ledger.headline(conn, roots)
+
+    now = filled()
+    monkeypatch.setattr(ledger, "_FINGERPRINTED", "JOIN content_fingerprints f ON "
+                        "f.asset_id = a.id AND f.size = a.size AND f.mtime = a.mtime")
+    monkeypatch.setattr(ledger, "_FP", "(f.algo || ':' || f.digest)")
+    before = filled()
+    assert now[:2] == before[:2]
+    assert now[1] and now[2]["unfingerprinted"] >= 1
+    assert recorded.b["fp"] not in {r[0] for r in now[1]}
+
+
+def _let_go(conn, rel: str, digest: str) -> None:
+    conn.execute("INSERT INTO mugil_let_go(root, rel_path, size, mtime, algo, digest, let_go_at) "
+                 "VALUES ('/library', ?, 100, 1700000000.0, ?, ?, 1.0)",
+                 (rel, fingerprints.ALGO, digest))
+    conn.commit()
+
+
+def test_a_let_go_original_is_known_by_its_path_and_after_a_move_by_its_fingerprint(tmp_path):
+    path = tmp_path / "index.db"
+    conn = db.init_db(path)
+    try:
+        kept, moved, copy, plain = (db.upsert_asset(conn, _record(f"a/{n}.jpg"))
+                                    for n in ("kept", "moved", "copy", "plain"))
+        _fingerprint(conn, kept, "11" * 32)
+        _fingerprint(conn, copy, "11" * 32)               # the same bytes as kept
+        _fingerprint(conn, moved, "22" * 32)
+        _let_go(conn, "a/kept.jpg", "11" * 32)
+        _let_go(conn, "a/moved.jpg", "22" * 32)
+        # As 3.x read it: by path.
+        assert locations.let_go_paths(conn, "/library") == {"a/kept.jpg", "a/moved.jpg"}
+        assert locations.let_go_paths(conn, "/elsewhere") == set()
+
+        # The row moved by a writer that left the let-go record where it was.
+        with db._write_lock:                              # noqa: SLF001
+            conn.execute("UPDATE assets SET rel_path='b/moved.jpg' WHERE id=?", (moved,))
+            conn.commit()
+        assert locations.let_go_paths(conn, "/library") == {
+            "a/kept.jpg", "a/moved.jpg", "b/moved.jpg"}
+
+        # None of the four files is on the disk: the let-go ones stay, and the
+        # copy with the let-go bytes is not taken for the original, whose row
+        # is where its record says.
+        db.delete_missing(conn, "/library", set(), complete=True, force=True)
+        assert {r[0] for r in conn.execute("SELECT id FROM assets")} == {kept, moved}
+        assert len(_in_step(conn)) == 2
+    finally:
+        db.close(path)
+
+
+def test_a_let_go_record_two_rows_share_bytes_with_names_neither(tmp_path):
+    path = tmp_path / "index.db"
+    conn = db.init_db(path)
+    try:
+        one, two = (db.upsert_asset(conn, _record(f"b/{n}.jpg")) for n in ("one", "two"))
+        _fingerprint(conn, one, "33" * 32)
+        _fingerprint(conn, two, "33" * 32)
+        _let_go(conn, "a/was.jpg", "33" * 32)             # no row is at its path
+        assert locations.let_go_paths(conn, "/library") == {"a/was.jpg"}
+    finally:
+        db.close(path)
+
+
+# -- the console's reading -----------------------------------------------------
+
+def test_the_console_reads_the_health_of_locations(scanned):
+    from conftest import ADMIN, login
+    from ninaivu import build_services, create_admin_app
+    cfg, conn, _ = scanned
+    cfg.watch = False
+    auth.bootstrap_admin(conn, ADMIN[0], ADMIN[1], "Dad")
+    services = build_services(cfg)
+    services.scanner.stop()
+    try:
+        anonymous = create_admin_app(services).test_client()
+        assert anonymous.get("/api/admin/locations/health").status_code in (401, 403)
+        client = login(create_admin_app(services).test_client(), *ADMIN)
+        files = conn.execute("SELECT COUNT(*) FROM assets WHERE trashed=0").fetchone()[0]
+        got = client.get("/api/admin/locations/health").get_json()
+        assert got["photographs"] == files > 0
+        assert got["fingerprinted"] == 0 and got["waiting"] == files
+        assert got["locations"]["agrees"] is True
+
+        first = conn.execute("SELECT id FROM assets WHERE trashed=0 ORDER BY id").fetchone()[0]
+        _fingerprint(conn, first, "44" * 32, *conn.execute(
+            "SELECT size, mtime FROM assets WHERE id=?", (first,)).fetchone())
+        with db._write_lock:                              # noqa: SLF001
+            conn.execute("DELETE FROM locations WHERE asset_id=?", (first,))
+            conn.commit()
+        before = conn.execute("SELECT COUNT(*) FROM locations").fetchone()[0]
+        got = client.get("/api/admin/locations/health").get_json()
+        assert (got["fingerprinted"], got["waiting"]) == (1, files - 1)
+        assert got["locations"]["agrees"] is False and got["locations"]["missing"] == 1
+        # Only read.
+        assert conn.execute("SELECT COUNT(*) FROM locations").fetchone()[0] == before
+    finally:
+        services.stop(timeout=5.0)

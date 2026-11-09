@@ -4007,6 +4007,17 @@ def fingerprints_status():
                     "spare_bytes": sum(g["spare_bytes"] for g in groups)})
 
 
+@admin_bp.get("/api/admin/locations/health")
+@require_admin
+def locations_health():
+    """Where each photograph is (4.0, proposal 3; storage/locations.py):
+    photographs, how many have a fingerprint of the file as it is now and how
+    many wait for one, and whether ``locations`` agrees with the index. Only
+    reads: a disagreement is set right by the index check at the next start."""
+    from ..storage import locations                           # noqa: PLC0415
+    return jsonify(locations.health(_conn()))
+
+
 @admin_bp.get("/api/admin/space")
 @require_admin
 def space_report():

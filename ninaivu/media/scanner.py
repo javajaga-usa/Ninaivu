@@ -39,7 +39,7 @@ from PIL import Image
 from . import audio_art, faces as faces_mod, media, revealing, screens, upright
 from .. import engine as jobs
 from ..archive import dates as capture_dates
-from ..storage import db, fingerprints, journal
+from ..storage import db, fingerprints, journal, locations
 from ..server.auth import VIS_FAMILY, VIS_HIDDEN
 from ..server.config import RAW_EXTS, Config, media_kind, media_kind_named
 
@@ -2721,11 +2721,7 @@ class Scanner:
             # (mugil/free.py): not gone. An exact copy of one turning up in
             # another folder took its row, and the record of where the
             # original is pointed at a path nothing was at any more.
-            try:
-                let_go = {r[0] for r in conn.execute(
-                    "SELECT rel_path FROM mugil_let_go WHERE root=?", (root,))}
-            except sqlite3.OperationalError:
-                let_go = set()
+            let_go = locations.let_go_paths(conn, root)
             gone = [rel for rel in gone if rel not in let_go]
         if not gone:
             return 0

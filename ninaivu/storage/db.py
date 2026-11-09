@@ -2314,11 +2314,8 @@ def delete_missing(conn: sqlite3.Connection, root: str, present: Iterable[str],
     """
     present_set = set(present)
     # Let go of on purpose, and kept on the other computer: not missing.
-    try:
-        present_set.update(r[0] for r in conn.execute(
-            "SELECT rel_path FROM mugil_let_go WHERE root=?", (root,)))
-    except sqlite3.OperationalError:
-        pass                              # an index made before the table was
+    from .locations import let_go_paths                   # noqa: PLC0415
+    present_set.update(let_go_paths(conn, root))
     within, params = under_folders(under)
     rows = conn.execute(
         "SELECT id, rel_path, thumb FROM assets WHERE root=?" + within, (root, *params)
