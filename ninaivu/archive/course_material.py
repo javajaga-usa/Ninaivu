@@ -349,7 +349,9 @@ def _frame(path: str):
     from PIL import Image
     if _ext(path) in VIDEO_EXTS:
         import cv2
-        capture = cv2.VideoCapture(path)
+
+        from ..media.media import open_video
+        capture = open_video(path)
         try:
             count = int(capture.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
             if count > 2:
