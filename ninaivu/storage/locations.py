@@ -115,11 +115,12 @@ def rebuild(conn: sqlite3.Connection) -> int:
 
 
 def health(conn: sqlite3.Connection) -> dict[str, Any]:
-    """For the console: photographs, how many have a fingerprint of the file
-    as it is now, how many wait for one, and whether ``locations`` agrees."""
-    total = int(conn.execute("SELECT COUNT(*) FROM assets").fetchone()[0])
-    current = int(conn.execute(
-        f"SELECT COUNT(*) FROM assets a WHERE {_EXPECTED} IS NOT NULL").fetchone()[0])
+    """For the console: photographs (not in the bin), how many have a
+    fingerprint of the file as it is now, how many wait for one, and whether
+    ``locations`` agrees with ``assets`` (:func:`check`, the bin included)."""
+    total, current = (int(n or 0) for n in conn.execute(
+        f"SELECT COUNT(*), SUM({_EXPECTED} IS NOT NULL) FROM assets a "
+        "WHERE a.trashed = 0").fetchone())
     return {"photographs": total, "fingerprinted": current, "waiting": total - current,
             "locations": check(conn)}
 

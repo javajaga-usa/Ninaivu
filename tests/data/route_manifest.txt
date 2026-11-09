@@ -67,6 +67,7 @@ admin | GET                  | /api/admin/library/relocation | admin | reads | -
 admin | POST                 | /api/admin/library/relocation | admin | writes | same origin | admin.library_relocation_confirm
 admin | GET                  | /api/admin/locations | admin | reads | - | admin.location_suggestions
 admin | POST                 | /api/admin/locations/apply | admin | writes | same origin | admin.location_apply
+admin | GET                  | /api/admin/locations/health | admin | reads | - | admin.locations_health
 admin | POST                 | /api/admin/locations/undo | admin | writes | same origin | admin.location_undo
 admin | GET                  | /api/admin/migration | admin | reads | - | migration.migration
 admin | POST                 | /api/admin/migration/check-index | admin | writes | same origin | migration.check_index

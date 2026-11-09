@@ -569,3 +569,39 @@ def test_a_let_go_record_two_rows_share_bytes_with_names_neither(tmp_path):
         assert locations.let_go_paths(conn, "/library") == {"a/was.jpg"}
     finally:
         db.close(path)
+
+
+# -- the console's reading -----------------------------------------------------
+
+def test_the_console_reads_the_health_of_locations(scanned):
+    from conftest import ADMIN, login
+    from ninaivu import build_services, create_admin_app
+    cfg, conn, _ = scanned
+    cfg.watch = False
+    auth.bootstrap_admin(conn, ADMIN[0], ADMIN[1], "Dad")
+    services = build_services(cfg)
+    services.scanner.stop()
+    try:
+        anonymous = create_admin_app(services).test_client()
+        assert anonymous.get("/api/admin/locations/health").status_code in (401, 403)
+        client = login(create_admin_app(services).test_client(), *ADMIN)
+        files = conn.execute("SELECT COUNT(*) FROM assets WHERE trashed=0").fetchone()[0]
+        got = client.get("/api/admin/locations/health").get_json()
+        assert got["photographs"] == files > 0
+        assert got["fingerprinted"] == 0 and got["waiting"] == files
+        assert got["locations"]["agrees"] is True
+
+        first = conn.execute("SELECT id FROM assets WHERE trashed=0 ORDER BY id").fetchone()[0]
+        _fingerprint(conn, first, "44" * 32, *conn.execute(
+            "SELECT size, mtime FROM assets WHERE id=?", (first,)).fetchone())
+        with db._write_lock:                              # noqa: SLF001
+            conn.execute("DELETE FROM locations WHERE asset_id=?", (first,))
+            conn.commit()
+        before = conn.execute("SELECT COUNT(*) FROM locations").fetchone()[0]
+        got = client.get("/api/admin/locations/health").get_json()
+        assert (got["fingerprinted"], got["waiting"]) == (1, files - 1)
+        assert got["locations"]["agrees"] is False and got["locations"]["missing"] == 1
+        # Only read.
+        assert conn.execute("SELECT COUNT(*) FROM locations").fetchone()[0] == before
+    finally:
+        services.stop(timeout=5.0)
