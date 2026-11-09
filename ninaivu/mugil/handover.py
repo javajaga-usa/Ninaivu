@@ -230,7 +230,10 @@ class Handover:
         self.partner = partner
         self.hold = hold or (lambda: None)
         self._stop = threading.Event()
-        self._thread: threading.Thread | None = None
+        #: Whether a hand-over is being sent now (status: "running").
+        self._sending = False
+        #: The supervisor its look runs on; Ninaivu gives it its own.
+        self.supervisor = None
         self._lock = threading.Lock()
         self.live: dict[str, Any] = {}
 
@@ -284,33 +287,39 @@ class Handover:
     def status(self) -> dict[str, Any]:
         last = self.last()
         return {"on": bool(getattr(self.cfg, "mugil_family_copy", False)),
-                "running": self._thread is not None and self._thread.is_alive(),
+                "running": self._sending,
                 "at": last.get("at"), "error": last.get("error", ""),
                 "generation": last.get("generation"), **self.live}
 
     # -- running -------------------------------------------------------------
+    #: Its job on the supervisor, and the thread's name, as before it moved.
+    JOB = "mugil-handover"
+
     def keep(self) -> None:
-        if self._thread is not None:
-            return
-        self._stop.clear()
-        self._thread = threading.Thread(target=self._keep, name="mugil-handover", daemon=True)
-        self._thread.start()
+        """Look every LOOK_EVERY seconds whether a hand-over, or taking the
+        family view down, is due; kept by the supervisor
+        (server/supervisor.py). retry_most=0: a look that fails is tried at
+        the next, as before. A stop cuts a hand-over short by the flag its
+        waits watch."""
+        from ..server.supervisor import NETWORK, STOPPED, Job, every, supervisor_of  # noqa: PLC0415
+        supervisor = supervisor_of(self)
+        if supervisor.state(self.JOB) in (None, STOPPED):
+            self._stop.clear()
+        supervisor.add(Job(
+            self.JOB, self._look, every(LOOK_EVERY), claims={NETWORK}, log=log,
+            failure="The family app's copy could not be sent", retry_most=0,
+            interrupt=self._stop.set, progress=lambda: {"sending": self._sending}))
 
     def stop(self, join: bool = False) -> None:
+        from ..server.supervisor import supervisor_of            # noqa: PLC0415
         self._stop.set()
-        if join and self._thread is not None and self._thread is not threading.current_thread():
-            self._thread.join(timeout=10)
-        self._thread = None
+        supervisor_of(self).stop_job(self.JOB, timeout=10 if join else 0)
 
-    def _keep(self) -> None:
-        while not self._stop.wait(LOOK_EVERY):
-            try:
-                if self.due():
-                    self.run()
-                elif self.withdraw_due():
-                    self.withdraw()
-            except Exception:                                    # noqa: BLE001 - keep looking
-                log.exception("The family app's copy could not be sent")
+    def _look(self) -> None:
+        if self.due():
+            self.run()
+        elif self.withdraw_due():
+            self.withdraw()
 
     def _pause(self) -> None:
         while True:
@@ -324,6 +333,13 @@ class Handover:
 
     def run(self) -> dict[str, Any] | None:
         """Send one hand-over now; its manifest, or None when it did not go."""
+        self._sending = True
+        try:
+            return self._hand_over()
+        finally:
+            self._sending = False
+
+    def _hand_over(self) -> dict[str, Any] | None:
         from ..replica import FOLDERS, FORMAT, MANIFEST          # noqa: PLC0415
         from ..storage import backup                             # noqa: PLC0415
         from ..utils.files import sha256_file                    # noqa: PLC0415

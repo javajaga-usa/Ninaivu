@@ -397,3 +397,18 @@ def test_the_view_sits_behind_the_proxy_fix(scanned):
     app = create_home_app(build_services(cfg))
     assert isinstance(app.wsgi_app, ProxyFix) and app.wsgi_app.x_for == 1
     assert isinstance(app.wsgi_app.app, family_view._Dispatch)
+
+
+def test_the_hand_over_and_the_view_are_kept_by_the_supervisor(two):
+    """Both looks run on the supervisor (4.0, proposal 2): the console's
+    background list names them, and a stop ends them like every other job."""
+    services = two.services
+    services.mugil_handover.keep()
+    two.view.keep()
+    names = {job["name"] for job in services.supervisor.activity()}
+    assert {"mugil-handover", "mugil-family-view"} <= names
+    assert services.mugil_handover.status()["running"] is False     # nothing being sent
+    services.mugil_handover.stop(join=True)
+    two.view.stop(join=True)
+    assert services.supervisor.state("mugil-handover") == "stopped"
+    assert services.supervisor.state("mugil-family-view") == "stopped"

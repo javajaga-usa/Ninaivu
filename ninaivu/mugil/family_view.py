@@ -159,8 +159,8 @@ class FamilyView:
         #: refuses): removed at the next look instead.
         self._leftover = False
         self._lock = threading.Lock()
-        self._stop = threading.Event()
-        self._thread: threading.Thread | None = None
+        #: The supervisor its look runs on; Ninaivu gives it its own.
+        self.supervisor = None
 
     @property
     def state(self) -> Path:
@@ -359,25 +359,23 @@ class FamilyView:
         if gone:
             log.info("the rest of the withdrawn family view was removed: %s", ", ".join(gone))
 
-    def keep(self) -> None:
-        if self._thread is not None and self._thread.is_alive():
-            return
-        self._stop.clear()
-        self._thread = threading.Thread(target=self._loop, name="mugil-family-view",
-                                        daemon=True)
-        self._thread.start()
+    #: Its job on the supervisor, and the thread's name, as before it moved.
+    JOB = "mugil-family-view"
 
-    def _loop(self) -> None:
-        self.look()
-        while not self._stop.wait(LOOK_EVERY):
-            self.look()
+    def keep(self) -> None:
+        """Look at once, then every LOOK_EVERY seconds, whether the view is
+        wanted and a newer hand-over came; kept by the supervisor
+        (server/supervisor.py). A look never raises."""
+        from ..server.supervisor import Job, every, supervisor_of  # noqa: PLC0415
+        supervisor_of(self).add(Job(
+            self.JOB, self.look, every(LOOK_EVERY, first=0), log=log, retry_most=0,
+            progress=lambda: {"served": self.app is not None}))
 
     def stop(self, join: bool = False) -> None:
-        self._stop.set()
+        from ..server.supervisor import supervisor_of            # noqa: PLC0415
         if self.front is not None:
             self.front.stop()
-        if join and self._thread is not None:
-            self._thread.join(timeout=5)
+        supervisor_of(self).stop_job(self.JOB, timeout=5 if join else 0)
 
     def status(self) -> dict[str, Any]:
         out: dict[str, Any] = {"wanted": self.wanted(), "served": self.app is not None,
