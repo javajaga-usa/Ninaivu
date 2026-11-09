@@ -5464,5 +5464,13 @@
   "Not done yet": "இன்னும் செய்யப்படவில்லை",
   "{two} of {total} photographs are in at least two places": "{total} புகைப்படங்களில் {two} குறைந்தது இரண்டு இடங்களில் உள்ளன",
   "No photographs yet": "இன்னும் புகைப்படங்கள் இல்லை",
-  "{count} are not fingerprinted yet: they are counted, but not as in two places until they are.": "{count} இன்னும் கைரேகை எடுக்கப்படவில்லை: அவை எண்ணப்படுகின்றன, ஆனால் கைரேகை எடுக்கப்படும் வரை இரண்டு இடங்களில் உள்ளவையாக அல்ல."
+  "{count} are not fingerprinted yet: they are counted, but not as in two places until they are.": "{count} இன்னும் கைரேகை எடுக்கப்படவில்லை: அவை எண்ணப்படுகின்றன, ஆனால் கைரேகை எடுக்கப்படும் வரை இரண்டு இடங்களில் உள்ளவையாக அல்ல.",
+  "Which change": "எந்த மாற்றம்",
+  "Pairing: bring in what only one computer had": "இணைத்தல்: ஒரு கணினியில் மட்டும் இருந்தவற்றைக் கொண்டுவருதல்",
+  "Replacing the Secondary's disk": "இரண்டாம் கணினியின் வட்டை மாற்றுதல்",
+  "Moving the Primary to another computer": "முதன்மைக் கணினியை வேறொரு கணினிக்கு மாற்றுதல்",
+  "Unpairing": "இணைப்பை நீக்குதல்",
+  "Bring in what only the Secondary's disk holds, put the new disk in, let the originals be sent again, then prove nothing was lost.": "இரண்டாம் கணினியின் வட்டில் மட்டும் உள்ளவற்றைக் கொண்டுவாருங்கள், புதிய வட்டைப் பொருத்துங்கள், மூலக் கோப்புகள் மீண்டும் அனுப்பப்படட்டும், பின்னர் எதுவும் இழக்கப்படவில்லை என்று சான்று காட்டுங்கள்.",
+  "{count} files are only on the Secondary's disk ({size}). Bring them in on this page before the disk is replaced, or they go with it.": "{count} கோப்புகள் இரண்டாம் கணினியின் வட்டில் மட்டுமே உள்ளன ({size}). வட்டை மாற்றுவதற்கு முன் இந்தப் பக்கத்தில் அவற்றைக் கொண்டுவாருங்கள், இல்லையெனில் அவை வட்டுடன் போய்விடும்.",
+  "Nothing is only on the Secondary's disk: everything it holds is here too. The disk can be replaced, and the originals sent again.": "இரண்டாம் கணினியின் வட்டில் மட்டும் எதுவும் இல்லை: அது வைத்திருக்கும் அனைத்தும் இங்கும் உள்ளன. வட்டை மாற்றலாம், மூலக் கோப்புகள் மீண்டும் அனுப்பப்படும்."
 }

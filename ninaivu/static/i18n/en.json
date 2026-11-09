@@ -5178,5 +5178,13 @@
   "Not done yet": "Not done yet",
   "{two} of {total} photographs are in at least two places": "{two} of {total} photographs are in at least two places",
   "No photographs yet": "No photographs yet",
-  "{count} are not fingerprinted yet: they are counted, but not as in two places until they are.": "{count} are not fingerprinted yet: they are counted, but not as in two places until they are."
+  "{count} are not fingerprinted yet: they are counted, but not as in two places until they are.": "{count} are not fingerprinted yet: they are counted, but not as in two places until they are.",
+  "Which change": "Which change",
+  "Pairing: bring in what only one computer had": "Pairing: bring in what only one computer had",
+  "Replacing the Secondary's disk": "Replacing the Secondary's disk",
+  "Moving the Primary to another computer": "Moving the Primary to another computer",
+  "Unpairing": "Unpairing",
+  "Bring in what only the Secondary's disk holds, put the new disk in, let the originals be sent again, then prove nothing was lost.": "Bring in what only the Secondary's disk holds, put the new disk in, let the originals be sent again, then prove nothing was lost.",
+  "{count} files are only on the Secondary's disk ({size}). Bring them in on this page before the disk is replaced, or they go with it.": "{count} files are only on the Secondary's disk ({size}). Bring them in on this page before the disk is replaced, or they go with it.",
+  "Nothing is only on the Secondary's disk: everything it holds is here too. The disk can be replaced, and the originals sent again.": "Nothing is only on the Secondary's disk: everything it holds is here too. The disk can be replaced, and the originals sent again."
 }

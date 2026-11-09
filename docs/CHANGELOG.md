@@ -26,7 +26,7 @@
 - **The two-computers guide gives the safe order** for making a pair of two one-computer Ninaivus: a census on both computers with the disk plugged in, then pair, plan, bring the photographs in, and prove.
 - **Moving the Primary to another computer, and unpairing, are planned and proved the same way.** Moving the Primary lists what only the old Primary holds; the plan and both censuses travel in the full export, so the new Primary proves every photograph is on it or on the Secondary. Unpairing says what each computer keeps, and each then proves its own side.
 - **An unplugged drive's empty mount folder counts as away, not as an empty library**, so a census taken with the disk unplugged can never let a proof pass having checked nothing.
-- Replacing the Secondary's disk is named as a change the plan can make, on the console's routes; the Two computers page does not offer it yet.
+- **Replacing the Secondary's disk is planned and proved too.** On the paired Primary, **Plan** has a list of the changes it can plan: pairing, replacing the Secondary's disk, moving the Primary and unpairing. For a new disk, the plan says how many files, and how much, only the Secondary's disk holds, names each by its path, and says to bring them in before the disk goes; after the new disk is in and the originals are sent again, the proof checks nothing was lost.
 
 ### How many photographs are in at least two places
 

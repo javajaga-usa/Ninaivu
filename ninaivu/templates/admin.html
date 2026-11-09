@@ -1245,10 +1245,20 @@
         <p class="hint tc-away" id="tc-safe-warn" hidden data-i18n="Take the census on each computer before pairing, with the disk that holds the photographs plugged in: the proof afterwards compares against it, and a disk that is away is not counted.">Take the census on each computer before pairing, with the disk that holds the photographs plugged in: the proof afterwards compares against it, and a disk that is away is not counted.</p>
         <div class="ar-actions">
           <button class="btn" id="tc-census-go" type="button" hidden data-i18n="Take a census">Take a census</button>
+          <select class="input" id="tc-plan-which" hidden aria-label="Which change" data-i18n-label="Which change">
+            <option value="pair" data-i18n="Pairing: bring in what only one computer had">Pairing: bring in what only one computer had</option>
+            <option value="replace_secondary_disk" data-i18n="Replacing the Secondary's disk">Replacing the Secondary's disk</option>
+            <option value="move_primary" data-i18n="Moving the Primary to another computer">Moving the Primary to another computer</option>
+            <option value="unpair" data-i18n="Unpairing">Unpairing</option>
+          </select>
           <button class="btn" id="tc-plan-go" type="button" hidden data-i18n="Plan">Plan</button>
           <button class="btn primary" id="tc-prove-go" type="button" hidden data-i18n="Prove nothing was lost">Prove nothing was lost</button>
         </div>
         <p class="hint subtle" id="tc-safe-says"></p>
+        <div id="tc-disk-plan" hidden>
+          <p class="hint" id="tc-disk-says"></p>
+          <ul class="tc-machines" id="tc-disk-only"></ul>
+        </div>
         <div id="tc-plan" hidden>
           <ul class="tc-machines" id="tc-plan-totals"></ul>
           <select class="input" id="tc-plan-filter" aria-label="Which files" data-i18n-label="Which files"></select>
