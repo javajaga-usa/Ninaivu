@@ -3887,7 +3887,7 @@ _feature("screening")
 from . import ai_playground_api  # noqa: E402,F401 - registers routes
 
 # Scan old prints: the family's, so on `bp` too (paths under /api/prints).
-from . import api_scan_prints  # noqa: E402,F401 - registers routes
+_feature("scan_prints")
 
 # Family moments, each off until switched on: the living photo frame and
 # time capsules.
@@ -3895,27 +3895,27 @@ _feature("capsules")
 _feature("frame")
 
 # Ask Ninaivu: questions about the photographs, answered on this computer.
-from . import api_ask_ninaivu  # noqa: E402,F401
+_feature("ask_ninaivu")
 
 # Our Year: the family's year in photographs, as cards.
-from . import api_our_year  # noqa: E402,F401
+_feature("our_year")
 
 # A life in photographs: one person's life, decade by decade.
 _feature("life_story")
 
 # Talk about this photo: questions about the photograph open in the viewer.
-from . import api_photo_talk  # noqa: E402,F401
+_feature("photo_talk")
 # Festival albums: every Deepavali, every Pongal, found from the calendar.
-from . import api_festivals  # noqa: E402,F401
+_feature("festivals")
 
 # Letters read aloud: an old letter's words, written out and spoken.
 _feature("letters")
 
 # Young faces, older names: who an unnamed child in an old photograph may be.
-from . import api_young_faces  # noqa: E402,F401
+_feature("young_faces")
 
 # Find this print: the library photograph a framed print is a copy of.
-from . import api_find_print  # noqa: E402,F401
+_feature("find_print")
 
 # Photo stacks: a burst, or a photograph and its copies, as one tile.
 _feature("stacks")
@@ -3923,7 +3923,7 @@ _feature("stacks")
 # Speaking to search, and colour for black-and-white photographs: each off
 # until switched on, each answered on this computer.
 _feature("colour_copies")
-from . import api_voice_search  # noqa: E402,F401
+_feature("voice_search")
 
 # Moments inside videos: search finds the second inside a long clip.
 _feature("video_moments")

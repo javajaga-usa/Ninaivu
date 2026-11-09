@@ -37,8 +37,9 @@ TABLES_IN_37 = ["smart", "ask_family", "family_tree", "books", "handover", "stor
 #: The order api/api.py imported the features' routes in, in 3.7 (with those
 #: that have no tables, which were not features then, in their places).
 ROUTES_IN_37 = ["smart", "ask_family", "family_tree", "books", "films", "handover", "stories",
-                "screening", "capsules", "frame", "life_story", "letters", "stacks", "colour_copies",
-                "video_moments", "then_and_now"]
+                "screening", "scan_prints", "capsules", "frame", "ask_ninaivu", "our_year",
+                "life_story", "photo_talk", "festivals", "letters", "young_faces", "find_print",
+                "stacks", "colour_copies", "voice_search", "video_moments", "then_and_now"]
 
 #: Old module name -> where it lives now.
 MOVED = {
@@ -82,6 +83,16 @@ MOVED = {
     "ninaivu.storage.stories": "ninaivu.features.stories.storage",
     "ninaivu.api.api_screening": "ninaivu.features.screening.routes",
     "ninaivu.storage.screening": "ninaivu.features.screening.storage",
+    "ninaivu.api.api_our_year": "ninaivu.features.our_year.routes",
+    "ninaivu.api.api_photo_talk": "ninaivu.features.photo_talk.routes",
+    "ninaivu.api.api_festivals": "ninaivu.features.festivals.routes",
+    "ninaivu.api.api_young_faces": "ninaivu.features.young_faces.routes",
+    "ninaivu.api.api_find_print": "ninaivu.features.find_print.routes",
+    "ninaivu.api.api_voice_search": "ninaivu.features.voice_search.routes",
+    "ninaivu.media.our_year": "ninaivu.features.our_year.media",
+    "ninaivu.media.photo_talk": "ninaivu.features.photo_talk.media",
+    "ninaivu.media.festivals": "ninaivu.features.festivals.media",
+    "ninaivu.media.find_print": "ninaivu.features.find_print.media",
 }
 
 

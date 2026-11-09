@@ -186,9 +186,10 @@ def _here(name: str, title: str, *, routes: str | None, tables: Tables | None,
 
 
 def _manifests() -> tuple[Feature, ...]:
-    from . import ask_family, books, capsules, colour_copies, family_tree, films  # noqa: PLC0415
-    from . import frame, handover, letters, life_story, screening, smart  # noqa: PLC0415
-    from . import stacks, stories, then_and_now, video_moments    # noqa: PLC0415
+    from . import ask_family, books, capsules, colour_copies, family_tree, festivals  # noqa: PLC0415
+    from . import films, find_print, frame, handover, letters, life_story  # noqa: PLC0415
+    from . import our_year, photo_talk, screening, smart, stacks, stories  # noqa: PLC0415
+    from . import then_and_now, video_moments, voice_search, young_faces  # noqa: PLC0415
     return (
         smart.MANIFEST,
         ask_family.MANIFEST,
@@ -210,6 +211,16 @@ def _manifests() -> tuple[Feature, ...]:
         stacks.MANIFEST,
         _here("journal", "The change journal", routes=None,
               tables=Tables("ninaivu.storage.journal", "create"), switch="change_journal"),
+        # Those with no tables, which were not features before 4.0.
+        _here("scan_prints", "Scan old prints", routes="ninaivu.api.api_scan_prints", tables=None),
+        _here("ask_ninaivu", "Ask Ninaivu", routes="ninaivu.api.api_ask_ninaivu", tables=None,
+              switch="ask_ninaivu", needs="writing"),
+        our_year.MANIFEST,
+        photo_talk.MANIFEST,
+        festivals.MANIFEST,
+        young_faces.MANIFEST,
+        find_print.MANIFEST,
+        voice_search.MANIFEST,
     )
 
 
@@ -319,6 +330,9 @@ ORDER: tuple[str, ...] = (
     "smart", "ask_family", "family_tree", "books", "films", "handover", "stories", "capsules",
     "frame", "screening", "descriptions", "colour_copies", "video_moments", "then_and_now",
     "life_story", "letters", "stacks", "journal",
+    # No tables: in the order their routes are put on.
+    "scan_prints", "ask_ninaivu", "our_year", "photo_talk", "festivals", "young_faces",
+    "find_print", "voice_search",
 )
 
 __all__ = ["FACES", "Feature", "ORDER", "TIERS", "Tables", "create_tables", "endpoints",
