@@ -121,5 +121,25 @@ await c.waitForTimeout(800);
 stampedOnce('notifications');
 stampedOnce('scrubber');
 
+/** Open console page *tab*, and once more after another, to see it fetched once. */
+async function openConsolePage(tab, ready) {
+  ok(`${tab} is not fetched before it is opened`, pageAsked(`console/${tab}.js`).length === 0);
+  await c.click(`#tabs button[data-tab="${tab}"]`);
+  await c.waitForSelector(`[data-panel="${tab}"].active`);
+  await c.waitForFunction(ready, null, { timeout: 10000 })
+    .then(() => ok(`${tab} draws when opened`, true))
+    .catch(() => ok(`${tab} draws when opened`, false));
+  await c.click('#tabs button[data-tab="overview"]');
+  await c.waitForTimeout(200);
+  await c.click(`#tabs button[data-tab="${tab}"]`);
+  await c.waitForTimeout(600);
+  stampedOnce(tab);
+}
+
+await openConsolePage('library', () => document.querySelectorAll('#library-list .library-item').length > 0
+  && !/…/.test(document.querySelector('#loc-summary')?.textContent || '…'));
+ok('and Library\'s "Change" is still wired from the start',
+  await c.evaluate(() => typeof document.querySelector('#change-root')?.onclick === 'function'));
+
 ok('no script errors', errors.length === 0, errors.join(' | '));
 await done(b);
