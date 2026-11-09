@@ -255,9 +255,12 @@ def test_a_proof_that_fails_names_the_file(apart):
     record = finish(apart.primary)["record"]
     assert record["state"] == "failed"
     assert record["proof"]["passed"] is False
-    assert [m["file"] for m in record["proof"]["missing"]] == [str(gone)]
+    # Compared as the same file, not as the same spelling: on Windows a
+    # temporary folder can be named short (RUNNER~1) one way and long the other.
+    same = lambda files: [os.path.normcase(Path(f).resolve()) for f in files]  # noqa: E731
+    assert same(m["file"] for m in record["proof"]["missing"]) == same([gone])
     with gzip.open(apart.mac.state_dir / record["missing_file"], "rt") as handle:
-        assert [json.loads(line)["file"] for line in handle] == [str(gone)]
+        assert same(json.loads(line)["file"] for line in handle) == same([gone])
     # Put back, the proof can be run again, and passes.
     put(gone, b"\xff\xd8 deleted on the mac")
     apart.primary.prove()
@@ -332,7 +335,7 @@ def test_only_the_paired_primary_makes_a_plan(apart):
     with pytest.raises(topology.Refused):
         apart.secondary.plan(PAIR)
     with pytest.raises(topology.Refused):
-        apart.primary.plan(UNPAIR)                   # checked, not yet planned
+        apart.secondary.plan(UNPAIR)                 # the Primary plans it
     with pytest.raises(topology.Refused):
         apart.primary.plan("swap")
 
@@ -344,6 +347,124 @@ def test_replacing_the_secondary_disk_lists_what_only_it_holds(apart):
     only = sorted(Path(m["file"]).name for m in record["plan"]["named"])
     assert only == ["IMG_1.jpg", "IMG_9.jpg", "deleted-on-mac.jpg", "linux-only.jpg",
                     "linux-only.jpg.xmp", "old.jpg"]
+
+
+# -- unpairing: each computer keeps its part, and proves it ------------------------------
+
+def unpaired_plan(world) -> dict[str, dict]:
+    world.primary.plan(UNPAIR)
+    record = finish(world.primary)["record"]
+    assert record["state"] == "planned" and record["to"] == {"role": "primary", "paired": False}
+    page = world.primary.plan_page(limit=100)
+    return {Path(i["file"]).name + ("@mac" if i["on"] == "primary" else ""): i
+            for i in page["items"]}
+
+
+def test_unpairing_plans_what_each_computer_keeps(apart):
+    plan = unpaired_plan(apart)
+    assert (plan["mac.jpg@mac"]["outcome"], plan["mac.jpg@mac"]["reason"]) == ("kept", "only_on_primary")
+    assert plan["same.jpg"]["outcome"] == plan["same.jpg@mac"]["outcome"] == "both"
+    assert (plan["linux-only.jpg"]["outcome"], plan["linux-only.jpg"]["reason"]) == (
+        "kept", "only_on_secondary")
+    totals = apart.primary.status()["record"]["plan"]
+    assert totals["primary"]["both"]["files"] == 1 and totals["secondary"]["kept"]["files"] == 6
+
+
+def test_after_unpairing_each_computer_proves_its_own_side(apart):
+    unpaired_plan(apart)
+    assert apart.primary.status()["can_prove"] is False           # still paired
+    for cfg in (apart.mac, apart.linux):
+        pairing.forget(cfg.state_dir)
+    assert apart.primary.status()["can_prove"] and apart.secondary.status()["can_prove"]
+    gone = apart.lin_lib / "2026/11/04/linux-only.jpg"
+    gone.unlink()                                    # lost on the Secondary's side
+    for side in (apart.primary, apart.secondary):
+        side.prove()
+    mac, linux = finish(apart.primary)["record"], finish(apart.secondary)["record"]
+    assert mac["state"] == "done" and mac["proof"]["checked"] == 4
+    assert linux["transition"] == "unpair" and linux["state"] == "failed"
+    assert [m["file"] for m in linux["proof"]["missing"]] == [str(gone)]
+    put(gone, b"\xff\xd8 imported on the linux pc")
+    apart.secondary.prove()
+    assert finish(apart.secondary)["record"]["state"] == "done"
+    with pytest.raises(topology.Refused):
+        apart.secondary.prove()                      # done is done
+
+
+# -- moving the Primary: the plan goes with the index -----------------------------------
+
+def moved(world, tmp_path, monkeypatch, *, leave_behind: str | None = None):
+    """Plan the move on the old Mac, export its index, copy its library to the
+    new Mac by hand, and import the index there, as the household does."""
+    from ninaivu.cli import backup_restore
+    from ninaivu.storage import backup, full_export
+    world.primary.plan(MOVE_PRIMARY)
+    record = finish(world.primary)["record"]
+    assert record["state"] == "planned" and topology.moving(world.mac.state_dir)
+    (world.mac.state_dir / "config.json").write_text(json.dumps({"home_name": "Mac mini"}))
+    bundle = backup.snapshot(world.mac.state_dir, tmp_path / "export", full=True)
+    new_lib = tmp_path / "New Mac" / "NinaivuMaster" / "Ninaivu Archive"
+    shutil.copytree(world.mac_lib, new_lib, copy_function=shutil.copy2)
+    if leave_behind:
+        (new_lib / leave_behind).unlink()
+    new = computer(tmp_path, "New Mac", [new_lib])
+    (new.state_dir / "config.json").write_text(json.dumps({"home_name": "New Mac"}))
+    monkeypatch.setattr(backup_restore.Config, "load", lambda: SimpleNamespace(state_dir=new.state_dir))
+    full_export.ask_for_import(new.state_dir, bundle)
+    assert full_export.apply_pending(new.state_dir) is True
+    new.mugil_role, new.mugil_partner_url = "primary", "http://linux-pc"
+    return new, Topology(new, lambda: sqlite3.connect(new.db_path), wait=0.01,
+                         partner=through(world.secondary)), bundle
+
+
+def test_moving_the_primary_plans_what_must_go_with_the_index(apart):
+    apart.primary.plan(MOVE_PRIMARY)
+    record = finish(apart.primary)["record"]
+    assert record["to"] == {"role": "single", "paired": False}
+    page = apart.primary.plan_page(limit=100)
+    plan = {Path(i["file"]).name + ("@mac" if i["on"] == "primary" else ""): i for i in page["items"]}
+    assert (plan["mac.jpg@mac"]["outcome"], plan["mac.jpg@mac"]["reason"]) == (
+        "carried", "carry_with_library")
+    assert plan["same.jpg@mac"]["outcome"] == "both"
+    assert plan["linux-only.jpg"]["outcome"] == "kept" and "reason" not in plan["linux-only.jpg"]
+    assert record["plan"]["primary"]["carried"]["files"] == 3     # with the one in its bin
+    # The old Primary is not where it is proved.
+    with pytest.raises(topology.Refused, match="computer the index went to"):
+        apart.primary.prove()
+
+
+def test_the_export_carries_the_plan_and_the_new_primary_proves_it(apart, tmp_path, monkeypatch):
+    new, there, bundle = moved(apart, tmp_path, monkeypatch)
+    import tarfile
+    with tarfile.open(bundle) as tar:
+        names = {m.name for m in tar.getmembers()}
+    assert "state/mugil-move/record.json" in names
+    record = there.status()["record"]
+    assert record["transition"] == "move_primary" and record["moved_in"] and record["state"] == "planned"
+    assert not topology.moving(new.state_dir)                      # put in place, and gone
+    assert there.status()["can_prove"]
+    there.prove()
+    record = finish(there)["record"]
+    assert record["state"] == "done", record
+    assert record["proof"]["passed"] and record["proof"]["checked"] == 11
+
+
+def test_a_file_left_on_the_old_primary_fails_the_proof_by_name(apart, tmp_path, monkeypatch):
+    new, there, _ = moved(apart, tmp_path, monkeypatch, leave_behind="2026/11/01/mac.jpg")
+    there.prove()
+    record = finish(there)["record"]
+    assert record["state"] == "failed"
+    assert [m["file"] for m in record["proof"]["missing"]] == [str(apart.mac_lib / "2026/11/01/mac.jpg")]
+
+
+def test_an_export_without_a_plan_arrives_with_nothing_to_prove(tmp_path):
+    state = tmp_path / "state"
+    state.mkdir()
+    assert topology.arrive(state) is None
+    (state / topology.MOVING).mkdir()
+    (state / topology.MOVING / "record.json").write_text(json.dumps(
+        {"transition": "move_primary", "before": {"here": "../mugil-pair.json", "partner": "x"}}))
+    assert topology.arrive(state) is None and topology.load_record(state) == {}
 
 
 # -- the routes, between two whole Ninaivus ----------------------------------------------
@@ -365,7 +486,7 @@ def test_the_console_plans_and_proves_a_pairing_over_the_signed_api(two_apps, tm
         "/api/mugil/census/file?name=../mugil-pair.json").status_code == 401
     services.mugil_topology.wait = 0.05
 
-    assert first.post("/api/admin/mugil/topology/plan", json={"transition": "unpair"}).status_code == 409
+    assert first.post("/api/admin/mugil/topology/plan", json={"transition": "swap"}).status_code == 409
     assert first.post("/api/admin/mugil/topology/plan", json={"transition": "pair"}).status_code == 200
     services.mugil_topology._thread.join(timeout=60)
     status = first.get("/api/admin/mugil/topology").get_json()
@@ -398,3 +519,37 @@ def test_a_census_request_reaches_only_a_census_kept_here(tmp_path):
                  "/etc/passwd", "mugil-census-20261108-120001.jsonl.gz", "", None,
                  "mugil-topology.json"):
         assert census_file(state, name) is None, name
+
+
+# -- an unplugged drive's empty mount folder -----------------------------------------
+
+def test_an_empty_mount_folder_where_the_library_was_is_away(tmp_path):
+    """An unplugged N300 leaves its mount folder behind, empty. A census that
+    took it for the library would record nothing, and the proof would pass
+    having checked nothing."""
+    library = tmp_path / "N300" / "Ninaivu Archive"
+    put(library / "2019/beach.jpg", b"beach")
+    cfg = computer(tmp_path, "linux", [library])
+    shutil.rmtree(library)
+    library.mkdir()                                  # the drive is away; its folder is not
+    assert topology._library_away(cfg, str(library)) is True
+    assert [t["away"] for t in topology._tops(cfg)] == [True]
+
+
+def test_a_library_folder_without_the_id_it_is_known_by_is_away(tmp_path):
+    from ninaivu.storage import library_id
+    library = tmp_path / "Photos"
+    put(library / "a.jpg", b"a")
+    cfg = computer(tmp_path, "mac", [library])
+    known = library_id.ensure_marker(library)
+    library_id._save_known(Path(cfg.state_dir), {str(library): known})
+    assert topology._library_away(cfg, str(library)) is False
+    (library / library_id.MARKER).unlink()           # another disk mounted in its place
+    assert topology._library_away(cfg, str(library)) is True
+
+
+def test_an_empty_library_the_index_knows_nothing_of_is_not_away(tmp_path):
+    library = tmp_path / "New"
+    library.mkdir()
+    cfg = computer(tmp_path, "mac", [library])
+    assert topology._library_away(cfg, str(library)) is False

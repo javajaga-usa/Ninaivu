@@ -11,7 +11,8 @@ rules that decide who goes first.
 ```
 python -m ninaivu
  └─ Services.start()                                     ninaivu/__init__.py
-     ├─ power policy, archive guardian, backup scheduler (own threads)
+     ├─ power policy (no thread of its own)
+     ├─ the periodic keepers, as jobs on the supervisor (see below)
      └─ ninaivu-boot thread
          ├─ load the AI engine (can take minutes on a first run)
          ├─ resume an interrupted archive job   → archive-resume thread
@@ -65,7 +66,13 @@ with scanner.held("checking the library's storage"):
   asked for in the meantime is queued rather than lost.
 - `Scanner.resume(reason)` releases **that** claim. The queued scan starts only
   once no claims are left.
-- `Scanner.deferred` shows everything holding the indexer, for the console.
+- `Scanner.deferred` shows everything holding the indexer, for the console,
+  each reason once.
+- A claim is a reason **and a holder**. Callers that give no holder share a
+  claim with anybody else giving the same reason alone, as they always did.
+  A supervisor job holds in its own name (`defer(reason, holder=job.name)`),
+  so a job and the Storage page's check, or two jobs, giving the same reason
+  never let go of each other's claim. `Scanner.holding()` lists them.
 
 | Holder | Claim | Kind |
 |---|---|---|
@@ -122,11 +129,112 @@ variables it exports cap OpenMP, MKL and OpenCV. Rule 1 means the CPU-heavy
 jobs (scan analysis, straighten, storage check) no longer run on top of one
 another, so each can use the full budget.
 
+## The supervisor
+
+`ninaivu/server/supervisor.py` runs the periodic keepers. Each is a `Job`:
+what one round does, when rounds happen, and what it needs of the machine.
+The supervisor runs each job on its own named thread (the name the keeper's
+thread always had), logs and retries a round that raises (so a loop never
+dies on one error), honours the job's claims with the scan's rules above,
+stops everything within a budget, and lists every job's state at
+`GET /api/admin/jobs/background`.
+
+### Declaring a job
+
+```python
+from ..server.supervisor import NETWORK, Job, every, supervisor_of
+
+class Keeper:
+    JOB = "ninaivu-something"           # its thread name, as before
+
+    def start(self) -> None:
+        supervisor_of(self).add(Job(
+            self.JOB, self._look, every(600, first=60),
+            claims={NETWORK}, log=log, failure="could not do the thing",
+            retry_most=0, progress=lambda: {"busy": self.busy}))
+
+    def stop(self, timeout: float = 5.0) -> None:
+        supervisor_of(self).stop_job(self.JOB, timeout)
+```
+
+- **When**: `at_start()` (once, until a round succeeds), `every(N or
+  callable, first=)` (N seconds after each round ends; a callable is asked
+  afresh each round; `first` defaults to one interval, which is what
+  `while not stop.wait(N)` did), `on_request()` (a round per
+  `supervisor.request(name)`; asks during a round come to one more round) or
+  `after(job)`. `request()` also wakes an `every` job early.
+- **Claims**: from `library_disk`, `archive_disk`, `cpu`, `index_write`,
+  `network`. The first three make the scan stand down and need a `reason`;
+  a job that only reads uses a reason in `READ_ONLY_CLAIMS`, and one that
+  moves files sets `moves_files=True` and waits for any other mover.
+  `index_write` and `network` are shown, not arbitrated. Declaring a claim
+  the scan stands down for where the keeper held none is a change of
+  behaviour, not a refactor.
+- **Failures**: the round raises; the supervisor logs `failure` (on `log`)
+  with the traceback and tries again after `retry_first`, doubling up to
+  `retry_most`, never sooner than the schedule. `retry_most=0` keeps a
+  scheduled job to exactly its schedule, which is what the old loops did.
+- **Stopping**: give `interrupt` when a round can be cut short (usually the
+  flag the work already watches); otherwise a stop waits for the round.
+- Keep the keeper's old `start`/`keep`/`stop` methods as thin wrappers, and
+  a `supervisor = None` attribute: Ninaivu hands each keeper the shared
+  supervisor in `Services.__init__`, and one used by itself (as much of the
+  test suite does) gets its own from `supervisor_of`.
+
+### The jobs on it
+
+| Thread | Keeper | When | Claims |
+|---|---|---|---|
+| `bin-sweep` | the recycle bin, `ninaivu/__init__.py` | every day | index_write |
+| `ninaivu-digest` | weekly photograph, `utils/digest.py` | every 20 min | network |
+| `ninaivu-library-drives` | `storage/library_drives.py` | every 15 s | |
+| `ninaivu-index-copy` | `cloud/index_copy.py` | every 30 min | network |
+| `ninaivu-restore-test` | `cloud/restore_test.py` | every hour | network |
+| `ninaivu-backup` | `storage/backup.py` | every 15 min (none while off) | |
+| `ninaivu-disks` | `storage/disk_health.py` | 1 min in, then every 10 min | |
+| `archive-guardian` | `archive/guardian.py` | 5 s in, then every 5 min | |
+| `ninaivu-second-copy-keeper` | `storage/mirror.py` | every 10 min, or `look_now()` | |
+| `ninaivu-offsite-schedule` | `cloud/offsite.py` | every 10 min | network |
+| `ninaivu-xmp-schedule` | `storage/xmp.py` | every hour | |
+| `ninaivu-xmp-read-timer` | `storage/xmp_read.py` | every 30 min | |
+| `ninaivu-daily-catchup` | `server/catchup.py` | every 30 s | |
+| `mugil-keeper` | `mugil/courier.py` | every 10 min, sooner for the first copy | network |
+| `mugil-wake` | `mugil/wake.py` | every 30 s | network |
+| `mugil-display` | `mugil/display.py` | at once, then every 10 min | |
+| `ninaivu-descriptions` | `runtime/describer.py` | 2 min in, every 30 min, or `wake()` | |
+| `ninaivu-story-words` | `runtime/transcriber.py` | 1 min in, every 30 min, or `wake()` | |
+| `ninaivu-video-moments` | `media/video_moments.py` | 3 min in, every hour, or `wake()` | |
+
+Not on it yet, each with its reason:
+
+- The scan (`mv-scan`, `mv-rescan`), the archive job (`archive-job`,
+  `archive-resume`) and the cloud upload (`ninaivu-cloud`): not periodic,
+  and each has its own stop and resume rules; they move over one at a time.
+- The job engine (`ninaivu/engine`): a run is worked through on the caller's
+  own thread (the scan's), with the caller's database connection, and hands
+  its report back to it. Running it on a supervisor thread means handing the
+  run and its connection across threads and waiting on the answer.
+- The model host (`runtime/host.py`): it has no thread to keep. It is started
+  by the call that needs it, under the call's lock, leaves when idle, and a
+  crash is the caller's to retry; models that fail to load are already held
+  off with a growing wait.
+- Runs started on request or carried on at start-up (the copies' runs,
+  sending the originals, freeing space, checking a copy made by hand,
+  rebuilding, an update, the smaller-videos trial), the beacon's listening
+  socket, and the hand-over keeper (`mugil/handover.py`).
+- The repair's check schedule (`ninaivu-check-schedule`), the replica's
+  keepers (`ninaivu-replica-front`, `ninaivu-replica-receive`) and the
+  tailnet certificate (`ninaivu-tailnet-cert`): periodic, not yet moved.
+
 ## Adding a new background job
 
-1. Run it on one named daemon thread, and refuse a second start while it runs.
-2. If it reads the whole library or keeps the CPU busy for minutes, run it
-   inside `scanner.held(...)`. If it only reads, add its claim to
+1. If it runs on a schedule or on request, declare it as a `Job` on the
+   supervisor (above), with the thread name it is to be known by. Otherwise
+   run it on one named daemon thread, and refuse a second start while it
+   runs.
+2. If it reads the whole library or keeps the CPU busy for minutes, it
+   claims the disk or the processors (on the supervisor) or runs inside
+   `scanner.held(...)`. If it only reads, add its reason to
    `READ_ONLY_CLAIMS`.
 3. Commit often: every second or so, never across slow work.
 4. If it should survive a restart, write itself down with `resume.want` and

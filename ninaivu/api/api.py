@@ -122,13 +122,11 @@ def _engine():
 
 
 def _roots() -> list[str]:
-    """Library folders the caller may query — never more than they're assigned."""
-    cfg = _cfg()
-    libraries = cfg.libraries or ([cfg.active_root] if cfg.active_root else [])
-    if not libraries:
-        abort(409, description="No library folder has been set up yet.")
-    roots, _ = auth.resolve_library(current_user().assigned_library, libraries)
-    return roots
+    """Library folders the caller may query — never more than they're assigned.
+
+    The visibility gate's (``Viewer.roots``): a 409 when no library folder has
+    been set up yet."""
+    return visibility.current().roots
 
 
 def _root() -> str:
@@ -280,17 +278,9 @@ def _viewer() -> dict[str, Any]:
     Never from a request parameter — a guest cannot ask to see more by
     changing the query string. Three limits stack: which library folders they
     were assigned, how deep inside one, and what visibility they may see.
+    They are the visibility gate's (``Viewer.limits``): one copy of the rules.
     """
-    cfg = _cfg()
-    user = current_user()
-    libraries = cfg.libraries or ([cfg.active_root] if cfg.active_root else [])
-    _, sub = auth.resolve_library(user.assigned_library, libraries)
-    return {
-        "viewer_id": user.id,
-        "max_visibility": user.max_visibility,
-        # An explicit assignment wins; the legacy scope column is the fallback.
-        "scope": sub or (user.effective_scope or None),
-    }
+    return visibility.current().limits()
 
 
 #: A family member's search leaves out what the explicit check scored at this
@@ -311,43 +301,25 @@ def _viewer_limits() -> dict[str, Any]:
 
 
 def _guard(asset: dict[str, Any] | None) -> dict[str, Any]:
-    """404 unless the caller is allowed to see this asset."""
-    if not _may_see(asset):
-        abort(404)
-    return asset  # type: ignore[return-value]
+    """404 unless the caller is allowed to see this asset, as the visibility
+    gate decides it (``Viewer.may_see``)."""
+    return _gate(asset)
 
 
 def _gate(asset: dict[str, Any] | None) -> dict[str, Any]:
     """404 unless the caller may see this asset, as the visibility gate
-    decides it (server/visibility.py): :func:`_guard`, for the routes that go
-    through the gate."""
+    decides it (server/visibility.py)."""
     if not visibility.current().may_see(asset):
         abort(404)
     return asset  # type: ignore[return-value]
 
 
 def _may_see(asset: dict[str, Any] | None) -> bool:
-    """Whether the caller is allowed to see this asset: :func:`_guard`'s test."""
-    if not asset:
-        return False
-    limits = _viewer()
-    if not db.visible_to(asset, limits["max_visibility"], limits["scope"],
-                         viewer_id=limits["viewer_id"]):
-        return False
-    # …and it must live in a library folder they were assigned.
-    if asset.get("root") not in _roots():
-        return False
-    # Trash is not a display hint. Every listing withholds trashed rows and
-    # only an admin may opt back into them, so fetching one by id has to
-    # answer the same way — otherwise a photo the admin removed from every
-    # family-facing view is still served in full to anyone holding its id.
-    if asset.get("trashed") and not current_user().is_admin:
-        return False
-    # Explicit / adult / NSFW content must never be served in the family app
-    # or to non-admin users. Only admins may view and control it.
-    if asset.get("nsfw") and not current_user().is_admin:
-        return False
-    return True
+    """Whether the caller is allowed to see this asset: :func:`_guard`'s test,
+    the visibility gate's (``Viewer.may_see``). Trash and explicit content are
+    an administrator's alone, and the item must live in a library folder the
+    caller was given."""
+    return visibility.current().may_see(asset)
 
 
 def _dates_from_phrase(text: str) -> tuple[str, str, str]:
@@ -589,12 +561,14 @@ def _semantic_ids(text: str, roots, conn) -> tuple[list[int] | None, dict[int, f
     # the matrix that is already in memory. It reads every vector's row, a
     # quarter of a second on a large library, so it is remembered until the
     # library or the set of vectors changes.
-    limits = _viewer_limits()
+    # *roots* are the caller's own (every caller passes the gate's): the
+    # candidates are the gate's, its SQL — folders, ceiling, date limit and
+    # sub-folder — the key they are remembered by.
+    viewer = visibility.current()
+    gate_sql, gate_params = viewer.sql("a")
     visible = db.cached_aggregate(
-        # The visibility clause carries this viewer's date policy.
-        conn, ("visible_embeddings", tuple(roots), limits["max_visibility"],
-               limits["scope"], db.visibility_clause("a", limits["max_visibility"])),
-        lambda: tuple(db.visible_embedding_ids(conn, roots, **limits)),
+        conn, ("visible_embeddings", gate_sql, tuple(gate_params), viewer.ranks_every_vector()),
+        lambda: tuple(db.visible_embedding_ids(conn, gate=viewer)),
         also=(db.EMBEDDINGS_GENERATION_KEY,), shared=True)
     rows = [index[i] for i in visible if i in index]
     ranked = ai_mod.semantic_search(vector, ids, buffer, dim, top_k=4000, rows=rows,
@@ -889,9 +863,7 @@ def status():
     # /api/status/stats.
     if (cfg.libraries or cfg.active_root) and _bool_arg("stats", True):
         try:
-            payload["stats"] = db.library_stats(
-                _conn(), _roots(), **_viewer()
-            )
+            payload["stats"] = db.library_stats(_conn(), gate=visibility.current())
         except Exception as exc:  # noqa: BLE001
             current_app.logger.warning("library_stats failed: %s", exc)
             payload["stats"] = None
@@ -912,7 +884,7 @@ def status_stats():
     if not (cfg.libraries or cfg.active_root):
         return jsonify({"stats": None})
     try:
-        stats = db.library_stats(_conn(), _roots(), **_viewer())
+        stats = db.library_stats(_conn(), gate=visibility.current())
     except Exception as exc:  # noqa: BLE001
         current_app.logger.warning("library_stats failed: %s", exc)
         stats = None
@@ -3644,13 +3616,13 @@ def _own_album(album_id: int):
     exists, owner = db.album_owner(_conn(), album_id)
     if not exists:
         abort(404)
-    from ..server import date_policy
+    viewer = visibility.current()
     # Only a restricted viewer needs the album's date, and that is all this
     # needs: loading every item id to learn whether there were any was most
     # of the cost of each edit to a large album.
-    if date_policy.restricted():
+    if viewer.restricted:
         album = db.get_album(_conn(), album_id)
-        if album["item_ids"] and not date_policy.allows(album):
+        if album["item_ids"] and not viewer.in_dates(album):
             abort(404)
     user = current_user()
     if owner is not None and owner != user.id and not user.is_admin:
@@ -3670,12 +3642,12 @@ def _visible_ids(ids: Sequence[int]) -> list[int]:
     # a family member adding a whole library to one, a few thousand at a time
     # — could then not be read, patched or added to at all.
     ids = list(ids)
-    conn, roots, viewer = _conn(), _roots(), _viewer()
+    conn, viewer = _conn(), visibility.current()
     seen: list[int] = []
     for start in range(0, len(ids), _IN_CHUNK):
         piece = ids[start:start + _IN_CHUNK]
-        rows, _ = db.query_assets(conn, roots, ids=piece, limit=len(piece),
-                                 offset=0, columns=("id",), with_total=False, **viewer)
+        rows, _ = db.query_assets(conn, gate=viewer, ids=piece, limit=len(piece),
+                                 offset=0, columns=("id",), with_total=False)
         seen.extend(int(r["id"]) for r in rows)
     return seen
 
@@ -3685,9 +3657,7 @@ def _visible_ids(ids: Sequence[int]) -> list[int]:
 def albums():
     user = current_user()
     return jsonify({"albums": db.list_albums(
-        _conn(), _roots(), **_viewer_limits(),
-        viewer_id=user.id, is_admin=user.is_admin
-    )})
+        _conn(), gate=visibility.current(), viewer_id=user.id, is_admin=user.is_admin)})
 
 
 @bp.get("/api/albums/<int:album_id>")
@@ -3697,11 +3667,11 @@ def album_get(album_id: int):
     if not album:
         abort(404)
     user = current_user()
+    viewer = visibility.current()
     visible_ids = _visible_ids(album.get("item_ids", []))
-    from ..server import date_policy
-    if not date_policy.allows(album):
+    if not viewer.in_dates(album):
         abort(404)
-    if not visible_ids and (date_policy.restricted() or (album.get("created_by") != user.id and not user.is_admin)):
+    if not visible_ids and (viewer.restricted or (album.get("created_by") != user.id and not user.is_admin)):
         abort(404)
     album["item_ids"] = visible_ids
     album["n"] = len(visible_ids)
@@ -3789,8 +3759,8 @@ def album_items(album_id: int):
         db.album_add(_conn(), album_id, ids)
     # Counted in one query. Read back as ids and narrowed 500 at a time, every
     # addition to a 50,000-photograph album ran a hundred queries (240 ms).
-    _, count = db.query_assets(_conn(), _roots(), album=album_id, include_companions=True,
-                               limit=1, offset=0, columns=("id",), **_viewer())
+    _, count = db.query_assets(_conn(), gate=visibility.current(), album=album_id,
+                               include_companions=True, limit=1, offset=0, columns=("id",))
     return jsonify({"ok": True, "count": count})
 
 

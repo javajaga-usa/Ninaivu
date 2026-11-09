@@ -78,7 +78,7 @@ globalThis.fetch = async (url, options = {{}}) => {{
 globalThis.localStorage = {{ getItem: () => null, setItem() {{}} }};
 globalThis.document = {{ documentElement: {{ lang: 'en' }}, addEventListener() {{}} }};
 Object.defineProperty(globalThis, 'navigator', {{ value: {{ languages: ['en'], language: 'en' }}, configurable: true }});
-const {{ home, admin }} = await import({str(JS / 'api.js')!r});
+const {{ home, admin }} = await import({(JS / 'api.js').resolve().as_uri()!r});  // a file:// URL: on Windows a path is not one
 await admin.getAdminOverview();
 await admin.postAdminBackupsNow();
 await admin.postVisibilityFolder({{ body: {{ folder: 'a b', visibility: 'hidden', confirm: false }} }});

@@ -18,8 +18,9 @@ from ._body import json_object
 # The blueprints and the shared helpers stay in api.py: these routes
 # are registered on the same two blueprints they always were, so every
 # path and every endpoint name is unchanged.
-from .api import (admin_only, bp, _cfg, _conn, _guard, _int_arg, _root, _roots,
-                  _scanner, _viewer_limits)
+from ..server import visibility
+from .api import (admin_only, bp, _cfg, _conn, _gate, _int_arg, _root, _roots,
+                  _scanner)
 
 
 # ---------------------------------------------------------------------------
@@ -77,7 +78,7 @@ def face_people():
     disclose that they are somewhere in the library.
     """
     conn = _conn()
-    people = db.list_people(conn, _roots(), **_viewer_limits())
+    people = db.list_people(conn, gate=visibility.current())
     return jsonify({"people": people})
 
 
@@ -86,7 +87,7 @@ def face_people():
 def face_boxes(asset_id: int):
     """The faces in one photograph, for the viewer's overlay."""
     conn = _conn()
-    _guard(db.get_asset(conn, asset_id, current_user().id))
+    _gate(db.get_asset(conn, asset_id, current_user().id))
     rows = db.faces_for_asset(conn, asset_id)
     for row in rows:
         try:
@@ -110,7 +111,7 @@ def face_thumb(face_id: int):
     face = db.get_face(conn, face_id)
     if not face or not face.get("thumb"):
         abort(404)
-    _guard(db.get_asset(conn, int(face["asset_id"]), current_user().id))
+    _gate(db.get_asset(conn, int(face["asset_id"]), current_user().id))
     path = Path(_cfg().state_dir) / "faces" / str(face["thumb"])
     if not path.exists():
         abort(404)
@@ -207,7 +208,7 @@ def faces_clusters():
     hidden = _int_arg("hidden", 0) == 1
     limit = _face_limit(60)
     clusters = db.list_unnamed_clusters(
-        conn, _roots(), max_visibility=current_user().max_visibility,
+        conn, gate=visibility.current(),
         min_size=max(1, _int_arg("min_size", 1 if hidden else 3)), limit=limit + 1,
         offset=max(0, _int_arg("offset", 0)), hidden=hidden)
     return jsonify({"clusters": clusters[:limit], "more": len(clusters) > limit,

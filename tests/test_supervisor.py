@@ -284,26 +284,31 @@ def test_a_claim_makes_the_scan_stand_down(cfg):
     assert scanner.deferred is None and len(started) == 1
 
 
+class _Held:
+    """The scan's claims, as Scanner keeps them; those given as plain text
+    here were made by a reason alone (holder None)."""
+
+    def __init__(self) -> None:
+        self.claims: list = []
+
+    def defer(self, reason, holder=None):
+        self.claims.append(reason if holder is None else (reason, holder))
+
+    def resume(self, reason=None, holder=None):
+        self.claims.remove(reason if holder is None else (reason, holder))
+
+    def holding(self):
+        return [c if isinstance(c, tuple) else (c, None) for c in self.claims]
+
+    @property
+    def deferred(self):
+        return "; ".join(dict.fromkeys(r for r, _ in self.holding())) or None
+
+
 def test_a_job_that_moves_files_waits_for_another(clock):
     from ninaivu.media.scanner import CLAIM_STORAGE_CHECK
 
-    class Held:
-        """The scan's claims, as Scanner keeps them."""
-
-        def __init__(self) -> None:
-            self.claims: list[str] = []
-
-        def defer(self, reason):
-            self.claims.append(reason)
-
-        def resume(self, reason=None):
-            self.claims.remove(reason)
-
-        @property
-        def deferred(self):
-            return "; ".join(self.claims) or None
-
-    scanner = Held()
+    scanner = _Held()
     scanner.claims += ["a consolidation is running", CLAIM_STORAGE_CHECK]
     supervisor = Supervisor(scanner, clock=clock)
     ran = []
@@ -320,6 +325,68 @@ def test_a_job_that_moves_files_waits_for_another(clock):
         assert ran == [f"{CLAIM_STORAGE_CHECK}; tidying the library"]
         assert scanner.claims == [CLAIM_STORAGE_CHECK]
     finally:
+        assert supervisor.stop(timeout=5) == []
+
+
+def test_two_jobs_moving_files_for_the_same_reason_take_turns(clock):
+    """The same reason is not the same holder: the second waits for the first."""
+    scanner = _Held()
+    supervisor = Supervisor(scanner, clock=clock)
+    gate, ran = threading.Event(), []
+
+    def first() -> None:
+        ran.append("first")
+        gate.wait(5)
+
+    tidy = dict(claims={sup.LIBRARY_DISK}, reason="tidying the library", moves_files=True)
+    try:
+        supervisor.add(Job("one", first, sup.at_start(), interrupt=gate.set, **tidy))
+        until(lambda: supervisor.state("one") == sup.RUNNING)
+        supervisor.add(Job("two", lambda: ran.append("second"), sup.at_start(), **tidy))
+        clock.asleep_until("two", sup.CLAIM_LOOK_EVERY)
+        assert supervisor.state("two") == sup.WAITING
+        gate.set()
+        until(lambda: supervisor.state("one") == sup.DONE)
+        clock.advance(sup.CLAIM_LOOK_EVERY)
+        until(lambda: supervisor.state("two") == sup.DONE)
+        assert ran == ["first", "second"] and scanner.claims == []
+    finally:
+        assert supervisor.stop(timeout=5) == []
+
+
+def test_a_shared_reason_is_one_claim_per_holder(cfg):
+    """The first slice's risk: claims were keyed by reason, so a job and the
+    Storage page's check, both 'checking the library's storage', let go of
+    each other's claim and the scan came back while one of them still read."""
+    from ninaivu.media.scanner import CLAIM_STORAGE_CHECK, Scanner
+
+    scanner = Scanner(cfg)
+    scanner.watch = lambda roots=(): None
+    supervisor = Supervisor(scanner)
+    inside, carry_on = threading.Event(), threading.Event()
+
+    def check() -> None:
+        inside.set()
+        carry_on.wait(5)
+
+    try:
+        scanner.defer(CLAIM_STORAGE_CHECK)                  # the Storage page's check
+        supervisor.add(Job("check", check, sup.at_start(), claims={sup.CPU},
+                           reason=CLAIM_STORAGE_CHECK, interrupt=carry_on.set))
+        assert inside.wait(5)
+        assert scanner.deferred == CLAIM_STORAGE_CHECK      # read as one reason
+        assert len(scanner.holding()) == 2
+        scanner.resume(CLAIM_STORAGE_CHECK)                 # the page's check ends
+        assert scanner.deferred == CLAIM_STORAGE_CHECK      # the job still holds it
+        # Two jobs with one reason: each holds and lets go of its own.
+        scanner.defer(CLAIM_STORAGE_CHECK, holder="other")
+        carry_on.set()
+        until(lambda: supervisor.state("check") == sup.DONE)
+        assert scanner.holding() == [(CLAIM_STORAGE_CHECK, "other")]
+        scanner.resume(CLAIM_STORAGE_CHECK, holder="other")
+        assert scanner.deferred is None
+    finally:
+        carry_on.set()
         assert supervisor.stop(timeout=5) == []
 
 
@@ -395,15 +462,30 @@ def _keepers(tmp_path):
     ]
 
 
+def _new_threads(before: set[int]) -> list[str]:
+    """Names of the threads started since *before* (idents) that are still alive.
+
+    Only these count: other tests in the same process may have left threads
+    of the same names running, and they are not this test's.
+    """
+    return [t.name for t in threading.enumerate() if t.ident not in before]
+
+
 def test_the_keepers_keep_their_threads_and_schedules(tmp_path):
+    _keep_their_threads_and_schedules(_keepers(tmp_path))
+
+
+def _keep_their_threads_and_schedules(keepers):
+    """Each (keeper, thread, when): one thread by that name however often it
+    is started, on that schedule, gone after stop() and back after start()."""
     shared = Supervisor()
-    keepers = _keepers(tmp_path)
+    before = {t.ident for t in threading.enumerate()}
     try:
         for keeper, _, _ in keepers:
             keeper.supervisor = shared
             keeper.start()
             keeper.start()                      # a second start is no second loop
-        names = [t.name for t in threading.enumerate()]
+        names = _new_threads(before)
         rows = {r["name"]: r for r in shared.activity()}
         for _keeper, thread, when in keepers:
             assert names.count(thread) == 1
@@ -411,8 +493,7 @@ def test_the_keepers_keep_their_threads_and_schedules(tmp_path):
         for keeper, thread, _ in keepers:
             keeper.stop(timeout=5)
             assert shared.state(thread) == sup.STOPPED
-        assert not {thread for _, thread, _ in keepers} & {
-            t.name for t in threading.enumerate()}
+        assert not {thread for _, thread, _ in keepers} & set(_new_threads(before))
         # And started again after a stop, as before.
         for keeper, thread, _ in keepers:
             keeper.start()
@@ -424,12 +505,13 @@ def test_the_keepers_keep_their_threads_and_schedules(tmp_path):
 def test_a_keeper_used_by_itself_has_a_supervisor_of_its_own(tmp_path):
     keeper, thread, _ = _keepers(tmp_path)[0]
     assert keeper.supervisor is None
+    before = {t.ident for t in threading.enumerate()}
     keeper.start()
     try:
         assert keeper.supervisor is not None and keeper.supervisor.state(thread) == sup.IDLE
     finally:
         keeper.stop(timeout=5)
-    assert thread not in [t.name for t in threading.enumerate()]
+    assert thread not in _new_threads(before)
 
 
 def test_the_index_copy_stop_still_reaches_an_upload_under_way(tmp_path):
@@ -442,3 +524,278 @@ def test_the_index_copy_stop_still_reaches_an_upload_under_way(tmp_path):
     keeper.start()
     assert not keeper._stop.is_set()
     keeper.stop(timeout=5)
+
+
+# -- the second slice, group 1: backups, drives, the archive guardian ------------
+
+def _group_1(tmp_path, monkeypatch):
+    from ninaivu.archive import guardian as guardian_mod
+    from ninaivu.storage.backup import BackupKeeper
+    from ninaivu.storage.disk_health import DiskWatch
+
+    monkeypatch.setattr(guardian_mod.db, "load_guardian_state", lambda: {})
+    cfg = SimpleNamespace(state_dir=str(tmp_path), backup_every_hours=24, backup_keep=7,
+                          backup_dir="")
+    return [
+        (BackupKeeper(cfg), "ninaivu-backup", "every 900 seconds"),
+        (DiskWatch(cfg, lambda: None, probe=lambda since: None), "ninaivu-disks",
+         "every 600 seconds"),
+        (guardian_mod.ArchiveGuardian(lambda: False), "archive-guardian",
+         "every 300 seconds"),
+    ]
+
+
+def test_group_1_keeps_its_threads_and_schedules(tmp_path, monkeypatch):
+    _keep_their_threads_and_schedules(_group_1(tmp_path, monkeypatch))
+
+
+def test_group_1_first_looks_come_when_they_did(tmp_path, monkeypatch, clock):
+    """The drive watch a minute in, the guardian five seconds in, and the
+    backup one quarter-hour in, never at start-up."""
+    shared = Supervisor(clock=clock)
+    keepers = _group_1(tmp_path, monkeypatch)
+    try:
+        for keeper, _, _ in keepers:
+            keeper.supervisor = shared
+            keeper.start()
+        clock.asleep_until("ninaivu-backup", 900)
+        clock.asleep_until("ninaivu-disks", 60)
+        clock.asleep_until("archive-guardian", 5)
+    finally:
+        assert shared.stop(timeout=5) == []
+
+
+def test_a_backup_switched_off_starts_no_job(tmp_path):
+    from ninaivu.storage.backup import BackupKeeper
+
+    keeper = BackupKeeper(SimpleNamespace(state_dir=str(tmp_path), backup_every_hours=0))
+    keeper.supervisor = Supervisor()
+    keeper.start()
+    assert keeper.supervisor.activity() == []
+
+
+# -- group 2: the second copy, the off-site copy, the sidecars, the catch-up ------
+
+def _group_2(tmp_path):
+    from ninaivu.cloud.offsite import Offsite
+    from ninaivu.server.catchup import DailyCatchUp
+    from ninaivu.storage.mirror import Mirror
+    from ninaivu.storage.xmp import XmpWriter
+    from ninaivu.storage.xmp_read import XmpReader
+
+    cfg = SimpleNamespace(state_dir=str(tmp_path), mirror_dir="", libraries=[])
+    reader = XmpReader(cfg, lambda: None)
+    reader.baseline = lambda: None
+    return [
+        (Mirror(cfg, lambda: None), "keep", "ninaivu-second-copy-keeper",
+         "every 600 seconds"),
+        (Offsite(cfg, lambda: None), "keep", "ninaivu-offsite-schedule", "every 600 seconds"),
+        (XmpWriter(cfg, lambda: None), "keep", "ninaivu-xmp-schedule", "every 3600 seconds"),
+        (reader, "schedule", "ninaivu-xmp-read-timer", "every 1800 seconds"),
+        (DailyCatchUp(cfg, None, None, None, owed=lambda: []), "keep",
+         "ninaivu-daily-catchup", "every 30 seconds"),
+    ]
+
+
+def test_group_2_keeps_its_threads_and_schedules(tmp_path):
+    shared = Supervisor()
+    keepers = _group_2(tmp_path)
+    before = {t.ident for t in threading.enumerate()}
+    try:
+        for keeper, start, _, _ in keepers:
+            keeper.supervisor = shared
+            getattr(keeper, start)()
+            getattr(keeper, start)()            # a second start is no second loop
+        names = _new_threads(before)
+        rows = {r["name"]: r for r in shared.activity()}
+        for _, _, thread, when in keepers:
+            assert names.count(thread) == 1
+            assert rows[thread]["when"] == when
+        for keeper, _, thread, _ in keepers:
+            keeper.stop(join=True)
+            until(lambda thread=thread: shared.state(thread) == sup.STOPPED)
+        for keeper, start, thread, _ in keepers:
+            getattr(keeper, start)()            # and started again after a stop
+            assert shared.state(thread) == sup.IDLE
+    finally:
+        assert shared.stop(timeout=5) == []
+
+
+def test_the_sidecar_schedule_outlives_an_unexpected_error(tmp_path, clock, caplog,
+                                                            monkeypatch):
+    """Only a refusal was caught: anything else ended the hourly schedule."""
+    from ninaivu.storage.xmp import XmpWriter
+
+    writer = XmpWriter(SimpleNamespace(state_dir=str(tmp_path)), lambda: None, every=60)
+    writer.supervisor = Supervisor(clock=clock)
+    tries = []
+
+    def start() -> None:
+        tries.append(clock.now())
+        raise RuntimeError("unexpected")
+
+    monkeypatch.setattr(XmpWriter, "enabled", property(lambda self: True))
+    try:
+        writer.start = start
+        caplog.set_level(logging.ERROR)
+        writer.keep()
+        for when in (60, 120):
+            clock.asleep_until(writer.SCHEDULE, when)
+            clock.advance(60)
+            until(lambda when=when: tries[-1:] == [float(when)])
+        assert any("brought up to date by themselves" in r.getMessage() for r in caplog.records)
+    finally:
+        assert writer.supervisor.stop(timeout=5) == []
+
+
+# -- group 3: the two computers' keepers ------------------------------------------
+
+def _group_3(tmp_path):
+    from ninaivu.mugil.courier import Courier
+    from ninaivu.mugil.display import DisplayCopies
+    from ninaivu.mugil.wake import Waker
+
+    cfg = SimpleNamespace(state_dir=str(tmp_path), mugil_role="", mugil_partner_url="")
+    display = DisplayCopies(cfg, lambda: None)
+    display.wanted = lambda: False
+    return [
+        (Courier(cfg, lambda: None), "mugil-keeper", "every 600 seconds"),
+        (Waker(cfg), "mugil-wake", "every 30 seconds"),
+        (display, "mugil-display", "every 600 seconds"),
+    ]
+
+
+def test_group_3_keeps_its_threads_and_schedules(tmp_path):
+    shared = Supervisor()
+    keepers = _group_3(tmp_path)
+    before = {t.ident for t in threading.enumerate()}
+    try:
+        for keeper, _, _ in keepers:
+            keeper.supervisor = shared
+            keeper.keep()
+            keeper.keep()                       # a second keep is no second loop
+        names = _new_threads(before)
+        rows = {r["name"]: r for r in shared.activity()}
+        for _, thread, when in keepers:
+            assert names.count(thread) == 1
+            assert rows[thread]["when"] == when
+        for keeper, thread, _ in keepers:
+            keeper.stop(join=True)
+            assert shared.state(thread) == sup.STOPPED
+        for keeper, thread, _ in keepers:
+            keeper.keep()                       # and kept again after a stop
+            until(lambda thread=thread: shared.state(thread) == sup.IDLE)
+    finally:
+        assert shared.stop(timeout=5) == []
+
+
+def test_the_first_copy_after_pairing_only_looks_for_itself(tmp_path, monkeypatch):
+    """soon() wakes the keeper for the first copy; the owed copy and the
+    look after the Secondary keep to the ten minutes."""
+    from ninaivu.mugil import courier as courier_mod
+
+    courier, _, _ = _group_3(tmp_path)[0]
+    courier.supervisor = Supervisor()
+    started, looked = threading.Event(), []
+    monkeypatch.setattr(courier, "ready", lambda: None)
+    monkeypatch.setattr(courier, "start", lambda: started.set())
+    monkeypatch.setattr(courier, "owed", lambda now=None: looked.append("owed") or False)
+    monkeypatch.setattr(courier, "look_after_the_secondary", lambda now=None: [])
+    # The look soon() asks for, before the first copy is due, only waits for it.
+    courier._first_copy_at, courier._nudged = time.time() + 60, True
+    courier._look()
+    assert looked == [] and not started.is_set() and courier._wait() <= 60
+    courier.keep()
+    try:
+        courier.soon(after=0.2)
+        assert started.wait(5)
+        until(lambda: courier._wait() == courier_mod.LOOK_EVERY)
+    finally:
+        courier.stop(join=True)
+
+
+def test_display_copies_start_at_once_and_a_stop_cuts_a_round_short(tmp_path):
+    display = _group_3(tmp_path)[2][0]
+    display.supervisor = Supervisor()
+    inside = threading.Event()
+    display.wanted = lambda: True
+
+    def run_once() -> int:
+        inside.set()
+        display._stop.wait(5)
+        return 0
+
+    display.run_once = run_once
+    display.keep()
+    try:
+        assert inside.wait(5)                   # no wait before the first round
+        began = time.monotonic()
+        display.stop(join=True)
+        assert time.monotonic() - began < 2
+        assert display.supervisor.state("mugil-display") == sup.STOPPED
+    finally:
+        assert display.supervisor.stop(timeout=5) == []
+
+
+# -- group 4: the AI passes ---------------------------------------------------------
+
+def _group_4(tmp_path):
+    from ninaivu.media.video_moments import MomentFinder
+    from ninaivu.runtime.describer import Describer
+    from ninaivu.runtime.transcriber import Transcriber
+
+    cfg = SimpleNamespace(state_dir=str(tmp_path))
+    return [
+        (Describer(cfg, lambda: None, host=lambda: None, every=1800),
+         "ninaivu-descriptions", 120),
+        (Transcriber(cfg, lambda: None, host=lambda: None, every=1800),
+         "ninaivu-story-words", 60),
+        (MomentFinder(cfg, lambda: None, engine=lambda: None, every=1800),
+         "ninaivu-video-moments", 180),
+    ]
+
+
+def test_group_4_keeps_its_threads_first_looks_and_wakes(tmp_path, clock, monkeypatch):
+    shared = Supervisor(clock=clock)
+    keepers = _group_4(tmp_path)
+    before = {t.ident for t in threading.enumerate()}
+    passes = []
+    try:
+        for keeper, thread, _ in keepers:
+            keeper.supervisor = shared
+            monkeypatch.setattr(type(keeper), "enabled", property(lambda self: True))
+            keeper.run = lambda thread=thread: passes.append(thread)
+            keeper.keep()
+            keeper.keep()                       # a second keep is no second loop
+        names = _new_threads(before)
+        for _, thread, first in keepers:
+            assert names.count(thread) == 1
+            clock.asleep_until(thread, first)   # its first look, as before
+        rows = {r["name"]: r for r in shared.activity()}
+        assert {rows[t]["when"] for _, t, _ in keepers} == {"every 1800 seconds"}
+        # Woken, each looks at once, and then waits its whole interval again.
+        for keeper, thread, _ in keepers:
+            keeper.wake()
+            until(lambda thread=thread: passes.count(thread) == 1)
+            clock.asleep_until(thread, 1800)
+        for keeper, thread, _ in keepers:
+            keeper.stop(join=True)
+            assert shared.state(thread) == sup.STOPPED
+            assert keeper._stop.is_set()        # what cuts a pass under way short
+            keeper.keep()
+            assert not keeper._stop.is_set() and shared.state(thread) == sup.IDLE
+    finally:
+        assert shared.stop(timeout=5) == []
+
+
+def test_an_ai_pass_woken_before_it_is_kept_looks_at_once(tmp_path):
+    describer = _group_4(tmp_path)[0][0]
+    describer.supervisor = Supervisor()
+    looked = threading.Event()
+    describer._look = looked.set
+    describer.wake()                            # before keep(): no job to ask yet
+    describer.keep()
+    try:
+        assert looked.wait(5), "the wake was lost until the first look"
+    finally:
+        assert describer.supervisor.stop(timeout=5) == []

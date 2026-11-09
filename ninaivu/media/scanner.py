@@ -1372,8 +1372,11 @@ class Scanner:
         #: Everything the indexer is standing down for, in the order asked.
         #: More than one job can hold the disk at once — a consolidation, a
         #: storage check, a straightening pass — and the indexer comes back
-        #: only when the last of them lets go.
-        self._claims: list[str] = []
+        #: only when the last of them lets go. Each is (reason, holder): the
+        #: holder is None for a claim made by its reason alone, or the name
+        #: of the supervisor job that made it, so two jobs giving the same
+        #: reason hold two claims and neither lets go of the other's.
+        self._claims: list[tuple[str, str | None]] = []
         self._defer_pending: tuple[list[Path], bool] | None = None
         #: How many scans have been asked for and queued rather than started.
         #: A job holding the indexer for hours (the storage check) watches it
@@ -1424,7 +1427,7 @@ class Scanner:
     # already match, so a stopped scan restarts almost where it stopped.
 
     def defer(self, reason: str, *, analysis_may_continue: bool = False,
-              indexing_may_continue: bool = False) -> bool:
+              indexing_may_continue: bool = False, holder: str | None = None) -> bool:
         """Stand down until every holder has called :meth:`resume`.
 
         True if a running scan was stopped. While anything holds the indexer,
@@ -1432,8 +1435,11 @@ class Scanner:
         nothing is lost — a scan requested mid-consolidation simply happens
         when the consolidation ends.
 
-        Claims are by *reason*, and asking twice for the same one is one
-        claim. There used to be a single slot: a job that finished released
+        Claims are by *reason* and *holder*, and asking twice for the same
+        pair is one claim. A caller that gives no holder (every one outside
+        the supervisor) shares its claim with anybody else giving that reason
+        alone, as before; a supervisor job gives its name, so it holds a claim
+        of its own and the console still reads the reason. There used to be a single slot: a job that finished released
         the indexer even while another still had the disk, and approving an
         upload in the middle of a consolidation put the indexer back on the
         drive being written to.
@@ -1457,8 +1463,8 @@ class Scanner:
         jobs used to wait for each other, hours each on a first scan.
         """
         with self._lock:
-            if reason not in self._claims:
-                self._claims.append(reason)
+            if (reason, holder) not in self._claims:
+                self._claims.append((reason, holder))
             was_running = self.running
             past = self._analysing or (indexing_may_continue and self._read_through)
             kept = (was_running and (analysis_may_continue or indexing_may_continue)
@@ -1504,16 +1510,17 @@ class Scanner:
             log.info("indexing stood down — %s; nothing was running", reason)
         return was_running
 
-    def resume(self, reason: str | None = None) -> bool:
+    def resume(self, reason: str | None = None, *, holder: str | None = None) -> bool:
         """Let go of one claim, or all of them. True if a scan was started.
 
+        The claim let go of is *reason* as made by *holder* (see :meth:`defer`).
         The queued scan starts only once nothing holds the indexer.
         """
         with self._lock:
             if reason is None:
                 self._claims.clear()
-            elif reason in self._claims:
-                self._claims.remove(reason)
+            elif (reason, holder) in self._claims:
+                self._claims.remove((reason, holder))
             if self._claims:
                 log.debug("released by %s; still held by %s",
                           reason, self.deferred)
@@ -1544,8 +1551,15 @@ class Scanner:
     @property
     def deferred(self) -> str | None:
         """Why the indexer is standing down, or ``None`` when it is free."""
-        claims = list(self._claims)
-        return "; ".join(claims) if claims else None
+        # Each reason once, in the order first asked: two jobs checking the
+        # storage read as one reason to the household.
+        reasons = list(dict.fromkeys(reason for reason, _ in list(self._claims)))
+        return "; ".join(reasons) if reasons else None
+
+    def holding(self) -> list[tuple[str, str | None]]:
+        """Every claim as (reason, holder), in the order asked."""
+        with self._lock:
+            return list(self._claims)
 
     @property
     def waiting(self) -> bool:

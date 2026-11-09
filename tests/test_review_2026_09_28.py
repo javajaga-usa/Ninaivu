@@ -267,10 +267,10 @@ def test_reading_an_album_far_larger_than_sqlite_takes_in_one_query(admin, peopl
     # Stand in for a stock build's variable limit, far above this suite's data.
     original = db.query_assets
 
-    def strict(conn, roots, *args, **kwargs):
+    def strict(conn, *args, **kwargs):
         if len(kwargs.get("ids") or []) > 1000:
             raise sqlite3.OperationalError("too many SQL variables")
-        return original(conn, roots, *args, **kwargs)
+        return original(conn, *args, **kwargs)
 
     monkeypatch.setattr(api_mod.db, "query_assets", strict)
     answer = admin.get(f"/api/albums/{album}")

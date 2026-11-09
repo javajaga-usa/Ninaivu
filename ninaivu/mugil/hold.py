@@ -609,6 +609,44 @@ class Holding:
             return False
         return got == int(size) and fresh.hexdigest() == digest
 
+    def library_folders(self) -> dict[str, Path]:
+        """Each library this computer keeps originals of, by its id, and the
+        folder they are in: what the family view re-roots the Primary's
+        paths through (mugil/family_view.py). Read only."""
+        ledger = self.folder / LEDGER
+        if not ledger.is_file():
+            return {}
+        try:
+            with contextlib.closing(sqlite3.connect(f"{ledger.as_uri()}?mode=ro", uri=True,
+                                                    timeout=30)) as conn:
+                rows = conn.execute("SELECT id, folder FROM libraries").fetchall()
+        except sqlite3.Error:
+            return {}
+        return {str(i): self.folder / str(f) for i, f in rows
+                if stays_inside(self.folder, self.folder / str(f))}
+
+    def read_back(self, library: str, rel: str) -> dict[str, Any] | None:
+        """The kept file at *rel* of *library* read again end to end now, and
+        its fingerprint worked out from what was read, in the kind it was
+        kept with: what the Primary's test restore asks for. None when no
+        whole file is kept there."""
+        found = self.kept_file(library, rel)
+        if found is None:
+            return None
+        path, kept = found
+        fresh = hasher(str(kept["algo"]))
+        if fresh is None:
+            return None
+        got = 0
+        try:
+            with open(path, "rb") as handle:
+                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                    fresh.update(chunk)
+                    got += len(chunk)
+        except OSError:
+            return None
+        return {"size": got, "algo": str(kept["algo"]), "digest": fresh.hexdigest()}
+
     def kept_elsewhere(self, items: list[dict[str, Any]]) -> list[bool]:
         """For each ``{size, algo, digest}``, whether a file with that very
         content is kept here already, at any path of any library."""

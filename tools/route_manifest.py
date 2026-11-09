@@ -20,7 +20,9 @@ FILE = ROOT / "tests" / "data" / "route_manifest.txt"
 def build() -> str:
     """The manifest of the family app and the console, as a fresh install makes them."""
     logging.disable(logging.WARNING)
-    with tempfile.TemporaryDirectory() as state:
+    # Windows will not delete a file something still has open; whatever is
+    # left behind in a temporary folder is the system's to clear.
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as state:
         os.environ["NINAIVU_STATE_DIR"] = state
         from ninaivu import build_services, create_admin_app, create_home_app
         from ninaivu.server import routes
@@ -33,8 +35,10 @@ def build() -> str:
             found = routes.manifest([("home", create_home_app(services)),
                                      ("admin", create_admin_app(services))])
         finally:
+            from ninaivu.archive import database as archive_db
             from ninaivu.storage import db
             db.close_all()
+            archive_db.close_db()
         return routes.render(found)
 
 

@@ -230,8 +230,8 @@ class DiskWatch:
         self._probe = probe
         self._notify = notify
         self._clock = clock
-        self._stop = threading.Event()
-        self._thread: threading.Thread | None = None
+        #: The supervisor its loop runs on; Ninaivu gives it its own.
+        self.supervisor = None
         self._lock = threading.Lock()
         #: {disk number: drive key} at the previous look, and when.
         self._numbers: dict[int, str] = {}
@@ -245,30 +245,23 @@ class DiskWatch:
 
     # -- lifecycle --------------------------------------------------------
 
+    #: The thread it runs on, as before it moved to the supervisor.
+    JOB = "ninaivu-disks"
+
     def start(self) -> None:
-        if self._thread and self._thread.is_alive():
-            return
-        self._stop.clear()
-        self._thread = threading.Thread(target=self._loop, name="ninaivu-disks",
-                                        daemon=True)
-        self._thread.start()
+        # A minute in: start-up is busy, and nothing here is urgent to the
+        # second. Then every EVERY seconds, kept by the supervisor
+        # (server/supervisor.py); retry_most=0: a look that fails is tried
+        # again at the next look, no sooner and no later.
+        from ..server.supervisor import Job, every, supervisor_of  # noqa: PLC0415
+        supervisor_of(self).add(Job(
+            self.JOB, self.check, every(EVERY, first=60), log=log,
+            failure="could not check the drives", retry_most=0,
+            progress=lambda: {"checked_at": self.checked_at or None}))
 
     def stop(self, timeout: float = 5.0) -> None:
-        self._stop.set()
-        if self._thread and self._thread.is_alive():
-            self._thread.join(timeout)
-
-    def _loop(self) -> None:
-        # A minute in: start-up is busy, and nothing here is urgent to the second.
-        if self._stop.wait(60):
-            return
-        while True:
-            try:
-                self.check()
-            except Exception:                               # noqa: BLE001
-                log.exception("could not check the drives")
-            if self._stop.wait(EVERY):
-                return
+        from ..server.supervisor import supervisor_of            # noqa: PLC0415
+        supervisor_of(self).stop_job(self.JOB, timeout)
 
     # -- one look -----------------------------------------------------------
 

@@ -12,9 +12,10 @@ from flask import abort, jsonify, request
 
 from ..media import frame
 from ..server.auth import current_user
+from ..server import visibility
 from ..storage import db
 from .api import (_asset_file, _cfg, _conn, _gate, _ids_from_csv, _int_arg,
-                  _roots, _viewer, _viewing_copy, bp)
+                  _viewing_copy, bp)
 
 
 def _switched_on() -> None:
@@ -28,7 +29,8 @@ def frame_next():
     ``seed``, avoiding the ids in ``shown`` (the frame's recent history)."""
     _switched_on()
     shown = _ids_from_csv(request.args.get("shown", ""), 400)
-    found = frame.batch(_conn(), _roots(), _viewer(), count=_int_arg("n", frame.BATCH),
+    gate = visibility.current()
+    found = frame.batch(_conn(), gate.roots, gate.limits(), count=_int_arg("n", frame.BATCH),
                         seed=_int_arg("seed", 0), shown=shown)
     user = current_user()
     if user.is_guest:

@@ -456,8 +456,10 @@ def test_in_tamil_the_name_is_written_in_tamil():
     import json
     ta = json.loads((ROOT / "ninaivu" / "static" / "i18n" / "ta.json").read_text(encoding="utf-8"))
     assert ta["Ninaivu"] == "நினைவு"
-    # A file's name in <code> (Ninaivu.exe) is what is on the disk, not the word.
-    latin = [k for k, v in ta.items() if "Ninaivu" in re.sub(r"<code>.*?</code>", "", v)]
+    # A file's name (Ninaivu.exe), in <code> or in a plain-text message, is
+    # what is on the disk, not the word.
+    latin = [k for k, v in ta.items()
+             if "Ninaivu" in re.sub(r"<code>.*?</code>|\bNinaivu\.(?:exe|app)\b", "", v)]
     assert latin == [], f"still in Latin letters: {latin[:5]}"
     assert ta["Ninaivu is locked"] == "நினைவு பூட்டப்பட்டுள்ளது"
     page = PAGE.read_text(encoding="utf-8")

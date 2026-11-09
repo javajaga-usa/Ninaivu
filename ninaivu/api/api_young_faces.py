@@ -46,7 +46,8 @@ from ..media.life_story import _relation
 from ..server.auth import current_user, require_family
 from ..storage import db, family_tree, then_and_now as born_store
 from ._body import json_object
-from .api import _cfg, _conn, _guard, _roots, _thumb_version, _viewer, _viewer_limits, bp
+from ..server import visibility
+from .api import _cfg, _conn, _gate, _thumb_version, bp
 
 log = logging.getLogger(__name__)
 
@@ -76,16 +77,11 @@ def _guard_sql() -> tuple[str, list[Any]]:
     """Photographs this viewer may open, as SQL on ``a``: the People page's
     rule (db._face_visibility_sql), with explicit photographs for an
     administrator, who sees everything."""
-    limits = _viewer_limits()
-    roots_sql, params = db.roots_clause("a", _roots())
-    where = [roots_sql, db.visibility_clause("a", limits["max_visibility"]), "a.trashed = 0",
-             "a.kind = 'picture'"]
-    params = [*params, int(limits["max_visibility"])]
-    scope_sql, scope_params = db.scope_clause("a", limits["scope"])
-    if scope_sql:
-        where.append(scope_sql)
-        params.extend(scope_params)
-    if not current_user().is_admin:
+    gate = visibility.current()
+    gate_sql, gate_params = gate.sql("a")
+    where = [gate_sql, "a.trashed = 0", "a.kind = 'picture'"]
+    params = list(gate_params)
+    if not gate.is_admin:
         where.append("a.nsfw = 0")
     screens, screen_params = db.screen_clause(_conn(), "a")
     where.append(f"NOT ({screens})")
@@ -94,7 +90,7 @@ def _guard_sql() -> tuple[str, list[Any]]:
 
 
 def _people() -> dict[int, dict[str, Any]]:
-    return {int(p["id"]): p for p in db.list_people(_conn(), _roots(), **_viewer_limits())
+    return {int(p["id"]): p for p in db.list_people(_conn(), gate=visibility.current())
             if p.get("name")}
 
 
@@ -180,8 +176,9 @@ def _find() -> dict[str, Any]:
     wanted = sorted({s["asset_id"] for s in suggestions})
     for start in range(0, len(wanted), 900):
         part = wanted[start:start + 900]
-        for row in db.query_assets(conn, _roots(), kinds=["picture"], ids=part, limit=len(part),
-                                   offset=0, columns=COLUMNS, with_total=False, **_viewer())[0]:
+        for row in db.query_assets(conn, gate=visibility.current(), kinds=["picture"], ids=part,
+                                   limit=len(part), offset=0, columns=COLUMNS,
+                                   with_total=False)[0]:
             rows[int(row["id"])] = row
     by_ref = {r.person_id: r for r in refs}
     grouped: dict[int, list[dict[str, Any]]] = {}
@@ -212,15 +209,14 @@ def _find() -> dict[str, Any]:
 
 def _suggestions() -> dict[str, Any]:
     conn = _conn()
-    viewer = _viewer()
+    viewer = visibility.current()
     guard, params = _guard_sql()
     # Keyed on what the viewer may see, not on who they are: everybody with
     # the same limits shares one reading of every face (the guard and the
     # gallery query narrow by those limits alone; a viewer's own "Only to me"
     # photographs are outside the guard).
-    key = ("young_faces", guard, tuple(params), tuple(_roots()),
-           int(viewer["max_visibility"]), viewer["scope"] or "",
-           bool(current_user().is_admin),
+    key = ("young_faces", guard, tuple(params), tuple(viewer.roots),
+           int(viewer.max_visibility), viewer.scope or "", viewer.is_admin,
            tuple(sorted(born_store.born(conn).items())),
            tuple((int(r["person_a"]), int(r["person_b"]), r["kind"])
                  for r in family_tree.relations(conn)))
@@ -251,7 +247,7 @@ def _face_and_person(face_id: int) -> tuple[dict[str, Any], int]:
     face = db.get_face(conn, face_id)
     if not face:
         abort(404)
-    _guard(db.get_asset(conn, int(face["asset_id"]), current_user().id))
+    _gate(db.get_asset(conn, int(face["asset_id"]), current_user().id))
     if person_id not in _people():
         abort(404)
     if face.get("person_id") is not None:

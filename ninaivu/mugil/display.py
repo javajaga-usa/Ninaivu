@@ -408,7 +408,8 @@ class DisplayCopies:
         self.connect_db = connect_db
         self.hold = hold or (lambda: None)
         self._stop = threading.Event()
-        self._thread: threading.Thread | None = None
+        #: The supervisor its loop runs on; Ninaivu gives it its own.
+        self.supervisor = None
         self._lock = threading.Lock()
         self.doing: dict[str, Any] = {}
         #: Originals passed over in this round (gone, or changed since sent).
@@ -417,18 +418,27 @@ class DisplayCopies:
     def wanted(self) -> bool:
         return role(self.cfg) == PRIMARY and pairing.load(self.cfg.state_dir) is not None
 
+    #: The thread it runs on, as before it moved to the supervisor.
+    JOB = "mugil-display"
+
     def keep(self) -> None:
-        if self._thread is not None:
-            return
-        self._stop.clear()
-        self._thread = threading.Thread(target=self._keep, name="mugil-display", daemon=True)
-        self._thread.start()
+        # A round at once, then every LOOK_EVERY seconds, kept by the
+        # supervisor (server/supervisor.py); retry_most=0: a round that fails
+        # is tried again at the next, as before. A stop cuts a round short
+        # between copies, by the flag run_once watches.
+        from ..server.supervisor import STOPPED, Job, every, supervisor_of  # noqa: PLC0415
+        supervisor = supervisor_of(self)
+        if supervisor.state(self.JOB) in (None, STOPPED):
+            self._stop.clear()
+        supervisor.add(Job(
+            self.JOB, self._round, every(LOOK_EVERY, first=0), log=log,
+            failure="Display copies stopped", retry_most=0, interrupt=self._stop.set,
+            progress=lambda: dict(self.doing)))
 
     def stop(self, join: bool = False) -> None:
+        from ..server.supervisor import supervisor_of            # noqa: PLC0415
         self._stop.set()
-        if join and self._thread is not None and self._thread is not threading.current_thread():
-            self._thread.join(timeout=10)
-        self._thread = None
+        supervisor_of(self).stop_job(self.JOB, timeout=10 if join else 0)
 
     def status(self) -> dict[str, Any]:
         with self._lock:
@@ -436,15 +446,10 @@ class DisplayCopies:
         return {**summary(self.cfg.state_dir), "doing": doing, "wanted": self.wanted(),
                 "owed": self.owed_count()}
 
-    def _keep(self) -> None:
-        while not self._stop.is_set():
-            self._passed = set()
-            try:
-                while self.wanted() and not self._stop.is_set() and self.run_once():
-                    pass
-            except Exception:                                    # noqa: BLE001 - keep looking
-                log.exception("Display copies stopped")
-            self._stop.wait(LOOK_EVERY)
+    def _round(self) -> None:
+        self._passed = set()
+        while self.wanted() and not self._stop.is_set() and self.run_once():
+            pass
 
     def owed(self, limit: int = BATCH) -> list[dict[str, Any]]:
         """Originals the Secondary confirmed that have no display copy yet."""

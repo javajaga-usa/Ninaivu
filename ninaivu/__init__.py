@@ -337,6 +337,10 @@ class Services:
         # And the Secondary waking the Primary for its catch-up (mugil/wake.py).
         from .mugil.wake import Waker                           # noqa: PLC0415
         self.mugil_waker = Waker(cfg)
+        # And on the Secondary, the family app's read-only copy served on its
+        # own family port while the Primary is off (mugil/family_view.py).
+        from .mugil.family_view import FamilyView               # noqa: PLC0415
+        self.mugil_family_view = FamilyView(cfg)
         #: On the Pi: the hand-over being served and its front door (set by
         #: ``--replica-of``, ninaivu/__main__.py). None on the Mac.
         self.replica = None
@@ -437,6 +441,19 @@ class Services:
         from .server.supervisor import Supervisor                 # noqa: PLC0415
         self.supervisor = Supervisor(self.scanner)
         for keeper in (self.digest, self.library_drives, self.index_copy, self.restore_tests):
+            keeper.supervisor = self.supervisor
+        # The backups, the drive watch and the archive guardian.
+        for keeper in (self.backups, self.disks, self.guardian):
+            keeper.supervisor = self.supervisor
+        # The second copy, the off-site copy, the sidecars and the catch-up.
+        for keeper in (self.mirror, self.offsite, self.xmp, self.xmp_reader, self.catchup):
+            keeper.supervisor = self.supervisor
+        # The two computers' keepers: sending the originals, waking the
+        # Primary, and the display copies.
+        for keeper in (self.mugil_courier, self.mugil_waker, self.mugil_display):
+            keeper.supervisor = self.supervisor
+        # The AI passes: descriptions, voice stories and moments in videos.
+        for keeper in (self.describer, self.transcriber, self.moment_finder):
             keeper.supervisor = self.supervisor
         self.engine = None
         self._ai_mod = ai_mod
@@ -653,6 +670,7 @@ class Services:
         self.mugil_beacon.keep()
         self.mugil_waker.keep()
         self.mugil_adopter.resume()
+        self.mugil_family_view.keep()
 
     def _prepare_new_files_folder(self) -> None:
         """Set up the new-files folder now if a library folder is read-only.
@@ -788,6 +806,10 @@ class Services:
         # Kept, so whoever must know start-up is over (the tests, before they
         # stop the scan it may start) can wait for it.
         self._keep_the_bin_swept()
+        # The copies ledger filled from the engines' records, by the
+        # supervisor, never under a page's read (ninaivu/copies/).
+        from . import copies                                     # noqa: PLC0415
+        self.supervisor.add(copies.fill_job(self))
         self.boot_thread = threading.Thread(target=boot, name="ninaivu-boot", daemon=True)
         self.boot_thread.start()
 
@@ -1596,6 +1618,7 @@ class Services:
                             ("mugil_survey", "looking for the Secondary's own files"),
                             ("mugil_topology", "the census and the proof"),
                             ("mugil_adopter", "checking the copy made by hand"),
+                            ("mugil_family_view", "the family view"),
                             ("repairer", "the repair"), ("xmp", "the sidecars"),
                             ("xmp_reader", "reading the sidecars"),
                             ("keepsake", "the family archive"), ("importer", "the import")):
@@ -2385,9 +2408,16 @@ def create_home_app(services: Services) -> Flask:
     _declared(app, FACE_HOME)
     front = getattr(services, "replica_front", None)
     if front is not None:
-        # The Pi serving a read-only copy (ninaivu/replica/front.py).
+        # A read-only copy served the old way, ``--replica-of``
+        # (ninaivu/replica/front.py), or the Secondary's family view itself.
         from .replica import front as front_mod             # noqa: PLC0415
         front_mod.install(app, front)
+    view = getattr(services, "mugil_family_view", None)
+    if view is not None and front is None:
+        # On a Secondary, the family view in front of its own family app
+        # while the Primary is off (ninaivu/mugil/family_view.py).
+        from .mugil import family_view                      # noqa: PLC0415
+        family_view.install(app, view)
     return app
 
 

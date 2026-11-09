@@ -27,7 +27,6 @@ import logging
 import os
 import re
 import socket
-import threading
 import time
 from pathlib import Path
 from typing import Any, Callable
@@ -233,23 +232,27 @@ class Waker:
         self.cfg = cfg
         self.sender = sender
         self.clock = clock
-        self._stop = threading.Event()
-        self._thread: threading.Thread | None = None
+        #: The supervisor its loop runs on; Ninaivu gives it its own.
+        self.supervisor = None
 
     def wanted(self) -> bool:
         return role(self.cfg) == SECONDARY and pairing.load(self.cfg.state_dir) is not None
 
+    #: The thread it runs on, as before it moved to the supervisor.
+    JOB = "mugil-wake"
+
     def keep(self) -> None:
-        if self._thread is None or not self._thread.is_alive():
-            self._stop.clear()
-            self._thread = threading.Thread(target=self._loop, name="mugil-wake", daemon=True)
-            self._thread.start()
+        # A look every LOOK_SECONDS, kept by the supervisor
+        # (server/supervisor.py); retry_most=0: one that fails is tried again
+        # at the next look, as before.
+        from ..server.supervisor import NETWORK, Job, every, supervisor_of  # noqa: PLC0415
+        supervisor_of(self).add(Job(
+            self.JOB, self.look, every(lambda: self.LOOK_SECONDS), claims={NETWORK},
+            log=log, failure="Could not wake the Primary", retry_most=0))
 
     def stop(self, join: bool = False) -> None:
-        self._stop.set()
-        if join and self._thread is not None and self._thread is not threading.current_thread():
-            self._thread.join(timeout=5)
-        self._thread = None
+        from ..server.supervisor import supervisor_of            # noqa: PLC0415
+        supervisor_of(self).stop_job(self.JOB, timeout=5 if join else 0)
 
     def look(self) -> bool:
         """Send the wake if it is due; whether it was sent."""
@@ -262,13 +265,6 @@ class Waker:
         if sent:
             log.info("Woke the Primary for its nightly catch-up")
         return bool(sent)
-
-    def _loop(self) -> None:
-        while not self._stop.wait(self.LOOK_SECONDS):
-            try:
-                self.look()
-            except Exception:                                    # noqa: BLE001 - try again later
-                log.exception("Could not wake the Primary")
 
 
 __all__ = ["Waker", "magic_packet", "hardware_addresses", "wanted_at", "what_to_ask",

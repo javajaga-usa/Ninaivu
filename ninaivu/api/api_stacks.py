@@ -39,9 +39,11 @@ def _visible(conn, ids: list[int]) -> list[dict[str, Any]]:  # noqa: ANN001
     """Those of *ids* this viewer may see, as the gallery would show them."""
     if not ids:
         return []
-    admin = bool(current_user().is_admin)
-    rows, _ = db.query_assets(conn, gate=visibility.current(), ids=ids, kinds=["picture"],
-                              limit=len(ids), offset=0, with_total=False, include_nsfw=admin)
+    viewer = visibility.current()
+    rows, _ = db.query_assets(conn, gate=viewer, ids=ids, kinds=["picture"],
+                              limit=len(ids), offset=0, with_total=False,
+                              include_nsfw=viewer.is_admin,
+                              include_trashed=viewer.stack_shows_bin())
     return rows
 
 

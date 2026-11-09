@@ -14,6 +14,11 @@ with ``--map``, or found under ``--mirror`` by the id in its
 
 (Writing a hand-over into a shared folder for a Raspberry Pi, ``replica
 publish``, was retired in 4.0.)
+
+``unit`` is the old way. Since 4.0 a paired Secondary serves the hand-over
+from its own Ninaivu, on its own family app, with its paths re-rooted onto
+its originals folder (mugil/family_view.py): no service of its own, no
+``--map`` and no sudo. It stays for a Pi, or a Secondary already set up so.
 """
 
 from __future__ import annotations
@@ -219,7 +224,7 @@ def main(argv: list[str] | None = None) -> int:
     st.add_argument("--from", dest="source", required=True)
     st.set_defaults(run=cmd_status)
 
-    un = sub.add_parser("unit", help="print the Pi's systemd service")
+    un = sub.add_parser("unit", help="print the Pi's systemd service (the old way)")
     un.add_argument("--from", dest="source", required=True, help="the hand-over folder")
     un.add_argument("--mirror", default=None,
                     help="where the Pi keeps its copy of the library (searched for markers)")

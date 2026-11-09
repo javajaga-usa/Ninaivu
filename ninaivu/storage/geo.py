@@ -66,19 +66,28 @@ def _wrap(lon: float) -> float:
     return lon if -180.0 <= lon <= 180.0 else ((lon + 180.0) % 360.0) - 180.0
 
 
-def _filters(roots: Sequence[str] | str, *, max_visibility: int = 1, scope: str | None = None,
-             viewer_id: int = 0, bounds: tuple[float, float, float, float] | None = None,
+def _filters(roots: Sequence[str] | str | None, *, max_visibility: int = 1,
+             scope: str | None = None, viewer_id: int = 0,
+             bounds: tuple[float, float, float, float] | None = None,
              year: int | None = None, person: int | None = None,
-             place: tuple[str, str] | None = None) -> tuple[str, list[Any]]:
-    """The WHERE for every map question. *bounds* is (south, north, west, east)."""
-    roots_sql, params = db.roots_clause("a", roots)
-    where = [roots_sql, "a.trashed = 0", "a.nsfw = 0", "a.gps_lat IS NOT NULL",
-             "a.gps_lon IS NOT NULL", db.visibility_clause("a", max_visibility)]
-    params.append(int(max_visibility))
-    scope_sql, scope_params = db.scope_clause("a", scope)
-    if scope_sql:
-        where.append(scope_sql)
-        params.extend(scope_params)
+             place: tuple[str, str] | None = None, gate: Any = None) -> tuple[str, list[Any]]:
+    """The WHERE for every map question. *bounds* is (south, north, west, east).
+    *gate*, a ``server.visibility.Viewer``, is the caller's limits when given
+    (and *roots*, *max_visibility* and *scope* are not read)."""
+    if gate is not None:
+        gate_sql, gate_params = gate.sql("a")
+        where = [gate_sql, "a.trashed = 0", "a.nsfw = 0", "a.gps_lat IS NOT NULL",
+                 "a.gps_lon IS NOT NULL"]
+        params = list(gate_params)
+    else:
+        roots_sql, params = db.roots_clause("a", roots if roots is not None else [])
+        where = [roots_sql, "a.trashed = 0", "a.nsfw = 0", "a.gps_lat IS NOT NULL",
+                 "a.gps_lon IS NOT NULL", db.visibility_clause("a", max_visibility)]
+        params.append(int(max_visibility))
+        scope_sql, scope_params = db.scope_clause("a", scope)
+        if scope_sql:
+            where.append(scope_sql)
+            params.extend(scope_params)
     if bounds is not None:
         south, north, west, east = (float(v) for v in bounds)
         where.append("a.gps_lat BETWEEN ? AND ?")

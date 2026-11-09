@@ -645,12 +645,7 @@ def open_the_starter(portable: Portable, photos: Path, logs: Path) -> None:
     program = starter(portable.folder)
     step(f"Opening {program.relative_to(portable.folder)}, the download's one starter")
     port, admin_port = free_ports(2)
-    control = Path(portable.env["NINAIVU_HOME"]) / ".ninaivu-control"
-    control.mkdir(parents=True, exist_ok=True)
-    (control / "settings.json").write_text(json.dumps({"arguments": [
-        str(photos), "--http", "--no-mdns", "--strict-port", "--port", str(port),
-        "--admin-port", str(admin_port), "--ai", "off", "--no-watch", "--allow-sleep", "--local-only"]}),
-        encoding="utf-8")
+    set_the_panel_up(portable, photos, port, admin_port)
     report = WORK / "opened.json"
     report.unlink(missing_ok=True)
     # The starter sets the folders itself, as on a double-click.
@@ -660,29 +655,68 @@ def open_the_starter(portable: Portable, photos: Path, logs: Path) -> None:
     with open(logs / "starter.log", "ab") as out:
         opened = subprocess.Popen([str(program)], env=env, cwd=str(WORK), stdout=out, stderr=subprocess.STDOUT)
         try:
-            told = wait_for("the Control Panel saying how the start went",
-                            lambda: json.loads(report.read_text(encoding="utf-8")) if report.is_file() else None,
-                            START_PATIENCE + 60, 1.0)
-            print(f"   {told}")
-            expect(told["kind"] == "done" and told["running"], f"opening it started Ninaivu ({told['answer']})")
-            expect(told["title"] == "Ninaivu Control Panel", "in the Control Panel")
-            if (WINDOWS or sys.platform == "darwin") and not (told["tray"] and told["tray_shown"]):
-                # Said, not failed: a CI runner may have no desktop that shows
-                # tray icons, and a release should not wait on that. The panel
-                # opening and starting Ninaivu is what is required.
-                print("   warning: the tray icon was not shown on this machine "
-                      f"(tray={told['tray']}, shown={told['tray_shown']}); check it by hand")
-            with urllib.request.urlopen(f"http://127.0.0.1:{port}/healthz", timeout=10) as answer:
-                expect(answer.status == 200, "and Ninaivu serves")
-            # Ninaivu.exe ends at once; the panel it opened quits after the report.
-            try:
-                opened.wait(timeout=60)
-            except subprocess.TimeoutExpired:
-                raise Failed("the Control Panel did not quit after its report") from None
+            _report_the_panel_start(report, port, opened)
+        except Failed:
+            # The panel's own logs say why its start failed; they are not with
+            # this check's (the starter sets NINAIVU_LOG_DIR itself).
+            for found in sorted((portable.folder / "logs").glob("*.log")) + sorted(
+                    (portable.folder / "data" / "control").rglob("*.log")):
+                shutil.copy2(found, logs / f"panel-{found.name}")
+            raise
         finally:
             if opened.poll() is None:
                 opened.kill()
             _stop_by_run_file(portable, port, admin_port)
+
+
+def set_the_panel_up(portable: Portable, photos: Path, port: int, admin_port: int) -> None:
+    """The library and ports the panel's start is to use, kept where a
+    household's are.
+
+    The arguments go in the panel's settings.json. The ports do not: the
+    panel leaves ``--port`` and ``--admin-port`` out of those (they are the
+    ports one start ended up on, desktop/control.py ONE_SHOT_OPTIONS), so put
+    there they were dropped and the server asked for the default 80 with
+    ``--strict-port``, which a runner refuses (a privileged port on Linux,
+    most likely taken on Windows) and the server ended within seconds (#408). They are
+    the configured ports instead, in the index folder's config.json, as the
+    console's settings keep them."""
+    control = Path(portable.env["NINAIVU_HOME"]) / ".ninaivu-control"
+    control.mkdir(parents=True, exist_ok=True)
+    (control / "settings.json").write_text(json.dumps({"arguments": [
+        str(photos), "--http", "--no-mdns", "--strict-port", "--ai", "off", "--no-watch",
+        "--allow-sleep", "--local-only"]}), encoding="utf-8")
+    stored = portable.state / "config.json"
+    try:
+        config = json.loads(stored.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        config = {}
+    config.update(port=port, admin_port=admin_port)
+    portable.state.mkdir(parents=True, exist_ok=True)
+    stored.write_text(json.dumps(config, indent=2), encoding="utf-8")
+
+
+def _report_the_panel_start(report: Path, port: int, opened: subprocess.Popen) -> None:
+    """What the panel says about the start it made, held to what is required."""
+    told = wait_for("the Control Panel saying how the start went",
+                    lambda: json.loads(report.read_text(encoding="utf-8")) if report.is_file() else None,
+                    START_PATIENCE + 60, 1.0)
+    print(f"   {told}")
+    expect(told["kind"] == "done" and told["running"], f"opening it started Ninaivu ({told['answer']})")
+    expect(told["title"] == "Ninaivu Control Panel", "in the Control Panel")
+    if (WINDOWS or sys.platform == "darwin") and not (told["tray"] and told["tray_shown"]):
+        # Said, not failed: a CI runner may have no desktop that shows tray
+        # icons, and a release should not wait on that. The panel opening and
+        # starting Ninaivu is what is required.
+        print("   warning: the tray icon was not shown on this machine "
+              f"(tray={told['tray']}, shown={told['tray_shown']}); check it by hand")
+    with urllib.request.urlopen(f"http://127.0.0.1:{port}/healthz", timeout=10) as answer:
+        expect(answer.status == 200, "and Ninaivu serves")
+    # Ninaivu.exe ends at once; the panel it opened quits after the report.
+    try:
+        opened.wait(timeout=60)
+    except subprocess.TimeoutExpired:
+        raise Failed("the Control Panel did not quit after its report") from None
 
 
 def _stop_by_run_file(portable: Portable, port: int, admin_port: int) -> None:

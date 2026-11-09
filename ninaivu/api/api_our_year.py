@@ -30,7 +30,8 @@ from ..server.auth import current_user
 from ..storage import db
 from . import _long_calls
 from ._body import json_object
-from .api import _cfg, _conn, _roots, _thumb_version, _viewer, bp
+from ..server import visibility
+from .api import _cfg, _conn, _thumb_version, bp
 
 log = logging.getLogger(__name__)
 
@@ -79,21 +80,18 @@ def _home() -> tuple[float, float] | None:
 
 def _summary(year: int) -> dict[str, Any]:
     conn = _conn()
-    roots = _roots()
-    viewer = _viewer()
+    gate = visibility.current()
+    roots, viewer = gate.roots, gate.limits()
     user = current_user()
     guest = bool(user.is_guest)
     names: dict[int, str] = {}
     if not guest:
-        names = {int(p["id"]): str(p["name"]) for p in db.list_people(
-            conn, roots, max_visibility=viewer["max_visibility"], scope=viewer["scope"])
-            if p.get("name")}
+        names = {int(p["id"]): str(p["name"]) for p in db.list_people(conn, gate=gate)
+                 if p.get("name")}
     home = _home()
-    # The visibility clause carries the household's date limit, which moves no
+    # The gate's key carries the household's date limit, which moves no
     # library counter: a narrower limit is in force at once.
-    key = ("our_year", int(year), int(viewer["viewer_id"] or 0), int(viewer["max_visibility"]),
-           viewer["scope"] or "", tuple(roots), db.visibility_clause("a", viewer["max_visibility"]),
-           guest, home,
+    key = ("our_year", int(year), *gate.cache_key(), guest, home,
            tuple(sorted(names.items())))
     # Favourites move no library counter, so the year is read afresh after a
     # few minutes even when nothing else changed.
@@ -109,8 +107,8 @@ def _summary(year: int) -> dict[str, Any]:
 def our_year_list():
     _switched_on()
     writes, why = _writer()
-    viewer = _viewer()
-    return jsonify({"years": our_year.years(_conn(), _roots(), viewer),
+    gate = visibility.current()
+    return jsonify({"years": our_year.years(_conn(), gate.roots, gate.limits()),
                     "writer": writes and not current_user().is_guest, "why": why})
 
 

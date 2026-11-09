@@ -22,7 +22,8 @@ from flask import abort, jsonify
 from ..server.auth import current_user, require_family
 from ..storage import db
 from ._body import json_object
-from .api import _conn, _id_list, _roots, _viewer, bp
+from ..server import visibility
+from .api import _conn, _id_list, bp
 
 
 @bp.post("/api/private")
@@ -40,15 +41,15 @@ def keep_private():
 
     conn = _conn()
     user = current_user()
-    viewer = _viewer()
+    viewer = visibility.current()
     # What this caller may reach: the gallery's own query, which for ids also
     # finds the caller's own private items.
     allowed: list[int] = []
     for start in range(0, len(ids), 500):
         piece = ids[start:start + 500]
         rows, _ = db.query_assets(
-            conn, _roots(), ids=piece, limit=len(piece), offset=0, columns=("id",),
-            include_nsfw=user.is_admin, with_total=False, **viewer)
+            conn, gate=viewer, ids=piece, limit=len(piece), offset=0, columns=("id",),
+            include_nsfw=user.is_admin, with_total=False)
         allowed.extend(int(r["id"]) for r in rows)
     if not allowed:
         return jsonify({"updated": 0, "private": wanted})
@@ -61,5 +62,5 @@ def keep_private():
     return jsonify({
         "updated": updated,
         "private": wanted,
-        "count": db.private_count(conn, _roots(), user.id, viewer["scope"]),
+        "count": db.private_count(conn, viewer.roots, user.id, viewer.scope),
     })

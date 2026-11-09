@@ -24,14 +24,13 @@ from typing import Any
 
 from flask import abort, jsonify
 
-from ..server import auth
+from ..server import auth, visibility
 from ..server.auth import VIS_HIDDEN, VIS_NAMES, current_user, require_admin, require_family
 from ..server.config import BROWSER_NATIVE
 from ..storage import db, screening
 from ..utils import proxies
 from ._body import json_object
-from .api import (_conn, _id_list, _move_to_bin, _roots, _thumb_version, _viewer,
-                  admin_only, bp)
+from .api import (_conn, _id_list, _move_to_bin, _thumb_version, admin_only, bp)
 
 #: The most items one request may send, or one decision may settle.
 MAX_ITEMS = 2000
@@ -43,8 +42,8 @@ def _reachable(conn, ids: list[int], *, admin: bool) -> list[int]:
     for start in range(0, len(ids), 500):
         piece = ids[start:start + 500]
         rows, _ = db.query_assets(
-            conn, _roots(), ids=piece, limit=len(piece), offset=0, columns=("id",),
-            include_nsfw=admin, include_trashed=admin, with_total=False, **_viewer())
+            conn, gate=visibility.current(), ids=piece, limit=len(piece), offset=0,
+            columns=("id",), include_nsfw=admin, include_trashed=admin, with_total=False)
         allowed.extend(int(r["id"]) for r in rows)
     return allowed
 
@@ -133,8 +132,8 @@ def screening_queue():
     for start in range(0, len(ids), 500):
         piece = ids[start:start + 500]
         found, _ = db.query_assets(
-            conn, _roots(), ids=piece, limit=len(piece), offset=0,
-            include_nsfw=True, with_total=False, **_viewer())
+            conn, gate=visibility.current(), ids=piece, limit=len(piece), offset=0,
+            include_nsfw=True, with_total=False)
         rows.update({int(r["id"]): dict(r) for r in found})
     user_ids = {r["user_id"] for e in entries for r in e["requests"] if r["user_id"]}
     names = {}

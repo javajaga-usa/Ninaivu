@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 import time
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -281,11 +282,12 @@ def test_the_restore_test_hooks(app):
     class Probe:
         cfg = services.cfg
 
-        def test(self):
-            return {"ok": True, "where": "here"}
+        def restore_sample(self, count):
+            return {"ok": True, "checked": count, "files": []}
 
     assert copies.OffsiteDestination(Probe()).restore_test() == {
-        "started": True, "ok": True, "test": "write and read back"}
+        "started": True, "ok": True, "checked": 3, "files": [],
+        "test": "a sample restored and compared"}
 
     class Tests:
         def __init__(self):
@@ -314,6 +316,8 @@ def test_the_console_reads_every_copy_and_the_headline(app, as_admin, monkeypatc
                  "VALUES (?,?,?,?,?)", (*first, 1.0))
     conn.commit()
     monkeypatch.setattr(copies, "_filled", {})
+    # Filled by the supervisor's job, not by the console's read.
+    copies.fill_job(services).run()
     answer = as_admin.get("/api/admin/copies")
     assert answer.status_code == 200
     data = answer.get_json()
@@ -366,3 +370,210 @@ def test_a_family_setting_changed_alone_makes_the_secondary_hand_over_due(cfg, m
     assert keeper.due() is False                      # nothing changed
     cfg.nsfw_filter = not cfg.nsfw_filter
     assert keeper.due() is True
+
+
+# --- the engines write the ledger as they confirm a copy (second slice) -------------
+
+def test_the_console_read_writes_nothing(app, as_admin, monkeypatch):
+    services = app.config["MV_SERVICES"]
+    conn = db.connect(services.cfg.db_path)
+    for root in services.cfg.roots:
+        fingerprints.fill(conn, root)
+    conn.executescript(MIRROR_SCHEMA)
+    first = conn.execute("SELECT root, rel_path, size, mtime FROM assets LIMIT 1").fetchone()
+    conn.execute("INSERT INTO mirror_copies(root, rel_path, size, mtime, copied_at) "
+                 "VALUES (?,?,?,?,?)", (*first, 1.0))
+    conn.commit()
+    monkeypatch.setattr(copies, "_filled", {})
+    before = conn.total_changes
+    rows = conn.execute("SELECT COUNT(*) FROM copies").fetchone()[0]
+    assert as_admin.get("/api/admin/copies").status_code == 200
+    assert conn.execute("SELECT COUNT(*) FROM copies").fetchone()[0] == rows
+    assert conn.total_changes == before
+
+
+def test_the_fill_is_a_supervisor_job(app):
+    services = app.config["MV_SERVICES"]
+    job = copies.fill_job(services)
+    assert job.name == "copies-ledger" and job.trigger.kind == "every"
+    assert job.trigger.interval() == copies.FILL_EVERY and "index_write" in job.claims
+    assert services.supervisor.state("copies-ledger") is not None
+
+
+def test_a_confirmed_copy_is_written_verified(recorded):
+    conn, a = recorded.conn, recorded.a
+    at = time.time()
+    assert ledger.confirm(conn, "mirror", [(a["root"], a["rel_path"], a["size"], a["mtime"])],
+                          at=at) == 1
+    conn.commit()
+    row = conn.execute("SELECT state, verified_at, size FROM copies WHERE fingerprint=? "
+                       "AND destination='mirror'", (a["fp"],)).fetchone()
+    assert tuple(row) == ("verified", at, a["size"])
+    assert ledger.holds(conn, "mirror", a["fp"])
+    assert ledger.counts(conn, "mirror")["verified"] == 1
+
+
+def test_a_copy_of_other_bytes_is_not_confirmed(recorded):
+    conn, a = recorded.conn, recorded.a
+    # Another size, another time, or another fingerprint at the other end.
+    assert ledger.confirm(conn, "mirror", [(a["root"], a["rel_path"], a["size"] + 1, None)],
+                          at=1.0) == 0
+    assert ledger.confirm(conn, "mirror", [(a["root"], a["rel_path"], a["size"],
+                                            a["mtime"] + 5)], at=1.0) == 0
+    assert ledger.confirm(conn, "secondary", [(a["root"], a["rel_path"], a["size"], None)],
+                          at=1.0, expect=[f"{a['algo']}:{'0' * 64}"]) == 0
+    assert conn.execute("SELECT COUNT(*) FROM copies").fetchone()[0] == 0
+
+
+def test_without_a_ledger_confirming_changes_nothing(tmp_path):
+    conn = sqlite3.connect(":memory:")
+    assert ledger.confirm(conn, "mirror", [("/x", "a.jpg", 1, None)], at=1.0) == 0
+
+
+def test_the_fill_keeps_verified_and_marks_unconfirmed_when_the_record_goes(recorded):
+    cfg, conn, a = recorded.cfg, recorded.conn, recorded.a
+    ledger.confirm(conn, "mirror", [(a["root"], a["rel_path"], a["size"], a["mtime"])], at=5.0)
+    conn.commit()
+    ledger.refresh(conn, state_dir=cfg.state_dir)
+    assert _ledger(conn)[(a["fp"], "mirror")] == "verified"
+    assert _ledger(conn)[(recorded.b["fp"], "mirror")] == "kept"
+    conn.execute("DELETE FROM mirror_copies WHERE root=? AND rel_path=?",
+                 (a["root"], a["rel_path"]))
+    conn.commit()
+    ledger.refresh(conn, state_dir=cfg.state_dir)
+    assert _ledger(conn)[(a["fp"], "mirror")] == "unconfirmed"
+
+
+def test_drive_writes_the_ledger_when_an_upload_is_done(recorded):
+    conn, e = recorded.conn, recorded.e
+    store.record_done(conn, e["root"], e["rel_path"], remote_id="r1")
+    assert _ledger(conn)[(e["fp"], "drive")] == "verified"
+
+
+def test_the_secondary_confirmation_writes_the_ledger(recorded):
+    cfg, conn, a, b = recorded.cfg, recorded.conn, recorded.a, recorded.b
+    keeper = courier.Courier(cfg, lambda: conn)
+    item = lambda r, digest: {"path": r["rel_path"], "size": r["size"], "mtime": r["mtime"],  # noqa: E731
+                              "algo": r["algo"], "digest": digest}
+    keeper._record(a["root"], [item(a, a["digest"]), item(b, "0" * 64)], conn)  # noqa: SLF001
+    got = _ledger(conn)
+    assert got[(a["fp"], "secondary")] == "verified"
+    assert (b["fp"], "secondary") not in got
+
+
+@pytest.fixture()
+def second_disk(scanned, tmp_path):
+    from ninaivu import build_services
+    cfg, conn, _ = scanned
+    cfg.watch = False
+    for root in cfg.roots:
+        fingerprints.fill(conn, root)
+    services = build_services(cfg)
+    services.scanner.stop()
+    disk = tmp_path / "other-disk"
+    disk.mkdir()
+    cfg.mirror_dir, cfg.mirror_enabled = str(disk), True
+    return cfg, conn, services.mirror
+
+
+def test_the_second_disk_writes_the_ledger_as_it_copies(second_disk):
+    cfg, conn, mirror = second_disk
+    assert mirror.start() == {"started": True}
+    mirror.join(30)
+    copied = conn.execute("SELECT COUNT(*) FROM mirror_copies").fetchone()[0]
+    assert copied > 0
+    verified = conn.execute("SELECT COUNT(*) FROM copies WHERE destination='mirror' "
+                            "AND state='verified'").fetchone()[0]
+    distinct = conn.execute("SELECT COUNT(DISTINCT f.digest) FROM mirror_copies m JOIN assets a "
+                            "ON a.root=m.root AND a.rel_path=m.rel_path JOIN "
+                            "content_fingerprints f ON f.asset_id=a.id").fetchone()[0]
+    assert verified == distinct > 0
+
+
+@pytest.fixture()
+def away(scanned, tmp_path):
+    from ninaivu.cloud import keyring
+    from ninaivu.cloud.offsite import Offsite
+    cfg, conn, _ = scanned
+    for root in cfg.roots:
+        fingerprints.fill(conn, root)
+    keyring.create(cfg.state_dir, "correct horse battery", "correct horse battery")
+    cfg.offsite_kind = "folder"
+    cfg.offsite_folder = str(tmp_path / "friends-disk")
+    (tmp_path / "friends-disk").mkdir()
+    offsite = Offsite(cfg, lambda: db.connect(cfg.db_path))
+    offsite.start()
+    offsite.join(60)
+    assert not offsite.status()["error"]
+    return cfg, conn, offsite
+
+
+def test_the_offsite_copy_writes_the_ledger_as_it_sends(away):
+    _, conn, _ = away
+    sent = conn.execute("SELECT COUNT(*) FROM offsite_copies WHERE uploaded_at > 0").fetchone()[0]
+    verified = conn.execute("SELECT COUNT(*) FROM copies WHERE destination='offsite' "
+                            "AND state='verified'").fetchone()[0]
+    assert sent > 0 and 0 < verified <= sent
+
+
+def test_the_offsite_test_restore_brings_back_a_sample_and_checks_it(away, tmp_path):
+    cfg, conn, offsite = away
+    before = sorted(p.name for p in Path(cfg.state_dir).iterdir())
+    done = copies.OffsiteDestination(offsite).restore_test()
+    assert done["started"] is True and done["ok"] is True and done["checked"] == 3
+    assert all(f["checked"] == fingerprints.ALGO for f in done["files"])
+    # The temporary folder went with it.
+    assert sorted(p.name for p in Path(cfg.state_dir).iterdir()) == before
+    # A fingerprint that does not match what comes back is said.
+    first = lambda pool, n: sorted(pool, key=lambda e: e["path"])[:n]  # noqa: E731
+    rel = first(offsite_entries(offsite), 1)[0]["path"]
+    conn.execute("UPDATE content_fingerprints SET digest=? WHERE asset_id IN "
+                 "(SELECT id FROM assets WHERE rel_path=?)", ("0" * 64, rel))
+    conn.commit()
+    bad = offsite.restore_sample(1, pick=first)
+    assert bad["ok"] is False and bad["files"][0]["why"] == "the fingerprint differs"
+
+
+def offsite_entries(offsite):
+    from ninaivu.cloud.offsite import latest, read_manifest
+    key, _ = offsite._key()                                     # noqa: SLF001
+    return latest(read_manifest(offsite.target(), key,
+                                Path(offsite.cfg.state_dir) / "offsite-staging"))
+
+
+# --- the Secondary's test restore, over the signed peer API -------------------------
+
+from test_mugil_two_computers import primary, run, secondary  # noqa: E402,F401  (fixtures)
+
+
+def test_the_secondary_reads_back_a_sample_and_reports_fingerprints(  # noqa: F811
+        primary, secondary, scanned):  # noqa: F811
+    mine, keeper = primary
+    _, folder = secondary
+    cfg, conn, _ = scanned
+    assert run(keeper)["complete"] is True
+    # The Secondary's acknowledgements are in the Primary's ledger.
+    assert ledger.counts(conn, "secondary")["verified"] > 0
+    done = copies.SecondaryDestination(keeper).restore_test()
+    assert done["started"] is True and done["ok"] is True and done["checked"] == 3
+    # A kept file gone bad on the Secondary is found: same size, other bytes.
+    with courier.sent_record(mine.state_dir) as record:
+        rel = record.execute("SELECT rel_path FROM sent ORDER BY rel_path").fetchone()[0]
+    bad = next(p for p in folder.rglob("*") if p.is_file() and p.as_posix().endswith(rel))
+    data = bytearray(bad.read_bytes())
+    data[-1] ^= 0xFF
+    bad.write_bytes(bytes(data))
+    first = lambda rows, n: sorted(rows, key=lambda r: r["rel_path"])[:n]  # noqa: E731
+    found = keeper.read_back(1, pick=first)
+    assert found["ok"] is False and found["files"] == [
+        {"path": rel, "ok": False, "why": "read back different"}]
+
+
+def test_the_read_back_is_signed_and_the_secondarys_alone(app, secondary):  # noqa: F811
+    assert app.test_client().post("/api/mugil/originals/read-back",
+                                  json={"items": []}).status_code in (401, 403)
+
+
+def test_one_computer_has_no_secondary_to_test(cfg, scanned):
+    keeper = courier.Courier(cfg, lambda: db.connect(cfg.db_path))
+    assert keeper.read_back()["started"] is False

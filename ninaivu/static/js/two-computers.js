@@ -73,6 +73,17 @@ const when = (seconds) => (seconds
     { dateStyle: 'medium', timeStyle: 'short' })
   : '');
 
+/** What happens to a file, as the plan says it (mugil/topology.OUTCOMES). */
+const outcomeWords = (outcome) => ({
+  both: () => i18n.t('on both'),
+  brought_in: () => i18n.t('brought in'),
+  beside: () => i18n.t('kept beside'),
+  sent: () => i18n.t('sent to the Secondary'),
+  left_alone: () => i18n.t('left alone'),
+  kept: () => i18n.t('kept where it is'),
+  carried: () => i18n.t('to carry to the new Primary'),
+}[outcome] || (() => outcome))();
+
 const ROLE_STATE = {
   single: () => i18n.t('One computer'),
   primary: () => i18n.t('Primary'),
@@ -202,6 +213,14 @@ export class TwoComputers {
       this.act(() => json('/api/admin/mugil/unpair', { method: 'POST' }),
         i18n.t('Unpaired. Unpair the other computer too.'));
     };
+    $('#tc-census-go').onclick = () => this.topologyAct(
+      () => json('/api/admin/mugil/census', { method: 'POST', body: {} }));
+    $('#tc-plan-go').onclick = () => this.topologyAct(
+      () => json('/api/admin/mugil/topology/plan', { method: 'POST', body: { transition: 'pair' } }));
+    $('#tc-prove-go').onclick = () => this.topologyAct(
+      () => json('/api/admin/mugil/topology/prove', { method: 'POST' }));
+    $('#tc-plan-filter').onchange = () => this.loadPlan(true);
+    $('#tc-plan-more').onclick = () => this.loadPlan(false);
   }
 
   show() { this.visible = true; this.refresh(); }
@@ -253,6 +272,7 @@ export class TwoComputers {
     else $('#tc-machines-row').hidden = true;
     if (this.visible && this.status && this.status.role !== 'single') await this.checklist();
     else $('#tc-checklist-row').hidden = true;
+    if (this.visible && this.status) await this.safe();
     if (this.visible && this.status?.paired && this.status.role === 'primary') {
       await this.optimize();
       await this.exactCopies();
@@ -570,7 +590,8 @@ export class TwoComputers {
     const busy = Boolean(status.sending?.running) || Boolean(status.freeing?.running)
       || Boolean(this.only?.found?.running) || Boolean(this.only?.bring?.running)
       || (status.role === 'primary' && !status.paired)
-      || (status.role === 'secondary' && status.welcome?.waiting);
+      || (status.role === 'secondary' && status.welcome?.waiting)
+      || Boolean(this.topology?.running);
     this.timer = setTimeout(() => this.refresh(), busy ? 4000 : 60000);
   }
 
@@ -863,6 +884,195 @@ export class TwoComputers {
     if (answer.complete) lines.push(i18n.t('Every original is back. The library is being indexed.'));
     if (answer.error) lines.push(i18n.fromServer(answer.error));
     $('#tc-rebuild-says').textContent = lines.join(' ');
+  }
+
+  /** A census, plan or proof started: what it says now, and look again soon. */
+  async topologyAct(call) {
+    const buttons = [...document.querySelectorAll('#tc-safe button')];
+    buttons.forEach((b) => { b.disabled = true; });
+    try {
+      this.renderSafe(await call());
+    } catch (exc) {
+      this.toast(exc.message, true);
+    } finally {
+      buttons.forEach((b) => { b.disabled = false; });
+    }
+    this.schedule();
+  }
+
+  /** Census, plan and proof (mugil/topology.py), on every computer. */
+  async safe() {
+    try {
+      this.renderSafe(await json('/api/admin/mugil/topology'));
+    } catch {
+      $('#tc-safe').hidden = true;
+    }
+  }
+
+  renderSafe(answer) {
+    if (!answer) return;
+    this.topology = answer;
+    const here = answer.standing || {};
+    const running = Boolean(answer.running);
+    const record = answer.record || null;
+    const censuses = answer.censuses || [];
+    const last = censuses[censuses.length - 1] || null;
+    $('#tc-safe').hidden = false;
+
+    const part = (ROLE_STATE[here.role] || ROLE_STATE.single)();
+    const standing = [here.paired ? i18n.t('Standing: {part}, paired.', { part })
+      : i18n.t('Standing: {part}, not paired.', { part })];
+    if (last) {
+      const days = Math.floor((Date.now() / 1000 - (last.taken_at || 0)) / 86400);
+      const about = { when: when(last.taken_at), files: count(last.files), size: size(last.bytes) };
+      standing.push(days < 1 ? i18n.t('Last census {when}, today: {files} files, {size}.', about)
+        : i18n.t('Last census {when}, {days} days ago: {files} files, {size}.', { ...about, days: count(days) }));
+    } else {
+      standing.push(i18n.t('No census taken on this computer yet.'));
+    }
+    $('#tc-safe-standing').textContent = standing.join(' ');
+    $('#tc-safe-warn').hidden = Boolean(here.paired);
+
+    $('#tc-census-go').hidden = Boolean(here.paired) || running;
+    $('#tc-plan-go').hidden = !(here.role === 'primary' && here.paired) || running;
+    $('#tc-prove-go').hidden = !answer.can_prove || running;
+
+    const lines = [];
+    const progress = answer.progress || {};
+    if (running && answer.job === 'census') {
+      lines.push(i18n.t('Taking a census: {files} files so far, {size}.', {
+        files: count(progress.files), size: size(progress.bytes) }));
+    } else if (running && answer.job === 'plan') {
+      lines.push(i18n.t('Making the plan from the censuses…'));
+    } else if (running) {
+      lines.push(i18n.t('Proving: taking both censuses again and comparing them…'));
+    }
+    if (running && answer.partner_progress) {
+      lines.push(i18n.t('The other computer: {files} files so far.', {
+        files: count(answer.partner_progress.files) }));
+    }
+    if (answer.waiting) lines.push(i18n.t('Waiting: {reason}', { reason: i18n.fromServer(answer.waiting) }));
+    if (!running && answer.error) lines.push(i18n.fromServer(answer.error));
+    if (last?.away?.length) {
+      lines.push(i18n.t('That census could not reach {folders}: plug the disk in and take it again.', {
+        folders: last.away.join(', ') }));
+    }
+    if (answer.moving) {
+      lines.push(i18n.t('The plan for moving the Primary is ready: export the index now, and the plan goes with it.'));
+    }
+    if (record?.state === 'planned' && answer.can_prove) {
+      lines.push(i18n.t('Carry the change out, then prove nothing was lost.'));
+    } else if (record?.state === 'planned' && record.transition === 'pair') {
+      lines.push(i18n.t('Bring them in, then prove nothing was lost.'));
+    }
+    if (record?.state === 'failed' && record.error) lines.push(i18n.fromServer(record.error));
+    $('#tc-safe-says').textContent = lines.join(' ');
+    this.renderPlan(record);
+    this.renderProof(record);
+  }
+
+  /** The plan's totals by outcome, and its files, a page at a time. */
+  renderPlan(record) {
+    const plan = record?.plan;
+    const block = $('#tc-plan');
+    if (!plan || !(plan.primary || plan.secondary)) { block.hidden = true; this.planFor = null; return; }
+    block.hidden = false;
+    const outcomes = new Set();
+    const rows = [];
+    for (const side of ['primary', 'secondary']) {
+      for (const [outcome, bucket] of Object.entries(plan[side] || {})) {
+        outcomes.add(outcome);
+        const row = document.createElement('li');
+        row.dataset.outcome = outcome;
+        row.textContent = i18n.t('{where}: {outcome}, {files} files, {size}', {
+          where: side === 'primary' ? i18n.t('On the Primary') : i18n.t('On the Secondary'),
+          outcome: outcomeWords(outcome), files: count(bucket.files), size: size(bucket.bytes) });
+        rows.push(row);
+      }
+    }
+    $('#tc-plan-totals').replaceChildren(...rows);
+    const key = `${record.id}:${record.planned || ''}`;
+    if (this.planFor === key) return;
+    this.planFor = key;
+    const filter = $('#tc-plan-filter');
+    const all = document.createElement('option');
+    all.value = '';
+    all.textContent = i18n.t('Every file');
+    filter.replaceChildren(all, ...[...outcomes].map((outcome) => {
+      const option = document.createElement('option');
+      option.value = outcome;
+      option.textContent = outcomeWords(outcome);
+      return option;
+    }));
+    this.loadPlan(true);
+  }
+
+  async loadPlan(fresh) {
+    if (fresh) { this.planNext = 0; $('#tc-plan-list').replaceChildren(); }
+    const outcome = $('#tc-plan-filter').value;
+    const query = new URLSearchParams({ limit: '100', after: String(this.planNext || 0) });
+    if (outcome) query.set('outcome', outcome);
+    let page;
+    try {
+      page = await json(`/api/admin/mugil/topology/plan?${query}`);
+    } catch (exc) {
+      this.toast(exc.message, true);
+      return;
+    }
+    const reasons = page.reasons || {};
+    $('#tc-plan-list').append(...(page.items || []).map((item) => {
+      const row = document.createElement('li');
+      row.dataset.outcome = item.outcome;
+      const head = document.createElement('strong');
+      head.textContent = item.file;
+      const line = document.createElement('span');
+      line.className = 'hint subtle';
+      const said = [outcomeWords(item.outcome)];
+      if (item.to) said.push(i18n.t('to {path}', { path: item.to }));
+      if (item.reason && reasons[item.reason]) said.push(i18n.fromServer(reasons[item.reason]));
+      line.textContent = said.join(' · ');
+      row.append(head, line);
+      return row;
+    }));
+    this.planNext = page.next;
+    $('#tc-plan-more').hidden = !page.next;
+  }
+
+  /** The proof: passed, or failed with every missing file named. */
+  renderProof(record) {
+    const proof = record?.proof;
+    const block = $('#tc-proof');
+    if (!proof || record.state === 'proving') { block.hidden = true; return; }
+    block.hidden = false;
+    const says = $('#tc-proof-says');
+    const lines = [];
+    if (proof.passed) {
+      lines.push(i18n.t('Passed: nothing was lost. All {files} files seen before ({size}) are still there. Proved {when}.', {
+        files: count(proof.checked), size: size(proof.bytes), when: when(proof.proved_at) }));
+    } else {
+      lines.push(i18n.t('Failed: {count} files seen before are missing. Put them back, then prove again.', {
+        count: count(proof.missing_count) }));
+      if (proof.error) lines.push(i18n.fromServer(proof.error));
+      if (proof.away_before?.length) {
+        lines.push(i18n.t('The census before could not reach {folders}, so the proof cannot pass: take the censuses again with the disk plugged in.', {
+          folders: proof.away_before.join(', ') }));
+      }
+    }
+    if (record.transition === 'unpair') {
+      lines.push(i18n.t('This proves this computer\'s side; prove the other computer on its own console.'));
+    }
+    says.textContent = lines.join(' ');
+    says.className = proof.passed ? 'hint' : 'hint tc-away';
+    $('#tc-proof-missing').replaceChildren(...(proof.missing || []).map((gone) => {
+      const row = document.createElement('li');
+      const head = document.createElement('strong');
+      head.textContent = gone.file;
+      const line = document.createElement('span');
+      line.className = 'hint subtle';
+      line.textContent = i18n.t('Was on {name}, {size}.', { name: gone.computer || '—', size: size(gone.size) });
+      row.append(head, line);
+      return row;
+    }));
   }
 
   renderFound() {

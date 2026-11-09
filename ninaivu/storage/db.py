@@ -3255,23 +3255,36 @@ def bulk_set_user_asset(conn: sqlite3.Connection, user_id: int,
         conn.commit()
     return len(asset_ids)
 
-def library_stats(conn: sqlite3.Connection, roots: Sequence[str] | str, *,
+def library_stats(conn: sqlite3.Connection, roots: Sequence[str] | str | None = None, *,
                   viewer_id: int = 0, max_visibility: int = 1,
-                  scope: str | None = None) -> dict[str, Any]:
-    """Counts for the sidebar, limited to what this viewer may see."""
-    # One alias (`a`) everywhere, so the scope clause can be reused verbatim.
-    roots_sql, roots_params = roots_clause("a", roots)
-    where = [roots_sql, "a.trashed = 0", visibility_clause("a", max_visibility)]
-    params: list[Any] = [*roots_params, int(max_visibility)]
-    # Flagged content is admin-only in every listing (query_assets, and the
-    # API's per-item guard); counting it for anybody else said how much of it
-    # there was, and in which years and folders.
-    if int(max_visibility) < 2:
-        where.append("a.nsfw = 0")
-    scope_sql, scope_params = scope_clause("a", scope)
-    if scope_sql:
-        where.append(scope_sql)
-        params.extend(scope_params)
+                  scope: str | None = None, gate: Any = None) -> dict[str, Any]:
+    """Counts for the sidebar, limited to what this viewer may see: *gate*'s
+    (a ``server.visibility.Viewer``) when it is given."""
+    if gate is not None:
+        viewer_id, max_visibility = gate.viewer_id, gate.max_visibility
+        gate_sql, gate_params = gate.sql("a")
+        where = [gate_sql, "a.trashed = 0"]
+        params: list[Any] = list(gate_params)
+        # The analysed count below is by folder alone, as it always was, and
+        # the caller's own "Only to me" count by folder and sub-folder.
+        roots, scope = gate.roots, gate.scope
+        roots_sql, roots_params = roots_clause("a", roots)
+        if int(max_visibility) < 2:
+            where.append("a.nsfw = 0")
+    else:
+        # One alias (`a`) everywhere, so the scope clause can be reused verbatim.
+        roots_sql, roots_params = roots_clause("a", roots if roots is not None else [])
+        where = [roots_sql, "a.trashed = 0", visibility_clause("a", max_visibility)]
+        params = [*roots_params, int(max_visibility)]
+        # Flagged content is admin-only in every listing (query_assets, and the
+        # API's per-item guard); counting it for anybody else said how much of it
+        # there was, and in which years and folders.
+        if int(max_visibility) < 2:
+            where.append("a.nsfw = 0")
+        scope_sql, scope_params = scope_clause("a", scope)
+        if scope_sql:
+            where.append(scope_sql)
+            params.extend(scope_params)
     where_sql = " AND ".join(where)
 
     def whole_library() -> dict[str, Any]:
@@ -3471,23 +3484,30 @@ def timeline(conn: sqlite3.Connection, roots: Sequence[str] | str | None = None,
     return cached_aggregate(conn, ("timeline", guard, params), days)
 
 
-def picture_years(conn: sqlite3.Connection, roots: Sequence[str] | str, *,
+def picture_years(conn: sqlite3.Connection, roots: Sequence[str] | str | None = None, *,
                   max_visibility: int = 1,
-                  scope: str | None = None) -> list[dict[str, Any]]:
+                  scope: str | None = None, gate: Any = None) -> list[dict[str, Any]]:
     """How many photographs this viewer can see in each year, newest first.
 
     The same limits as :func:`timeline`, for photographs only: what the
     ready-made books (api/api_books.py) offer a "best of the year" for.
+    *gate*, a ``server.visibility.Viewer``, is the caller's limits when given.
     """
-    roots_sql, roots_params = roots_clause("assets", roots)
-    scope_sql, scope_params = scope_clause("assets", scope)
-    guard = (roots_sql.replace("assets.", "")
-             + " AND trashed=0 AND nsfw=0 AND live_clip=0 AND raw_twin=0 AND "
-             + "kind='picture' AND "
-             + visibility_clause("", max_visibility) + " AND date_key != ''")
-    if scope_sql:
-        guard += " AND " + scope_sql.replace("assets.", "")
-    params = (*roots_params, int(max_visibility), *scope_params)
+    if gate is not None:
+        gate_sql, gate_params = gate.sql("")
+        guard = (gate_sql + " AND trashed=0 AND nsfw=0 AND live_clip=0 AND raw_twin=0"
+                 " AND kind='picture' AND date_key != ''")
+        params = tuple(gate_params)
+    else:
+        roots_sql, roots_params = roots_clause("assets", roots if roots is not None else [])
+        scope_sql, scope_params = scope_clause("assets", scope)
+        guard = (roots_sql.replace("assets.", "")
+                 + " AND trashed=0 AND nsfw=0 AND live_clip=0 AND raw_twin=0 AND "
+                 + "kind='picture' AND "
+                 + visibility_clause("", max_visibility) + " AND date_key != ''")
+        if scope_sql:
+            guard += " AND " + scope_sql.replace("assets.", "")
+        params = (*roots_params, int(max_visibility), *scope_params)
 
     def years() -> list[dict[str, Any]]:
         rows = conn.execute(

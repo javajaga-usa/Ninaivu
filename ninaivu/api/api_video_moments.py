@@ -23,10 +23,10 @@ from pathlib import Path
 from flask import abort, jsonify, request, send_file
 
 from ..media import media
-from ..server import features
+from ..server import features, visibility
 from ..storage import db, video_moments
-from .api import (_cfg, _conn, _engine, _gate, _roots, _search_shield, _text_vector,
-                  _thumb_version, _viewer, bp)
+from .api import (_cfg, _conn, _engine, _gate, _text_vector,
+                  _thumb_version, bp)
 
 #: A clip is offered when its best scene is at least this share of the best
 #: clip's: a strip of the weakest matches is noise beside the grid.
@@ -60,9 +60,10 @@ def _counts_for_viewer(conn) -> dict[str, int]:
     seen: list[int] = []
     for start in range(0, len(ids), 500):
         piece = ids[start:start + 500]
-        rows, _ = db.query_assets(conn, _roots(), ids=piece, kinds=["video"],
+        viewer = visibility.current()
+        rows, _ = db.query_assets(conn, gate=viewer, ids=piece, kinds=["video"],
                                   limit=len(piece), offset=0, columns=("id",),
-                                  with_total=False, **_viewer(), **_search_shield())
+                                  with_total=False, **viewer.search_shield())
         seen.extend(int(r["id"]) for r in rows)
     return {"clips": len(seen), "moments": sum(done[i] for i in seen)}
 
@@ -87,9 +88,10 @@ def moments_search():
     # Narrowed to what this viewer may see, through the gallery's own query:
     # visibility, folders, dates, the bin and explicit content alike.
     wanted = [f["id"] for f in found]
-    rows, _ = db.query_assets(conn, _roots(), ids=wanted, kinds=["video"],
-                              limit=len(wanted), offset=0, with_total=False, **_viewer(),
-                              **_search_shield())
+    viewer = visibility.current()
+    rows, _ = db.query_assets(conn, gate=viewer, ids=wanted, kinds=["video"],
+                              limit=len(wanted), offset=0, with_total=False,
+                              **viewer.search_shield())
     allowed = {int(r["id"]): r for r in rows}
     # Then held to the best of what they may see: measured against a hidden
     # clip's score, a family member's own good matches were cut, and how

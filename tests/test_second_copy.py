@@ -299,9 +299,11 @@ def test_stopping_one_run_leaves_the_schedule_running(house):
     # In Hearth, stopping a run from the console also ended the schedule, so
     # nothing was copied by itself again until Ninaivu restarted.
     mirror = house["mirror"]
+    from ninaivu.server import supervisor as sup
+
     mirror.keep()
     mirror.stop()
-    assert mirror._keeper.is_alive()                              # noqa: SLF001
+    assert mirror.supervisor.state(mirror.KEEPER) == sup.IDLE
     mirror.stop(join=True)
-    mirror._keeper.join(5)                                        # noqa: SLF001
-    assert not mirror._keeper.is_alive()                          # noqa: SLF001
+    assert mirror.supervisor.stop_job(mirror.KEEPER, timeout=5)
+    assert mirror.supervisor.state(mirror.KEEPER) == sup.STOPPED

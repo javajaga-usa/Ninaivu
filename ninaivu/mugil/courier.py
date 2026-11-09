@@ -338,13 +338,14 @@ class Courier:
         self._asked_at = 0.0
         self._lock = threading.Lock()
         self._thread: threading.Thread | None = None
-        self._keeper: threading.Thread | None = None
         self._stop = threading.Event()
-        self._quit = threading.Event()
+        #: The supervisor its keeper runs on; Ninaivu gives it its own.
+        self.supervisor = None
         self._progress: dict[str, Any] = {}
         self.last: dict[str, Any] = {}
         self._first_copy_at = 0.0
-        self._nudge = threading.Event()
+        #: Set by soon(): the next look is for the first copy only.
+        self._nudged = False
 
     # -- what it is doing ----------------------------------------------------
 
@@ -383,19 +384,27 @@ class Courier:
     def stop(self, join: bool = False) -> None:
         self._stop.set()
         if join:
-            self._quit.set()
-            self._nudge.set()
-            for thread in (self._thread, self._keeper):
-                if thread is not None and thread is not threading.current_thread():
-                    thread.join(timeout=10)
+            from ..server.supervisor import supervisor_of        # noqa: PLC0415
+            supervisor_of(self).stop_job(self.KEEPER, timeout=10)
+            thread = self._thread
+            if thread is not None and thread is not threading.current_thread():
+                thread.join(timeout=10)
+
+    #: The keeper's thread, as before it moved to the supervisor.
+    KEEPER = "mugil-keeper"
 
     def keep(self) -> None:
         """Send by itself every ``mugil_copy_every_hours``, while this is the Primary."""
-        if self._keeper is not None:
-            return
-        self._quit.clear()
-        self._keeper = threading.Thread(target=self._keep, name="mugil-keeper", daemon=True)
-        self._keeper.start()
+        # A look every LOOK_EVERY seconds, or sooner when the first copy
+        # after pairing falls due (_wait, asked afresh each round), kept by
+        # the supervisor (server/supervisor.py). retry_most=0: a look that
+        # fails is tried again at the next, as before.
+        from ..server.supervisor import NETWORK, Job, every, supervisor_of  # noqa: PLC0415
+        self._nudged = False
+        supervisor_of(self).add(Job(
+            self.KEEPER, self._look, every(self._wait), claims={NETWORK}, log=log,
+            failure="Could not start sending the originals", retry_most=0,
+            progress=lambda: {"sending": self.running}))
 
     def owed(self, now: float | None = None) -> bool:
         every = float(getattr(self.cfg, "mugil_copy_every_hours", 0) or 0) * 3600
@@ -409,30 +418,31 @@ class Courier:
     def soon(self, after: float = FIRST_COPY_AFTER) -> None:
         """Just paired: start the first copy in *after* seconds, not at the
         next look."""
+        from ..server.supervisor import supervisor_of            # noqa: PLC0415
         self._first_copy_at = time.time() + after
-        self._nudge.set()
+        self._nudged = True
+        supervisor_of(self).request(self.KEEPER)
 
-    def _keep(self) -> None:
-        while not self._quit.is_set():
-            wait = LOOK_EVERY
-            if self._first_copy_at:
-                wait = min(wait, max(0.5, self._first_copy_at - time.time()))
-            looked = not self._nudge.wait(wait)
-            self._nudge.clear()
-            if self._quit.is_set():
-                break
-            try:
-                if self._first_copy_at and time.time() >= self._first_copy_at:
-                    self._first_copy_at = 0.0
-                    if self.ready() is None:
-                        self.start()
-                if not looked:
-                    continue
-                if self.owed():
-                    self.start()
-                self.look_after_the_secondary()
-            except Exception:                            # noqa: BLE001 - keep looking
-                log.exception("Could not start sending the originals")
+    def _wait(self) -> float:
+        """The wait before the next look: shorter while a first copy is due."""
+        wait = LOOK_EVERY
+        if self._first_copy_at:
+            wait = min(wait, max(0.5, self._first_copy_at - time.time()))
+        return wait
+
+    def _look(self) -> None:
+        # A look asked for by soon() only sees whether the first copy is due;
+        # one that came on time looks after everything.
+        looked, self._nudged = not self._nudged, False
+        if self._first_copy_at and time.time() >= self._first_copy_at:
+            self._first_copy_at = 0.0
+            if self.ready() is None:
+                self.start()
+        if not looked:
+            return
+        if self.owed():
+            self.start()
+        self.look_after_the_secondary()
 
     def look_after_the_secondary(self, now: float | None = None) -> list[str]:
         """Ask after the Secondary now and then, and tell somebody when it has
@@ -740,7 +750,7 @@ class Courier:
                         totals["changed"] += 1
                     elif outcome is not None:
                         totals["failed"] += 1
-            self._record(root, confirmed_now)
+            self._record(root, confirmed_now, conn)
             if failure is not None:
                 raise failure
             with self._lock:
@@ -932,7 +942,42 @@ class Courier:
             return "failed"
         return "kept"
 
-    def _record(self, root: str, items: list[dict[str, Any]]) -> None:
+    def read_back(self, count: int = 3, *, pick: Callable[[list, int], list] | None = None
+                  ) -> dict[str, Any]:
+        """A test restore from the Secondary: *count* files it confirmed,
+        chosen at random, read back there end to end over the signed pairing,
+        and the fingerprints it reports compared with the ones it confirmed.
+        Nothing is copied or changed at either end."""
+        import random                                            # noqa: PLC0415
+        pair = pairing.load(self.cfg.state_dir)
+        if role(self.cfg) != PRIMARY or pair is None:
+            return {"started": False, "reason": "This computer is not a paired Primary."}
+        with sent_record(self.cfg.state_dir) as record:
+            rows = [dict(r) for r in record.execute(
+                "SELECT s.root, s.rel_path, s.size, s.algo, s.digest, l.library FROM sent s "
+                "JOIN libraries l ON l.root = s.root")]
+        if not rows:
+            return {"started": False, "reason": "The Secondary has confirmed no file yet."}
+        sample = (pick or random.sample)(rows, min(int(count), len(rows)))
+        partner = self.partner(self.cfg.mugil_partner_url, pair.get("key"))
+        try:
+            answer = partner.request("POST", "/api/mugil/originals/read-back", body={
+                "items": [{"library": r["library"], "path": r["rel_path"]} for r in sample]})
+        except PartnerError as exc:
+            return {"started": False, "reason": str(exc)}
+        read = list(answer.get("read") or [])
+        files = []
+        for row, got in zip(sample, read + [{}] * (len(sample) - len(read))):
+            same = (not got.get("missing") and int(got.get("size", -1)) == int(row["size"])
+                    and got.get("algo") == row["algo"] and got.get("digest") == row["digest"])
+            files.append({"path": row["rel_path"], "ok": bool(same),
+                          **({} if same else {"why": "not kept there" if got.get("missing")
+                                              else "read back different"})})
+        return {"started": True, "ok": all(f["ok"] for f in files), "checked": len(files),
+                "files": files}
+
+    def _record(self, root: str, items: list[dict[str, Any]],
+                index: sqlite3.Connection | None = None) -> None:
         if not items:
             return
         now = time.time()
@@ -942,3 +987,14 @@ class Courier:
                 "VALUES (?,?,?,?,?,?,?)",
                 [(root, i["path"], i["size"], i["mtime"], i["algo"], i["digest"], now)
                  for i in items])
+        if index is not None:
+            # And the ledger in the index, right after (ninaivu/copies/ledger.py),
+            # with the fingerprint the Secondary confirmed.
+            from ..copies import ledger                          # noqa: PLC0415
+            ledger.confirm(index, "secondary",
+                           [(root, i["path"], i["size"], i["mtime"]) for i in items], at=now,
+                           expect=[f"{i['algo']}:{i['digest']}" for i in items])
+            try:
+                index.commit()
+            except sqlite3.Error as exc:
+                log.warning("the ledger was not told of the Secondary's copies: %s", exc)

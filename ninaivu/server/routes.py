@@ -86,8 +86,9 @@ OPEN: dict[str, tuple[str, str]] = {
     "api.readyz": ("anyone", "whether the server is ready"),
     "api.certificate_authority": ("anyone", "this computer's certificate authority, public by nature"),
     # The gallery's reads. Those marked GATE ask the one visibility gate
-    # (server/visibility.Viewer, proposal 6); the rest still apply the
-    # caller's visibility themselves until they are moved to it.
+    # (server/visibility.Viewer, proposal 6) directly; any other route that
+    # reads photographs takes the same limits through api._viewer, _roots and
+    # _guard, which ask it too.
     "api.assets": ("guest", GATE),
     "api.asset_detail": ("guest", GATE),
     "api.asset_stories": ("guest", GATE),
@@ -106,19 +107,19 @@ OPEN: dict[str, tuple[str, str]] = {
     "api.status": ("guest", "what the server is doing; more for an administrator"),
     "api.activity": ("guest", "what the server is doing; more for an administrator"),
     "api.scan_progress": ("guest", "what the server is doing; more for an administrator"),
-    "api.status_stats": ("guest", "the route applies the caller's visibility itself"),
-    "api.frame_next": ("guest", "the route applies the caller's visibility itself"),
+    "api.status_stats": ("guest", GATE),
+    "api.frame_next": ("guest", GATE),
     "api.frame_picture": ("guest", GATE),
-    "api.festivals_list": ("guest", "the route applies the caller's visibility itself"),
-    "api.festivals_one": ("guest", "the route applies the caller's visibility itself"),
-    "api.moments_search": ("guest", "the route applies the caller's visibility itself"),
+    "api.festivals_list": ("guest", GATE),
+    "api.festivals_one": ("guest", GATE),
+    "api.moments_search": ("guest", GATE),
     "api.moments_of_clip": ("guest", GATE),
     "api.moment_frame": ("guest", GATE),
-    "api.our_year_list": ("guest", "the route applies the caller's visibility itself"),
-    "api.our_year_one": ("guest", "the route applies the caller's visibility itself"),
-    "api.our_year_words": ("guest", "refused for a guest; written from what the caller may see"),
-    "api.then_and_now_all": ("guest", "the route applies the caller's visibility itself"),
-    "api.then_and_now_today": ("guest", "the route applies the caller's visibility itself"),
+    "api.our_year_list": ("guest", GATE),
+    "api.our_year_one": ("guest", GATE),
+    "api.our_year_words": ("guest", "refused for a guest; written from what the visibility gate lets the caller see"),
+    "api.then_and_now_all": ("guest", GATE),
+    "api.then_and_now_today": ("guest", GATE),
     "api.stack": ("guest", GATE),
     "api.stack_top": ("guest", "refused unless the caller may change it (_may_change)"),
     "api.stack_apart": ("guest", "refused unless the caller may change it (_may_change)"),

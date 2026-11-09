@@ -34,53 +34,54 @@ class ArchiveGuardian:
         self.interval = interval
         self.sample_size = sample_size
         self._lock = threading.Lock()
-        self._stop = threading.Event()
-        self._thread: threading.Thread | None = None
+        #: The supervisor its loop runs on; Ninaivu gives it its own.
+        self.supervisor = None
+        #: The wait before the next look, as the last look decided it.
+        self._next_look = 300.0
         self._check_thread: threading.Thread | None = None
         self._running = False
         self._state = db.load_guardian_state()
 
+    #: The thread it runs on, as before it moved to the supervisor.
+    JOB = 'archive-guardian'
+
     def start(self) -> None:
-        with self._lock:
-            if self._thread is not None and self._thread.is_alive():
-                return
-            self._stop.clear()
-            self._thread = threading.Thread(target=self._loop,
-                                            name='archive-guardian', daemon=True)
-            self._thread.start()
+        # Check shortly after boot, then every five minutes (or sooner, with
+        # a shorter interval) for whether the daily run is due. Kept by the
+        # supervisor (server/supervisor.py); _look keeps its own failures.
+        from ..server.supervisor import Job, every, supervisor_of  # noqa: PLC0415
+        supervisor_of(self).add(Job(
+            self.JOB, self._look, every(lambda: min(300, max(5, self._next_look)), first=5),
+            log=log, retry_most=0,
+            progress=lambda: {'status': self._state.get('status'),
+                              'checking': self._running}))
 
-    def stop(self) -> None:
-        self._stop.set()
-        thread = self._thread
-        if thread is not None and thread is not threading.current_thread():
-            thread.join(timeout=3)
-        self._thread = None
+    def stop(self, timeout: float = 3.0) -> None:
+        from ..server.supervisor import supervisor_of            # noqa: PLC0415
+        supervisor_of(self).stop_job(self.JOB, timeout)
 
-    def _loop(self) -> None:
-        # Check shortly after boot, then hourly for whether the daily run is due.
-        if self._stop.wait(5):
-            return
-        while not self._stop.is_set():
+    def _look(self) -> None:
+        """One look: run the daily check if it is due and the archive is idle."""
+        retry = 300
+        try:
+            last = float(self._state.get('checked_at') or 0)
+            # Soon for what may put itself right within minutes: a check that
+            # could not finish, an unplugged drive, and a nearly full disk
+            # (for its space only: sample_due keeps the read-back daily).
+            retry = 300 if (self._state.get('retry_soon')
+                            or self._state.get('status') in ('no-archive', 'warning')) \
+                else self.interval
+            if time.time() - last >= retry and not self.is_archive_running():
+                self.run_once(sample=self.sample_due())
+        except Exception:                                   # noqa: BLE001
+            # run_once keeps the database and the disk to themselves;
+            # anything else (a damaged row, a bad setting) ended this
+            # thread, and with it every daily check, without a word.
+            log.exception('archive health check failed; trying again in 5 minutes')
+            with self._lock:
+                self._state = {**self._state, 'retry_soon': True}
             retry = 300
-            try:
-                last = float(self._state.get('checked_at') or 0)
-                # Soon for what may put itself right within minutes: a check that
-                # could not finish, an unplugged drive, and a nearly full disk
-                # (for its space only: sample_due keeps the read-back daily).
-                retry = 300 if (self._state.get('retry_soon')
-                                or self._state.get('status') in ('no-archive', 'warning')) \
-                    else self.interval
-                if time.time() - last >= retry and not self.is_archive_running():
-                    self.run_once(sample=self.sample_due())
-            except Exception:                               # noqa: BLE001
-                # run_once keeps the database and the disk to themselves;
-                # anything else (a damaged row, a bad setting) ended this
-                # thread, and with it every daily check, without a word.
-                log.exception('archive health check failed; trying again in 5 minutes')
-                with self._lock:
-                    self._state = {**self._state, 'retry_soon': True}
-                retry = 300
-            self._stop.wait(min(300, max(5, retry)))
+        self._next_look = retry
 
     def sample_due(self) -> bool:
         """Whether the next scheduled check reads files back, or only looks at

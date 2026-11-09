@@ -72,6 +72,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from ..utils.files import CHUNK, create_new, sha256_file, stays_inside
+from ..copies import ledger
 from . import fit, roots as roots_kit
 
 log = logging.getLogger(__name__)
@@ -179,12 +180,12 @@ class Mirror:
         self._clock = clock
         self._lock = threading.Lock()
         self._thread: threading.Thread | None = None
-        self._keeper: threading.Thread | None = None
         self._stop = threading.Event()
-        self._asleep = threading.Event()
-        #: Wakes the keeper before its ten minutes are up: set by a check of
-        #: the copy that made way for the copy (see _verify's _Yield).
-        self._look_now = threading.Event()
+        #: The supervisor its keeper runs on; Ninaivu gives it its own.
+        self.supervisor = None
+        #: Set when the keeper was woken before its ten minutes were up, by a
+        #: check of the copy that made way for the copy (see _verify's _Yield).
+        self._woken = False
         #: The library scanner, when there is one: a restore indexes what it
         #: put back.
         self.scanner = None
@@ -395,8 +396,10 @@ class Mirror:
         so nothing was copied by itself again until a restart."""
         self._stop.set()
         if join:
-            self._asleep.set()
-            self._look_now.set()
+            from ..server.supervisor import supervisor_of        # noqa: PLC0415
+            # Asked, not waited for: a look under way only starts a run, and
+            # the run's thread is waited for below.
+            supervisor_of(self).stop_job(self.KEEPER, timeout=0)
             if self._thread:
                 self._thread.join(30)
 
@@ -404,38 +407,40 @@ class Mirror:
         if self._thread:
             self._thread.join(timeout)
 
+    #: The keeper's thread, as before it moved to the supervisor.
+    KEEPER = "ninaivu-second-copy-keeper"
+
     def keep(self) -> None:
         """Run by itself every so often, and whenever the disk comes back."""
-        if self._keeper and self._keeper.is_alive():
-            return
-        self._asleep.clear()
-        self._keeper = threading.Thread(target=self._loop, name="ninaivu-second-copy-keeper",
-                                        daemon=True)
-        self._keeper.start()
+        # Every ten minutes, or at once when a check of the copy stood aside
+        # for a copy that was due (look_now). That check used to stop and
+        # leave the copy to the next look, up to ten minutes later, with
+        # nothing happening and the console saying the copy was about to
+        # start. Kept by the supervisor (server/supervisor.py); retry_most=0:
+        # a look that fails is tried again at the next, as before.
+        from ..server.supervisor import Job, every, supervisor_of  # noqa: PLC0415
+        supervisor_of(self).add(Job(
+            self.KEEPER, self._look, every(LOOK_EVERY), log=log, retry_most=0,
+            failure="the second copy could not start by itself",
+            progress=lambda: {"running": self.running}))
 
-    def _loop(self) -> None:
-        while True:
-            # Every ten minutes, or at once when a check of the copy stood
-            # aside for a copy that was due. That check used to stop and
-            # leave the copy to this loop's next look, up to ten minutes
-            # later, with nothing happening and the console saying the copy
-            # was about to start.
-            woken = self._look_now.wait(LOOK_EVERY)
-            self._look_now.clear()
-            if self._asleep.is_set():
-                return
-            thread = self._thread
-            if woken and thread is not None and thread is not threading.current_thread():
-                # The check that woke us is on its way out: a start while its
-                # thread is still alive would be refused as busy.
-                thread.join(60)
-            try:
-                if self.due():
-                    self.start()
-                elif self.verify_due():
-                    self.verify()
-            except Exception:                               # noqa: BLE001
-                log.exception("the second copy could not start by itself")
+    def look_now(self) -> None:
+        """Wake the keeper before its ten minutes are up."""
+        from ..server.supervisor import supervisor_of            # noqa: PLC0415
+        self._woken = True
+        supervisor_of(self).request(self.KEEPER)
+
+    def _look(self) -> None:
+        woken, self._woken = self._woken, False
+        thread = self._thread
+        if woken and thread is not None and thread is not threading.current_thread():
+            # The check that woke us is on its way out: a start while its
+            # thread is still alive would be refused as busy.
+            thread.join(60)
+        if self.due():
+            self.start()
+        elif self.verify_due():
+            self.verify()
 
     def due(self) -> bool:
         """Whether a copy is owed now. Cheap enough to ask after every scan:
@@ -547,6 +552,9 @@ class Mirror:
                     "INSERT OR REPLACE INTO mirror_copies(root, rel_path, size, mtime, sha256, "
                     "copied_at, stored_as) VALUES(?,?,?,?,?,?,?)",
                     (root, rel, size, float(row["mtime"] or 0), digest, time.time(), stored))
+                # And the ledger, in the same transaction (ninaivu/copies/ledger.py).
+                ledger.confirm(conn, "mirror", [(root, rel, size, float(row["mtime"] or 0))],
+                               at=time.time())
                 conn.commit()
                 copied += 1
                 with self._lock:
@@ -688,7 +696,7 @@ class Mirror:
             if message:
                 log.info("second copy: %s", message)
             if yielded:
-                self._look_now.set()
+                self.look_now()
 
     def _save_verify_cursor(self, conn, where: tuple[str, str], bad: int, missing: int,
                             checked: int) -> None:

@@ -33,7 +33,6 @@ from __future__ import annotations
 import datetime as _dt
 import json
 import logging
-import threading
 import time
 from pathlib import Path
 from typing import Any, Callable
@@ -63,8 +62,8 @@ class DailyCatchUp:
         #: The library folders that owe analysis now.
         self._owed = owed
         self._clock = clock
-        self._stop = threading.Event()
-        self._thread: threading.Thread | None = None
+        #: The supervisor its loop runs on; Ninaivu gives it its own.
+        self.supervisor = None
         #: The day whose stretch has had its scan started.
         self._scanned_for = ""
         #: The stretch whose straightening survey has been started. Started
@@ -102,26 +101,24 @@ class DailyCatchUp:
         except OSError:
             log.debug("could not note the daily catch-up's stretch", exc_info=True)
 
+    #: The thread it runs on, as before it moved to the supervisor.
+    JOB = "ninaivu-daily-catchup"
+
     def keep(self) -> None:
-        if self._thread is not None and self._thread.is_alive():
-            return
-        self._stop.clear()
-        self._thread = threading.Thread(target=self._run, name="ninaivu-daily-catchup",
-                                        daemon=True)
-        self._thread.start()
+        # A look every LOOK_SECONDS, kept by the supervisor
+        # (server/supervisor.py); retry_most=0: one that fails is tried again
+        # at the next look, as before. The look only starts work on threads
+        # of its own (the scan, the straightening survey), which hold the
+        # scan themselves, so it claims nothing.
+        from ..server.supervisor import Job, every, supervisor_of  # noqa: PLC0415
+        supervisor_of(self).add(Job(
+            self.JOB, self.look, every(LOOK_SECONDS), log=log, retry_most=0,
+            failure="the daily catch-up could not look for work",
+            progress=lambda: {"last": self.last}))
 
     def stop(self, join: bool = False, timeout: float = 5.0) -> None:
-        self._stop.set()
-        thread = self._thread
-        if join and thread is not None and thread.is_alive():
-            thread.join(timeout)
-
-    def _run(self) -> None:
-        while not self._stop.wait(LOOK_SECONDS):
-            try:
-                self.look()
-            except Exception:                                # noqa: BLE001 - next look
-                log.exception("the daily catch-up could not look for work")
+        from ..server.supervisor import supervisor_of            # noqa: PLC0415
+        supervisor_of(self).stop_job(self.JOB, timeout if join else 0)
 
     def _stretch(self, window: Any) -> tuple[float, str]:
         """When the stretch that is open now opened (wall clock), and its name.

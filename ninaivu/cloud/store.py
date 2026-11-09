@@ -343,6 +343,14 @@ def record_done(conn: sqlite3.Connection, root: str, rel_path: str, *,
         "WHERE root=? AND rel_path=?",
         (DONE, remote_id, digest, md5 or "", folder, time.time(), int(bool(encrypted)),
          root, rel_path))
+    # And the ledger, in the same transaction (ninaivu/copies/ledger.py): at
+    # the size the queue sent, and its modified time where it noted one.
+    from ..copies import ledger                             # noqa: PLC0415
+    sent = conn.execute("SELECT size, source_mtime, done_at FROM cloud_uploads "
+                        "WHERE root=? AND rel_path=?", (root, rel_path)).fetchone()
+    if sent is not None:
+        ledger.confirm(conn, "drive", [(root, rel_path, int(sent[0] or 0), float(sent[1]) or None)],
+                       at=float(sent[2] or time.time()))
     conn.commit()
 
 
