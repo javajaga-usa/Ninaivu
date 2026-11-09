@@ -10,7 +10,8 @@ import {
   accountsApi, askSecret, avatarNode, Gate, ProfileSheet, roleBadge, upgradeSecret,
 } from './accounts.js';
 import {
-  consoleJson as json, onUnauthorized, sessionRestored, subscribeProgress, thumbUrl, SCAN_COUNTS, timeLeft,
+  admin, consoleJson as json, onUnauthorized, sessionRestored, subscribeProgress, thumbUrl,
+  SCAN_COUNTS, timeLeft,
 } from './api.js';
 import { renderActivity, subscribeActivity } from './activity.js';
 import { ArchivePanel } from './archive.js';
@@ -93,9 +94,6 @@ const adminApi = {
     json('/api/visibility', { method: 'POST', body: { ids, visibility } }),
   setExplicit: (ids, nsfw) =>
     json('/api/assets/bulk', { method: 'POST', body: { ids, nsfw } }),
-  startScrubber: () => json('/api/admin/scrubber/start', { method: 'POST' }),
-  stopScrubber: () => json('/api/admin/scrubber/stop', { method: 'POST' }),
-  scrubberStatus: () => json('/api/admin/scrubber/status'),
   revealFolder: (folder) =>
     json('/api/admin/reveal-folder', { method: 'POST', body: { folder } }),
   deleteFromFolders: (ids) =>
@@ -489,7 +487,7 @@ function relabel() {
   if (current === 'activity') loadActivity();
   if (current === 'settings') refreshExtensions();
   if (current === 'ai-models') refreshExtensions();
-  if (lastNotifications) describeNotifications(lastNotifications);
+  ifOpened('notifications', (page) => page.relabel());
   pollScrubber();
 }
 
@@ -646,7 +644,6 @@ function wireChrome() {
   });
   wireScrubber();
   wireLocations();
-  wireNotifications();
   $$('#delete-cancel').onclick = () => closeDelete();
   $$('#delete-modal').addEventListener('click', (event) => {
     if (event.target === $('#delete-modal')) closeDelete();
@@ -782,6 +779,9 @@ function rememberPage(name) {
 const PAGE_MODULES = {
   health: () => import('./pages/console/health.js'),
   'large-files': () => import('./pages/console/large-files.js'),
+  // Sections of the Health page: fetched at sign-in, drawn once it is opened.
+  notifications: () => import('./pages/console/notifications.js'),
+  scrubber: () => import('./pages/console/scrubber.js'),
   // A section of the Folders page, opened with it.
   'recycle-bin': () => import('./pages/console/recycle-bin.js'),
 };
@@ -816,6 +816,8 @@ const shell = {
   refresh: () => refresh(),
   loadAttention: () => loadAttention(),
   openFolderPicker: (options) => openFolderPicker(options),
+  notifications: () => lastNotifications,
+  scrubber: () => lastScrub,
 };
 
 function showTab(name) {
@@ -871,6 +873,7 @@ function showTab(name) {
   // the moment somebody signed in stays blank until a reload if that one
   // call fails, and cannot show what today would send.
   if (name === 'health') openPage('health').then((page) => page?.show());
+  if (name === 'health') { openPage('notifications'); openPage('scrubber'); }
   if (name === 'library') { renderLibraryFolders(); loadLocations(); }
   // Only the visible tab holds an event stream open.
   if (name === 'archive') archive?.show(); else archive?.hide();
@@ -3804,105 +3807,20 @@ function randomPassword() {
 
 /* ── Ninaivu 5.0 Bitrot Scrubber ────────────────────────────────────────── */
 
-const notifyApi = {
-  get: () => json('/api/admin/notifications'),
-  save: (body) => json('/api/admin/notifications', { method: 'POST', body }),
-  test: () => json('/api/admin/notifications/test', { method: 'POST' }),
-};
-
-// The last answer, so a change of language can say it again without asking.
+// The notification settings, asked for at sign-in and drawn by the Health
+// page's module (pages/console/notifications.js) once it is opened.
 let lastNotifications = null;
-
-function describeNotifications(data) {
-  lastNotifications = data;
-  const state = $('#notify-state');
-  if (!state) return;
-  state.textContent = data.configured
-    ? i18n.t('Notifications are on.')
-    : i18n.t('Nothing is being sent — add a webhook or an email address.');
-}
 
 // Runs from start(), not wireChrome(): the console wires itself before anyone
 // has signed in, and asking then was a 401 that announced "Your session has
 // ended" to someone who never had one, and left this list empty afterwards.
 async function loadNotifications() {
-  const box = $('#notify-events');
-  if (!box) return;
-
-  let settings;
   try {
-    settings = await notifyApi.get();
+    lastNotifications = await admin.getAdminNotifications();
   } catch {
     return;                       // not an admin, or the console is older
   }
-
-  const chosen = new Set(settings.events || []);
-  box.innerHTML = '';
-  for (const [key, description] of Object.entries(settings.known_events || {})) {
-    const row = el('label', 'toggle');
-    const input = el('input');
-    input.type = 'checkbox';
-    input.value = key;
-    input.checked = chosen.has(key);
-    // Kept as the English key too, so a change of language retranslates it.
-    const words = el('span', null, i18n.t(description));
-    words.dataset.i18n = description;
-    row.append(input, words);
-    box.appendChild(row);
-  }
-  fillNotificationForm(settings.form);
-  describeNotifications(settings);
-}
-
-// What was saved, in the fields. Opened empty, the form sent empty strings
-// for everything on Save, so changing one tick box wiped the webhook and the
-// email setup. The password never comes back; a blank one keeps it.
-function fillNotificationForm(form) {
-  if (!form) return;              // a server from before it said
-  const set = (id, value) => { const input = $(id); if (input) input.value = value ?? ''; };
-  set('#notify-webhook', form.webhook);
-  set('#notify-smtp-host', form.smtp_host);
-  set('#notify-smtp-port', form.smtp_port || 587);
-  set('#notify-smtp-user', form.smtp_user);
-  set('#notify-smtp-to', form.smtp_to);
-  const password = $('#notify-smtp-password');
-  if (password) {
-    password.value = '';
-    password.placeholder = form.smtp_password_saved ? i18n.t('saved — leave blank to keep') : i18n.t('password');
-  }
-}
-
-function wireNotifications() {
-  $$('#notify-save').onclick = async () => {
-    const events = [...document.querySelectorAll('#notify-events input:checked')].map((i) => i.value);
-    try {
-      const result = await notifyApi.save({
-        webhook: $('#notify-webhook')?.value || '',
-        smtp_host: $('#notify-smtp-host')?.value || '',
-        smtp_port: Number($('#notify-smtp-port')?.value || 587),
-        smtp_user: $('#notify-smtp-user')?.value || '',
-        smtp_password: $('#notify-smtp-password')?.value || '',
-        smtp_to: $('#notify-smtp-to')?.value || '',
-        events,
-      });
-      describeNotifications(result.settings);
-      toast(i18n.t('Saved.'));
-    } catch (exc) {
-      toast(exc.message, true);
-    }
-  };
-
-  $$('#notify-test').onclick = async () => {
-    try {
-      const result = await notifyApi.test();
-      toast(result.sent
-        ? i18n.t('Sent. Check wherever you pointed it.')
-        : i18n.t('Nothing was sent: {reason}', { reason: result.reason || result.webhook || result.email }),
-        !result.sent);
-    } catch (exc) {
-      toast(exc.message, true);
-    }
-  };
+  ifOpened('notifications', (page) => page.render(lastNotifications));
 }
 
 function wireScrubber() {
@@ -3910,7 +3828,7 @@ function wireScrubber() {
   startBtn?.addEventListener('click', async () => {
     startBtn.disabled = true;
     try {
-      const res = await adminApi.startScrubber();
+      const res = await admin.postAdminScrubberStart();
       // The server's two answers are fixed sentences, so they are said here in
       // the console's language rather than repeated in English.
       toast(res.ok === false ? i18n.t('Scrubber is already running') : i18n.t('Scrubber started'));
@@ -3924,7 +3842,7 @@ function wireScrubber() {
   stopBtn?.addEventListener('click', async () => {
     stopBtn.disabled = true;
     try {
-      await adminApi.stopScrubber();
+      await admin.postAdminScrubberStop();
       toast(i18n.t('The storage check stops after the file it is reading. Check every file carries on from there.'));
     } catch (err) {
       toast(err.message, true);
@@ -3933,114 +3851,22 @@ function wireScrubber() {
   });
 }
 
-/** How far a running check has got, and the buttons that go with it. */
-function showScrubberProgress(progress) {
-  const running = !!progress?.running;
-  const startBtn = $('#scrubber-start-btn');
-  const stopBtn = $('#scrubber-stop-btn');
-  if (startBtn) {
-    startBtn.disabled = running;
-    startBtn.textContent = !running && Number(progress?.stopped_at) > 0
-      ? i18n.t('Carry on checking') : i18n.t('Check every file');
-  }
-  if (stopBtn) {
-    stopBtn.hidden = !running;
-    if (!running) stopBtn.disabled = false;
-  }
-  const box = $('#scrub-progress');
-  if (!box) return;
-  box.hidden = !running;
-  if (!running) return;
-  const total = Number(progress.total) || 0;
-  const done = Math.min(Number(progress.processed) || 0, total || Infinity);
-  const bar = $('#scrub-progress-bar');
-  if (bar) { bar.max = Math.max(total, 1); bar.value = done; }
-  const text = $('#scrub-progress-text');
-  if (text) {
-    text.textContent = total
-      ? i18n.t('Checked {done} of {total} files', { done: done.toLocaleString(), total: total.toLocaleString() })
-      : i18n.t('Getting ready…');
-  }
-}
-
-// What the storage check found, in the words the server uses for it.
-const SCRUB_STATES = {
-  corrupt: i18n.key('corrupt'),
-  missing: i18n.key('missing'),
-  unreadable: i18n.key('unreadable'),
-};
-
+// The storage check's status, asked for at sign-in and every two seconds
+// while a check runs; drawn by the Health page's module
+// (pages/console/scrubber.js) once it is opened.
+let lastScrub;
 let scrubberPollTimer = null;
 async function pollScrubber() {
   clearTimeout(scrubberPollTimer);
-  const data = await loadScrubberStatus();
-  showScrubberProgress(data?.progress);
-  if (data?.progress?.running) scrubberPollTimer = setTimeout(pollScrubber, 2000);
-}
-
-async function loadScrubberStatus() {
+  let data;
   try {
-    const data = await adminApi.scrubberStatus();
-    const set = (id, value) => {
-      const node = $(id);
-      if (node) node.textContent = String(value || 0);
-    };
-    set('#scrub-total', data.total_assets);
-    set('#scrub-verified', data.verified);
-    set('#scrub-baseline', data.baseline);
-    set('#scrub-changed', data.changed);
-    set('#scrub-corrupt', data.corrupt);
-    set('#scrub-missing', data.missing);
-    set('#scrub-unreadable', data.unreadable);
-
-    // Only the three that need somebody to go and look turn red. "Edited" and
-    // "fingerprinted" are ordinary states, not problems.
-    const alarm = (id, n) => {
-      const card = $(id);
-      if (card) card.classList.toggle('bad', (n || 0) > 0);
-    };
-    alarm('#scrub-corrupt-card', data.corrupt);
-    alarm('#scrub-missing-card', data.missing);
-    alarm('#scrub-unreadable-card', data.unreadable);
-
-    const issues = data.recent_issues || [];
-    const wrap = $('#scrubber-issues-wrap');
-    const tbody = $('#scrubber-issues-tbody');
-    if (issues.length && wrap && tbody) {
-      wrap.hidden = false;
-      tbody.innerHTML = '';
-      // Built as nodes rather than with innerHTML: these strings are
-      // filenames off the disk, and a photograph called
-      // `<img src=x onerror=...>.jpg` would otherwise run in the console.
-      issues.forEach((iss) => {
-        const tr = document.createElement('tr');
-
-        const pathCell = document.createElement('td');
-        const path = document.createElement('code');
-        path.textContent = iss.rel_path || '';
-        pathCell.appendChild(path);
-
-        const statusCell = document.createElement('td');
-        const tag = document.createElement('span');
-        tag.className = `tag ${iss.status === 'corrupt' ? 'danger' : 'warn'}`;
-        tag.textContent = SCRUB_STATES[iss.status] ? i18n.t(SCRUB_STATES[iss.status]) : (iss.status || '');
-        statusCell.appendChild(tag);
-
-        const whenCell = document.createElement('td');
-        whenCell.textContent = iss.checked_at
-          ? new Date(iss.checked_at * 1000).toLocaleString(i18n.locale())
-          : i18n.t('Just now');
-
-        tr.append(pathCell, statusCell, whenCell);
-        tbody.appendChild(tr);
-      });
-    } else if (wrap) {
-      wrap.hidden = true;
-    }
-    return data;
+    data = await admin.getAdminScrubberStatus();
   } catch (err) {
     console.debug('Scrubber status fetch note:', err);
   }
+  lastScrub = data;
+  ifOpened('scrubber', (page) => page.show(data));
+  if (data?.progress?.running) scrubberPollTimer = setTimeout(pollScrubber, 2000);
 }
 
 /* ======================================================================== */

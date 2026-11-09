@@ -102,5 +102,24 @@ ok('Health was fetched when opened', pageAsked('console/health.js').length === 1
 ok('and its problems Refresh is wired',
   await c.evaluate(() => typeof document.querySelector('#problem-refresh')?.onclick === 'function'));
 
+// Notifications and the storage check are asked for at sign-in; their modules
+// come with the Health page and draw what sign-in fetched.
+const stampedOnce = (name) => {
+  const urls = pageAsked(`console/${name}.js`);
+  ok(`${name} was fetched once, stamped`, urls.length === 1 && /\?v=/.test(urls[0]), urls.join(' '));
+};
+await c.waitForFunction(() => document.querySelectorAll('#notify-events input[type="checkbox"]').length > 0,
+  null, { timeout: 8000 }).catch(() => {});
+ok('the notification events are drawn on Health',
+  await c.$$eval('#notify-events input[type="checkbox"]', (n) => n.length) > 0);
+ok('and the line under them says something', (await c.textContent('#notify-state')).trim().length > 0);
+ok('the storage check shows its count', /^\d+$/.test((await c.textContent('#scrub-total')).trim()));
+await c.click('#tabs button[data-tab="overview"]');
+await c.waitForTimeout(300);
+await c.click('#tabs button[data-tab="health"]');
+await c.waitForTimeout(800);
+stampedOnce('notifications');
+stampedOnce('scrubber');
+
 ok('no script errors', errors.length === 0, errors.join(' | '));
 await done(b);
