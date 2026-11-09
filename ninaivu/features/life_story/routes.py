@@ -32,12 +32,13 @@ from flask import abort, current_app, jsonify, request
 
 from ... import runtime
 from ...server.auth import current_user, require_family
-from ...storage import db, family_tree, then_and_now as born_store
+from ...storage import db, family_tree
 from ...words import Said
 from ...api import _long_calls
 from ...api._body import json_object
 from ...server import visibility
 from ...api.api import _cfg, _conn, _thumb_version, bp
+from ..then_and_now import storage as born_store
 from . import media as life_story, storage as words_store
 
 log = logging.getLogger(__name__)

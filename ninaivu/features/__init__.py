@@ -186,7 +186,7 @@ def _here(name: str, title: str, *, routes: str | None, tables: Tables | None,
 
 
 def _manifests() -> tuple[Feature, ...]:
-    from . import books, films, letters, life_story               # noqa: PLC0415
+    from . import books, films, letters, life_story, stacks, then_and_now  # noqa: PLC0415
     return (
         _here("smart", "Smart albums", routes="ninaivu.api.api_smart",
               tables=Tables("ninaivu.storage.smart")),
@@ -213,12 +213,10 @@ def _manifests() -> tuple[Feature, ...]:
         _here("video_moments", "Moments inside videos", routes="ninaivu.api.api_video_moments",
               tables=Tables("ninaivu.storage.video_moments", "create"),
               switch="video_moments", needs=""),
-        _here("then_and_now", "Then and now", routes="ninaivu.api.api_then_and_now",
-              tables=Tables("ninaivu.storage.then_and_now", "create"), switch="then_and_now"),
+        then_and_now.MANIFEST,
         life_story.MANIFEST,
         letters.MANIFEST,
-        _here("stacks", "Photo stacks", routes="ninaivu.api.api_stacks",
-              tables=Tables("ninaivu.storage.stacks", "create"), switch="photo_stacks"),
+        stacks.MANIFEST,
         _here("journal", "The change journal", routes=None,
               tables=Tables("ninaivu.storage.journal", "create"), switch="change_journal"),
     )

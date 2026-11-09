@@ -55,6 +55,11 @@ MOVED = {
     "ninaivu.api.api_life_story": "ninaivu.features.life_story.routes",
     "ninaivu.media.life_story": "ninaivu.features.life_story.media",
     "ninaivu.storage.life_story": "ninaivu.features.life_story.storage",
+    "ninaivu.api.api_then_and_now": "ninaivu.features.then_and_now.routes",
+    "ninaivu.media.then_and_now": "ninaivu.features.then_and_now.media",
+    "ninaivu.storage.then_and_now": "ninaivu.features.then_and_now.storage",
+    "ninaivu.api.api_stacks": "ninaivu.features.stacks.routes",
+    "ninaivu.storage.stacks": "ninaivu.features.stacks.storage",
 }
 
 
