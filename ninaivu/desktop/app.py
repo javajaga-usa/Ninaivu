@@ -58,7 +58,7 @@ from . import autostart
 from . import portable
 from . import theme
 from . import control
-from .control import UPDATE_ADVICE, Controller, Monitor, read_power
+from .control import Controller, Monitor, read_power
 from .progress import describe_step, heading, may_stop, percent, remaining, stop_warning, stuck_words
 from .logs import LogTail
 from ..utils.resources import budget
@@ -645,11 +645,8 @@ class Dashboard:
         self.trust_button = self.button(mode_actions, 'Trust the HTTPS certificate', self.open_certificate)
         self.reset_button = self.button(mode_actions, 'Reset a password…', self.reset_password)
         # A portable copy whose library was brought from an older one beside
-        # it can hand it back (portable.go_back).
+        # it can hand it back (portable.go_back): offered in the Update window.
         self.went_back = False
-        older_version = portable.can_go_back()
-        if older_version:
-            self.button(mode_actions, f'Go back to {older_version}…', self.go_back)
         self._sync_trust_button({})
         if autostart.supported():
             # So a restart for an update, or after a power cut, brings the
@@ -663,11 +660,16 @@ class Dashboard:
                                          'Closing this panel leaves Ninaivu running.')
         self.paint(tk.Label(main, textvariable=self.notice, font=self.fonts['small'], wraplength=950, justify='left'),
                    bg='bg', fg='text3').pack(anchor='w', pady=(8, 0))
-        # Always shown: the version, and that an update starts with Stop.
+        # Always shown: the version, and the window that says how to update
+        # it, and how to go back when this copy came from an older one.
         from .. import __version__
-        self.paint(tk.Label(main, text=UPDATE_ADVICE.format(version=__version__), font=self.fonts['small'],
-                            wraplength=950, justify='left'),
-                   bg='bg', fg='text3').pack(anchor='w', pady=(2, 10))
+        version_row = self.paint(tk.Frame(main), bg='bg')
+        version_row.pack(fill='x', pady=(4, 10))
+        self.paint(tk.Label(version_row, text=f'Ninaivu {__version__}', font=self.fonts['small']),
+                   bg='bg', fg='text3').pack(side='left', padx=(0, 10))
+        self.update_button = self.button(
+            version_row, 'Update or go back…' if portable.can_go_back() else 'Update…',
+            self.show_update)
 
         self.build_logs(split)
         self.apply_theme()
@@ -1673,6 +1675,20 @@ class Dashboard:
         rows[1][1].focus_set()
         dialog.grab_set()
 
+    def show_update(self):
+        """The Update window: how to update, and going back when this copy's
+        library came from an older one (desktop/updating.py)."""
+        from . import updating
+        from .. import __version__
+        folder = portable.this_folder()
+        version = portable.can_go_back()
+        record = portable.brought_from() or {}
+        updating.how_to_update(
+            self.root, updating.Look.of(self), version=__version__,
+            folder=folder.path if folder is not None else None,
+            go_back=(version, record.get('folder') or 'the older folder', self.go_back)
+            if version else None)
+
     def go_back(self):
         """Hand the library back to the older Ninaivu it was brought from."""
         version = portable.can_go_back()
@@ -1938,6 +1954,17 @@ def offer_the_older_library(root, ask=None, tell=None, warn=None):
     if older is None:
         return None
     from .. import __version__
+    if ask is None and root is not None:
+        # The window, with each step ticked off as it is done
+        # (desktop/updating.py).
+        from . import updating
+        try:
+            look = updating.Look(root)
+        except tk.TclError:
+            look = None
+        if look is not None:
+            return updating.offer_window(root, look, older, __version__,
+                                         bring=portable.bring_here, stop=portable._stop)
     ask = ask or (lambda title, text: messagebox.askyesno(title, text, parent=root))
     tell = tell or (lambda title, text: messagebox.showinfo(title, text, parent=root))
     warn = warn or (lambda title, text: messagebox.showerror(title, text, parent=root))
