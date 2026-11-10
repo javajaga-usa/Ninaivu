@@ -145,6 +145,48 @@ def test_somebody_elses_file_under_the_name_is_left_alone(tmp_path, desktop):
     assert not (desktop / "Ninaivu Console.app").exists()
 
 
+def test_told_no_to_the_desktop_it_is_not_tried_at_every_start(tmp_path, desktop, monkeypatch):
+    """macOS asks whether Ninaivu may use the Desktop folder. Told no, every
+    start tried again and logged an error with its traceback."""
+    control = tmp_path / "control"
+    calls = []
+
+    def refused(*args, **kwargs):
+        calls.append(1)
+        raise PermissionError(1, "Operation not permitted")
+    monkeypatch.setattr(shortcuts, "write_mac", refused)
+    prog = mac_program(tmp_path)
+    with pytest.raises(PermissionError):
+        shortcuts.settle(control, platform="darwin", desktop=desktop, prog=prog)
+    assert shortcuts.read_record(control) == {"done": True, "placed": {}}
+    assert shortcuts.settle(control, platform="darwin", desktop=desktop, prog=prog) == []
+    assert len(calls) == 1, "not tried again by itself"
+    # Quietly, for the Control Panel: a line in the log, not an error.
+    monkeypatch.delenv("NINAIVU_DESKTOP_SHORTCUTS", raising=False)
+    monkeypatch.setattr(shortcuts, "settle", refused)
+    assert shortcuts.settle_quietly(control) == []
+
+
+def test_a_write_that_fails_part_way_keeps_what_was_placed(tmp_path, desktop, monkeypatch):
+    control = tmp_path / "control"
+    prog = mac_program(tmp_path)
+    real, seen = shortcuts.write_mac, []
+
+    def second_fails(target, face, prog, icon):
+        seen.append(face.key)
+        if len(seen) == 2:
+            raise OSError(28, "No space left on device")
+        real(target, face, prog, icon)
+    monkeypatch.setattr(shortcuts, "write_mac", second_fails)
+    with pytest.raises(OSError):
+        shortcuts.settle(control, platform="darwin", desktop=desktop, prog=prog)
+    record = shortcuts.read_record(control)
+    assert record["done"] is False and list(record["placed"]) == [str(desktop / "Ninaivu.app")]
+    monkeypatch.setattr(shortcuts, "write_mac", real)
+    assert shortcuts.settle(control, platform="darwin", desktop=desktop, prog=prog) == \
+        ["Ninaivu Console", "Ninaivu Control Panel"], "the rest at the next start"
+
+
 def test_no_desktop_is_remembered_as_done(tmp_path, monkeypatch):
     control = tmp_path / "control"
     monkeypatch.setattr(shortcuts, "desktop_folder", lambda environ=None, platform=None: None)
