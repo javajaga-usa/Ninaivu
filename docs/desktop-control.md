@@ -16,6 +16,37 @@ and the icon, and still leaves Ninaivu running: **Stop** is what stops it.
 `--tray` (`open -a Ninaivu --args --tray` on a Mac, `./ninaivu --tray` on
 Linux) opens it minimised.
 
+## Shortcuts on the Desktop
+
+The first time the Control Panel opens it puts three shortcuts on the
+Desktop, each with its own icon:
+
+- **Ninaivu**: the family app, in the browser (blue);
+- **Ninaivu Console**: the console, in the browser (violet);
+- **Ninaivu Control Panel**: this window (dark, with a power sign).
+
+The first two start Ninaivu when it is stopped and open the page once it
+answers, with the Control Panel waiting in the tray; when Ninaivu is open
+already they only open the page. So a shortcut never opens a page that does
+not load, and still works when the port changes. They open Ninaivu itself
+(`Ninaivu.exe`, `Ninaivu.app`, `ninaivu`, or a checkout's Control Panel)
+with `--open family` or `--open console`, which works from a terminal too.
+
+It happens once. A shortcut you delete is not put back. The ones still there
+follow the copy of Ninaivu that last opened: a newer portable copy that
+brought the library across takes them over. A file of your own on the Desktop
+under one of these names is left alone. On a Mac, macOS asks once whether
+Ninaivu may use the Desktop folder; saying no leaves the Desktop as it is.
+
+```
+python -m ninaivu.desktop.shortcuts --add       # put back any that are missing
+python -m ninaivu.desktop.shortcuts --remove    # take away the ones Ninaivu put there
+```
+
+From a portable folder these run with its Python: on a Mac
+`Ninaivu.app/Contents/Resources/python/bin/python3 -m …`, on Linux
+`app/python/bin/python3 -m …`, on Windows `app\python\python.exe -m …`.
+
 ## The tray
 
 The icon's menu is short, because everything else is one click away in the

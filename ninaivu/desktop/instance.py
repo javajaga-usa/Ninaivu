@@ -13,7 +13,9 @@ So the first one opened holds a lock in its run-time folder (the
 ``data/control``) for as long as it runs, and listens on a port of this
 computer's own (127.0.0.1) that it writes beside the lock with a token. A
 second one that cannot take the lock tells the first to show itself, with
-that token, and ends. The lock is the operating system's, so it goes when
+that token, and ends. A desktop shortcut to the family app or the console
+(:mod:`desktop.shortcuts`) opens the program the same way with ``--open``,
+and a second one passes that on instead: the first opens the page. The lock is the operating system's, so it goes when
 the program does, however it ends: there is no stale file to clear by hand.
 
 Each folder has its own: a newer portable copy unpacked beside an older one
@@ -49,6 +51,8 @@ LOCK = 'desktop.lock'
 ADDRESS = 'desktop.json'
 #: What a second Ninaivu sends, and what it is answered.
 SHOW, SHOWN = b'show', b'shown'
+#: What a second Ninaivu opened by a shortcut sends instead: open that page.
+OPEN = (b'family', b'console')
 #: How long a second Ninaivu waits for the first to answer before opening anyway.
 PATIENCE = 6.0
 
@@ -62,16 +66,19 @@ class Instance:
         self._listener = listener
         self._token = token.encode('ascii')
         self._on_show: Callable[[], None] | None = None
+        self._on_open: Callable[[str], None] | None = None
         self._closed = threading.Event()
 
     @property
     def port(self) -> int:
         return self._listener.getsockname()[1]
 
-    def serve(self, on_show: Callable[[], None]) -> None:
+    def serve(self, on_show: Callable[[], None], on_open: Callable[[str], None] | None = None) -> None:
         """Answer the next Ninaivu opened, on a thread of its own: *on_show*
-        for each one that brings the right token."""
+        for each one that brings the right token, or *on_open* with
+        ``'family'`` or ``'console'`` for one opened to show that page."""
         self._on_show = on_show
+        self._on_open = on_open
         threading.Thread(target=self._accept, name='ninaivu-desktop-instance', daemon=True).start()
 
     def _accept(self) -> None:
@@ -84,10 +91,15 @@ class Instance:
                 try:
                     connection.settimeout(2.0)
                     said = _read_line(connection, 2)
-                    if len(said) == 2 and hmac.compare_digest(said[0], self._token) and said[1] == SHOW:
-                        connection.sendall(SHOWN + b'\n')
-                        if self._on_show is not None:
-                            self._on_show()
+                    if len(said) != 2 or not hmac.compare_digest(said[0], self._token):
+                        continue
+                    if said[1] != SHOW and said[1] not in OPEN:
+                        continue
+                    connection.sendall(SHOWN + b'\n')
+                    if said[1] in OPEN and self._on_open is not None:
+                        self._on_open(said[1].decode('ascii'))
+                    elif self._on_show is not None:
+                        self._on_show()
                 except (OSError, ValueError):
                     continue
 
@@ -107,9 +119,11 @@ class Instance:
             self._handle.close()
 
 
-def claim(folder: Path, *, patience: float = PATIENCE, sleep=time.sleep) -> Instance | None:
+def claim(folder: Path, *, patience: float = PATIENCE, sleep=time.sleep,
+          say: bytes = SHOW) -> Instance | None:
     """This program as the Ninaivu for *folder*, or None when another
-    already is and has been told to show its window.
+    already is and has been told to show its window (*say*: or to open
+    the page named, one of :data:`OPEN`).
 
     When another holds the lock but does not answer within *patience*
     seconds, this one becomes a second panel rather than leave the person
@@ -129,7 +143,7 @@ def claim(folder: Path, *, patience: float = PATIENCE, sleep=time.sleep) -> Inst
     handle.close()
     deadline = time.monotonic() + patience
     while True:
-        if tell_to_show(folder):
+        if tell_to_show(folder, say=say):
             return None
         if time.monotonic() >= deadline:
             break
@@ -141,9 +155,9 @@ def claim(folder: Path, *, patience: float = PATIENCE, sleep=time.sleep) -> Inst
     return Instance(folder, _Unlocked(), listener, secrets.token_hex(16))
 
 
-def tell_to_show(folder: Path, timeout: float = 2.0) -> bool:
-    """Ask the Ninaivu holding *folder*'s lock to show its window; whether it
-    said it would."""
+def tell_to_show(folder: Path, timeout: float = 2.0, say: bytes = SHOW) -> bool:
+    """Ask the Ninaivu holding *folder*'s lock to show its window (or to
+    open the page *say* names); whether it said it would."""
     try:
         told = json.loads((Path(folder) / ADDRESS).read_text(encoding='utf-8'))
         port, token = int(told['port']), str(told['token'])
@@ -151,7 +165,7 @@ def tell_to_show(folder: Path, timeout: float = 2.0) -> bool:
         return False
     try:
         with socket.create_connection(('127.0.0.1', port), timeout=timeout) as connection:
-            connection.sendall(token.encode('ascii') + b'\n' + SHOW + b'\n')
+            connection.sendall(token.encode('ascii') + b'\n' + say + b'\n')
             return _read_line(connection, 1) == [SHOWN]
     except (OSError, ValueError):
         return False
