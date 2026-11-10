@@ -58,7 +58,7 @@ from typing import Any, Callable
 from .control import UPDATE_ADVICE, Controller
 
 #: The tray's icon, from the same mark as the app's.
-ICON = Path(__file__).resolve().parents[1] / "static" / "icons" / "icon-192.png"
+ICON = Path(__file__).resolve().parents[1] / "static" / "icons" / "panel" / "icon-192.png"
 
 #: How often the menu's first line ("Running" / "Stopped") is re-read.
 POLL_SECONDS = 5.0
