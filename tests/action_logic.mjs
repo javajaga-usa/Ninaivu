@@ -116,10 +116,13 @@ console.log('PASS: favorite failures and navigation, modal shortcuts, clipboard 
 
 const filterContext = {
   state: { filters: { person: 7, q: 'beach', tag: 'trip', sort: 'date_desc' } },
-  searchTimer: 1, clearTimeout() {},
+  ctx: { stopSearch() {} },
   $: () => ({}), syncChips() {}, reload() {},
 };
-vm.runInNewContext(source.slice(source.indexOf('function clearFilters()'), source.indexOf('\nfunction syncChips()')), filterContext);
+// The sidebar is a module of its own since 4.0 (gallery/sidebar.js).
+const sidebarSource = readFileSync(new URL('../ninaivu/static/js/gallery/sidebar.js', import.meta.url), 'utf8');
+vm.runInNewContext(sidebarSource.slice(sidebarSource.indexOf('function clearFilters()'),
+  sidebarSource.indexOf('\nexport function syncChips()')), filterContext);
 filterContext.clearFilters();
 assert.equal(filterContext.state.filters.person, 0);
 assert.equal(filterContext.state.filters.q, '');
