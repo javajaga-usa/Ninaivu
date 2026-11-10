@@ -1863,6 +1863,22 @@ class Dashboard:
     def open_family(self):
         self.open_in_browser(False)
 
+    def place_shortcuts(self):
+        """The family app, the console and the Control Panel on the Desktop,
+        the first time (:mod:`desktop.shortcuts`), said in the notice line.
+        Not while a release check opens the panel on a build machine."""
+        if self.check_report:
+            return
+        from . import shortcuts
+        folder = control.control_dir(control.ninaivu_root())
+
+        def then(names):
+            if isinstance(names, list) and names and not self.busy:
+                said = names[0] if len(names) == 1 else ', '.join(names[:-1]) + ' and ' + names[-1]
+                self.notice.set(f'{said} {"is" if len(names) == 1 else "are"} on your Desktop.')
+
+        self.in_background(lambda: shortcuts.settle_quietly(folder), then, name='ninaivu-shortcuts')
+
     def start_on_open(self):
         """Opening Ninaivu starts it: the one thing to double-click is the
         one thing to do. Unless it is running already, or starting (begun
@@ -1919,6 +1935,9 @@ def parse_arguments(argv):
     parser = argparse.ArgumentParser(prog='ninaivu.desktop.app', add_help=False)
     parser.add_argument('--tray', action='store_true',
                         help='open minimised to the icon in the tray (menu bar on a Mac)')
+    parser.add_argument('--open', choices=('family', 'console'),
+                        help='open the family app or the console in the browser, starting '
+                             'Ninaivu first if it is stopped (the Desktop shortcuts)')
     known, _rest = parser.parse_known_args(argv)
     return known
 
@@ -2029,8 +2048,11 @@ def main(argv=None):
     ``python -m ninaivu.desktop.app``.
 
     It opens the Control Panel with Ninaivu's icon in the tray, and starts
-    Ninaivu. ``--tray`` opens it minimised to the icon. Opened again while it
-    is open, it shows the window it has and ends (:mod:`desktop.instance`).
+    Ninaivu. ``--tray`` opens it minimised to the icon. ``--open family`` or
+    ``--open console`` (the Desktop shortcuts, :mod:`desktop.shortcuts`) opens
+    it minimised too, and the page in the browser once Ninaivu answers.
+    Opened again while it is open, it shows the window it has, or opens the
+    page asked for, and ends (:mod:`desktop.instance`).
     """
     options = parse_arguments(sys.argv[1:] if argv is None else argv)
     if tk is None:
@@ -2039,7 +2061,7 @@ def main(argv=None):
         print('The Control Panel needs Tk, which this Python does not have; opening the tray instead.', file=sys.stderr)
         from .tray import run_alone
         return run_alone()
-    instance = claim_the_desktop()
+    instance = claim_the_desktop(say=options.open)
     if instance is ALREADY_OPEN:
         return 0
     try:
@@ -2053,7 +2075,7 @@ def main(argv=None):
 ALREADY_OPEN = object()
 
 
-def claim_the_desktop(claim=None):
+def claim_the_desktop(claim=None, say=None):
     """This program as the Ninaivu of its folder (:mod:`desktop.instance`):
     the :class:`~desktop.instance.Instance`, :data:`ALREADY_OPEN` when one
     is open already and has been told to show itself, or None when it could
@@ -2062,7 +2084,9 @@ def claim_the_desktop(claim=None):
     from . import instance
     try:
         portable.activate_environment()
-        held = (claim or instance.claim)(control.control_dir(control.ninaivu_root()))
+        folder = control.control_dir(control.ninaivu_root())
+        held = (claim(folder) if claim else
+                instance.claim(folder, say=say.encode('ascii') if say else instance.SHOW))
     except OSError:
         import logging
         logging.getLogger(__name__).warning('could not tell whether Ninaivu is already open', exc_info=True)
@@ -2090,7 +2114,9 @@ def _open(options, instance):
         return 2
     root.withdraw()
     offer_the_older_library(root)
-    if not options.tray:
+    # A shortcut to a page opens the page: the panel waits in the tray.
+    minimised = options.tray or bool(options.open)
+    if not minimised:
         root.deiconify()
     try:
         board = Dashboard(root)
@@ -2100,11 +2126,16 @@ def _open(options, instance):
         root.destroy()
         return 1
     board.attach_tray()
-    if options.tray and not (board.tray is not None and board.tray.shown):
+    if minimised and not (board.tray is not None and board.tray.shown):
         root.deiconify()            # minimised only where there is an icon to find it in
     if instance is not None:
-        instance.serve(lambda: board.post(board.show_window))
-    board.start_on_open()
+        instance.serve(lambda: board.post(board.show_window),
+                       lambda which: board.post(lambda: board.open_in_browser(which == 'console')))
+    if options.open:
+        board.open_in_browser(options.open == 'console')    # starts Ninaivu first when stopped
+    else:
+        board.start_on_open()
+    board.place_shortcuts()
     root.mainloop()
     return 0
 
