@@ -5,8 +5,8 @@
 #   pip install "torch>=2.15.0" torchvision --index-url https://download.pytorch.org/whl/cpu
 #   pip install -r requirements-ai.txt
 torch>=2.15.0,<3
-open_clip_torch>=2.24,<4
+open_clip_torch>=4.2.1,<5
 # SigLIP 2 search (downloaded in Admin -> AI models) reads its tokenizer with these.
-transformers>=5.22.1,<6   # same line as requirements-ai-editing.txt
+transformers>=5.22.2,<6   # same line as requirements-ai-editing.txt
 tokenizers>=0.23.3,<1
 

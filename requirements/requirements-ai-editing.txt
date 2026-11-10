@@ -2,7 +2,7 @@
 # Tested together: diffusers 0.40.0, transformers 5.17.0, accelerate 1.15.0 (MagicBrush on CPU).
 # transformers 5 fixes the advisories reported against 4.x (docs/audits/2026-09-12.md).
 diffusers>=0.42.1,<0.43
-transformers>=5.22.1,<6
+transformers>=5.22.2,<6
 accelerate>=1.15,<2
 safetensors>=0.4,<1
 torch>=2.15.0,<3
