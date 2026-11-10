@@ -9,12 +9,12 @@
 # Dependabot proposes updates to both files.
 
 # Packaging
-pip==26.2.2
+pip==26.3
 setuptools==84.2.1
 wheel==0.48.0
 
 # The guides, as PDFs (tools/build_guide_pdf.py)
-Markdown==3.11.2
+Markdown==3.11.3
 playwright==1.64.1
 greenlet==3.5.6
 pyee==13.0.1             # playwright 1.63 needs pyee<14
