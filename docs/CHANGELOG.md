@@ -1,8 +1,8 @@
 # Changelog
 
-## 4.0.0 — beta, not released
+## 4.0.0 — 10 November 2026
 
-4.0 is being built in ten parts. Each is described below as it stands; what is not finished is said where it belongs. The version number stays 3.7.0 until the release.
+4.0 is one program to open, with an icon for each of its three faces; two computers that can be paired, moved and replaced with proof that nothing was lost; and a count of how many photographs are in at least two places. Underneath, the app is put together from feature modules, one work plane and one visibility gate. An index 4.0 has opened is not opened by 3.x: read **Before you update**.
 
 ### One program to open, and its tray icon
 
@@ -42,6 +42,17 @@
 - **Each copy can be test-restored.** The off-site copy brings three random files back into a temporary folder and compares their fingerprints; the Secondary is asked to read three kept originals back from its disk and report theirs.
 - **On the Health page, under Copies:** how many photographs are in at least two places, of all of them, with a line for each copy (the second disk, the Secondary, the off-site copy, Google Drive) saying how many it keeps and when it last finished, or that it is off or has a problem. Opening it only reads the record; nothing is sent or checked.
 
+### Two computers with HTTPS on the Secondary
+
+- **A Secondary with Use HTTPS on can be paired.** The Primary always knocked at `http://`, so a Secondary on HTTPS hung up and the Mugil page said it "answers, but its family app cannot be reached". It now says it speaks HTTPS when the Primary looks for it, and the Primary uses `https://`.
+- **The Primary trusts the Secondary's own certificate, and only that one.** A Secondary on HTTPS serves a certificate from its own home authority, which no other computer knew, so even `https://` was refused. The Secondary now hands over that authority when it is found. The six-digit number both screens show covers it, so a computer in between would show another number. When pairing with a code typed on the Secondary, the authority is part of the code's proof. From then on the Primary trusts that authority alone for the Secondary. The system's authorities are not used for it, and a certificate from anyone else is refused.
+- Both computers need this version for a Secondary on HTTPS. A Secondary on plain HTTP pairs as before, with the same numbers.
+
+### Two computers: the Secondary keeps the originals in its library folder
+
+- **The library folder itself can be chosen as the place for the originals.** On the Secondary, *Where should the originals be kept?* used to refuse a library folder ("Keep the originals in a folder of their own"). Choosing it now keeps the originals there: the folder above it becomes the originals folder, so the library is `<originals folder>/<library folder name>`, the layout the Primary sends into. It works for the Secondary's own library (asked first, as before; that computer then stops showing it as a library) and for the Primary's library copied onto the big disk by hand, even under another folder name: the copy carries the library's id (`.ninaivu-library`) and is known by it. A library that is a whole disk is refused with what to do instead.
+- **Photographs already in the chosen folder are checked at once, and the Primary marks them as in sync.** Each is read and fingerprinted on the Secondary; the Primary then sends nothing for a file at the same path with the same size and fingerprint, only puts back its modified time, and sends what is missing or different (a different file is set aside, never written over). No *I have finished copying* is needed for a folder that already holds the library.
+
 ### The Raspberry Pi publisher is retired
 
 - **The Primary no longer writes a hand-over into a shared folder for a Pi.** The Secondary is the always-on computer now. `ninaivu replica publish`, the hand-over folder routes, and the `replica_dir` and `replica_every_minutes` settings are gone, with the Pi page of the guide. A Pi or a Secondary already serving the view as a service of its own (`ninaivu replica unit`) keeps working, and the guide marks that as the old way.
@@ -72,19 +83,6 @@ These change nothing a household sees; they make the next changes smaller and sa
 ### Going in 4.1
 
 - **The old import paths of the moved features.** Code that moved into `ninaivu/features` (for example `ninaivu.api.api_films`, `ninaivu.media.films`, `ninaivu.storage.films`) can still be imported by its old name in 4.0. 4.1 removes those names; an extension that imports one should import from `ninaivu.features` instead.
-
-## Unreleased
-
-### Two computers with HTTPS on the Secondary
-
-- **A Secondary with Use HTTPS on can be paired.** The Primary always knocked at `http://`, so a Secondary on HTTPS hung up and the Mugil page said it "answers, but its family app cannot be reached". It now says it speaks HTTPS when the Primary looks for it, and the Primary uses `https://`.
-- **The Primary trusts the Secondary's own certificate, and only that one.** A Secondary on HTTPS serves a certificate from its own home authority, which no other computer knew, so even `https://` was refused. The Secondary now hands over that authority when it is found. The six-digit number both screens show covers it, so a computer in between would show another number. When pairing with a code typed on the Secondary, the authority is part of the code's proof. From then on the Primary trusts that authority alone for the Secondary. The system's authorities are not used for it, and a certificate from anyone else is refused.
-- Both computers need this version for a Secondary on HTTPS. A Secondary on plain HTTP pairs as before, with the same numbers.
-
-### Two computers: the Secondary keeps the originals in its library folder
-
-- **The library folder itself can be chosen as the place for the originals.** On the Secondary, *Where should the originals be kept?* used to refuse a library folder ("Keep the originals in a folder of their own"). Choosing it now keeps the originals there: the folder above it becomes the originals folder, so the library is `<originals folder>/<library folder name>`, the layout the Primary sends into. It works for the Secondary's own library (asked first, as before; that computer then stops showing it as a library) and for the Primary's library copied onto the big disk by hand, even under another folder name: the copy carries the library's id (`.ninaivu-library`) and is known by it. A library that is a whole disk is refused with what to do instead.
-- **Photographs already in the chosen folder are checked at once, and the Primary marks them as in sync.** Each is read and fingerprinted on the Secondary; the Primary then sends nothing for a file at the same path with the same size and fingerprint, only puts back its modified time, and sends what is missing or different (a different file is set aside, never written over). No *I have finished copying* is needed for a folder that already holds the library.
 
 ## 3.7.0 — 5 November 2026
 
