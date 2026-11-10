@@ -102,7 +102,8 @@ def test_the_first_time_puts_all_three_on_a_mac_desktop(tmp_path, desktop):
     family = desktop / "Ninaivu.app" / "Contents"
     info = plistlib.loads((family / "Info.plist").read_bytes())
     assert info["CFBundleExecutable"] == "open-ninaivu" and info["CFBundleIconFile"] == "icon"
-    assert (family / "MacOS" / "open-ninaivu").stat().st_mode & 0o111
+    if sys.platform != "win32":                         # Windows keeps no such bit
+        assert (family / "MacOS" / "open-ninaivu").stat().st_mode & 0o111
     assert (family / "Resources" / "icon.icns").read_bytes()[:4] == b"icns"
     assert shortcuts.settle(control, platform="darwin", desktop=desktop, prog=prog) == [], \
         "the second time there is nothing to do"
