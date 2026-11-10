@@ -23,6 +23,25 @@ def test_each_face_has_its_mark():
         assert maskable.getpixel((0, 0))[3] == 255, "a maskable icon bleeds to its edges"
 
 
+def test_the_control_panel_has_its_own_icon():
+    """The program on the desktop opens the Control Panel, so its window, its
+    tray icon, the Linux menu and both installers show the panel's face."""
+    panel = STATIC / "icons" / "panel"
+    for size in (192, 512):
+        assert Image.open(panel / f"icon-{size}.png").size == (size, size)
+    from ninaivu.desktop import app, linux_menu, tray
+    assert app.ICON == panel / "icon-192.png" and tray.ICON == panel / "icon-192.png"
+    assert linux_menu.icon_source(ROOT) == panel / "icon-512.png"
+    # The panel's tile is the dark one: unlike the family's blue or the console's violet.
+    def middle_of_tile(im):
+        r, g, b, _ = im.convert("RGBA").getpixel((im.width // 2, int(im.height * .88)))
+        return r + g + b
+    assert middle_of_tile(Image.open(panel / "icon-512.png")) < 200
+    assert middle_of_tile(Image.open(STATIC / "icons" / "icon-512.png")) > 300
+    mac = Image.open(ROOT / "installers" / "macos" / "ninaivu.iconset" / "icon_512x512@2x.png")
+    assert sum(mac.convert("RGBA").getpixel((512, 880))[:3]) < 200
+
+
 def test_pages_show_the_mark_not_the_old_outline():
     for name, mark in (("index.html", "/static/icons/mark.svg"), ("admin.html", "/static/icons/admin/mark.svg"),
                        ("share.html", "/static/icons/mark.svg"), ("ask.html", "/static/icons/mark.svg")):

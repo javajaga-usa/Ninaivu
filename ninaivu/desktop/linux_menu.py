@@ -113,8 +113,8 @@ def entry(name: str, comment: str, argv: list[str], *, workdir: Path,
 def icon_source(root: Path) -> Path | None:
     """Ninaivu's icon: in the package (a portable folder's site-packages, or
     a checkout)."""
-    for candidate in (HERE.parent / "static" / "icons" / "icon-512.png",
-                      root / "ninaivu" / "static" / "icons" / "icon-512.png"):
+    for candidate in (HERE.parent / "static" / "icons" / "panel" / "icon-512.png",
+                      root / "ninaivu" / "static" / "icons" / "panel" / "icon-512.png"):
         if candidate.is_file():
             return candidate
     return None

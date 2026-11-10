@@ -63,7 +63,7 @@ from .progress import describe_step, heading, may_stop, percent, remaining, stop
 from .logs import LogTail
 from ..utils.resources import budget
 
-ICON = Path(__file__).resolve().parents[1] / 'static' / 'icons' / 'icon-192.png'
+ICON = Path(__file__).resolve().parents[1] / 'static' / 'icons' / 'panel' / 'icon-192.png'
 
 #: What to install when the panel cannot run, said the same way everywhere.
 NEEDS = ('Install what the Control Panel needs into Ninaivu’s environment:\n\n'
