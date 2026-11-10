@@ -202,6 +202,24 @@ class Stopped(Exception):
     """A census asked to stop part-way: nothing is written."""
 
 
+def _line(item: dict[str, Any]) -> str:
+    """*item* as one JSON line of a census, a plan or a list of missing files.
+
+    A name is written as it reads, in its own script. One the disk holds in
+    bytes that are not UTF-8 (an old camera's, a zip from another system; a
+    Linux disk allows any bytes) reaches Python with those bytes set aside
+    as lone surrogates, which UTF-8 cannot write: one such file anywhere in
+    the library used to end the whole census. Its line is written escaped
+    instead (``\\udce9``), which reads back as the very same name.
+    """
+    text = json.dumps(item, ensure_ascii=False)
+    try:
+        text.encode("utf-8")
+    except UnicodeEncodeError:
+        text = json.dumps(item)
+    return text + "\n"
+
+
 def _who(cfg) -> str:
     try:
         from . import display_name                                 # noqa: PLC0415
@@ -327,6 +345,13 @@ def _walk_top(top: dict[str, Any], ignore: set[str]) -> Iterator[tuple[str, str,
                 yield area, f"{entry}/{rel}", full
 
 
+def _safe(text: str) -> str:
+    """*text* as SQLite can hold it: a name with bytes that are not UTF-8
+    (see :func:`_line`) has them written out (``\\xe9``), the same way every
+    time, so it is still found by that name. Any other text is unchanged."""
+    return text.encode("utf-8", "backslashreplace").decode("utf-8")
+
+
 class _Known:
     """Fingerprints already taken, by the file's whole path: from the last
     census, the index and the record of the originals. Kept in a private
@@ -341,23 +366,23 @@ class _Known:
 
     def add(self, rows) -> None:
         self.db.executemany("INSERT OR REPLACE INTO known VALUES (?,?,?,?)",
-                            ((os.path.normpath(p), int(s), float(m), d) for p, s, m, a, d in rows
+                            ((_safe(os.path.normpath(p)), int(s), float(m), d) for p, s, m, a, d in rows
                              if a == fingerprints.ALGO and d))
 
     def mark(self, table: str, paths) -> None:
         self.db.executemany(f"INSERT OR IGNORE INTO {table} VALUES (?)",
-                            ((os.path.normpath(p),) for p in paths))
+                            ((_safe(os.path.normpath(p)),) for p in paths))
 
     def digest(self, path: str, size: int, mtime: float) -> str | None:
         row = self.db.execute("SELECT size, mtime, digest FROM known WHERE path = ?",
-                              (os.path.normpath(path),)).fetchone()
+                              (_safe(os.path.normpath(path)),)).fetchone()
         if row and row[0] == size and abs(row[1] - mtime) <= 0.001:
             return row[2]
         return None
 
     def has(self, table: str, path: str) -> bool:
         return self.db.execute(f"SELECT 1 FROM {table} WHERE path = ?",
-                               (os.path.normpath(path),)).fetchone() is not None
+                               (_safe(os.path.normpath(path)),)).fetchone() is not None
 
     def from_census(self, path: Path) -> None:
         header = read_header(path)
@@ -496,7 +521,7 @@ def take_census(cfg, *, connect_db: Callable[[], sqlite3.Connection] | None = No
                         entry["i"] = 1
                     if area == SET_ASIDE_AREA and known.has("replaced", whole):
                         entry["r"] = 1
-                    out.write(json.dumps(entry, ensure_ascii=False) + "\n")
+                    out.write(_line(entry))
                     files += 1
                     size_total += size
                     if progress is not None and files % 200 == 0:
@@ -618,7 +643,7 @@ def _place(header: dict[str, Any], entry: dict[str, Any]) -> tuple[str, str]:
     same for a file in the library itself and for its copy in the
     Secondary's originals folder, which is named after the library."""
     top = header["tops"][entry["t"]]
-    path = unicodedata.normalize("NFC", entry["p"])
+    path = _safe(unicodedata.normalize("NFC", entry["p"]))
     if top["kind"] == LIBRARY:
         return PurePosixPath(top["top"].replace("\\", "/")).name, path
     if entry["a"] in (INBOX, STRAY):
@@ -712,7 +737,7 @@ def plan_pair(primary: Path, secondary: Path, out: Path, *,
             folder, rel = _place(header, entry)
             batch.append((folder, rel, entry["a"], entry.get("d"), int(entry["s"]),
                           int(entry.get("i" if table == "p" else "r") or 0),
-                          _where(header, entry)))
+                          _safe(_where(header, entry))))
             if len(batch) >= 2000:
                 work.executemany(f"INSERT INTO {table} VALUES (?,?,?,?,?,?,?)", batch)
                 batch = []
@@ -744,7 +769,7 @@ def plan_pair(primary: Path, secondary: Path, out: Path, *,
                     line["reason"] = reason
                 if to:
                     line["to"] = to
-                handle.write(json.dumps(line, ensure_ascii=False) + "\n")
+                handle.write(_line(line))
                 count(side, outcome, int(row[4]), reason)
 
             for row in work.execute("SELECT * FROM s ORDER BY folder, rel").fetchall():
@@ -857,7 +882,7 @@ def plan_apart(transition: str, primary: Path, secondary: Path, out: Path) -> di
                                             "size": size, "outcome": outcome}
                     if reason:
                         line["reason"] = reason
-                    handle.write(json.dumps(line, ensure_ascii=False) + "\n")
+                    handle.write(_line(line))
                     bucket = totals[side].setdefault(outcome, {"files": 0, "bytes": 0})
                     bucket["files"] += 1
                     bucket["bytes"] += size
@@ -956,7 +981,7 @@ def prove(before: list[Path], after_: list[Path], missing_to: Path | None = None
                     if len(result["missing"]) < NAMED:
                         result["missing"].append(gone)
                     if handle is not None:
-                        handle.write(json.dumps(gone, ensure_ascii=False) + "\n")
+                        handle.write(_line(gone))
         finally:
             if handle is not None:
                 handle.close()
@@ -999,6 +1024,7 @@ BUSY = {"reason": "A census, a plan or a proof is being made already. Wait for i
 NOTHING_TO_PROVE = {"reason": "Make a plan first: the proof compares against its census."}
 PROVED_ALREADY = {"reason": "That change is proved and done already."}
 NOT_CARRIED_OUT = {"reason": "Carry the change out first: this computer is not where it leaves it."}
+STOPPED_PLAN = {"reason": "The plan was stopped before it was finished. Make it again."}
 PROVE_ON_THE_NEW = {"reason": "Prove the move on the computer the index went to: it is the "
                               "Primary now, and the export took the plan there."}
 
@@ -1154,6 +1180,7 @@ class Topology:
             work()
         except Stopped:
             self._tell(stopped=True)
+            self._put_back()
         except (PartnerError, ValueError) as exc:
             self._tell(error=str(exc))
             self._fail_record(str(exc))
@@ -1343,7 +1370,11 @@ class Topology:
         """The record a proof now would be for; Refused saying why there is none."""
         here = here or standing(self.cfg)
         current = load_record(self.state_dir).get("current") or {}
-        if current.get("before") and current.get("state") in (PLANNED, FAILED):
+        # A proof cut short by a stop or a restart (it may read a whole disk,
+        # for hours) left the record as "proving" with nothing proving it:
+        # it is as it was planned, and can be proved again.
+        waiting = (PLANNED, FAILED) if self.running else (PLANNED, FAILED, PROVING)
+        if current.get("before") and current.get("state") in waiting:
             if current.get("transition") == MOVE_PRIMARY and not current.get("moved_in"):
                 raise Refused(PROVE_ON_THE_NEW["reason"])
             if asdict(here) != current.get("to"):
@@ -1416,6 +1447,23 @@ class Topology:
             current["error"] = why
             data["current"] = current
             _save_record(self.state_dir, data)
+
+    def _put_back(self) -> None:
+        """A plan or a proof was asked to stop: the record goes back to where
+        it can be started again. A proof's plan stands; a plan that did not
+        finish compares against nothing."""
+        data = load_record(self.state_dir)
+        current = data.get("current") or {}
+        if current.get("state") == PROVING:
+            current["state"] = PLANNED
+        elif current.get("state") == PLANNING:
+            current.pop("before", None)
+            current["state"] = FAILED
+            current["error"] = STOPPED_PLAN["reason"]
+        else:
+            return
+        data["current"] = current
+        _save_record(self.state_dir, data)
 
     def _tidy(self) -> None:
         """Keep the censuses the record still compares against."""
