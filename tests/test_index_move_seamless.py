@@ -428,7 +428,11 @@ class OtherWriters(Base):
             digest = real(original, copy)
             if original.name == 'index.db':
                 n[0] += 1
-                (self.source / 'index.db').write_bytes(b'change %d' % n[0] * 50)
+                # A different length each time: two writes inside one tick of
+                # Windows' clock have the same modified time, and a change of
+                # the same length was then not seen (the test failed there
+                # now and then; a growing file is what "keeps changing" is).
+                (self.source / 'index.db').write_bytes(b'change %d' % n[0] * (50 + n[0]))
             return digest
 
         with patch.object(relocate, '_hash_copy', always):
