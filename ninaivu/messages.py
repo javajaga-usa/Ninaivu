@@ -490,6 +490,7 @@ MESSAGES = (
     said('The parent of the new folder must already exist.'),
     said('The picture could not be saved.'),
     said('The plan must be an object.'),
+    said('The plan was stopped before it was finished. Make it again.'),
     said('The radius must be a number of metres.'),
     said('The recording is empty.'),
     said('The recovery file did not read as one.'),

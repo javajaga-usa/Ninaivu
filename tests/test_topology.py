@@ -13,6 +13,7 @@ import json
 import os
 import shutil
 import sqlite3
+import sys
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -244,6 +245,85 @@ def test_a_proof_that_passes_marks_the_pairing_done(apart):
     assert record["proof"]["checked"] == 11
     with pytest.raises(topology.Refused):
         apart.primary.prove()                        # done is done
+
+
+def test_a_proof_cut_short_can_be_made_again(apart):
+    """A proof may read a whole disk, for hours. One stopped part-way, or cut
+    short by a restart, left the record as "proving" with nothing proving it,
+    and the proof was refused from then on ("Make a plan first")."""
+    planned(apart)
+    bring_in(apart)
+    # Stopped by somebody: the record goes back to planned.
+    real = topology.take_census
+
+    def stopped(cfg, **kwargs):
+        apart.primary._stop.set()
+        return real(cfg, **kwargs)
+    topology.take_census = stopped
+    try:
+        apart.primary.prove()
+        apart.primary._thread.join(timeout=60)
+    finally:
+        topology.take_census = real
+    status = apart.primary.status()
+    assert status.get("stopped") and status["record"]["state"] == "planned", status
+    assert status["can_prove"]
+    # Cut short by a restart: the file still says "proving", and nothing is.
+    data = topology.load_record(apart.mac.state_dir)
+    data["current"]["state"] = "proving"
+    topology._save_record(apart.mac.state_dir, data)
+    again = topo(apart.mac, through(apart.secondary))
+    assert again.status()["can_prove"]
+    again.prove()
+    record = finish(again)["record"]
+    assert record["state"] == "done" and record["proof"]["passed"] is True
+
+
+def test_a_plan_stopped_part_way_says_so(apart):
+    real = topology.plan_pair
+
+    def stopped(*args, **kwargs):
+        raise topology.Stopped()
+    topology.plan_pair = stopped
+    try:
+        apart.primary.plan(PAIR)
+        apart.primary._thread.join(timeout=60)
+    finally:
+        topology.plan_pair = real
+    record = apart.primary.status()["record"]
+    assert record["state"] == "failed" and "before" not in record
+    assert "stopped" in record["error"]
+    assert planned(apart)                                # and it can be made again
+
+
+@pytest.mark.skipif(not sys.platform.startswith("linux"),
+                    reason="only a Linux disk keeps a name that is not UTF-8")
+def test_a_name_that_is_not_utf8_does_not_end_the_census(apart):
+    """A Linux disk allows any bytes in a name. One file named in Latin-1 (an
+    old camera's, a zip from another system) used to end the whole census with
+    a UnicodeEncodeError, so nothing on that computer could be proved."""
+    odd = os.path.join(os.fsencode(apart.lin_lib / "2026/11/04"), b"caf\xe9.jpg")
+    with open(odd, "wb") as handle:
+        handle.write(b"\xff\xd8 named by an old camera")
+    apart.secondary.take_census()
+    finish(apart.secondary)
+    newest = topology.newest(apart.linux.state_dir)
+    names = [e["p"] for e in topology.entries(Path(apart.linux.state_dir) / newest["file"])]
+    assert [os.fsencode(n) for n in names if "caf" in n] == [b"Ninaivu Archive/2026/11/04/caf\xe9.jpg"]
+    assert "2026/11/04/linux-only.jpg" in " ".join(names), "names in their own script stay as they read"
+    # Lost afterwards, the proof names it instead of failing to write the list.
+    state = Path(apart.linux.state_dir)
+    before = state / newest["file"]
+    os.unlink(odd)
+    apart.secondary.take_census()
+    finish(apart.secondary)
+    after = state / topology.newest(state)["file"]
+    assert after != before
+    proof = topology.prove([before], [after], missing_to=state / "missing.jsonl.gz")
+    assert proof["passed"] is False and proof["missing_count"] == 1
+    assert os.fsencode(proof["missing"][0]["file"]).endswith(b"caf\xe9.jpg")
+    with gzip.open(state / "missing.jsonl.gz", "rt", encoding="utf-8") as handle:
+        assert os.fsencode(json.loads(handle.readline())["file"]).endswith(b"caf\xe9.jpg")
 
 
 def test_a_proof_that_fails_names_the_file(apart):
