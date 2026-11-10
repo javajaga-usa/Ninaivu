@@ -14,9 +14,11 @@ To start
      terminal). The Ninaivu Control Panel opens and starts Ninaivu, and its
      icon goes in the tray. Closing the window puts it there; Ninaivu keeps
      running. Opening ninaivu again brings the window back.
-  3. For one click from the application menu and the Desktop from then on:
+  3. The first time it opens, it puts three shortcuts on the Desktop:
+     Ninaivu (the family app), Ninaivu Console and Ninaivu Control Panel.
+     For the application menu as well:
         ./ninaivu --add-to-menu
-     (./ninaivu --remove-from-menu takes them out; after moving the folder,
+     (./ninaivu --remove-from-menu takes it out; after moving the folder,
      run --add-to-menu again).
 
   Without a desktop (a server, or over ssh):

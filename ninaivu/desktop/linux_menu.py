@@ -9,8 +9,12 @@ from inside the folder: GLib leaves ``%k`` (the entry's own path) empty, so it
 cannot find the folder it is in.
 
 This writes the same launcher with the folder's own paths into the
-application menu, ``~/.local/share/applications``, and onto the Desktop,
-marked as trusted so it opens with one click, with Ninaivu's icon:
+application menu, ``~/.local/share/applications``, with Ninaivu's icon. The
+Desktop is not its place since 4.0: the first time the Control Panel opens
+it puts Ninaivu, Ninaivu Console and Ninaivu Control Panel there, each with
+its own icon (:mod:`desktop.shortcuts`), and a fourth entry also named
+*Ninaivu* that opened the panel would be mistaken for the family app. The
+copy an earlier ``--add-to-menu`` left on the Desktop is taken away:
 
     ./ninaivu --add-to-menu              # the portable folder
     ./ninaivu --remove-from-menu
@@ -184,11 +188,10 @@ def add(root: Path, environ=None, out=print) -> int:
         target.write_text(text, encoding="utf-8")
         target.chmod(0o755)
         out(f"In the application menu: {target}")
-        if desktop is not None:
-            shortcut = desktop / f"{ident}.desktop"
-            shortcut.write_text(text, encoding="utf-8")
-            trust(shortcut)
-            out(f"On the Desktop: {shortcut}")
+        old = desktop / f"{ident}.desktop" if desktop is not None else None
+        if old is not None and old.exists():
+            old.unlink()            # the Desktop is the shortcuts' (the module's docstring)
+            out(f"Removed {old}: the Control Panel puts Ninaivu's shortcuts on the Desktop")
     if shutil.which("update-desktop-database"):
         try:
             subprocess.run(["update-desktop-database", str(menu)], capture_output=True, timeout=30)
@@ -215,7 +218,7 @@ def remove(environ=None, out=print) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     which = parser.add_mutually_exclusive_group(required=True)
-    which.add_argument("--add", action="store_true", help="put Ninaivu in the menu and on the Desktop")
+    which.add_argument("--add", action="store_true", help="put Ninaivu in the application menu")
     which.add_argument("--remove", action="store_true", help="take it out again")
     parser.add_argument("--root", type=Path, default=None,
                         help="the portable folder or checkout (default: the one this is in)")
