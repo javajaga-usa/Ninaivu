@@ -133,6 +133,7 @@ def test_the_update_window_opens_the_page_and_the_folder_only_when_asked(root, t
     buttons["Open the downloads page"].invoke()
     buttons["Show the folder"].invoke()
     assert opened == [updating.DOWNLOADS] and shown == [tmp_path]
+    assert updating.DOWNLOADS.endswith('/releases'), 'the page, not the address a lookup asks'
     buttons["Go back to 3.7.0…"].invoke()
     assert asked == [True]
 

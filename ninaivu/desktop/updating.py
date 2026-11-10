@@ -36,8 +36,12 @@ except ImportError:                     # a Python built without it: no windows 
 
 from . import theme
 
-#: Where the downloads are. Opened only when somebody presses the button.
-DOWNLOADS = "https://github.com/javajaga-usa/Ninaivu/releases/latest"
+#: Where the downloads are: the page of releases, in the person's browser,
+#: only when they press the button. Not GitHub's "latest release" address,
+#: which is the one a program asks to learn whether a newer version is out;
+#: Ninaivu never does, and tests/test_no_update_lookup.py keeps that address
+#: out of the program altogether.
+DOWNLOADS = "https://github.com/javajaga-usa/Ninaivu/releases"
 
 #: A step's state, and the mark it is drawn with.
 WAITING, DOING, DONE, FAILED, LATER = "waiting", "doing", "done", "failed", "later"
