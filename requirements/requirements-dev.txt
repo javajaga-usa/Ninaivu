@@ -10,4 +10,4 @@ ruff==0.17.4
 build>=1,<2
 wheel>=0.45,<1
 # The docs site (mkdocs.yml): `mkdocs serve`.
-mkdocs-material>=9.8.0,<10
+mkdocs-material>=9.8.1,<10
