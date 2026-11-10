@@ -587,7 +587,7 @@ and `GET /api/admin/mugil` for the state.
   authority too, and so does the code's proof when the code is typed on the
   Secondary. The Primary keeps it with the pairing and trusts it alone for the
   Secondary: a certificate it did not issue is refused. Both computers need
-  Ninaivu newer than 3.7.0 for this; on plain HTTP nothing changes.
+  Ninaivu 4.0 or newer for this; on plain HTTP nothing changes.
 - After pairing, every request between them is signed with the key. A request
   that is unsigned, signed by another key, more than five minutes old or a
   replay is refused.
