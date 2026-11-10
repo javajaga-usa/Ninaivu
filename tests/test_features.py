@@ -89,6 +89,8 @@ MOVED = {
     "ninaivu.api.api_young_faces": "ninaivu.features.young_faces.routes",
     "ninaivu.api.api_find_print": "ninaivu.features.find_print.routes",
     "ninaivu.api.api_voice_search": "ninaivu.features.voice_search.routes",
+    "ninaivu.api.api_scan_prints": "ninaivu.features.scan_prints.routes",
+    "ninaivu.api.api_ask_ninaivu": "ninaivu.features.ask_ninaivu.routes",
     "ninaivu.media.our_year": "ninaivu.features.our_year.media",
     "ninaivu.media.photo_talk": "ninaivu.features.photo_talk.media",
     "ninaivu.media.festivals": "ninaivu.features.festivals.media",
