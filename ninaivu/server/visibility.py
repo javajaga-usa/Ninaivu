@@ -35,37 +35,37 @@ class Viewer:
     """Everything that limits what one caller sees. Never read from a request
     parameter: a guest cannot see more by changing the query string."""
 
-    # -- three answers kept as they were, pending the maintainer ----------------
+    # -- three answers found while moving the routes to the gate -----------------
     #
-    # Each is an inconsistency found while moving the routes to the gate and
-    # kept, so that moving them changed nothing. Each is decided here and
-    # nowhere else: flipping one is a one-line change, pinned by a test in
+    # Each was an inconsistency kept at first, so that moving the routes
+    # changed nothing, and decided by the maintainer on 10 Nov 2026. Each is
+    # decided here and nowhere else, pinned by a test in
     # tests/test_visibility_gate.py.
 
-    #: The occasions list counts a live photograph's clip and a RAW+JPEG
-    #: pair's RAW twin as items of their own (``db_albums.list_occasions``),
-    #: while every other list — the gallery, albums, on this day — shows and
-    #: counts a pair once. False would count each pair once there too.
-    OCCASIONS_COUNT_BOTH_HALVES = True
+    #: Decided: count a pair once. The occasions list counted a live
+    #: photograph's clip and a RAW+JPEG pair's RAW twin as items of their own
+    #: (``db_albums.list_occasions``), while every other list — the gallery,
+    #: albums, on this day — shows and counts a pair once. Now it does too,
+    #: so an occasion's number is what opening it shows.
+    OCCASIONS_COUNT_BOTH_HALVES = False
 
-    #: A profile whose library folder is gone has no folders at all, and the
-    #: picture search's candidate vectors (``embeddings.visible_embedding_ids``)
-    #: then are every vector in the library: "no folders" reads there as an
-    #: internal caller's "no limit", whoever is asking and whatever their
-    #: ceiling. Nothing reaches them — every id is narrowed to what they may
-    #: see afterwards, which is nothing — but the search is ranked over
-    #: everything. False would give such a profile no candidates.
-    NO_FOLDER_RANKS_EVERY_VECTOR = True
+    #: Decided: no folders, no candidates. A profile whose library folder is
+    #: gone has no folders at all, and the picture search's candidate vectors
+    #: (``embeddings.visible_embedding_ids``) were then every vector in the
+    #: library: "no folders" read there as an internal caller's "no limit".
+    #: Nothing reached them — every id was narrowed afterwards to what they
+    #: may see, which is nothing — but the search was ranked over everything.
+    NO_FOLDER_RANKS_EVERY_VECTOR = False
 
-    #: The stack route (api_stacks) leaves out an item in the bin for the
-    #: administrator too, who may open that same item by id and list the bin
-    #: everywhere else. False would show the administrator their stacks' binned
-    #: frames as the gallery's bin view does.
+    #: Decided: kept. The stack route (api_stacks) leaves out an item in the
+    #: bin for the administrator too, who may open that same item by id and
+    #: list the bin everywhere else: a stack is for choosing the best frame,
+    #: and the bin is where binned frames are looked at.
     STACK_HIDES_THE_BIN_FROM_ADMIN = True
 
     def occasion_halves_sql(self, alias: str = "a") -> str:
         """What the occasions list adds to its WHERE for a pair's other half:
-        nothing, while :attr:`OCCASIONS_COUNT_BOTH_HALVES` holds."""
+        it is left out, unless :attr:`OCCASIONS_COUNT_BOTH_HALVES`."""
         if self.OCCASIONS_COUNT_BOTH_HALVES:
             return ""
         dot = f"{alias}." if alias else ""
