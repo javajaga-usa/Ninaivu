@@ -263,11 +263,11 @@ def write_windows(made, run: Callable = subprocess.run) -> None:
 
 def make_icon(face: Face, folder: Path, platform: str | None = None) -> Path:
     """The face's icon as this system wants it, in *folder*."""
-    from PIL import Image
     system = _system(platform)
-    folder.mkdir(parents=True, exist_ok=True)
     if system == "linux":
-        return face.icon
+        return face.icon                 # the PNG itself, by its path
+    from PIL import Image
+    folder.mkdir(parents=True, exist_ok=True)
     image = Image.open(face.icon).convert("RGBA")
     if system == "darwin":
         target = folder / f"{face.key}.icns"

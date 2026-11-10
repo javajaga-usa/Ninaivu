@@ -40,7 +40,7 @@ def test_the_menu_entry_opens_the_folder_it_was_made_for(tmp_path, name, monkeyp
     monkeypatch.delenv("XDG_DATA_HOME", raising=False)
     assert linux_menu.add(folder, out=lambda _: None) == 0
     entry = home / ".local" / "share" / "applications" / f"{linux_menu.PORTABLE_ID}.desktop"
-    assert (home / "Desktop" / entry.name).read_text() == entry.read_text()
+    assert list((home / "Desktop").iterdir()) == [], "the Desktop is the shortcuts' (desktop/shortcuts.py)"
     assert (home / ".local/share/icons/hicolor/512x512/apps/ninaivu.png").is_file()
     subprocess.run(["gio", "launch", str(entry)], check=True, timeout=30, cwd="/")
     for _ in range(50):
@@ -97,6 +97,25 @@ def test_the_control_panel_script_sits_beside_the_windows_one():
     assert (ROOT / "launcher" / "Start - Ninaivu Control Panel.vbs").is_file()
     assert PANEL.read_bytes().startswith(b"#!/bin/sh\n"), "LF line endings, or sh cannot run it"
     assert "ninaivu_control.pyw" in PANEL.read_text()
+
+
+def test_the_copy_an_earlier_add_left_on_the_desktop_is_taken_away(tmp_path, monkeypatch):
+    """Up to 4.0's betas --add-to-menu put "Ninaivu" (the Control Panel) on the
+    Desktop too; beside the family app's shortcut of the same name it would
+    be the wrong one half the time."""
+    home = tmp_path / "home"
+    (home / "Desktop").mkdir(parents=True)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("PATH", str(tmp_path / "none"))      # no xdg-user-dir: ~/Desktop
+    monkeypatch.delenv("XDG_DATA_HOME", raising=False)
+    old = home / "Desktop" / f"{linux_menu.PORTABLE_ID}.desktop"
+    old.write_text("[Desktop Entry]\nName=Ninaivu\n")
+    theirs = home / "Desktop" / "local.ninaivu.family.desktop"
+    theirs.write_text("[Desktop Entry]\nName=Ninaivu\nX-Ninaivu-Shortcut=family\n")
+    said = []
+    assert linux_menu.add(_portable(tmp_path / "Ninaivu", tmp_path / "m"), out=said.append) == 0
+    assert not old.exists() and theirs.exists()
+    assert any("Removed" in line for line in said)
 
 
 def test_removing_takes_out_only_its_own(tmp_path, monkeypatch):
