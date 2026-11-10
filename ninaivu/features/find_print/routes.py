@@ -6,7 +6,7 @@ answers 404 as if it did not exist.
 ``POST /api/prints/find`` takes one photograph (``photo``) of a framed print
 or a page of an album and answers with the library photographs it may be a
 copy of, best first, each ``sure`` or only likely. The photograph is held as
-a batch of Scan old prints (api_scan_prints.py) and the answer carries that
+a batch of Scan old prints (features/scan_prints) and the answer carries that
 batch, so when nothing is found the same screen takes the print in with
 ``POST /api/prints/save``: an administrator's straight into the library, a
 family member's into the review queue, as any scan of theirs.
@@ -34,7 +34,7 @@ from ...server.auth import current_user, require_family
 from ...storage import db
 from ...words import Said
 from ...api.api import _cfg, _conn, _engine, _roots, _thumb_version, _viewer, bp
-from ...api.api_scan_prints import _capabilities, _where, hold
+from ..scan_prints.routes import _capabilities, _where, hold
 
 log = logging.getLogger(__name__)
 

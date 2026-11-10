@@ -6,5 +6,5 @@
   says what can be said of them plainly, and hands the same facts to the
   on-device writing model (runtime/llm.py) to answer in words.
 
-The route is api/api_ask_ninaivu.py; the setting is ``ask_ninaivu``.
+The route is features/ask_ninaivu/routes.py; the setting is ``ask_ninaivu``.
 """

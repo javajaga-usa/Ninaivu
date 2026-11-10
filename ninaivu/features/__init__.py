@@ -216,6 +216,7 @@ def _manifests() -> tuple[Feature, ...]:
     from . import films, find_print, frame, handover, letters, life_story  # noqa: PLC0415
     from . import our_year, photo_talk, screening, smart, stacks, stories  # noqa: PLC0415
     from . import then_and_now, video_moments, voice_search, young_faces  # noqa: PLC0415
+    from . import ask_ninaivu, scan_prints  # noqa: PLC0415
     return (
         smart.MANIFEST,
         ask_family.MANIFEST,
@@ -239,9 +240,8 @@ def _manifests() -> tuple[Feature, ...]:
         _here("journal", "The change journal", routes=None,
               tables=Tables("ninaivu.storage.journal", "create"), switch="change_journal"),
         # Those with no tables, which were not features before 4.0.
-        _here("scan_prints", "Scan old prints", routes="ninaivu.api.api_scan_prints", tables=None),
-        _here("ask_ninaivu", "Ask Ninaivu", routes="ninaivu.api.api_ask_ninaivu", tables=None,
-              switch="ask_ninaivu", needs="writing"),
+        scan_prints.MANIFEST,
+        ask_ninaivu.MANIFEST,
         our_year.MANIFEST,
         photo_talk.MANIFEST,
         festivals.MANIFEST,
