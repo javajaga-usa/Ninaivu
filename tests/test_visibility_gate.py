@@ -242,11 +242,11 @@ def test_the_routes_helpers_are_the_gates(app, house, restricted):
                         api._guard(row)
 
 
-# -- three answers kept as they were (Viewer's switches), pinned ----------------
+# -- three answers decided on 10 Nov 2026 (Viewer's switches), pinned ------------
 
-def test_occasions_count_a_pairs_other_half_today(app, house, monkeypatch):
-    """OCCASIONS_COUNT_BOTH_HALVES: a live photograph's clip is counted in its
-    occasion, where every other list counts the pair once."""
+def test_occasions_count_a_pair_once(app, house, monkeypatch):
+    """OCCASIONS_COUNT_BOTH_HALVES is off: a live photograph's clip is not
+    counted in its occasion, as every other list counts the pair once."""
     conn, ids, members = house
     root = conn.execute("SELECT root FROM assets LIMIT 1").fetchone()[0]
     conn.execute("INSERT INTO occasions(id, root, key, title, started_at, ended_at, count) "
@@ -256,17 +256,18 @@ def test_occasions_count_a_pairs_other_half_today(app, house, monkeypatch):
     conn.execute("UPDATE assets SET live_clip=1 WHERE id=?", (beach[1],))
     conn.commit()
     viewer = viewer_for(app, members["admin"])
+    counted = {o["id"]: o["count"] for o in db.list_occasions(conn, gate=viewer)}
+    assert counted[77] == 2
+    # What it was before the decision.
+    monkeypatch.setattr(visibility.Viewer, "OCCASIONS_COUNT_BOTH_HALVES", True)
     assert viewer.occasion_halves_sql("a") == ""
     counted = {o["id"]: o["count"] for o in db.list_occasions(conn, gate=viewer)}
     assert counted[77] == 3
-    monkeypatch.setattr(visibility.Viewer, "OCCASIONS_COUNT_BOTH_HALVES", False)
-    counted = {o["id"]: o["count"] for o in db.list_occasions(conn, gate=viewer)}
-    assert counted[77] == 2
 
 
-def test_a_profile_whose_folder_is_gone_ranks_every_vector_today(app, house, monkeypatch):
-    """NO_FOLDER_RANKS_EVERY_VECTOR: with no folders, the picture search's
-    candidates are every vector, whoever asks; one with folders gets its own."""
+def test_a_profile_whose_folder_is_gone_has_no_candidates(app, house, monkeypatch):
+    """NO_FOLDER_RANKS_EVERY_VECTOR is off: with no folders, the picture
+    search has no candidates to rank; one with folders gets its own."""
     conn, ids, members = house
     for rel in ("shared/holiday/beach0.jpg", "2023/06/11/shot1.jpg", "2023/07/11/shot2.jpg"):
         conn.execute("INSERT INTO embeddings(asset_id, model, dim, vector) VALUES (?, 't', 2, ?)",
@@ -274,20 +275,21 @@ def test_a_profile_whose_folder_is_gone_ranks_every_vector_today(app, house, mon
     conn.commit()
     every = sorted(r[0] for r in conn.execute("SELECT asset_id FROM embeddings"))
     gone = viewer_for(app, members["gone"])
-    assert gone.ranks_every_vector()
-    assert sorted(db.visible_embedding_ids(conn, gate=gone)) == every
-    # As before the gate: no roots meant no limit at all.
-    assert sorted(db.visible_embedding_ids(conn, gone.roots, gone.max_visibility,
-                                           gone.scope)) == every
+    assert not gone.ranks_every_vector()
+    assert db.visible_embedding_ids(conn, gate=gone) == []
     guest = viewer_for(app, members["guest"])
     assert db.visible_embedding_ids(conn, gate=guest) == [ids["shared/holiday/beach0.jpg"]]
-    monkeypatch.setattr(visibility.Viewer, "NO_FOLDER_RANKS_EVERY_VECTOR", False)
-    assert db.visible_embedding_ids(conn, gate=gone) == []
+    # An internal caller without a gate still means "no limit" by no roots.
+    assert sorted(db.visible_embedding_ids(conn, gone.roots, gone.max_visibility,
+                                           gone.scope)) == every
+    # What it was before the decision.
+    monkeypatch.setattr(visibility.Viewer, "NO_FOLDER_RANKS_EVERY_VECTOR", True)
+    assert sorted(db.visible_embedding_ids(conn, gate=gone)) == every
 
 
-def test_the_stack_route_hides_the_bin_from_the_administrator_today(app, house, monkeypatch):
-    """STACK_HIDES_THE_BIN_FROM_ADMIN: the stack route leaves a binned frame
-    out for the administrator too, who may open it by id."""
+def test_the_stack_route_hides_the_bin_from_the_administrator(app, house, monkeypatch):
+    """STACK_HIDES_THE_BIN_FROM_ADMIN, kept: the stack route leaves a binned
+    frame out for the administrator too, who may open it by id."""
     from ninaivu.api import api_stacks
     conn, ids, members = house
     binned = ids["2023/09/09/shot4.jpg"]
