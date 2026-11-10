@@ -20,7 +20,9 @@ On a Mac each is a small app of its own (a ``.app`` folder holding a
 one-line script and the icon), on Windows a ``.lnk``, on Linux a trusted
 ``.desktop`` file.
 
-**Only once.** A record in the run-time folder says what was placed. A
+**Only once.** On a Mac the system asks whether Ninaivu may use the Desktop
+folder; told no, nothing is placed and it is not tried again at every start
+(``--add`` tries again). A record in the run-time folder says what was placed. A
 shortcut the person deletes is not put back; one still there is pointed at
 this copy of Ninaivu each time the panel opens, so a newer portable copy
 that brought the library across (the record comes with it) takes the
@@ -344,18 +346,34 @@ def settle(control: Path, *, environ=None, platform: str | None = None, desktop:
         wanted.append((target, face, opens))
     written = []
     windows = []
-    for target, face, opens in wanted:
-        icon = make_icon(face, icons, platform)
-        if system == "darwin":
-            write_mac(target, face, prog, icon)
-        elif system == "linux":
-            write_linux(target, face, prog, icon)
-        else:
-            windows.append((target, face, prog, icon))
-        placed[str(target)] = opens
-        written.append(face.name)
-    write_windows(windows, run)
-    _write_record(control, {"done": True, "placed": placed})
+    done = bool(record.get("done"))
+    try:
+        for target, face, opens in wanted:
+            icon = make_icon(face, icons, platform)
+            if system == "darwin":
+                write_mac(target, face, prog, icon)
+            elif system == "linux":
+                write_linux(target, face, prog, icon)
+            else:
+                windows.append((target, face, prog, icon))
+            placed[str(target)] = opens
+            written.append(face.name)
+        write_windows(windows, run)
+        done = True
+    except PermissionError:
+        # The Desktop may not be written to: on a Mac, the person was asked
+        # and said no. That is an answer; it is not asked for at every start.
+        done = True
+        raise
+    except BaseException:
+        if windows:                       # none of the .lnk files is known to be there
+            for target, _face, _prog, _icon in windows:
+                placed.pop(str(target), None)
+        raise
+    finally:
+        # Also when a write failed part-way: what was placed is ours, and is
+        # kept right from now on; the rest is tried at the next start.
+        _write_record(control, {"done": done, "placed": placed})
     return written
 
 
@@ -383,10 +401,15 @@ def settle_quietly(control: Path) -> list[str]:
     turns it off (the release checks, which open the panel on build machines)."""
     if os.environ.get("NINAIVU_DESKTOP_SHORTCUTS", "").strip() == "0":
         return []
+    import logging
     try:
         return settle(control)
+    except PermissionError as exc:
+        logging.getLogger(__name__).info(
+            "Ninaivu may not write to the Desktop, so its shortcuts are not there (%s). "
+            "After allowing it: python -m ninaivu.desktop.shortcuts --add", exc)
+        return []
     except Exception:                                      # noqa: BLE001 - logged, the panel opens
-        import logging
         logging.getLogger(__name__).exception("could not put Ninaivu's shortcuts on the Desktop")
         return []
 
