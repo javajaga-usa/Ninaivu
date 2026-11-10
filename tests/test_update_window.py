@@ -12,11 +12,13 @@ from ninaivu.desktop import updating
 
 
 def test_the_three_steps_name_this_folder_and_say_nothing_is_looked_up():
-    steps = updating.update_steps("3.7.0", Path("/Users/jaga/Downloads"))
+    beside = Path("/Users/jaga/Downloads")
+    steps = updating.update_steps("3.7.0", beside)
     assert [s["title"] for s in steps] == [
         "Download the newer version", "Unpack it beside this folder", "Open the newer Ninaivu"]
     assert "never looks for updates by itself" in steps[0]["detail"]
-    assert "/Users/jaga/Downloads" in steps[1]["detail"] and "same drive" in steps[1]["detail"]
+    # As this system writes the folder (backslashes on Windows).
+    assert str(beside) in steps[1]["detail"] and "same drive" in steps[1]["detail"]
 
 
 def test_what_comes_says_where_and_whether_it_moves(tmp_path):
