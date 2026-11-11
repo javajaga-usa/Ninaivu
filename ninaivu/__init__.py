@@ -668,6 +668,17 @@ class Services:
         except OSError:
             pass
 
+    def _clear_display_copies(self) -> None:
+        """The smaller copies made up to 4.0.0 go once every original is on
+        this computer again (mugil/free.py). Never stops the start."""
+        try:
+            from .mugil import free                             # noqa: PLC0415
+            from .storage import db                             # noqa: PLC0415
+            free.clear_display_copies(self.cfg.state_dir, db.connect(self.cfg.db_path))
+        except Exception:                                       # noqa: BLE001
+            logging.getLogger(__name__).debug("the display copies were left as they are",
+                                              exc_info=True)
+
     def _wait_for_a_primary(self) -> None:
         """Two computers: a new Secondary not paired yet waits half an hour
         for its Primary from each start, and answers the Primary's question.
@@ -741,7 +752,8 @@ class Services:
         self.index_copy.start()
         self.mirror.keep()
         self.mugil_courier.keep()
-        self.mugil_display.keep()
+        self.mugil_display.keep()        # makes nothing since 4.0.1 (mugil/display.py)
+        self._clear_display_copies()
         self.mugil_handover.keep()
         self.video_trial.keep()
         self._wait_for_a_primary()
@@ -1639,7 +1651,7 @@ class Services:
                             ("mugil_display", "making display copies"),
                             ("video_trial", "the smaller-videos trial"),
                             ("mugil_handover", "sending the family app's copy"),
-                            ("mugil_free", "freeing space"),
+                            ("mugil_free", "bringing originals back"),
                             ("mugil_rebuild", "rebuilding the library"),
                             ("mugil_bring_in", "bringing in the Secondary's files"),
                             ("mugil_survey", "looking for the Secondary's own files"),

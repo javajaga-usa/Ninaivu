@@ -129,28 +129,12 @@ export class TwoComputers {
         method: 'POST', body: { role: 'primary', family_copy: event.target.checked },
       }),
       i18n.t('Saved'));
-    $('#tc-free-on').onchange = (event) => this.act(
-      () => json('/api/admin/mugil/role', {
-        method: 'POST', body: { role: 'primary', free_space: event.target.checked },
-      }),
-      i18n.t('Saved'));
-    $('#tc-free-go').onclick = () => {
-      const ready = this.plan?.ready || {};
-      if (!window.confirm(i18n.t('Let {files} originals ({size}) go from this computer? Each is read again here and on the Secondary first. Afterwards they are on the Secondary and off site only, and are sent for when somebody opens one.', {
-        files: count(ready.files), size: size(ready.bytes) }))) return;
-      this.act(() => json('/api/admin/mugil/free', { method: 'POST', body: { confirm: true } })
-        .then(() => json('/api/admin/mugil')), i18n.t('Freeing space'));
-    };
     $('#tc-free-stop').onclick = () => this.act(
       () => json('/api/admin/mugil/free/stop', { method: 'POST' }).then(() => json('/api/admin/mugil')));
     $('#tc-bring-back').onclick = () => {
       if (!window.confirm(i18n.t('Bring every original back from the Secondary? This computer needs room for them.'))) return;
       this.act(() => json('/api/admin/mugil/bring-back', { method: 'POST', body: { all: true } })
-        .then((answer) => {
-          this.toast(i18n.t('{back} brought back; {missed} could not be.', {
-            back: count(answer.back), missed: count(answer.missed) }), Boolean(answer.missed));
-          return json('/api/admin/mugil');
-        }));
+        .then(() => json('/api/admin/mugil')), i18n.t('Bringing the originals back'));
     };
     $('#tc-copies-go').onclick = () => {
       const spare = this.copies || {};
@@ -275,40 +259,15 @@ export class TwoComputers {
     else $('#tc-checklist-row').hidden = true;
     if (this.visible && this.status) await this.safe();
     if (this.visible && this.status?.paired && this.status.role === 'primary') {
-      await this.optimize();
       await this.exactCopies();
       await this.rebuilding();
       await this.onlyOnSecondary();
     } else {
-      $('#tc-optimize').hidden = true; $('#tc-free').hidden = true; $('#tc-rebuild').hidden = true;
+      $('#tc-free').hidden = true; $('#tc-rebuild').hidden = true;
       $('#tc-only').hidden = true;
       $('#tc-copies').hidden = true;
     }
     this.schedule();
-  }
-
-  /** The Primary: what Optimize Mac storage could free, read only. */
-  async optimize() {
-    const now = Date.now();
-    if (this.optimizeAt && now - this.optimizeAt < 300000) return;
-    this.optimizeAt = now;
-    let plan;
-    try {
-      plan = await json('/api/admin/mugil/optimize');
-    } catch {
-      return;
-    }
-    this.plan = plan;
-    const staying = plan.staying || {};
-    const kept = (key) => staying[key] || { files: 0, bytes: 0 };
-    const waiting = ['not_on_secondary', 'not_off_site', 'held', 'no_display_copy']
-      .reduce((sum, key) => sum + kept(key).bytes, 0);
-    const line = $('#tc-optimize');
-    line.hidden = false;
-    line.textContent = i18n.t('Optimize Mac storage: {ready} ({files} originals) could live on the Secondary only. {waiting} more once they are on the Secondary and off site for {days} days. {inuse} stay here in full: the last year and favourites. Nothing is freed until you say so.', {
-      ready: size(plan.ready?.bytes), files: count(plan.ready?.files), waiting: size(waiting),
-      days: plan.hold_days, inuse: size(kept('in_use').bytes + kept('favourite').bytes),
-    });
   }
 
   /** The Mugil checklist, read from what is set up (mugil/checklist.py), once a minute. */
@@ -389,9 +348,6 @@ export class TwoComputers {
           : done ? (item.sent_by === 'secondary' ? i18n.t('Sent by the Secondary, which is always on.')
             : i18n.t('Sent by this computer.'))
             : i18n.t('Set up the off-site copy (Backblaze B2 or another).')];
-      case 'display_copies':
-        return [i18n.t('Display copies are made'),
-          i18n.t('{made} made, {owed} still to make.', { made: count(item.made), owed: count(item.owed) })];
       case 'catchup':
         return [i18n.t('The daily catch-up is on'),
           done ? '' : i18n.t('Turn it on under Advanced settings, so the heavy work runs at night.')];
@@ -730,42 +686,35 @@ export class TwoComputers {
     } else if (status.family_copy && handover.error) {
       lines.push(i18n.t('The family app\'s copy could not be sent: {reason}', { reason: i18n.fromServer(handover.error) }));
     }
-    const display = status.display || {};
-    if (display.made || display.owed) {
-      lines.push(i18n.t('Display copies: {made} made, {size} in place of {original}; {owed} still to make.', {
-        made: count(display.made), size: size(display.bytes),
-        original: size(display.original_bytes), owed: count(display.owed),
-      }));
-    }
     $('#tc-progress').textContent = lines.join(' ');
     this.renderFreeing(status);
   }
 
-  /** The Primary: freeing space, off until it is turned on (mugil/free.py). */
+  /** The Primary: originals let go before 4.0.1, and bringing them back (mugil/free.py). */
   renderFreeing(status) {
     const block = $('#tc-free');
-    if (status.role !== 'primary' || !status.paired) { block.hidden = true; return; }
-    block.hidden = false;
-    const freeing = status.freeing || {};
-    const gone = freeing.let_go || {};
-    $('#tc-free-on').checked = Boolean(status.free_space);
-    $('#tc-free-actions').hidden = !status.free_space && !gone.files;
-    $('#tc-free-go').hidden = !status.free_space || Boolean(freeing.running);
-    $('#tc-free-stop').hidden = !freeing.running;
-    $('#tc-bring-back').hidden = !gone.files || Boolean(freeing.running);
+    const work = status.freeing || {};
+    const gone = work.let_go || {};
+    const shown = status.role === 'primary' && status.paired
+      && Boolean(gone.files || work.running || work.started);
+    block.hidden = !shown;
+    if (!shown) return;
+    $('#tc-free-stop').hidden = !work.running;
+    $('#tc-bring-back').hidden = !gone.files || Boolean(work.running);
     const lines = [];
     if (gone.files) {
-      lines.push(i18n.t('{files} originals ({size}) are on the Secondary only.', {
+      lines.push(i18n.t('{files} originals ({size}) are on the Secondary only. This computer no longer lets originals go or shows smaller copies: bring them back to see them here as they are.', {
         files: count(gone.files), size: size(gone.bytes) }));
+    } else {
+      lines.push(i18n.t('Every original is on this computer again.'));
     }
-    if (freeing.running && freeing.current) lines.push(i18n.t('Now: {path}', { path: freeing.current }));
-    if (freeing.waiting) lines.push(i18n.t('Waiting: {reason}', { reason: i18n.fromServer(freeing.waiting) }));
-    if (freeing.started) {
-      const kept = Object.values(freeing.kept || {}).reduce((a, b) => a + b, 0);
-      lines.push(i18n.t('This time: {freed} let go ({size}); {kept} kept because a check did not pass.', {
-        freed: count(freeing.freed), size: size(freeing.freed_bytes), kept: count(kept) }));
+    if (work.running && work.current) lines.push(i18n.t('Now: {path}', { path: work.current }));
+    if (work.waiting) lines.push(i18n.t('Waiting: {reason}', { reason: i18n.fromServer(work.waiting) }));
+    if (work.started) {
+      lines.push(i18n.t('This time: {back} brought back ({size}); {missed} could not be.', {
+        back: count(work.back), size: size(work.back_bytes), missed: count(work.missed) }));
     }
-    if (freeing.error) lines.push(i18n.fromServer(freeing.error));
+    if (work.error) lines.push(i18n.fromServer(work.error));
     $('#tc-free-says').textContent = lines.join(' ');
   }
 

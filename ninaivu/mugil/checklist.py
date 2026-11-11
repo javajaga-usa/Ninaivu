@@ -143,12 +143,6 @@ def primary(cfg, conn, services, *, now: float | None = None,
                            sent_by="secondary", last_run=theirs.get("last_run") or None))
     else:
         items.append(_item("offsite", TODO))
-    maker = getattr(services, "mugil_display", None)
-    if maker is not None:
-        shown = maker.status()
-        made, owed = int(shown.get("made") or 0), int(shown.get("owed") or 0)
-        items.append(_item("display_copies", DONE if made and not owed else TODO,
-                           made=made, owed=owed))
     catchup = bool(getattr(cfg, "daily_catchup", False))
     items.append(_item("catchup", DONE if catchup else TODO))
     told = wake.told(cfg.state_dir)

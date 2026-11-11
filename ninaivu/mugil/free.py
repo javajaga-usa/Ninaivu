@@ -1,27 +1,22 @@
-"""On the Primary: free space by letting originals go that the Secondary keeps.
+"""On the Primary: bringing back the originals that were let go.
 
-This is the one step of the two-computer design that removes a file from the
-Mac, so it is off until the household turns it on (``mugil_free_space``) and
-then runs only when somebody presses Free. The plan (optimize.py) says which
-originals could go; before each one goes, every condition is checked again,
-on the file itself, on both computers:
+Up to 4.0.0 the Primary could free space by letting originals go that the
+Secondary and the off-site copy both kept, and show them from a smaller
+display copy (display.py). The household found those copies poor to look
+at, and from 4.0.1 **nothing is let go and no smaller copy is made**: the
+Primary keeps, and shows, its originals.
 
-* the original here still has the size, time and fingerprint the Secondary
-  confirmed (it is read again, end to end);
-* the Secondary reads its kept copy again, end to end, and it is the same;
-* the off-site copy holds it at that size and time;
-* it has a display copy here, so it can still be seen;
-* it has been on the Secondary for :data:`~optimize.HOLD_DAYS` days, is not
-  from the last :data:`~optimize.IN_USE_DAYS` days and is nobody's favourite.
+What is left here is the way back for a library that used it. Each original
+let go is written down in the index (``mugil_let_go``); **Bring every
+original back** copies each one from the Secondary to the place it had,
+with its own modified time, checked against its fingerprint, and forgets
+that it was let go. It runs as one piece of work with its progress on the
+Two computers page, stops when the disk has too little room left, and can
+be started again. Until an original is back it is still found: opened, it
+is sent for from the Secondary (fetch.py).
 
-Only then is it written down as let go (``mugil_let_go`` in the index) and
-removed. The library keeps it: its thumbnail, display copy, names, albums and
-everything else stay, and the original is sent for from the Secondary when
-somebody needs it (fetch.py). A rescan does not take a let-go file for a
-missing one.
-
-Bring back puts an original back where it was, from the Secondary, checked
-against its fingerprint and with its own time, and forgets that it was let go.
+When none is left, the display copies have nothing to stand in for and
+their folder is removed (:func:`clear_display_copies`).
 """
 
 from __future__ import annotations
@@ -37,19 +32,23 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
-from . import PRIMARY, pairing, role
-from .courier import TIMEOUT, Partner, PartnerError
+from . import pairing
+from .courier import Partner, PartnerError
+from ..words import said
 from .hold import hasher
 
 log = logging.getLogger(__name__)
 
-#: Why an original that the plan called ready was kept after all.
-KEPT_BECAUSE = ("changed_here", "not_same_there", "secondary_away", "no_display_copy",
-                "could_not_remove")
+#: Said when somebody still asks for it.
+REMOVED = ("Freeing space was removed in 4.0.1: this computer keeps its originals. "
+           "Bring back the ones that were let go.")
+#: Bringing back stops when the disk would have less than this left.
+KEEP_FREE_BYTES = 2 * 1024 ** 3
 
 
 def wanted(cfg) -> bool:
-    return role(cfg) == PRIMARY and bool(getattr(cfg, "mugil_free_space", False))
+    """Whether originals may be let go: never, since 4.0.1."""
+    return False
 
 
 def fingerprint(path: Path, algo: str) -> str | None:
@@ -87,7 +86,9 @@ def _library(state_dir: str | Path, root: str) -> str | None:
 
 
 class Freeing:
-    """Lets the ready originals go, one at a time, when somebody presses Free."""
+    """Brings every let-go original back, one at a time, as one piece of work.
+
+    (Named for what it was: until 4.0.0 it let originals go.)"""
 
     def __init__(self, cfg, connect_db: Callable[[], sqlite3.Connection], *,
                  partner: Callable[..., Partner] = Partner,
@@ -108,20 +109,22 @@ class Freeing:
     def status(self) -> dict[str, Any]:
         # The index's connection is this thread's own (db.connect): not closed here.
         gone = summary(self.connect_db())
-        return {"on": bool(getattr(self.cfg, "mugil_free_space", False)),
-                "running": self.running, "let_go": gone, **self.live}
+        return {"on": False, "running": self.running, "let_go": gone, **self.live}
 
     def start(self) -> dict[str, Any]:
+        """Letting originals go: removed."""
+        raise PartnerError(REMOVED, 410)
+
+    def bring_all(self) -> dict[str, Any]:
+        """Start bringing every let-go original back; the status."""
         with self._lock:
-            if not wanted(self.cfg):
-                raise PartnerError("Freeing space is off. Turn it on first.", 409)
             if pairing.load(self.cfg.state_dir) is None or not self.cfg.mugil_partner_url:
                 raise PartnerError("This computer is not paired with a Secondary.", 409)
             if not self.running:
                 self._stop.clear()
-                self.live = {"started": time.time(), "freed": 0, "freed_bytes": 0,
-                             "kept": {k: 0 for k in KEPT_BECAUSE}, "error": ""}
-                self._thread = threading.Thread(target=self._run_logged, name="mugil-free",
+                self.live = {"started": time.time(), "back": 0, "back_bytes": 0, "missed": 0,
+                             "error": ""}
+                self._thread = threading.Thread(target=self._run_logged, name="mugil-bring-back",
                                                 daemon=True)
                 self._thread.start()
         return self.status()
@@ -136,46 +139,38 @@ class Freeing:
         try:
             self.run()
         except Exception as exc:                                    # noqa: BLE001 - said in status
-            log.exception("Freeing space stopped")
+            log.exception("Bringing the originals back stopped")
             self.live["error"] = str(exc)
         finally:
             self.live["finished"] = time.time()
             self.live.pop("current", None)
 
-    def run(self, *, limit: int | None = None, now: float | None = None) -> dict[str, Any]:
-        """Let every ready original go that passes its checks; the totals."""
-        from . import optimize                                       # noqa: PLC0415
+    def run(self) -> dict[str, Any]:
+        """Bring back every original that can be; the totals."""
         if not self.live:
-            self.live = {"freed": 0, "freed_bytes": 0, "kept": {k: 0 for k in KEPT_BECAUSE},
-                         "error": ""}
-        if not wanted(self.cfg):
-            raise PartnerError("Freeing space is off. Turn it on first.", 409)
-        pair = pairing.load(self.cfg.state_dir) or {}
-        partner = self.partner(self.cfg.mugil_partner_url, pair.get("key"), timeout=TIMEOUT)
+            self.live = {"back": 0, "back_bytes": 0, "missed": 0, "error": ""}
         conn = self.connect_db()
         try:
-            ready = optimize.ready(conn, self.cfg.state_dir, list(self.cfg.roots), now=now,
-                                   limit=limit)
-            self.live["ready"] = len(ready)
-            libraries: dict[str, str | None] = {}
-            for item in ready:
-                # Turned off part-way (the switch, or this computer's part):
-                # nothing more goes.
-                if self._stop.is_set() or not wanted(self.cfg):
+            waiting = let_go(conn)
+            self.live["total"] = len(waiting)
+            for item in waiting:
+                if self._stop.is_set():
                     break
                 self._pause()
-                root = item["root"]
-                if root not in libraries:
-                    libraries[root] = _library(self.cfg.state_dir, root)
-                why = self._one(conn, partner, libraries[root], item)
-                if why is None:
-                    self.live["freed"] += 1
-                    self.live["freed_bytes"] += int(item["size"] or 0)
+                root, rel, size = item["root"], item["rel_path"], int(item["size"] or 0)
+                self.live["current"] = rel
+                if not _room_for(Path(root), size):
+                    self.live["error"] = said(
+                        "This computer's disk is nearly full: the rest of the originals stay "
+                        "on the Secondary until there is room.")
+                    break
+                if bring_back(self.cfg, conn, root, rel):
+                    self.live["back"] += 1
+                    self.live["back_bytes"] += size
                 else:
-                    self.live["kept"][why] += 1
-                    if why == "secondary_away":
-                        self.live["error"] = "The Secondary did not answer; nothing more was let go."
-                        break
+                    self.live["missed"] += 1
+            if summary(conn)["files"] == 0:
+                clear_display_copies(self.cfg.state_dir, conn)
         finally:
             if threading.current_thread() is self._thread:
                 conn.close()                      # this run's own thread is ending
@@ -191,53 +186,33 @@ class Freeing:
             if self._stop.wait(30):
                 return
 
-    def _one(self, conn: sqlite3.Connection, partner: Partner, library: str | None,
-             item: dict[str, Any]) -> str | None:
-        """Let *item* go when every check passes; None, or why it stayed."""
-        from . import display                                        # noqa: PLC0415
-        root, rel = item["root"], item["rel_path"]
-        path = Path(root) / rel
-        self.live["current"] = rel
-        algo, digest, size = item["algo"], item["digest"], int(item["size"] or 0)
-        if display.find(self.cfg.state_dir, digest) is None:
-            return "no_display_copy"
-        try:
-            st = path.stat()
-            if (not stat.S_ISREG(st.st_mode) or path.is_symlink() or st.st_size != size
-                    or abs(st.st_mtime - float(item["mtime"])) >= 0.001
-                    or fingerprint(path, algo) != digest):
-                return "changed_here"
-        except OSError:
-            return "changed_here"
-        if not library:
-            return "not_same_there"
-        try:
-            answer = partner.request("POST", "/api/mugil/originals/verify", body={
-                "library": library, "path": rel, "size": size, "algo": algo, "digest": digest})
-        except PartnerError as exc:
-            return "not_same_there" if exc.status in (400, 404, 409) else "secondary_away"
-        if answer.get("same") is not True:
-            return "not_same_there"
-        # Once more, after the Secondary's answer: nothing changed here meanwhile.
-        try:
-            st2 = path.stat()
-        except OSError:
-            return "changed_here"
-        if st2.st_size != st.st_size or st2.st_mtime_ns != st.st_mtime_ns:
-            return "changed_here"
-        conn.execute("INSERT OR REPLACE INTO mugil_let_go(root, rel_path, size, mtime, algo, digest, "
-                     "let_go_at) VALUES (?,?,?,?,?,?,?)",
-                     (root, rel, size, float(item["mtime"]), algo, digest, time.time()))
-        conn.commit()
-        try:
-            path.unlink()
-        except OSError as exc:
-            log.warning("Could not let %s go: %s", rel, exc)
-            conn.execute("DELETE FROM mugil_let_go WHERE root=? AND rel_path=?", (root, rel))
-            conn.commit()
-            return "could_not_remove"
-        log.info("Let %s go; the Secondary keeps it", rel)
-        return None
+
+def _room_for(root: Path, size: int) -> bool:
+    """Whether *root*'s disk takes *size* more and keeps :data:`KEEP_FREE_BYTES`."""
+    try:
+        return shutil.disk_usage(root).free - size >= KEEP_FREE_BYTES
+    except OSError:
+        return True                     # cannot tell: the copy itself will say
+
+
+def clear_display_copies(state_dir: str | Path, conn: sqlite3.Connection) -> bool:
+    """Remove the smaller copies once no original is on the Secondary only:
+    they stood in for those, and for nothing else. Whether they were removed."""
+    from . import display                                            # noqa: PLC0415
+    try:
+        if summary(conn)["files"]:
+            return False
+    except sqlite3.Error:
+        return False
+    folder = display.folder(state_dir)
+    ledger = Path(state_dir) / display.LEDGER
+    if not folder.exists() and not ledger.exists():
+        return False
+    shutil.rmtree(folder, ignore_errors=True)
+    for name in (display.LEDGER, display.LEDGER + "-wal", display.LEDGER + "-shm"):
+        (Path(state_dir) / name).unlink(missing_ok=True)
+    log.info("The smaller display copies were removed: every original is on this computer")
+    return True
 
 
 def bring_back(cfg, conn: sqlite3.Connection, root: str, rel: str, *, partner=None) -> bool:
@@ -302,4 +277,4 @@ def bring_back_to_delete(cfg, conn: sqlite3.Connection, asset_ids) -> int:
     return back
 
 
-__all__ = ["Freeing", "bring_back", "bring_back_to_delete", "let_go", "summary", "wanted", "fingerprint", "KEPT_BECAUSE"]
+__all__ = ["Freeing", "REMOVED", "bring_back", "bring_back_to_delete", "clear_display_copies", "let_go", "summary", "wanted", "fingerprint"]
