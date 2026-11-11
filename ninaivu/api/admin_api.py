@@ -283,6 +283,27 @@ def _unnamed_groups(conn, roots, max_visibility: int) -> int:
 PROBLEMS_COUNTED = 50
 
 
+def _in_one_place_only(conn, roots) -> bool:
+    """Whether the library has photographs and nothing that copies them: no
+    second copy on another disk, no Secondary, no off-site copy and no Drive
+    copy is switched on (the destinations of ninaivu/copies/). The first thing
+    the Overview says then, since nothing else that is waiting matters as
+    much. Never in the way: anything that cannot be read counts as not so."""
+    from .. import copies                                     # noqa: PLC0415
+    try:
+        services = current_app.config.get("MV_SERVICES")
+        if services is None or not roots:
+            return False
+        marks = ",".join("?" * len(roots))
+        if conn.execute(f"SELECT 1 FROM assets WHERE trashed=0 AND root IN ({marks}) LIMIT 1",
+                        [str(r) for r in roots]).fetchone() is None:
+            return False
+        return not any(d.status().get("on") for d in copies.destinations(services))
+    except Exception:                                         # noqa: BLE001 - a notice, never a failure
+        log.debug("could not tell whether anything copies the library", exc_info=True)
+        return False
+
+
 @admin_bp.get("/api/admin/attention")
 @require_admin
 def attention():
@@ -320,6 +341,9 @@ def attention():
     except sqlite3.Error:
         screen_asks = 0
     items = [
+        {"key": "one_place", "count": 1 if _in_one_place_only(conn, roots) else 0, "page": "cloud",
+         "title": said("Your photographs are in one place only"),
+         "detail": said("Nothing copies them anywhere else yet: a failing disk would take them all. Set up a second copy on another disk, or a copy outside the house.")},  # noqa: E501
         {"key": "signin_help", "count": help_asked, "page": "people",
          "title": said("Asked for help signing in"),
          "detail": said("Someone forgot their password or PIN. Give them a temporary one on the People page.")},

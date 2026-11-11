@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **The Overview says so when the photographs are in one place only.** With photographs in the library and nothing switched on that copies them (no second copy on another disk, no Secondary, no off-site copy, no Google Drive copy), the first line under *Needs you* is "Your photographs are in one place only", and it opens the page where a copy is set up. It goes as soon as any copy is on. Mostly for a home with one computer, where a failing disk would otherwise take everything unnoticed.
+
 ## 4.0.0 — 10 November 2026
 
 4.0 is one program to open, with an icon for each of its three faces; two computers that can be paired, moved and replaced with proof that nothing was lost; and a count of how many photographs are in at least two places. Underneath, the app is put together from feature modules, one work plane and one visibility gate. An index 4.0 has opened is not opened by 3.x: read **Before you update**.
