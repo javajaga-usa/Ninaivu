@@ -273,7 +273,7 @@ CATALOGUE: dict[str, dict[str, Any]] = {
         "label": said("Letters read aloud in Tamil"),
         "used_for": said("Runs the Tamil voice that reads an old letter aloud (Letters read aloud, Advanced settings): transformers on PyTorch, in the engine's own process. About 2 GB installed with PyTorch; the voice itself is on the AI models page."),
         "present": _packages_present("torch", "transformers"),
-        "requirement": "transformers>=5.22.1,<6",
+        "requirement": "transformers>=5.22.2,<6",
         "also": ["--index-url", "https://download.pytorch.org/whl/cpu", "torch>=2.15.0,<3"],
         # Read by the model host, a process of its own, which starts after the
         # install: nothing in the server needs restarting for it.
