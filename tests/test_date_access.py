@@ -2,6 +2,7 @@
 from pathlib import Path
 from unittest.mock import patch
 
+import json
 import pytest
 
 from conftest import ADMIN, FAMILY, login
@@ -36,12 +37,41 @@ def listing(client):
     return {item['id'] for item in response.get_json()['items']}
 
 
-def test_by_default_nobody_is_limited_by_date(dates):
-    """Hearth's default hid everything before 2014, and everything undated,
-    from family members and guests — on a stranger's library, most of it."""
-    _, _, (old, boundary, unknown), admin, family, console = dates
+def test_a_library_already_in_use_keeps_nobody_limited(dates):
+    """The default became "family and guests from the cutoff on" on
+    11 November 2026. A library with no saved policy that was already in use
+    is not changed by an update: hiding everything before 2014, and everything
+    undated, without a word is what the earlier default did to most of one."""
+    _, conn, (old, boundary, unknown), admin, family, console = dates
+    assert date_policy.read(conn) == date_policy.OPEN
     assert {old, boundary, unknown} <= listing(family)
     assert {old, boundary, unknown} <= listing(admin)
+
+
+def test_a_new_library_starts_with_family_and_guests_from_the_cutoff(tmp_path, dates):
+    """A brand-new index: family members and guests see what is dated on or
+    after the cutoff; administrators see every date."""
+    fresh = db.init_db(tmp_path / "new-index.db")
+    policy = date_policy.read(fresh)
+    assert policy == date_policy.DEFAULTS
+    assert (policy["admin"], policy["family"], policy["guest"]) == ("all", "after", "after")
+    # Written down, so opening it again (now "in use") does not open it up.
+    assert date_policy.read(db.init_db(tmp_path / "new-index.db")) == date_policy.DEFAULTS
+    # And what that default does in the family app.
+    _, conn, (old, boundary, unknown), admin, family, console = dates
+    db.set_meta(conn, date_policy.KEY, json.dumps(date_policy.DEFAULTS))
+    conn.commit()
+    seen = listing(family)
+    assert boundary in seen and old not in seen and unknown not in seen
+    assert {old, boundary, unknown} <= listing(admin)
+
+
+def test_a_policy_the_administrator_saved_is_left_alone(tmp_path):
+    conn = db.init_db(tmp_path / "index.db")
+    mine = dict(date_policy.DEFAULTS, cutoff="2020-06-01", family="before", guest="all")
+    db.set_meta(conn, date_policy.KEY, json.dumps(mine))
+    conn.commit()
+    assert date_policy.read(db.init_db(tmp_path / "index.db")) == mine
 
 
 def test_a_limit_the_administrator_sets_holds_everywhere(dates):
@@ -82,7 +112,7 @@ def test_admins_keep_undated_media_under_their_own_cutoff(dates):
 
 def test_settings_persist_and_roles_are_isolated(dates):
     _, conn, (old, boundary, unknown), admin, family, console = dates
-    assert console.get('/api/admin/date-policy').get_json() == date_policy.DEFAULTS
+    assert console.get('/api/admin/date-policy').get_json() == date_policy.OPEN
     policy = dict(date_policy.DEFAULTS, cutoff='2013-01-01', admin='all', family='before')
     assert console.post('/api/admin/date-policy', json=policy).status_code == 200
     assert date_policy.read(conn) == policy

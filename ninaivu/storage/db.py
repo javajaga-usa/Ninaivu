@@ -1761,6 +1761,11 @@ def init_db(db_path: Path | str) -> sqlite3.Connection:
         # change_journal setting is on (storage/journal.py).
         from .. import features                           # noqa: PLC0415
         features.create_tables(conn)
+        # Who sees which dates, written down once: a new library starts with
+        # family and guests on or after the cutoff; one already in use keeps
+        # what it had (server/date_policy.py).
+        from ..server import date_policy                  # noqa: PLC0415
+        date_policy.settle(conn, new=not existing)
         # Old links cannot prove which incarnation of a reused row ID they
         # referred to. Retire them once; new links are revoked on any deletion,
         # including scanner cleanup and direct SQL, before that ID can be reused.

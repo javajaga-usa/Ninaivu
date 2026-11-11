@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **In a new library, family members and guests see what is dated on or after the cutoff; admins see every date.** The cutoff starts at 1 January 2014 and is changed in the console, under Family app date visibility, with each role's range. Undated photographs are then with admins only, who can date them. A library already in use keeps what it had (nobody limited by date) until an admin chooses a range there: updating never hides photographs by itself.
+
 ## 4.0.0 — 10 November 2026
 
 4.0 is one program to open, with an icon for each of its three faces; two computers that can be paired, moved and replaced with proof that nothing was lost; and a count of how many photographs are in at least two places. Underneath, the app is put together from feature modules, one work plane and one visibility gate. An index 4.0 has opened is not opened by 3.x: read **Before you update**.
