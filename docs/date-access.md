@@ -5,8 +5,11 @@ date and a range for each role: **Before cutoff**, **On or after cutoff**, or
 **All dates**. Settings are saved in the library database and apply to the next
 request; refresh an open family page to redraw its albums.
 
-The defaults are January 1, 2014, with family members and guests seeing dates on
-or after the cutoff and admins seeing all dates. Existing
+A new library starts with a cutoff of January 1, 2014, family members and
+guests seeing dates on or after the cutoff, and admins seeing all dates. A
+library that was already in use before 4.0.1 keeps what it had, nobody limited
+by date, until an admin chooses otherwise here: an update never hides
+photographs by itself. Existing
 folder, profile, hidden-file and media-type restrictions still apply. The admin
 management app remains unrestricted by date, and its role preview uses the
 family app's date settings.

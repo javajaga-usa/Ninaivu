@@ -4,17 +4,30 @@ import json
 
 from flask import current_app, g, has_request_context
 
-#: Nobody is limited by date until the administrator says so (People &
-#: access → Visibility). The limit is there for a household that wants one —
-#: guests see only this decade, say — not a default: Hearth shipped with
-#: family members and guests seeing nothing before 2014 and nothing undated,
-#: which on a stranger's library hid most of it without a word. The cutoff
-#: below is only where the date field starts when somebody does set a limit.
-#: Administrators are never limited by default: one limited in the family app
-#: could not find, or release, media they are responsible for.
-DEFAULTS = {"cutoff": "2014-01-01", "admin": "all", "family": "all",
-            "guest": "all"}
+#: A new library starts with family members and guests seeing what is dated on
+#: or after the cutoff, and administrators seeing every date (the household's
+#: decision of 11 November 2026; docs/date-access.md). Undated media is then
+#: with administrators only. Administrators are never limited by default: one
+#: limited in the family app could not find, or release, media they are
+#: responsible for.
+#:
+#: A library that was already in use when this became the default keeps what
+#: it had, nobody limited (:data:`OPEN`): :func:`settle` writes it down the
+#: first time, so an update never hides most of a library without a word.
+DEFAULTS = {"cutoff": "2014-01-01", "admin": "all", "family": "after",
+            "guest": "after"}
+#: What a library had before the default changed: nobody limited by date.
+OPEN = {**DEFAULTS, "family": "all", "guest": "all"}
 KEY = "family_date_policy"
+
+
+def settle(conn, *, new: bool) -> None:
+    """Write the policy down once, so a later change of the defaults never
+    changes who sees what: a *new* library gets the defaults, one already in
+    use keeps nobody limited. A policy an administrator saved is left alone."""
+    from ..storage import db
+    if db.get_meta(conn, KEY, "") == "":
+        db.set_meta(conn, KEY, json.dumps(DEFAULTS if new else OPEN))
 
 
 def read(conn):

@@ -25,9 +25,22 @@ ROOT = "/library"
 THIS_YEAR = int(time.strftime("%Y"))
 
 
+
+def _nobody_limited_by_date(conn):
+    """These tests are about which photograph is picked, on a library where
+    nobody is limited by date; a new library's default (family and guests
+    from the cutoff on) has its own tests in test_date_access.py."""
+    import json
+
+    from ninaivu.server import date_policy
+    db.set_meta(conn, date_policy.KEY, json.dumps(date_policy.OPEN))
+    conn.commit()
+
 @pytest.fixture()
 def conn(tmp_path):
-    return db.init_db(tmp_path / "index.db")
+    conn = db.init_db(tmp_path / "index.db")
+    _nobody_limited_by_date(conn)
+    return conn
 
 
 def add(conn, *, rel_path, year, month=7, day=4, faces=0, sharpness=500.0,
