@@ -1281,7 +1281,8 @@ async function loadAttention() {
     button.dataset.openPage = item.page;
     const count = document.createElement('span');
     count.className = 'shortcut-symbol attention-count';
-    count.textContent = item.count > 99 ? '99+' : String(item.count);
+    // Not a number of things: a warning (nothing copies the library).
+    count.textContent = item.key === 'one_place' ? '!' : item.count > 99 ? '99+' : String(item.count);
     const text = document.createElement('span');
     const title = document.createElement('strong');
     // Fixed sentences from the server, marked there with said().
