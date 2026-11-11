@@ -14,7 +14,7 @@ import pytest
 
 from conftest import ADMIN
 from test_mugil_two_computers import (  # noqa: F401 - fixtures used by name
-    _paired, _ready_to_free, keep, partner_through, primary, run, secondary, two_apps,
+    _paired, _some_let_go, keep, partner_through, primary, run, secondary, two_apps,
 )
 from ninaivu.mugil import free, inbox as inbox_mod, pairing
 from ninaivu.mugil.courier import PartnerError
@@ -72,17 +72,8 @@ def test_the_secondary_answers_away_not_none_kept(primary, secondary, scanned): 
 
 def test_a_let_go_original_is_brought_back_to_be_deleted(  # noqa: F811
         two_apps, tmp_path, scanned, monkeypatch):  # noqa: F811
-    from ninaivu.mugil import fetch
     primary_app, secondary_app, other = two_apps
-    first, services, folder, later = _ready_to_free(two_apps, tmp_path, scanned)
-    cfg = scanned[0]
-    through = partner_through(secondary_app.test_client())
-    monkeypatch.setattr(fetch, "Partner", through)
-    services.mugil_free.partner = through
-    first.post("/api/admin/mugil/role", json={"role": "primary", "free_space": True})
-    done = services.mugil_free.run(now=later, limit=1)
-    assert done["freed"] == 1, done
-    conn = db.connect(cfg.db_path)
+    first, services, conn, _originals, _ = _some_let_go(two_apps, tmp_path, scanned, monkeypatch, n=1)
     gone = free.let_go(conn)[0]
     row = conn.execute("SELECT id FROM assets WHERE root=? AND rel_path=?",
                        (gone["root"], gone["rel_path"])).fetchone()
@@ -262,23 +253,10 @@ def test_the_originals_item_is_not_ticked_by_files_deleted_since(scanned, tmp_pa
 
 # --- F-08: freeing stops when it is turned off -------------------------------------------
 
-def test_freeing_stops_when_it_is_turned_off(two_apps, tmp_path, scanned, monkeypatch):  # noqa: F811
-    from ninaivu.mugil import fetch
+def test_the_switch_for_freeing_is_still_a_managed_setting():
+    """Kept in the settings (always off since 4.0.1) so an older settings
+    file with it still loads."""
     from ninaivu.server.settings_groups import MANAGED
-    primary_app, secondary_app, other = two_apps
-    first, services, folder, later = _ready_to_free(two_apps, tmp_path, scanned)
-    through = partner_through(secondary_app.test_client())
-    monkeypatch.setattr(fetch, "Partner", through)
-    services.mugil_free.partner = through
-    first.post("/api/admin/mugil/role", json={"role": "primary", "free_space": True})
-    real = services.mugil_free._one
-
-    def one_then_off(*args, **kwargs):
-        services.cfg.mugil_free_space = False
-        return real(*args, **kwargs)
-    monkeypatch.setattr(services.mugil_free, "_one", one_then_off)
-    done = services.mugil_free.run(now=later)
-    assert done["freed"] == 1, done
     assert "mugil_free_space" in MANAGED and "mugil_family_copy" in MANAGED
 
 

@@ -187,7 +187,6 @@ def mugil_status():
         "partner_url": cfg.mugil_partner_url, "originals_dir": cfg.mugil_originals_dir,
         "copy_every_hours": cfg.mugil_copy_every_hours,
         "family_copy": bool(getattr(cfg, "mugil_family_copy", False)),
-        "free_space": bool(getattr(cfg, "mugil_free_space", False)),
         "copy_mode": str(getattr(cfg, "mugil_copy_mode", "automatic") or "automatic"),
         "version": __version__,
     }
@@ -311,10 +310,9 @@ def mugil_role():
     cfg.mugil_copy_every_hours = float(hours)
     if "family_copy" in data:
         cfg.mugil_family_copy = data["family_copy"]
-    if "free_space" in data:
-        cfg.mugil_free_space = data["free_space"]
-        if not data["free_space"] and _freeing() is not None:
-            _freeing().stop()
+    # "free_space" from an older page is taken and ignored: nothing is let
+    # go since 4.0.1 (mugil/free.py).
+    cfg.mugil_free_space = False
     if "copy_mode" in data and data["copy_mode"] != cfg.mugil_copy_mode:
         cfg.mugil_copy_mode = data["copy_mode"]
         if data["copy_mode"] == "manual" and _adopter() is not None:
@@ -866,22 +864,6 @@ def mugil_machines():
                     "same_version": machines.same_version(mine["version"], theirs)})
 
 
-@mugil_bp.get("/api/admin/mugil/optimize")
-@require_admin
-def mugil_optimize():
-    """Which originals the Primary could let go, and why the rest stay.
-    Only reads (mugil/optimize.py); nothing is freed."""
-    from ..mugil import optimize                                 # noqa: PLC0415
-    cfg = _cfg()
-    if role(cfg) != PRIMARY:
-        return _not_here()
-    conn = db.connect(cfg.db_path)
-    try:
-        return jsonify(optimize.plan(conn, cfg.state_dir, list(cfg.roots)))
-    finally:
-        conn.close()
-
-
 def _freeing():
     return getattr(current_app.config["MV_SERVICES"], "mugil_free", None)
 
@@ -898,22 +880,10 @@ def mugil_free_status():
 @mugil_bp.post("/api/admin/mugil/free")
 @require_admin
 def mugil_free_start():
-    """Let go the originals the plan calls ready, each checked again on both
-    computers first (mugil/free.py). Only with the switch on, and only when
-    the request says it means it."""
-    cfg = _cfg()
-    if role(cfg) != PRIMARY or _freeing() is None:
-        return _not_here()
-    data = json_body()
-    if not isinstance(data, dict) or data.get("confirm") is not True:
-        return jsonify({**refusal("Say that you mean it: the originals will be on the Secondary only."),
-                        "status": 400}), 400
-    try:
-        answer = _freeing().start()
-    except PartnerError as exc:
-        return jsonify({**refusal(str(exc)), "status": exc.status or 409}), exc.status or 409
-    _audit("freeing space: letting go originals the Secondary keeps")
-    return jsonify(answer)
+    """Letting originals go was removed in 4.0.1 (mugil/free.py): said, for a
+    page left open from before."""
+    from ..mugil import free                                     # noqa: PLC0415
+    return jsonify({**refusal(free.REMOVED), "status": 410}), 410
 
 
 @mugil_bp.post("/api/admin/mugil/free/stop")
@@ -938,18 +908,24 @@ def mugil_bring_back():
     data = json_body()
     if not isinstance(data, dict) or not (data.get("all") is True or data.get("path")):
         return jsonify({**refusal("Send a root and a path, or all."), "status": 400}), 400
+    if data.get("all") is True:
+        # Every one: a piece of work of its own, with its progress on the
+        # page; a library's worth does not fit in one request.
+        if _freeing() is None:
+            return _not_here()
+        try:
+            answer = _freeing().bring_all()
+        except PartnerError as exc:
+            return jsonify({**refusal(str(exc)), "status": exc.status or 409}), exc.status or 409
+        _audit("bringing every original back from the Secondary")
+        return jsonify(answer)
     conn = db.connect(cfg.db_path)
-    wanted = free.let_go(conn) if data.get("all") is True else [
-        {"root": str(data.get("root", "")), "rel_path": str(data["path"])}]
-    back = missed = 0
-    for item in wanted:
-        if free.bring_back(cfg, conn, item["root"], item["rel_path"]):
-            back += 1
-        else:
-            missed += 1
+    back = 1 if free.bring_back(cfg, conn, str(data.get("root", "")), str(data["path"])) else 0
     left = free.summary(conn)
+    if not left["files"]:
+        free.clear_display_copies(cfg.state_dir, conn)
     _audit(f"brought back {back} originals from the Secondary")
-    return jsonify({"back": back, "missed": missed, "let_go": left})
+    return jsonify({"back": back, "missed": 1 - back, "let_go": left})
 
 
 def _rebuild():

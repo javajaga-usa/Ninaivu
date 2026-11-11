@@ -1233,9 +1233,9 @@ class Config:
     #: thumbnails, faces) to the Secondary, so the family can browse there
     #: while this computer is off (mugil/handover.py).
     mugil_family_copy: bool = False
-    #: On the Primary: allow freeing space, letting go originals the
-    #: Secondary and the off-site copy both keep (mugil/free.py). Off until
-    #: the household turns it on; even then nothing goes until Free is pressed.
+    #: Not used since 4.0.1, and always off: the Primary no longer lets
+    #: originals go (mugil/free.py). Kept so that a settings file from 4.0.0
+    #: that has it still loads.
     mugil_free_space: bool = False
     #: On the Secondary: how the originals first arrive. ``automatic``: the
     #: Primary sends every one of them once the two are paired. ``manual``:

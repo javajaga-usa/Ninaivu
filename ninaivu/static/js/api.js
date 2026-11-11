@@ -307,7 +307,6 @@ export const admin = (() => {
     getAdminMugilFree: (options) => send('GET', '/api/admin/mugil/free', options),
     getAdminMugilMachines: (options) => send('GET', '/api/admin/mugil/machines', options),
     getAdminMugilOnlyOnSecondary: (options) => send('GET', '/api/admin/mugil/only-on-secondary', options),
-    getAdminMugilOptimize: (options) => send('GET', '/api/admin/mugil/optimize', options),
     getAdminMugilRebuild: (options) => send('GET', '/api/admin/mugil/rebuild', options),
     getAdminMugilTopology: (options) => send('GET', '/api/admin/mugil/topology', options),
     getAdminMugilTopologyPlan: (options) => send('GET', '/api/admin/mugil/topology/plan', options),

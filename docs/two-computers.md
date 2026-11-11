@@ -160,50 +160,30 @@ answers the same inbox, so phones can send while the Mac is asleep:
   sees the file as home. The original returns to the Secondary with the next
   copy of the originals.
 
-## Optimize Mac storage: the plan
+## The Primary keeps its originals
 
-The Primary's page says how much of its library could live on the Secondary
-only. An original qualifies only when all of these hold:
+Up to 4.0.0 the Primary could free space: originals that the Secondary and
+the off-site copy both kept could be let go from it, and were then shown
+from a smaller "display copy" (an AVIF or a 1080-line video). Those copies
+were poor to look at, and from 4.0.1 both are gone: **the Primary lets no
+original go and makes no smaller copy.** What is in the library is shown as
+it is.
 
-- it was not taken in the last year, and nobody made it a favourite;
-- the Secondary has confirmed it, with the fingerprint it has now;
-- the off-site copy (B2 or another) holds it as it is now;
-- it has been on the Secondary for 30 days;
-- it has a display copy (an original that is its own display copy, such as
-  an iPhone's HEIC, stays).
+A library that used it still has originals that are on the Secondary only.
+They are written down in the index (`mugil_let_go`) and nothing treats them
+as missing: a rescan, the integrity check, the repair and the second copy
+all pass over them. Opened, such an original is sent for from the Secondary
+and shown as it is. Only when the Secondary cannot send it just then is its
+old smaller copy shown instead.
 
-The plan only reads.
-
-## Freeing space
-
-Freeing is off. To use it, tick **Allow freeing space** on the Primary's
-Mugil page (`mugil_free_space`), then press **Free space** and confirm. Even
-then, every original the plan calls ready is checked again, one at a time,
-before it goes:
-
-- the file here is read end to end and still has the fingerprint, size and
-  time the Secondary confirmed;
-- the Secondary reads its own copy end to end and says it is the same;
-- the off-site copy holds it at that size and time;
-- its display copy is there;
-- nothing changed here while the Secondary was checking.
-
-If any check fails, the original stays. If the Secondary does not answer,
-nothing more is let go. Each original that goes is written down in the index
-(`mugil_let_go`) before it is removed. Its thumbnail, display copy, names,
-albums and stories stay. A rescan does not count it as missing. Neither do
-the integrity check, the repair or the second copy. When somebody opens a
-let-go photograph, it is shown from its display copy at once, with nothing
-sent over the network; a let-go video is sent for from the Secondary, and
-shown from its display copy when the Secondary is away. A download, an edit
-or a share is always the original, sent for from the Secondary. A family
-member is given either one without its place, as always, when it was taken
-at home.
-
-**Bring every original back** copies each let-go original back from the
-Secondary to the same place, with its own modified time, and checks each
-against its fingerprint. Turning the switch off stops a run, but nothing
-already let go comes back by itself.
+**Bring every original back** (Mugil → Two computers, shown while any is
+away) copies each one from the Secondary to the place it had, with its own
+modified time, and checks it against its fingerprint. It is one piece of
+work with its progress on the page; it waits while heavier work runs, stops
+when the Primary's disk would have less than 2 GB left, and can be stopped
+and started again. The two cannot be unpaired until every original is back.
+When none is away, the smaller copies (`display/` in the state folder) are
+removed.
 
 ## The copy out of the house, from the always-on computer
 
@@ -329,26 +309,6 @@ and the helper's own in the older folder's `logs/mugil-update.log`. The
 Primary's page shows each step, read from `mugil-update.json` in the
 Secondary's state folder. A Secondary that is not run from the portable
 download (a source checkout, Docker) is updated by hand.
-
-## Display copies
-
-Once the Secondary has confirmed an original, the Primary makes a display
-copy of it in its state folder (`display/`), one file at a time, at a low
-priority. The copy is the original made smaller, and nothing else changes:
-
-- A camera JPEG, a PNG or a RAW becomes an AVIF of at most 2560 pixels on its
-  long side. The EXIF goes into it byte for byte, with the colour profile and
-  the XMP. The orientation tag is kept as it is, and the pixels are not turned.
-- A video becomes HEVC in MP4, at most 1080 lines. Its tags (when and where
-  it was filmed, the camera) and its rotation go into the copy as they were.
-- iPhone HEIC photos and iPhone videos are already small and get no copy.
-
-Each copy has the original's modified time. It is checked before it is kept.
-It must open, carry the same metadata, run as long as the original, and be
-smaller. If it is not, the original is its own display copy. The copies are
-a cache: deleting `display/` costs only the time to make them again. Nothing
-in the library is changed, and no space is freed. They are shown in place of
-an original that is on the Secondary only (see above).
 
 ## An original that is not on the Primary
 

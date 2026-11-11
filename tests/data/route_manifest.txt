@@ -96,7 +96,6 @@ admin | GET                  | /api/admin/mugil/only-on-secondary | admin | read
 admin | POST                 | /api/admin/mugil/only-on-secondary/bring | admin | writes | same origin | mugil.mugil_only_bring | -
 admin | POST                 | /api/admin/mugil/only-on-secondary/look | admin | writes | same origin | mugil.mugil_only_look | -
 admin | POST                 | /api/admin/mugil/only-on-secondary/stop | admin | writes | same origin | mugil.mugil_only_stop | -
-admin | GET                  | /api/admin/mugil/optimize | admin | reads | - | mugil.mugil_optimize | -
 admin | POST                 | /api/admin/mugil/pair | admin | writes | same origin | mugil.mugil_pair | -
 admin | GET                  | /api/admin/mugil/rebuild | admin | reads | - | mugil.mugil_rebuild_status | -
 admin | POST                 | /api/admin/mugil/rebuild | admin | writes | same origin | mugil.mugil_rebuild_start | -
