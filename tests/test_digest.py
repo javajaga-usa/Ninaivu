@@ -31,6 +31,17 @@ THIS_YEAR = int(time.strftime("%Y"))
 
 # -- a library with one good photograph in it -------------------------------
 
+
+def _nobody_limited_by_date(conn):
+    """These tests are about which photograph is picked, on a library where
+    nobody is limited by date; a new library's default (family and guests
+    from the cutoff on) has its own tests in test_date_access.py."""
+    import json
+
+    from ninaivu.server import date_policy
+    db.set_meta(conn, date_policy.KEY, json.dumps(date_policy.OPEN))
+    conn.commit()
+
 @pytest.fixture()
 def library(tmp_path):
     """An index with one sendable photograph, and a thumbnail on disk."""
@@ -40,6 +51,7 @@ def library(tmp_path):
     Image.new("RGB", (640, 480), (90, 120, 160)).save(thumbs / "cdef_640.webp")
 
     conn = db.init_db(state / "index.db")
+    _nobody_limited_by_date(conn)
     cursor = conn.execute(
         "INSERT INTO assets(root, rel_path, filename, kind, date_key, "
         "  captured_at, thumb, visibility, nsfw, trashed, sharpness, "
