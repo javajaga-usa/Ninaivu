@@ -72,7 +72,6 @@ def test_the_secondary_answers_away_not_none_kept(primary, secondary, scanned): 
 
 def test_a_let_go_original_is_brought_back_to_be_deleted(  # noqa: F811
         two_apps, tmp_path, scanned, monkeypatch):  # noqa: F811
-    from ninaivu.mugil import fetch
     primary_app, secondary_app, other = two_apps
     first, services, conn, _originals, _ = _some_let_go(two_apps, tmp_path, scanned, monkeypatch, n=1)
     gone = free.let_go(conn)[0]
