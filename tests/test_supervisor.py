@@ -657,7 +657,9 @@ def _group_3(tmp_path):
 
     cfg = SimpleNamespace(state_dir=str(tmp_path), mugil_role="", mugil_partner_url="")
     display = DisplayCopies(cfg, lambda: None)
-    display.wanted = lambda: False
+    # Nothing is made since 4.0.1 (wanted() is False); the keeper itself is
+    # still checked until its code goes.
+    display.wanted = lambda: True
     return [
         (Courier(cfg, lambda: None), "mugil-keeper", "every 600 seconds"),
         (Waker(cfg), "mugil-wake", "every 30 seconds"),

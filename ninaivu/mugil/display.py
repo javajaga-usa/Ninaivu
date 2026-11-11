@@ -46,7 +46,6 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
-from . import PRIMARY, pairing, role
 from .courier import SENT, sent_record
 
 log = logging.getLogger(__name__)
@@ -416,7 +415,11 @@ class DisplayCopies:
         self._passed: set[str] = set()
 
     def wanted(self) -> bool:
-        return role(self.cfg) == PRIMARY and pairing.load(self.cfg.state_dir) is not None
+        """Whether copies are made: never, since 4.0.1. The household found
+        them poor to look at; the Primary keeps and shows its originals
+        (free.py). The copies already made stand in only for an original that
+        is still on the Secondary only and cannot be sent for just now."""
+        return False
 
     #: The thread it runs on, as before it moved to the supervisor.
     JOB = "mugil-display"
@@ -427,6 +430,8 @@ class DisplayCopies:
         # is tried again at the next, as before. A stop cuts a round short
         # between copies, by the flag run_once watches.
         from ..server.supervisor import STOPPED, Job, every, supervisor_of  # noqa: PLC0415
+        if not self.wanted():
+            return
         supervisor = supervisor_of(self)
         if supervisor.state(self.JOB) in (None, STOPPED):
             self._stop.clear()
@@ -441,6 +446,10 @@ class DisplayCopies:
         supervisor_of(self).stop_job(self.JOB, timeout=10 if join else 0)
 
     def status(self) -> dict[str, Any]:
+        if not self.wanted():
+            # Nothing is made and nothing is owed; the record is not opened
+            # (opening it would make it again after the copies are removed).
+            return {"wanted": False, "retired": True, "owed": 0, "doing": {}}
         with self._lock:
             doing = dict(self.doing)
         return {**summary(self.cfg.state_dir), "doing": doing, "wanted": self.wanted(),

@@ -142,16 +142,10 @@ def test_the_wake_is_at_the_primarys_hour_whatever_the_secondarys_time_zone(tmp_
     assert wake.remember(tmp_path, {"macs": [], "at": "01:55"})["utc_offset"] is None
 
 
-def test_the_space_report_reuses_the_optimize_plan(as_admin, monkeypatch):
+def test_the_space_report_has_no_step_for_freeing(as_admin, monkeypatch):
+    """4.0.1: nothing is let go, so the forecast counts nothing as freeable."""
     import ninaivu.mugil as mugil
-    from ninaivu.mugil import optimize
-    calls = []
-
-    def plan(*a, **k):
-        calls.append(1)
-        return {"ready": {"files": 1, "bytes": 5}}
     monkeypatch.setattr(mugil, "role", lambda cfg: mugil.PRIMARY)
-    monkeypatch.setattr(optimize, "plan", plan)
-    for _ in range(3):
-        assert as_admin.get("/api/admin/space").status_code == 200
-    assert len(calls) == 1
+    answer = as_admin.get("/api/admin/space")
+    assert answer.status_code == 200
+    assert "optimize_mac_storage" not in answer.get_data(as_text=True)

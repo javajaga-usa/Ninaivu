@@ -198,7 +198,7 @@ CATALOGUE: dict[str, dict[str, Any]] = {
         "label": said("Search by description"),
         "used_for": said('The image model: tags, finding "the beach at sunset" without anybody tagging it, and descriptions. About 2 GB installed, then a one-time download of the model itself at the next start. On a computer with less than 8 GB of memory and no graphics card Ninaivu keeps the light search even with this installed.'),
         "present": _package_present("open_clip"),
-        "requirement": "open_clip_torch>=2.24,<4",
+        "requirement": "open_clip_torch>=4.2.1,<5",
         # PyTorch first, from its own index: the processor-only build, which is
         # a fraction of the size of the default one with its graphics-card
         # libraries. The launcher's --ai auto does the same.
@@ -273,7 +273,7 @@ CATALOGUE: dict[str, dict[str, Any]] = {
         "label": said("Letters read aloud in Tamil"),
         "used_for": said("Runs the Tamil voice that reads an old letter aloud (Letters read aloud, Advanced settings): transformers on PyTorch, in the engine's own process. About 2 GB installed with PyTorch; the voice itself is on the AI models page."),
         "present": _packages_present("torch", "transformers"),
-        "requirement": "transformers>=5.22.1,<6",
+        "requirement": "transformers>=5.22.2,<6",
         "also": ["--index-url", "https://download.pytorch.org/whl/cpu", "torch>=2.15.0,<3"],
         # Read by the model host, a process of its own, which starts after the
         # install: nothing in the server needs restarting for it.

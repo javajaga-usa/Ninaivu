@@ -298,7 +298,6 @@ MESSAGES = (
     said('Restore into a folder outside the library; add it afterwards.'),
     said('Restore this file from the bin before changing its date.'),
     said('Rotation must be 0, 90, 180 or 270.'),
-    said('Say that you mean it: the originals will be on the Secondary only.'),
     said('Say true or false.'),
     said('Say what should be drawn in the painted area.'),
     said('Say where this piece goes with ?offset=.'),

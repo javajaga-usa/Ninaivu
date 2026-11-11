@@ -107,7 +107,7 @@ them; *runtime* ones say how this start was made and are never saved.
 | `mugil_originals_dir` |  |  | household | On the Secondary: the folder the originals are kept in, on the big disk. |
 | `mugil_copy_every_hours` | `24` |  | household | On the Primary: how often the originals are sent by themselves, in hours (0: only when asked). |
 | `mugil_family_copy` | `False` |  | household | On the Primary: also send the family app's read-only copy (the index, thumbnails, faces) to the Secondary, so the family can browse there while this computer is off (mugil/handover.py). |
-| `mugil_free_space` | `False` |  | household | On the Primary: allow freeing space, letting go originals the Secondary and the off-site copy both keep (mugil/free.py). Off until the household turns it on; even then nothing goes until Free is pressed. |
+| `mugil_free_space` | `False` |  | household | Not used since 4.0.1, and always off: the Primary no longer lets originals go (mugil/free.py). Kept so that a settings file from 4.0.0 that has it still loads. |
 | `mugil_copy_mode` | `'automatic'` |  | household | On the Secondary: how the originals first arrive. automatic: the Primary sends every one of them once the two are paired. manual: the household copies the library folder onto the disk by hand, and the Primary waits until it is said to be done and checked here, then sends only what is missing or different (mugil/adopt.py). |
 
 ## Remote access
