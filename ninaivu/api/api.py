@@ -233,10 +233,12 @@ def _safe_under(path: Path, root: Path) -> bool:
 def _asset_file(asset: dict[str, Any], *, viewing: bool = False) -> Path:
     """Resolve an asset's real path, refusing anything outside its root.
 
-    *viewing*: for being looked at, not taken away or worked on. Then an
-    original that is not on this computer is shown from its display copy
-    (ninaivu/mugil/display.py: the same metadata, smaller), a photograph's
-    at once, a video's when the Secondary cannot send the original."""
+    *viewing*: for being looked at, not taken away or worked on. An original
+    that is not on this computer is sent for from the Secondary, and shown as
+    it is. Only when the Secondary cannot send it now, and only for one let
+    go before 4.0.1, is its smaller display copy shown instead
+    (ninaivu/mugil/display.py): poorer to look at, but better than nothing
+    until the original is brought back (ninaivu/mugil/free.py)."""
     root = Path(asset["root"]).resolve()
     path = (root / asset["rel_path"]).resolve()
     if not _safe_under(path, root):
@@ -245,11 +247,9 @@ def _asset_file(asset: dict[str, Any], *, viewing: bool = False) -> Path:
         # Not on this computer: with two computers, the Secondary keeps it
         # and sends it (ninaivu/mugil/fetch.py). Otherwise it is missing.
         from ..mugil import fetch                                # noqa: PLC0415
-        shown = _display_copy(asset) if viewing else None
-        if shown is not None and (asset.get("kind") or "") == "picture":
-            return shown
         fetched = fetch.original(_cfg(), asset["root"], asset["rel_path"])
         if fetched is None:
+            shown = _display_copy(asset) if viewing else None
             if shown is not None:
                 return shown                 # the Secondary is away
             abort(404)

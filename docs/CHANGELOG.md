@@ -3,6 +3,7 @@
 ## Unreleased
 
 - **The Overview says so when the photographs are in one place only.** With photographs in the library and nothing switched on that copies them (no second copy on another disk, no Secondary, no off-site copy, no Google Drive copy), the first line under *Needs you* is "Your photographs are in one place only", and it opens the page where a copy is set up. It goes as soon as any copy is on. Mostly for a home with one computer, where a failing disk would otherwise take everything unnoticed.
+- **The Primary of two computers keeps and shows its originals.** Freeing space on the Primary, and the smaller "display copies" it showed in place of originals it had let go (an AVIF of at most 2560 pixels, a 1080-line video), are removed: they were poor to look at. Nothing is let go any more and no smaller copy is made. If originals were let go before, the Two computers page says how many are on the Secondary only and offers **Bring every original back**: it copies each one back to its place, checked against its fingerprint, with its progress on the page, and stops before the disk is full. Until then such an original is sent for from the Secondary when opened and shown as it is. Once every original is back, the smaller copies are deleted from Ninaivu's folder.
 
 ## 4.0.0 — 10 November 2026
 

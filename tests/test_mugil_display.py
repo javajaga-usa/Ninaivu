@@ -168,12 +168,13 @@ def test_the_primary_makes_copies_of_what_the_secondary_keeps(primary):
     a = _add(cfg, root, connect, "a.jpg")
     _add(cfg, root, connect, "song.mp3", kind="audio")
     maker = display.DisplayCopies(cfg, connect)
-    assert maker.wanted() and maker.owed_count() == 2
+    assert not maker.wanted(), 'none is made by itself since 4.0.1'
+    assert maker.owed_count() == 2
     assert maker.run_once() == 2
     assert maker.owed_count() == 0
     copy = display.find(cfg.state_dir, a)
     assert copy is not None and copy.suffix == ".avif"
-    status = maker.status()
+    status = display.summary(cfg.state_dir)
     assert status["made"] == 1 and status["kept"] == 1
     assert status["bytes"] < status["original_bytes"]
     assert maker.run_once() == 0
