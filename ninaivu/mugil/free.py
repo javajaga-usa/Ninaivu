@@ -160,9 +160,7 @@ class Freeing:
                 root, rel, size = item["root"], item["rel_path"], int(item["size"] or 0)
                 self.live["current"] = rel
                 if not _room_for(Path(root), size):
-                    self.live["error"] = said(
-                        "This computer's disk is nearly full: the rest of the originals stay "
-                        "on the Secondary until there is room.")
+                    self.live["error"] = said("This computer's disk is nearly full: the rest of the originals stay on the Secondary until there is room.")  # noqa: E501
                     break
                 if bring_back(self.cfg, conn, root, rel):
                     self.live["back"] += 1
