@@ -7,7 +7,7 @@ name = "ninaivu-gemini"
 version = "4.0.0"
 description = "Gemini for Ninaivu's Sudar photo studio: edits, descriptions and plans from Google's models"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 license = "MIT"
 dependencies = ["ninaivu>=0.1.0", "pillow>=10.0,<14"]
 

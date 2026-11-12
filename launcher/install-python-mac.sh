@@ -1,19 +1,19 @@
 #!/bin/sh
 # Ninaivu - find, or install, a Python new enough for it on a Mac.
 #
-#   sh launcher/install-python-mac.sh --find   # prints the first Python 3.12+, or fails
-#   sh launcher/install-python-mac.sh          # asks, then installs Python 3.12
+#   sh launcher/install-python-mac.sh --find   # prints the first Python 3.14+, or fails
+#   sh launcher/install-python-mac.sh          # asks, then installs Python 3.14
 #
 # Shared by launcher/Ninaivu.command and launcher/start.sh, so
 # the three look in the same places and install the same way.
 #
-# Ninaivu needs Python 3.12 or newer (MIN_PYTHON in launcher/start.py). The
+# Ninaivu needs Python 3.14 or newer (MIN_PYTHON in launcher/start.py). The
 # python3 that Apple's command line tools bring is 3.9, so asking macOS for
 # those - what the older launchers did - installs a Python that is then
 # refused. Instead, after asking:
-#   1. Homebrew, when the Mac has it: `brew install python@3.12`, no password.
+#   1. Homebrew, when the Mac has it: `brew install python@3.14`, no password.
 #      Homebrew's Python has no Tk, which the Control Panel is drawn with, so
-#      python-tk@3.12 is added too; the rest of Ninaivu works without it.
+#      python-tk@3.14 is added too; the rest of Ninaivu works without it.
 #   2. Otherwise the installer from python.org. It is only run once macOS
 #      confirms it is signed by the Python Software Foundation with a Developer
 #      ID that Apple issued, so a download that was tampered with or cut short
@@ -25,28 +25,28 @@
 # whether it worked. For the tests: NINAIVU_NO_BREW=1 leaves Homebrew out, and
 # NINAIVU_PYTHON_CERTIFICATES names another "Install Certificates" to run.
 
-VERSION=3.12.10
+VERSION=3.14.10
 PKG_URL="https://www.python.org/ftp/python/$VERSION/python-$VERSION-macos11.pkg"
 
 say()  { printf '  %s\n' "$1"; }
 
-# Accepts a candidate only if it runs and is 3.12 or newer.
+# Accepts a candidate only if it runs and is 3.14 or newer.
 new_enough() {
-    "$1" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 12) else 1)' >/dev/null 2>&1
+    "$1" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 14) else 1)' >/dev/null 2>&1
 }
 
-# The first Python 3.12+: on PATH by name, then where python.org's installer
+# The first Python 3.14+: on PATH by name, then where python.org's installer
 # and Homebrew put one - the last so a Python installed a moment ago is found
 # before PATH catches up with it.
 find_python() {
-    for name in python3.14 python3.13 python3.12 python3; do
+    for name in python3.14 python3; do
         found=$(command -v "$name" 2>/dev/null) || continue
         if new_enough "$found"; then
             printf '%s\n' "$found"
             return 0
         fi
     done
-    for version in 3.14 3.13 3.12; do
+    for version in 3.14; do
         for found in "/Library/Frameworks/Python.framework/Versions/$version/bin/python3" \
                      "/opt/homebrew/bin/python$version" "/usr/local/bin/python$version"; do
             if [ -x "$found" ] && new_enough "$found"; then
@@ -78,13 +78,13 @@ ask() {
 }
 
 install_with_brew() {
-    say "Installing Python 3.12 with Homebrew..."
-    if ! "$1" install python@3.12; then
-        say "Homebrew could not install Python 3.12."
+    say "Installing Python 3.14 with Homebrew..."
+    if ! "$1" install python@3.14; then
+        say "Homebrew could not install Python 3.14."
         return 1
     fi
-    say "Adding Tk for the Control Panel (python-tk@3.12)..."
-    "$1" install python-tk@3.12 || say "python-tk@3.12 did not install; the Control Panel needs it, the rest of Ninaivu does not."
+    say "Adding Tk for the Control Panel (python-tk@3.14)..."
+    "$1" install python-tk@3.14 || say "python-tk@3.14 did not install; the Control Panel needs it, the rest of Ninaivu does not."
     return 0
 }
 
@@ -118,7 +118,7 @@ install_from_python_org() {
         say "The downloaded installer is not signed by the Python Software Foundation,"
         say "so it was not run. Nothing was installed. What macOS said about it:"
         printf '%s\n' "$signature" | sed 's/^/      /'
-        say "Install Python 3.12 yourself from https://www.python.org/downloads/macos/"
+        say "Install Python 3.14 yourself from https://www.python.org/downloads/macos/"
         rm -rf "$work"
         return 1
     fi
@@ -138,9 +138,9 @@ install_from_python_org() {
     # Ninaivu's cloud copies, webhook and AI model downloads would fail.
     # (Ninaivu looks nothing up on its own; nothing here is an update check.)
     # Harmless to skip.
-    certificates="${NINAIVU_PYTHON_CERTIFICATES:-/Applications/Python 3.12/Install Certificates.command}"
+    certificates="${NINAIVU_PYTHON_CERTIFICATES:-/Applications/Python 3.14/Install Certificates.command}"
     if [ -x "$certificates" ]; then
-        "$certificates" >/dev/null 2>&1 || say "(Install Certificates did not finish; run it from /Applications/Python 3.12 if downloads fail.)"
+        "$certificates" >/dev/null 2>&1 || say "(Install Certificates did not finish; run it from /Applications/Python 3.14 if downloads fail.)"
     fi
     return 0
 }
@@ -156,7 +156,7 @@ if [ -n "$brew" ]; then
 else
     how="It comes from python.org, and macOS will ask for your password to install it."
 fi
-answer=$(ask "Ninaivu needs Python 3.12 or newer, and this Mac does not have it yet.\n\n$how It takes a few minutes, once.\n\nInstall Python 3.12 now?" "Install")
+answer=$(ask "Ninaivu needs Python 3.14 or newer, and this Mac does not have it yet.\n\n$how It takes a few minutes, once.\n\nInstall Python 3.14 now?" "Install")
 if [ "$answer" != "Install" ]; then
     say "Python was not installed. Nothing was changed."
     exit 1

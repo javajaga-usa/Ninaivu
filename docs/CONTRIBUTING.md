@@ -2,7 +2,7 @@
 
 ## Development
 
-Python 3.12 or newer, in a virtual environment. From the repository root:
+Python 3.14 or newer, in a virtual environment. From the repository root:
 
 ```sh
 python -m venv .venv

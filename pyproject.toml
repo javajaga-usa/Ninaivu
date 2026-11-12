@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "ninaivu"
 description = "Your family's photographs, at home: a private, self-hosted, AI-indexed family photo library"
 readme = "README.md"
-requires-python = ">=3.12"
+requires-python = ">=3.14"
 license = "MIT"
 authors = [{name = "Jagadeesh Rajendran"}]
 dynamic = ["dependencies", "version"]
@@ -32,7 +32,7 @@ version = {attr = "ninaivu.__version__"}
 
 [tool.black]
 line-length = 100
-target-version = ["py312", "py313"]
+target-version = ["py314"]
 include = '\.pyi?$'
 exclude = '''
 /(
@@ -48,7 +48,7 @@ exclude = '''
 
 [tool.ruff]
 line-length = 100
-target-version = "py312"
+target-version = "py314"
 exclude = [".venv", "build", "dist", "__pycache__"]
 
 [tool.ruff.lint]
@@ -67,7 +67,7 @@ select = [
 #                   scatter the lazy imports that are placed where they are
 #                   on purpose.
 #   UP (pyupgrade) — the code was written to a 3.9 floor and still reads that
-#                   way; the floor is now 3.12, and lifting the style is a
+#                   way; the floor is now 3.14, and lifting the style is a
 #                   deliberate pass for later, not a lint gate. Most
 #                   of what it proposes here is style, and one of its fixes
 #                   (%-formatting to f-strings) would make logging calls
@@ -91,7 +91,7 @@ ignore = [
 known-first-party = ["ninaivu", "tests"]
 
 [tool.mypy]
-python_version = "3.12"
+python_version = "3.14"
 ignore_missing_imports = true
 no_implicit_optional = true
 check_untyped_defs = true

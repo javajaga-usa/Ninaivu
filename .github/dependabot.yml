@@ -47,3 +47,10 @@ updates:
     directory: /installers/docker
     schedule:
       interval: weekly
+    # The image runs the Python the tests and the downloads run
+    # (installers/python-version.txt): its digest moves, its minor version is
+    # moved by hand, with the rest. It had reached 3.15, which
+    # nothing had been tested on.
+    ignore:
+      - dependency-name: python
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
