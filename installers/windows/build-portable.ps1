@@ -82,11 +82,15 @@ Remove-Item $info
 # -- app\ ---------------------------------------------------------------------------
 $app = Join-Path $stage "app"
 Copy-Item -Recurse $python (Join-Path $app "python")
-# Tk for the Control Panel is the Python's own: the Tcl library under
-# python\tcl, where _tkinter looks for it.
+# Tk for the Control Panel is the Python's own. Python 3.14 brings Tcl/Tk 9,
+# whose library is inside tcl9*.dll itself; up to 3.12 it was Tcl/Tk 8.6, in a
+# folder under python\tcl, where _tkinter looks for it. Either will do; the
+# check of the finished zip (tools/check_portable.py) opens the Control Panel.
 $tclTarget = Join-Path $app "python\tcl"
-if (-not (Get-ChildItem $tclTarget -Directory -Filter "tcl8*" -ErrorAction SilentlyContinue)) {
-    throw "The Tcl library is missing from ${tclTarget}, so the Control Panel would not open."
+$tclInFolder = Get-ChildItem $tclTarget -Directory -Filter "tcl8*" -ErrorAction SilentlyContinue
+$tclInDll = Get-ChildItem (Join-Path $app "python\DLLs") -Filter "tcl9*.dll" -ErrorAction SilentlyContinue
+if (-not $tclInFolder -and -not $tclInDll) {
+    throw "Tcl is missing from the private Python (no tcl8* folder in ${tclTarget}, no tcl9*.dll in python\DLLs), so the Control Panel would not open."
 }
 # pip, so the optional parts on the AI models page and in Extras install into
 # this Python as they do on the Mac and Linux. The embeddable Python the zip

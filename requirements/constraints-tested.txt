@@ -1,15 +1,16 @@
-# The exact versions the installers ship and the Python 3.12 test runs use,
-# for an install that should match them:
+# The exact versions the installers ship and the test runs use, for an
+# install that should match them:
 #
 #   pip install -r requirements.txt -r requirements-ai.txt -c constraints-tested.txt
 #
 # Every release build installs with this file as its constraints (release.yml,
-# installers/*/build.*, the Dockerfile), and the Python 3.12 jobs in tests.yml
-# test with it, so what ships is what was tested and is written down here; each
-# build also attaches the full list of what it bundled to the release.
-# First recorded on Windows with Python 3.12.10 after a full test run. Some of
-# these versions have no wheel for other Pythons, so the 3.14 jobs resolve
-# requirements*.txt instead. The GPU build of torch and its ROCm packages are
+# installers/*/build.*, the Dockerfile), and every test job in tests.yml tests
+# with it, on the Python the downloads carry (3.14 since 4.1;
+# installers/python-version.txt), so what ships is what was tested and is
+# written down here; each build also attaches the full list of what it bundled
+# to the release. First recorded on Windows with Python 3.12.10 after a full
+# test run; the same versions resolve on Python 3.14 for all four targets
+# (checked 11 November 2026). The GPU build of torch and its ROCm packages are
 # left out -- they are specific to the graphics card. Raised for advisories on
 # 6 Oct 2026: anyio, fsspec, idna, pillow, Pygments, urllib3, Werkzeug.
 # Change a version here only together with a test run that uses it.
