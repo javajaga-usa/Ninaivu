@@ -2,9 +2,9 @@ name: Tests & Linting
 
 on:
   push:
-    branches: [main, develop, "release-*", "codex/release-*"]
+    branches: [main, develop, "release-*", "release/**", "codex/release-*"]
   pull_request:
-    branches: [main, develop, "release-*"]
+    branches: [main, develop, "release-*", "release/**"]
   # Every night on main, whether or not anything was merged: a dependency
   # that moved, an advisory published since, a test that fails one night in
   # ten, or a clock that crossed a date all show up by morning, not on the
