@@ -36,7 +36,7 @@ def test_the_windows_build_carries_the_same_python_as_the_others_with_pip_and_tk
     portable = (WINDOWS / "build-portable.ps1").read_text(encoding="utf-8")
     assert 'Join-Path $here "build\\python"' in portable
     assert "Lib\\site-packages\\pip" in portable, "the zip is refused without pip"
-    assert "tcl8*" in portable, "and without the Tcl library"
+    assert "tcl8*" in portable and "tcl9*.dll" in portable, "and without the Tcl library"
     assert "._pth" not in portable and "pkgs" not in portable
 
 

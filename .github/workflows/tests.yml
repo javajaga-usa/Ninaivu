@@ -33,7 +33,7 @@ on:
 # (docs/development/self-hosted-runners.md): MAC_RUNNER names its macOS
 # runner, LINUX_RUNNER the Linux ones in Docker on it, BASIC_TIER_RUNNER the
 # one held to 2 GB. WINDOWS_TESTS "weekly" keeps Windows, which has no runner
-# at home, to Sunday night and "Run workflow", on Python 3.12 only.
+# at home, to Sunday night and "Run workflow".
 
 # Nothing here writes to the repository.
 permissions:
@@ -69,14 +69,10 @@ jobs:
         # (Names, not runners: the job's runs-on maps them, and the checks
         # keep their names whichever machine runs them.)
         os: ${{ fromJSON((vars.WINDOWS_TESTS != 'weekly' || github.event_name == 'workflow_dispatch' || github.event.schedule == '41 3 * * 0') && '["ubuntu-latest", "windows-latest"]' || '["ubuntu-latest"]') }}
-        # Both ends of what pyproject.toml promises: the oldest interpreter
-        # Ninaivu claims to run on, and the one it is developed against. The
-        # versions in between do not break on their own — a change that fails
-        # on 3.12 fails at one end of this range too — and paying for five
-        # interpreters on three operating systems to learn that is how a suite
-        # stops being run at all.
-        python-version: ["3.12", "3.14"]
-        exclude: ${{ fromJSON(vars.WINDOWS_TESTS == 'weekly' && '[{"os":"windows-latest","python-version":"3.14"}]' || '[]') }}
+        # One Python: the one the downloads carry (installers/python-version.txt),
+        # 3.14 since Ninaivu 4.1. Until then both 3.12 and 3.14 ran here, which
+        # doubled every job to learn the same thing twice.
+        python-version: ["3.14"]
         # No macOS run: it was the slowest job (close to an hour) and said
         # little the Linux runs do not. The Mac build is still made and
         # opened on every pull request that touches it (release.yml), and
@@ -91,19 +87,14 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: "pip"
 
-      # On 3.12, with the exact versions the installers ship
+      # With the exact versions the installers ship
       # (requirements/constraints-tested.txt): the release workflow publishes
       # only a commit these jobs passed on, so what ships is what was tested.
-      # 3.14 resolves the ranges, as a fresh `pip install` would.
       - name: Install dependencies
         shell: bash
-        env:
-          PYTHON_VERSION: ${{ matrix.python-version }}
         run: |
           python -m pip install --upgrade pip setuptools wheel
-          constraints=()
-          if [ "$PYTHON_VERSION" = "3.12" ]; then constraints=(-c requirements/constraints-tested.txt); fi
-          pip install -r requirements/requirements-dev.txt "${constraints[@]}"
+          pip install -r requirements/requirements-dev.txt -c requirements/constraints-tested.txt
 
       # The whole suite, and it has to pass. The runners ship Node, so the
       # browserless UI checks under tests/*.mjs run here too — the pytest
@@ -132,7 +123,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
-          python-version: "3.12"
+          python-version: "3.14"
           cache: "pip"
 
       # Ruff at the version in requirements-dev.txt, which is the one the
@@ -183,9 +174,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
-          python-version: "3.12"
+          python-version: "3.14"
           cache: "pip"
-      # At the versions the portable builds ship, as the 3.12 test jobs above:
+      # At the versions the portable builds ship, as the test jobs above:
       # the small machine this stands in for runs exactly those.
       - name: Install dependencies
         run: |
@@ -241,7 +232,7 @@ jobs:
 
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
-          python-version: "3.12"
+          python-version: "3.14"
           cache: "pip"
       - name: Install dependencies and the model stack
         run: |
@@ -277,7 +268,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
-          python-version: "3.12"
+          python-version: "3.14"
           cache: "pip"
 
       - name: Set up Node.js
@@ -336,7 +327,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
-          python-version: "3.12"
+          python-version: "3.14"
           cache: "pip"
 
       - name: Does this commit change the dependencies?

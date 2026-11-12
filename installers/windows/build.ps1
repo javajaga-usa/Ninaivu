@@ -4,7 +4,7 @@ into it, ready for build-portable.ps1 to make the portable zip from.
 
     installers\windows\build.ps1
 
-Needs Python 3.12 on PATH (it builds the wheels and compiles Ninaivu's
+Needs Python 3.14 on PATH (it builds the wheels and compiles Ninaivu's
 bytecode, so it has to be the bundled Python's minor version). The private
 Python is the python-build-standalone build installers\python-version.txt
 names, the same CPython the Mac and Linux downloads carry: a whole Python,

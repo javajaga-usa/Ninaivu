@@ -115,9 +115,9 @@ about those. `SHA256SUMS.txt` is how to check a download either way
 
 To build by hand: `installers\windows\build.ps1` then
 `installers\windows\build-portable.ps1` on Windows (needs
-Python 3.12 and, for Tamil text, MSYS2), `bash installers/macos/build.sh` on an Apple-silicon
+Python 3.14 and, for Tamil text, MSYS2), `bash installers/macos/build.sh` on an Apple-silicon
 Mac (needs Xcode's command-line tools), `bash installers/linux/build.sh` on
-x86-64 Linux with Python 3.12. Each prints the checksum and writes the
+x86-64 Linux with Python 3.14. Each prints the checksum and writes the
 package list under its `build/` folder.
 
 Until you have one of these, a checkout runs with `python -m ninaivu
