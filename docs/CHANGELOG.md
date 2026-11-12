@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 4.1.0 — 12 November 2026
+
+- **Clearer logos for each app.** Ninaivu Album uses a strong-blue home and photograph, Admin uses orange controls, and the Control Panel has its own N mark. Logos inside the app are larger and transparent; desktop and phone icons keep their background tiles. Startup images and installer artwork follow the same designs.
+- **The source launcher reuses its workspace Python.** A checkout already set up with a supported `.venv` starts with that interpreter before looking for a system Python, including a workspace set up with the portable installer's bundled runtime.
+- **CI no longer fails on its own tooling or leaks package imports between tests.** The root-layout check recognizes ESLint's configuration, and the no-Flask launcher checks run in separate interpreters so later Windows tests keep their package imports intact.
 
 - **The JavaScript is linted.** ESLint's recommended rules run in the Lint job over the front end and the browser tests, as Ruff does over the Python. Nothing is installed on anybody's computer and there is still no build step. The first run found no mistakes that reached anybody; the variables and parameters nothing read are removed.
 - **The old import paths are gone.** The features that moved into `ninaivu/features/` in 4.0 kept their old module names for that release (`ninaivu.api.api_films`, `ninaivu.media.films`, `ninaivu.storage.films` and 49 more, each a small module standing in for the moved one). 4.1 removes all 52; every import, test and comment names the place the code lives. Nothing changes for anybody using Ninaivu. An extension that imported one of the old names must import the new one.
