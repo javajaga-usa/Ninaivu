@@ -42,13 +42,13 @@ pause_before_closing() {
 
 # --- 1. Python -------------------------------------------------------------
 #
-# Ninaivu needs Python 3.12 or newer. The .venv's, once the setup has made
+# Ninaivu needs Python 3.14 or newer. The .venv's, once the setup has made
 # one; otherwise the first one new enough on this Mac. When there is none,
 # launcher/install-python-mac.sh asks, installs it (with Homebrew, or the
 # signed installer from python.org), and it is looked for again.
 
 new_enough() {
-    "$1" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 12) else 1)' >/dev/null 2>&1
+    "$1" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 14) else 1)' >/dev/null 2>&1
 }
 
 PYTHON=""
@@ -58,12 +58,12 @@ fi
 [ -n "$PYTHON" ] || PYTHON="$(sh "$HERE/launcher/install-python-mac.sh" --find)"
 
 if [ -z "$PYTHON" ]; then
-    warn "Ninaivu needs Python 3.12 or newer, and this Mac does not have it yet."
+    warn "Ninaivu needs Python 3.14 or newer, and this Mac does not have it yet."
     if sh "$HERE/launcher/install-python-mac.sh"; then
         PYTHON="$(sh "$HERE/launcher/install-python-mac.sh" --find)"
     fi
     if [ -z "$PYTHON" ]; then
-        fail "No Python 3.12 or newer, so Ninaivu cannot start."
+        fail "No Python 3.14 or newer, so Ninaivu cannot start."
         printf '      Install it from https://www.python.org/downloads/macos/ and\n'
         printf '      double-click Ninaivu again.\n'
         pause_before_closing

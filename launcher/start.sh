@@ -3,8 +3,8 @@
 #
 #     sh launcher/start.sh --add-to-menu    # Linux: one click from the menu and Desktop
 #
-# It runs on the first Python 3.12 or newer it finds. On a Mac without one,
-# launcher/install-python-mac.sh offers to install Python 3.12 first; on Linux
+# It runs on the first Python 3.14 or newer it finds. On a Mac without one,
+# launcher/install-python-mac.sh offers to install Python 3.14 first; on Linux
 # the distribution's package manager is the place for that, and start.py says
 # which version it needs.
 cd "$(dirname "$0")/.." || exit 1

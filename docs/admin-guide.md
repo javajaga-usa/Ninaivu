@@ -120,7 +120,7 @@ covers systemd, reverse proxies, HTTPS and large libraries.
 
 ## From a checkout
 
-Running from the source needs Python 3.12 or newer (the portable downloads
+Running from the source needs Python 3.14 or newer (the portable downloads
 bring their own).
 
 ```bash
@@ -146,13 +146,13 @@ the server directly, on plain HTTP and port 80 (8080 without the right to
 use 80), unless given `--https`.
 
 On Windows, `launcher\start.cmd` needs no Python beforehand: when it finds no Python
-3.12 or newer, it installs Python 3.12 for the current user first (with
+3.14 or newer, it installs Python 3.14 for the current user first (with
 winget, or from python.org when winget is missing), then carries on. No
 administrator rights are needed. **launcher\Start - Ninaivu Control
 Panel.vbs** opens the Control Panel once `launcher\start.cmd` has run.
 
-On a Mac, `sh launcher/start.sh` installs Python 3.12 if the Mac has no
-Python 3.12 or newer (after asking: with Homebrew when the Mac has it,
+On a Mac, `sh launcher/start.sh` installs Python 3.14 if the Mac has no
+Python 3.14 or newer (after asking: with Homebrew when the Mac has it,
 otherwise the installer from python.org, which is run only when it carries the
 Python Software Foundation's signature, and for which macOS asks your
 password). `launcher/Ninaivu.command` does the same from the Finder and asks

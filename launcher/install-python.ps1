@@ -1,7 +1,7 @@
 # Ninaivu - install Python for this user, when start.cmd finds none new enough.
 #
 # start.cmd runs this once, on a computer that has never had Python (or only
-# an old one). It installs Python 3.12 - the oldest version Ninaivu supports
+# an old one). It installs Python 3.14 - the version Ninaivu needs
 # and the one every release is tested on - for the current user only, so it
 # needs no administrator rights and touches nothing that belongs to anybody
 # else on the machine.
@@ -20,15 +20,15 @@
 $ErrorActionPreference = 'Stop'
 $ProgressPreference = 'SilentlyContinue'     # the progress bar makes downloads crawl
 
-$Version = '3.12.10'                         # the last 3.12 with a Windows installer
-$WingetId = 'Python.Python.3.12'
+$Version = '3.14.10'
+$WingetId = 'Python.Python.3.14'
 
 function Say([string]$text) { Write-Host "  $text" }
 
 function Install-WithWinget {
     $winget = Get-Command winget -ErrorAction SilentlyContinue
     if (-not $winget) { return $false }
-    Say 'Installing Python 3.12 with winget...'
+    Say 'Installing Python 3.14 with winget...'
     & $winget.Source install --id $WingetId --exact --scope user --silent `
         --accept-package-agreements --accept-source-agreements --disable-interactivity
     # winget answers "already installed" with its own non-zero code; start.cmd
@@ -62,7 +62,7 @@ function Install-FromPythonOrg {
         throw "The downloaded installer is not signed by the Python Software Foundation ($($signature.Status)); it was not run."
     }
 
-    Say 'Installing Python 3.12 for this user...'
+    Say 'Installing Python 3.14 for this user...'
     # Per-user, on PATH, with the py launcher: the same shape winget gives.
     $arguments = '/quiet', 'InstallAllUsers=0', 'PrependPath=1', 'Include_launcher=1',
                  'InstallLauncherAllUsers=0', 'Include_test=0', 'Shortcuts=0'

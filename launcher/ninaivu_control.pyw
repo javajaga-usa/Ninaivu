@@ -64,7 +64,7 @@ def main():
         import tkinter  # noqa: F401 — only to find out whether there is a Tk
     except ImportError:
         if sys.platform == 'darwin':
-            hint = ('Install python-tk for it (brew install python-tk@3.12), or use the Python '
+            hint = ('Install python-tk for it (brew install python-tk@3.14), or use the Python '
                     'from python.org, then open the Control Panel again.')
         elif sys.platform.startswith('linux'):
             hint = ('Install Tk for the system\'s Python (on Ubuntu, Debian or Linux Mint: '

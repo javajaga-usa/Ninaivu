@@ -124,7 +124,7 @@ def test_no_carriage_returns(path):
 
 @pytest.mark.parametrize("path", [LAUNCHER, HELPER, ROOT / "launcher" / "start.sh"])
 def test_python_is_never_asked_of_the_command_line_tools(path):
-    """They bring Python 3.9, which Ninaivu refuses (it needs 3.12)."""
+    """They bring Python 3.9, which Ninaivu refuses (it needs 3.14)."""
     assert "xcode-select" not in path.read_text(encoding="utf-8")
 
 
@@ -242,10 +242,9 @@ def _helper(tmp_path, *args, tools, extra_env=None):
 @runs_the_launcher
 def test_find_takes_only_a_python_new_enough(tmp_path):
     tools = tmp_path / "bin"
-    _tool(tools, "python3", "exit 1\n")                      # a 3.9 says no
     _tool(tools, "python3.14", "exit 1\n")                   # one that will not run
-    newer = _tool(tools, "python3.13", "exit 0\n")
-    _tool(tools, "python3.12", "exit 0\n")
+    _tool(tools, "python3.13", "exit 0\n")                   # not asked: 4.1 needs 3.14
+    newer = _tool(tools, "python3", "exit 0\n")
     result = _helper(tmp_path, "--find", tools=tools)
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == str(newer)
@@ -304,7 +303,7 @@ def test_the_signed_installer_is_run_with_the_administrators_password(tmp_path):
     assert result.returncode == 0, result.stdout + result.stderr
     ran = log.read_text()
     assert "with administrator privileges" in ran and "installer -pkg" in ran
-    assert "python-3.12.10-macos11.pkg" in ran
+    assert "python-3.14.10-macos11.pkg" in ran
 
 
 @runs_the_launcher
@@ -324,6 +323,6 @@ def test_a_signer_that_only_names_the_psf_is_refused(tmp_path):
 def test_the_installer_comes_from_python_org_and_brew_is_preferred():
     text = HELPER.read_text(encoding="utf-8")
     assert "https://www.python.org/ftp/python/$VERSION/python-$VERSION-macos11.pkg" in text
-    assert "VERSION=3.12.10" in text
-    assert "install python@3.12" in text
+    assert "VERSION=3.14.10" in text
+    assert "install python@3.14" in text
     assert "pkgutil --check-signature" in text

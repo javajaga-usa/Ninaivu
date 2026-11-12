@@ -181,7 +181,7 @@ The console's **Server** page has the readings, the mode and the log too; the
 panel is for the times the console is not open, or not running.
 
 The panel is drawn with Tk. The portable downloads and python.org's Python
-include it. Homebrew's Python does not: `brew install python-tk@3.12` adds it.
+include it. Homebrew's Python does not: `brew install python-tk@3.14` adds it.
 It also needs `psutil` (in `requirements-desktop.txt`); without it the panel could not
 tell whether Ninaivu is running, so it says what to install instead of
 opening.
