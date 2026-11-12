@@ -198,7 +198,7 @@ function card(item, person, section) {
   return node;
 }
 
-function bornForm(person, section) {
+function bornForm(person) {
   const input = el('input', { type: 'number', inputmode: 'numeric', min: '1850',
                               max: String(new Date().getFullYear()), placeholder: '1950',
                               'aria-label': i18n.t('Year born') });
@@ -243,7 +243,7 @@ function section(group) {
       el('div', { class: 'yf-person-text' }, el('h2', { text: p.name }), meta),
       group.faces.length > 1 ? askAll : null),
     box,
-    p.born ? null : bornForm(p, state),
+    p.born ? null : bornForm(p),
     el('div', { class: 'yf-cards' }, ...group.faces.map((item) => card(item, p, state)))].filter(Boolean));
   return node;
 }

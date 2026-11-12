@@ -153,6 +153,20 @@ jobs:
       - name: Lint with Ruff
         run: ruff check ninaivu tests tools launcher extensions
 
+      # ESLint's recommended rules over the front end and the browser tests:
+      # a name that does not exist, a variable nothing reads. The rules and the
+      # reasons for the two loosened ones are in eslint.config.mjs. Installed
+      # here only; nothing of it is served or shipped.
+      - name: Set up Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+
+      - name: Lint the JavaScript with ESLint
+        run: |
+          npm install --no-save eslint@10.14.0 @eslint/js@10.0.1 globals@17.14.0
+          npx eslint --max-warnings 0 ninaivu/static tests
+
       - name: Build and verify distribution
         run: |
           python -m build --wheel

@@ -12,7 +12,6 @@ import { consoleJson, homeSend, withQuery } from './http.js';
 export * from './http.js';
 
 const seg = (value) => encodeURIComponent(String(value));
-const path = (value) => String(value).split('/').map(encodeURIComponent).join('/');
 
 /** The family app's routes (port 80). */
 export const home = (() => {

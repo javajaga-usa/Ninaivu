@@ -75,7 +75,6 @@ async function loadFolderScreen(path = '', { keep = false } = {}) {
   const items = [];
   try {
     do {
-      // eslint-disable-next-line no-await-in-loop
       data = await folderApi.folder(path || '', foldState.show, foldState.deep, items.length);
       items.push(...(data.items || []));
     } while (items.length < wanted && items.length < (data.items_total || 0)
@@ -645,7 +644,6 @@ async function foldPlayConverted(stage, item) {
     if (gone()) return;
     let response;
     try {
-      // eslint-disable-next-line no-await-in-loop
       response = await fetch(url, { headers: { Accept: 'application/json' } });
     } catch {
       heading.textContent = i18n.t('Could not reach the server');
@@ -663,7 +661,6 @@ async function foldPlayConverted(stage, item) {
       return;
     }
     let payload = {};
-    // eslint-disable-next-line no-await-in-loop
     try { payload = await response.json(); } catch { /* not JSON */ }
     if (response.status !== 202) {
       heading.textContent = i18n.t('This file cannot be played here');
@@ -673,7 +670,6 @@ async function foldPlayConverted(stage, item) {
       return;
     }
     fill.style.width = `${Math.max(2, payload.percent || 0)}%`;
-    // eslint-disable-next-line no-await-in-loop
     await new Promise((resolve) => { setTimeout(resolve, 1000); });
   }
   bar.remove();

@@ -106,9 +106,13 @@ def render(routes: list[tuple[str, str, str]]) -> str:
         "export * from './http.js';",
         "",
         "const seg = (value) => encodeURIComponent(String(value));",
-        "const path = (value) => String(value).split('/').map(encodeURIComponent).join('/');",
-        "",
     ]
+    # Only when a route takes a whole path: none does today, and a helper
+    # nothing calls is what ESLint is there to find.
+    if any("${path(" in line for made in faces.values() for line in made.values()):
+        out.append("const path = (value) => String(value).split('/')"
+                   ".map(encodeURIComponent).join('/');")
+    out.append("")
     senders = {
         "home": "(method, url, options = {}) => homeSend(method, withQuery(url, options.query), options)",
         "admin": "(method, url, options = {}) => consoleJson(withQuery(url, options.query),\n"

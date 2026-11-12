@@ -7,7 +7,7 @@
  * so scrolling a 100k-item library costs the same as scrolling 200 items.
  */
 
-import { computeLayout, visibleRange, sectionAt, targetSize } from './layout.js';
+import { computeLayout, visibleRange, sectionAt } from './layout.js';
 import { thumbUrl } from './api.js';
 import * as i18n from './i18n.js';
 import {

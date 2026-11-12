@@ -500,7 +500,7 @@ function isNetworkFailure(error) {
          msg.includes('504');
 }
 
-function setServerOffline(reason = i18n.t('Cannot reach the Ninaivu server.')) {
+function setServerOffline() {
   // Whatever else is true, the cover comes off: a boot overlay left over a
   // page that is telling somebody the server is unreachable hides the one
   // thing they need to read.
@@ -628,7 +628,7 @@ async function checkConnection(manual = false) {
 
 function setupNetworkStatusListeners() {
   window.addEventListener('offline', () => {
-    setServerOffline(i18n.t('You are offline.'));
+    setServerOffline();
   });
   window.addEventListener('online', () => {
     checkConnection(false);
@@ -899,7 +899,7 @@ async function refreshStatus(asked = null) {
     return;
   }
   showAwayLibraries(state.status);
-  const { root, root_label: label, stats, ai, user } = state.status;
+  const { stats, ai, user } = state.status;
   if (user) {
     state.user = user;
     renderIdentity();

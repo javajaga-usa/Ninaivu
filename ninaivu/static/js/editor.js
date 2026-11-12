@@ -64,8 +64,6 @@ const EXPORT_SIZES = [0, 3840, 2048, 1080];
 // brushes, which are.
 const BRUSHES = ['dodge', 'burn', 'soften'];
 const PAINTED = { dodge: 'dodge', burn: 'burn', soften: 'soften' };
-/** The longest edge of the layers that hold what has been painted: the photograph's, not the window's. */
-const LAYER_LONGEST = 1600;
 /** The longest edge of the face maps sent to a render of the whole photograph. */
 const MAPS_LONGEST = 2400;
 const ASPECTS = { free: null, '1:1': 1, '4:5': 0.8, '3:2': 1.5, '2:3': 2 / 3, '16:9': 16 / 9 };
@@ -501,7 +499,7 @@ export class PhotoEditor {
     this.stage = canvas(f.cw, f.ch);
     this.stage.getContext('2d').drawImage(full, f.x, f.y, f.cw, f.ch, 0, 0, f.cw, f.ch);
 
-    for (const op of this.retouchOps) this.applyOp(this.stage, op, 1);
+    for (const op of this.retouchOps) this.applyOp(this.stage, op);
 
     const ratio = Math.min(1, 1400 / Math.max(f.cw, f.ch));
     this.preview = canvas(Math.max(1, Math.round(f.cw * ratio)), Math.max(1, Math.round(f.ch * ratio)));
@@ -516,7 +514,7 @@ export class PhotoEditor {
   }
 
   /** One retouch operation, replayed at whatever scale the target is. */
-  applyOp(target, op, scale) {
+  applyOp(target, op) {
     const ctx = target.getContext('2d');
     const x = op.x * target.width, y = op.y * target.height;
     const r = Math.max(2, op.r * target.width);

@@ -1075,7 +1075,6 @@ export class ArchivePanel {
 
     const running = data.is_scanning;
     const dry = data.job_mode === 'dry-run';
-    const verifying = data.job_mode === 'verify';
 
     // A run has begun: whatever estimate was walking is called off, here and
     // on the server, and the run's count is the one count on the page.
