@@ -353,7 +353,8 @@ def test_the_root_holds_only_what_tooling_looks_for_there():
     portable download carries its own one starter."""
     root = Path(__file__).resolve().parents[1]
     allowed = {"README.md", "LICENSE", "pyproject.toml", "mkdocs.yml", ".gitignore",
-               ".gitattributes", ".editorconfig", ".pre-commit-config.yaml", ".dockerignore"}
+               ".gitattributes", ".editorconfig", ".pre-commit-config.yaml", ".dockerignore",
+               "eslint.config.mjs"}
     # What the repository holds there, not whatever else is lying in this
     # checkout (a zip the person put there, a picture made from it): those
     # are theirs, and never reach anybody else. Read from disk where there is

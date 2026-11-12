@@ -9,36 +9,51 @@ apply the saved resource mode", and started the server with neither the mode's
 showed it.
 """
 
+import json
+import subprocess
 import sys
 from pathlib import Path
 
-import pytest
+from ninaivu.utils import resources
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
-sys.path.insert(0, str(ROOT / "launcher"))     # start.py lives there
-
-import start  # noqa: E402
-from ninaivu.utils import resources  # noqa: E402
 
 
-@pytest.fixture
-def no_flask(monkeypatch):
-    """The system python3 of a first run: no Flask, and Ninaivu never imported."""
-    for name in [n for n in sys.modules if n == "ninaivu" or n.startswith("ninaivu.")]:
-        monkeypatch.delitem(sys.modules, name)
-    monkeypatch.setitem(sys.modules, "flask", None)
+def without_flask(code):
+    """Use a fresh interpreter: evicting Ninaivu from pytest's sys.modules
+    can leave cached submodules attached to a different package instance.
+    That broke later string-based monkeypatches on Windows.
+    """
+    result = subprocess.run(
+        [sys.executable, "-c", "import sys; sys.modules['flask'] = None; " + code],
+        cwd=ROOT, capture_output=True, text=True, timeout=30,
+    )
+    assert result.returncode == 0, result.stderr
+    return result.stdout
 
 
-def test_the_ninaivu_package_cannot_be_imported_without_flask(no_flask):
-    """What the launcher used to do, so the fixture is known to bite."""
-    with pytest.raises(ImportError):
-        from ninaivu.utils.resources import budget  # noqa: F401
+def test_the_ninaivu_package_cannot_be_imported_without_flask():
+    """What the launcher used to do, so the simulation is known to bite."""
+    without_flask('''
+try:
+    from ninaivu.utils.resources import budget
+except ImportError:
+    pass
+else:
+    raise AssertionError("Ninaivu imported without Flask")
+''')
 
 
-def test_the_launcher_reads_the_budget_without_flask(no_flask):
-    loaded = start.load_resources()
-    for mode in resources.MODES:
-        assert loaded.budget(mode) == resources.budget(mode)
-        assert loaded.environment(mode) == resources.environment(mode)
-    assert "ninaivu" not in sys.modules, "the launcher imported the ninaivu package"
+def test_the_launcher_reads_the_budget_without_flask():
+    output = without_flask('''
+import json
+sys.path.insert(0, 'launcher')
+import start
+loaded = start.load_resources()
+assert "ninaivu" not in sys.modules, "the launcher imported the ninaivu package"
+print(json.dumps({mode: [loaded.budget(mode), loaded.environment(mode)]
+                  for mode in loaded.MODES}))
+''')
+    expected = {mode: [resources.budget(mode), resources.environment(mode)]
+                for mode in resources.MODES}
+    assert json.loads(output) == json.loads(json.dumps(expected))

@@ -296,8 +296,8 @@ button { background: none; border: 0; cursor: pointer; }
   white-space: nowrap;
 }
 /* The mark is a picture (static/icons/mark.svg, drawn by tools/generate_icons.py):
-   the same one as the home-screen icon, at the size of the name beside it. */
-.brand-mark { width: 30px; height: 30px; flex: none; display: block; }
+   transparent in the pages; installed app icons keep their background tiles. */
+.brand-mark { width: 44px; height: 44px; flex: none; display: block; }
 
 .icon-btn {
   display: inline-flex; align-items: center; justify-content: center;
@@ -1733,7 +1733,7 @@ button.job-row:focus-visible { outline: 2px solid var(--accent); outline-offset:
 }
 .gate-brand { display: flex; align-items: center; gap: 11px; }
 .gate-brand h1 { font-size: 25px; font-weight: 680; letter-spacing: -.03em; }
-.gate-mark { width: 40px; height: 40px; flex: none; display: block; }
+.gate-mark { width: 56px; height: 56px; flex: none; display: block; }
 .gate-lede { color: var(--text-2); font-size: 13.5px; margin-bottom: 4px; }
 
 .gate-form { display: flex; flex-direction: column; gap: 12px; }
@@ -2739,7 +2739,7 @@ body[data-role="guest"] #map-btn { display: none; }
 .boot.done { opacity: 0; pointer-events: none; }
 .boot[hidden] { display: none; }
 .boot-inner { display: grid; gap: 14px; justify-items: center; width: min(280px, 72vw); }
-.boot-mark { width: 56px; height: 56px; display: block; }
+.boot-mark { width: 80px; height: 80px; display: block; }
 .boot-bar {
   width: 100%; height: 4px; border-radius: 3px;
   background: var(--border); overflow: hidden;

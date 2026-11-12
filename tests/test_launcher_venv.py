@@ -8,6 +8,9 @@ fell back to the system python3, which on Debian has no pip, and ended on
 
 import errno
 import os
+import shlex
+import shutil
+import subprocess
 import sys
 import venv
 from pathlib import Path
@@ -20,6 +23,26 @@ sys.path.insert(0, str(ROOT / "launcher"))     # start.py lives there
 import start  # noqa: E402
 
 posix_only = pytest.mark.skipif(os.name == "nt", reason="venv makes no links on Windows")
+
+
+@posix_only
+def test_shell_launcher_reuses_workspace_python_without_system_python(tmp_path):
+    root = tmp_path / "Workspace with spaces"
+    launcher = root / "launcher"
+    launcher.mkdir(parents=True)
+    shutil.copyfile(ROOT / "launcher" / "start.sh", launcher / "start.sh")
+    shutil.copyfile(ROOT / "launcher" / "linux-env.sh", launcher / "linux-env.sh")
+    marker = root / "selected-python"
+    python = root / ".venv" / "bin" / "python"
+    python.parent.mkdir(parents=True)
+    python.write_text(
+        '#!/bin/sh\n[ "$1" != -c ] || exit 0\n'
+        f'printf "%s\\n" "$@" > {shlex.quote(str(marker))}\n'
+    )
+    python.chmod(0o755)
+    subprocess.run(["sh", str(launcher / "start.sh"), "--setup-only"],
+                   cwd=tmp_path, check=True, timeout=30)
+    assert marker.read_text().splitlines() == ["launcher/start.py", "--setup-only"]
 
 
 @pytest.fixture

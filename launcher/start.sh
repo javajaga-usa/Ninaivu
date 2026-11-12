@@ -16,7 +16,14 @@ case "${1:-}" in
     --remove-from-menu) exec python3 ninaivu/desktop/linux_menu.py --remove ;;
 esac
 [ "$(uname -s)" != Linux ] || . ./launcher/linux-env.sh
-PYTHON="$(sh launcher/install-python-mac.sh --find)"
+# Reuse the workspace's Python before looking for a system installation.
+# This also supports a workspace set up with the installer's bundled runtime.
+PYTHON=""
+if [ -x "$PWD/.venv/bin/python" ] && "$PWD/.venv/bin/python" -c 'import sys; raise SystemExit(0 if sys.version_info >= (3, 14) else 1)' >/dev/null 2>&1; then
+    PYTHON="$PWD/.venv/bin/python"
+else
+    PYTHON="$(sh launcher/install-python-mac.sh --find)"
+fi
 if [ -z "$PYTHON" ] && [ "$(uname -s)" = Darwin ]; then
     sh launcher/install-python-mac.sh && PYTHON="$(sh launcher/install-python-mac.sh --find)"
 fi

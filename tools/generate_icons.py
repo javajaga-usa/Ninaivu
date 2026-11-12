@@ -4,13 +4,10 @@
     pip install resvg-py          # once; a self-contained wheel, no system libraries
     python tools/generate_icons.py
 
-The mark: a roof over a photograph — a home that keeps pictures. A rounded
-chevron roof floats over a rounded card, and what is on the card says which
-of Ninaivu's three faces this is:
-
-* the family app (blue): a sunrise over a hill, a photograph;
-* the console (violet): three sliders, the settings;
-* the Control Panel (dark, the desktop app): a green power sign, on and off.
+The album and Admin marks share a roof over a card, recalling the original
+home for photographs: a sun and mountain for the album, sliders for Admin.
+The Control Panel keeps the angular N / viewfinder monogram. Strong blue,
+orange and graphite distinguish the three while the gradients unify them.
 
 It is written here as SVG, so the same drawing is the browser-tab icon, the
 brand mark in the pages (static/icons/mark.svg) and, rendered, every PNG: the
@@ -19,8 +16,9 @@ window and tray icon, the Windows .ico and the macOS iconset (both the
 Control Panel, which is what those installers open). No source file to lose
 and no artwork that is anybody's but the project's.
 
-The start-up screens sit on the warm charcoal of the dark theme with the name
-under the mark.
+Pages use the transparent mark.svg, with mark.png available as a raster
+export. Installed app icons keep their tiles. The start-up screens sit on the
+warm charcoal of the dark theme with the name under the transparent mark.
 """
 from __future__ import annotations
 
@@ -35,101 +33,72 @@ ICONS = STATIC / "icons"
 SPLASH = STATIC / "splash"
 INSTALLERS = ROOT / "installers"
 
-#: Each face's tile, light to dark from the top left. The roof and the card
-#: are the same warm cream on all three, so they read as one family.
+#: Shared geometry, with a distinct colourway for each application surface.
 FACES = {
-    "family": ("#4fb3ff", "#2a7cf0", "#5146e0"),
-    "admin": ("#b39bff", "#7c5cff", "#4128c2"),
-    "panel": ("#4a5550", "#26302c", "#121815"),
+    "family": ("#1677ff", "#1259e5", "#104acb"),
+    "admin": ("#ff972f", "#f57416", "#db540b"),
+    "panel": ("#283f46", "#152a32", "#0b161f"),
 }
-
-CREAM = "#fffaf2"
-CHARCOAL = (20, 18, 16, 255)        # --bg of the dark theme in static/css/style.css
-
-ROOF = "M262 418L512 236L762 418"
-CARD = (290, 440, 444, 340, 60)     # x, y, width, height, corner radius
-PHOTO = "M326 476H698V744H326Z"     # the picture on the family's card
-CX, CY, S = 512, 612, 0.82          # the middle of the card, and the signs' scale
-
-
-def _sign(face: str, i: str) -> str:
-    """What is on the card."""
-    if face == "family":
-        return (f'<g clip-path="url(#{i}w)"><rect width="1024" height="1024" fill="url(#{i}s)"/>'
-                f'<circle cx="{CX + 40 * S:g}" cy="{CY}" r="{74 * S:g}" fill="#fff6e2"/>'
-                f'<path d="M0 {CY + 116 * S:g}C{CX - 120 * S:g} {CY + 40 * S:g} {CX - 40 * S:g} {CY + 36 * S:g} '
-                f'{CX + 36 * S:g} {CY + 80 * S:g}S{CX + 156 * S:g} {CY + 92 * S:g} 1024 {CY + 30 * S:g}V1024H0Z" '
-                f'fill="#2c6be0"/></g>')
-    if face == "admin":
-        out, w = [], 364 * S
-        x0 = CX - w / 2
-        for dy, at in ((-90, .72), (0, .3), (90, .82)):
-            y, x = CY + dy * S, x0 + w * at
-            out.append(f'<rect x="{x0:g}" y="{y - 14 * S:g}" width="{w:g}" height="{28 * S:g}" rx="{14 * S:g}" '
-                       f'fill="#7c5cff" fill-opacity=".25"/>'
-                       f'<rect x="{x0:g}" y="{y - 14 * S:g}" width="{x - x0:g}" height="{28 * S:g}" rx="{14 * S:g}" '
-                       f'fill="#6a4cf0"/>'
-                       f'<circle cx="{x:g}" cy="{y:g}" r="{40 * S:g}" fill="#fff" stroke="#6a4cf0" '
-                       f'stroke-width="{22 * S:g}"/>')
-        return "".join(out)
-    r = 124 * S
-    return (f'<path d="M{CX - 68 * S:g} {CY - 104 * S:g}A{r:g} {r:g} 0 1 0 {CX + 68 * S:g} {CY - 104 * S:g}" '
-            f'fill="none" stroke="url(#{i}k)" stroke-width="{54 * S:g}" stroke-linecap="round"/>'
-            f'<path d="M{CX} {CY - 150 * S:g}V{CY - 34 * S:g}" stroke="#1fb457" stroke-width="{54 * S:g}" '
-            f'stroke-linecap="round"/>')
+CHARCOAL = (20, 18, 16, 255)        # --bg of the dark theme
 
 
 def mark_svg(face: str = "family", *, tile: str = "rounded", ident: str = "n") -> str:
-    """The mark as an SVG document, 1024 units square.
-
-    *face* is "family", "admin" (the console) or "panel" (the Control Panel).
-    *tile* is "rounded" (the app icon and the pages), "full" (a maskable icon:
-    the tile bleeds to the edges and the drawing keeps inside the safe centre)
-    or "mac" (Apple's grid: an 824-unit tile centred on the canvas, which is
-    how every other icon in the Dock is drawn). *ident* prefixes the gradient
-    ids, so two marks inlined in one page do not share them.
-    """
+    """The symbol: transparent for pages, tiled for installed app icons."""
     t0, t1, t2 = FACES[face]
-    i = ident
-    if tile == "full":
-        box, rx, art = (0, 1024), 0, 0.8
+    accent = {"family": "#c8e5ff", "admin": "#ffe5c2", "panel": "#84f5cf"}[face]
+    if tile == "transparent":
+        at, side, rx, art = 0, 1024, 0, 1.3
+        accent = "#258cae" if face == "panel" else t2
+    elif tile == "full":
+        at, side, rx, art = 0, 1024, 0, .8
     elif tile == "mac":
-        box, rx, art = (100, 824), 185, 0.8
+        at, side, rx, art = 100, 824, 185, .8
     else:
-        box, rx, art = (0, 1024), 230, 1.0
-    at, side = box
-    frame = (f'<rect x="{at}" y="{at}" width="{side}" height="{side}" rx="{rx}" fill="url(#{i}t)"/>'
-             f'<rect x="{at}" y="{at}" width="{side}" height="{side}" rx="{rx}" fill="url(#{i}g)"/>')
-    if rx:      # a hairline of light round the edge, so a dark tile still shows on a dark Dock
-        line = 12 * side / 1024
-        frame += (f'<rect x="{at + line / 2:g}" y="{at + line / 2:g}" width="{side - line:g}" '
-                  f'height="{side - line:g}" rx="{rx - line / 2:g}" fill="none" stroke="#fff" '
-                  f'stroke-opacity=".10" stroke-width="{line:g}"/>')
+        at, side, rx, art = 0, 1024, 230, 1
     k = (1 - art) * 512
-    x, y, w, h, r = CARD
-    return f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+    i = ident
+    if face == "panel":
+        symbol = (f'<path d="M288 392V288H496M736 632V736H528" fill="none" stroke="{accent}" stroke-width="40" stroke-linejoin="round"/>'
+                  f'<path d="M320 688V416L704 688V416" fill="none" stroke="url(#{i}a)" stroke-width="88" stroke-linecap="square" stroke-linejoin="round"/>'
+                  f'<circle cx="672" cy="304" r="48" fill="{accent}"/>')
+    else:
+        symbol = (f'<path d="M238 416L512 234L786 416" fill="none" stroke="url(#{i}a)" stroke-width="64" stroke-linecap="round" stroke-linejoin="round"/>'
+                  f'<rect x="280" y="444" width="464" height="332" rx="58" fill="url(#{i}a)"/>')
+        if face == "family":
+            symbol += (f'<clipPath id="{i}photo"><rect x="322" y="486" width="380" height="248" rx="23"/></clipPath>'
+                       f'<g clip-path="url(#{i}photo)"><rect x="322" y="486" width="380" height="248" fill="#ffd9b5"/>'
+                       f'<circle cx="611" cy="550" r="37" fill="#fffaf2"/>'
+                       f'<path d="M304 710L437 558L561 698L629 619L722 718V754H304Z" fill="#5b9afa"/>'
+                       f'<path d="M306 741L476 624L593 726L710 666V756H306Z" fill="#104bbf"/></g>')
+        else:
+            track = "#fff0de" if tile == "transparent" else "#ed9a51"
+            knob = "#fffaf2" if tile == "transparent" else "#e76b15"
+            for y, x in ((524, 578), (610, 442), (696, 602)):
+                symbol += (f'<path d="M354 {y}H670" stroke="{track}" stroke-width="22" stroke-linecap="round"/>'
+                           f'<circle cx="{x}" cy="{y}" r="32" fill="{knob}" stroke="{t1}" stroke-width="12"/>')
+    frame = "" if tile == "transparent" else (
+        f'<rect x="{at}" y="{at}" width="{side}" height="{side}" rx="{rx}" fill="url(#{i}t)"/>'
+        f'<rect x="{at}" y="{at}" width="{side}" height="{side}" rx="{rx}" fill="url(#{i}g)"/>'
+        f'<rect x="{at + 7}" y="{at + 7}" width="{side - 14}" height="{side - 14}" rx="{max(0, rx - 7)}" fill="none" stroke="#fff" stroke-opacity=".14" stroke-width="2"/>'
+    )
+    ink = ("#3bc7a0" if face == "panel" else t0) if tile == "transparent" else "#fff"
+    return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
 <defs>
 <linearGradient id="{i}t" x1="0" y1="0" x2="1" y2="1">
-<stop offset="0" stop-color="{t0}"/><stop offset=".55" stop-color="{t1}"/><stop offset="1" stop-color="{t2}"/>
+<stop stop-color="{t0}"/><stop offset=".5" stop-color="{t1}"/><stop offset="1" stop-color="{t2}"/>
 </linearGradient>
-<radialGradient id="{i}g" cx=".2" cy=".05" r=".95">
-<stop offset="0" stop-color="#fff" stop-opacity=".28"/><stop offset=".6" stop-color="#fff" stop-opacity="0"/>
+<linearGradient id="{i}a" x1="0" y1="1" x2="1" y2="0">
+<stop stop-color="{ink}"/><stop offset="1" stop-color="{accent}"/>
+</linearGradient>
+<radialGradient id="{i}g" cx=".12" cy="0" r="1">
+<stop stop-color="#fff" stop-opacity=".16"/><stop offset="1" stop-color="#fff" stop-opacity="0"/>
 </radialGradient>
-<linearGradient id="{i}s" x1="0" y1="0" x2="0" y2="1">
-<stop offset="0" stop-color="#ffd59a"/><stop offset="1" stop-color="#ff8f6b"/>
-</linearGradient>
-<linearGradient id="{i}k" x1="0" y1="0" x2="0" y2="1">
-<stop offset="0" stop-color="#4ade80"/><stop offset="1" stop-color="#16a34a"/>
-</linearGradient>
-<clipPath id="{i}w"><path d="{PHOTO}"/></clipPath>
 </defs>
 {frame}
 <g transform="translate({k:g} {k:g}) scale({art:g})">
-<path d="{ROOF}" fill="none" stroke="{CREAM}" stroke-width="70" stroke-linecap="round" stroke-linejoin="round"/>
-<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="{r}" fill="{CREAM}"/>
-{_sign(face, i)}
+{symbol}
 </g>
-</svg>"""
+</svg>'''
 
 
 def render(svg: str, size: int) -> Image.Image:
@@ -201,13 +170,15 @@ def main() -> None:
         for size in (512, 192, 180):
             big.resize((size, size), Image.LANCZOS).save(icons / f"icon-{size}.png", "PNG", optimize=True)
         render(mark_svg(face, tile="full"), 512).save(icons / "icon-maskable-512.png", "PNG", optimize=True)
-        (icons / "mark.svg").write_text(mark_svg(face) + "\n", encoding="utf-8")
+        (icons / "mark.svg").write_text(mark_svg(face, tile="transparent") + "\n", encoding="utf-8")
+        clear = render(mark_svg(face, tile="transparent"), 1024)
+        clear.resize((512, 512), Image.LANCZOS).save(icons / "mark.png", "PNG", optimize=True)
         if face == "family":               # the documentation site's logo and tab icon
             big.resize((192, 192), Image.LANCZOS).save(ROOT / "docs" / "assets" / "icon-192.png",
                                                        "PNG", optimize=True)
         for w, h in SCREENS:
             for width, height in ((w, h), (h, w)):
-                splash(big, width, height, name).save(splashes / f"splash-{width}x{height}.png",
+                splash(clear, width, height, name).save(splashes / f"splash-{width}x{height}.png",
                                                       "PNG", optimize=True)
 
     # The Control Panel: its window, its tray icon and the Linux menu entry.
@@ -216,7 +187,8 @@ def main() -> None:
     big = render(mark_svg("panel"), 1024)
     for size in (512, 192):
         big.resize((size, size), Image.LANCZOS).save(panel / f"icon-{size}.png", "PNG", optimize=True)
-    (panel / "mark.svg").write_text(mark_svg("panel") + "\n", encoding="utf-8")
+    (panel / "mark.svg").write_text(mark_svg("panel", tile="transparent") + "\n", encoding="utf-8")
+    render(mark_svg("panel", tile="transparent"), 512).save(panel / "mark.png", "PNG", optimize=True)
 
     # The installers' icons, the Control Panel's, since that is what they open:
     # one .ico for Windows (several sizes in one file) and the PNG set the

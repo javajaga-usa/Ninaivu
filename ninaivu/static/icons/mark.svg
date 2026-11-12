@@ -1,23 +1,17 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
 <defs>
 <linearGradient id="nt" x1="0" y1="0" x2="1" y2="1">
-<stop offset="0" stop-color="#4fb3ff"/><stop offset=".55" stop-color="#2a7cf0"/><stop offset="1" stop-color="#5146e0"/>
+<stop stop-color="#1677ff"/><stop offset=".5" stop-color="#1259e5"/><stop offset="1" stop-color="#104acb"/>
 </linearGradient>
-<radialGradient id="ng" cx=".2" cy=".05" r=".95">
-<stop offset="0" stop-color="#fff" stop-opacity=".28"/><stop offset=".6" stop-color="#fff" stop-opacity="0"/>
+<linearGradient id="na" x1="0" y1="1" x2="1" y2="0">
+<stop stop-color="#1677ff"/><stop offset="1" stop-color="#104acb"/>
+</linearGradient>
+<radialGradient id="ng" cx=".12" cy="0" r="1">
+<stop stop-color="#fff" stop-opacity=".16"/><stop offset="1" stop-color="#fff" stop-opacity="0"/>
 </radialGradient>
-<linearGradient id="ns" x1="0" y1="0" x2="0" y2="1">
-<stop offset="0" stop-color="#ffd59a"/><stop offset="1" stop-color="#ff8f6b"/>
-</linearGradient>
-<linearGradient id="nk" x1="0" y1="0" x2="0" y2="1">
-<stop offset="0" stop-color="#4ade80"/><stop offset="1" stop-color="#16a34a"/>
-</linearGradient>
-<clipPath id="nw"><path d="M326 476H698V744H326Z"/></clipPath>
 </defs>
-<rect x="0" y="0" width="1024" height="1024" rx="230" fill="url(#nt)"/><rect x="0" y="0" width="1024" height="1024" rx="230" fill="url(#ng)"/><rect x="6" y="6" width="1012" height="1012" rx="224" fill="none" stroke="#fff" stroke-opacity=".10" stroke-width="12"/>
-<g transform="translate(0 0) scale(1)">
-<path d="M262 418L512 236L762 418" fill="none" stroke="#fffaf2" stroke-width="70" stroke-linecap="round" stroke-linejoin="round"/>
-<rect x="290" y="440" width="444" height="340" rx="60" fill="#fffaf2"/>
-<g clip-path="url(#nw)"><rect width="1024" height="1024" fill="url(#ns)"/><circle cx="544.8" cy="612" r="60.68" fill="#fff6e2"/><path d="M0 707.12C413.6 644.8 479.2 641.52 541.52 677.6S639.92 687.44 1024 636.6V1024H0Z" fill="#2c6be0"/></g>
+
+<g transform="translate(-153.6 -153.6) scale(1.3)">
+<path d="M238 416L512 234L786 416" fill="none" stroke="url(#na)" stroke-width="64" stroke-linecap="round" stroke-linejoin="round"/><rect x="280" y="444" width="464" height="332" rx="58" fill="url(#na)"/><clipPath id="nphoto"><rect x="322" y="486" width="380" height="248" rx="23"/></clipPath><g clip-path="url(#nphoto)"><rect x="322" y="486" width="380" height="248" fill="#ffd9b5"/><circle cx="611" cy="550" r="37" fill="#fffaf2"/><path d="M304 710L437 558L561 698L629 619L722 718V754H304Z" fill="#5b9afa"/><path d="M306 741L476 624L593 726L710 666V756H306Z" fill="#104bbf"/></g>
 </g>
 </svg>
