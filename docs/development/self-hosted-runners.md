@@ -15,11 +15,11 @@ again at any time (a Mac that is retired, a month of travelling).
 
 | Job | With the variables set | Without them |
 | --- | --- | --- |
-| Tests on Linux (3.12 and 3.14), Lint, Dependency audit, Browser tests, the release gate, the docs site | a Linux runner in Docker on the Mac (`ninaivu-linux`) | `ubuntu-latest` |
+| Tests on Linux, Lint, Dependency audit, Browser tests, the release gate, the docs site | a Linux runner in Docker on the Mac (`ninaivu-linux`) | `ubuntu-latest` |
 | Basic tier | the 2 GB Linux runner on the Mac (`ninaivu-linux-2gb`) | `ubuntu-latest`, in a 2 GB systemd scope |
 | Full tier, the macOS download, the real-models check on Apple silicon | the Mac itself (`ninaivu-mac`) | `macos-14` |
 | The Linux arm64 download, the Docker image's arm64 check | a Linux runner on the Mac (they are arm64) | `ubuntu-24.04-arm` (free for public repositories only) |
-| Tests on Windows | Sunday nights and "Run workflow", Python 3.12 only (`WINDOWS_TESTS` = `weekly`) | every run, 3.12 and 3.14 |
+| Tests on Windows | Sunday nights and "Run workflow", (`WINDOWS_TESTS` = `weekly`) | every run |
 | The Windows and Linux x64 downloads, publishing a release, the Docker image | GitHub's runners (a few minutes per release) | the same |
 
 A check waits while the Mac is asleep or off, and starts when it is back. The

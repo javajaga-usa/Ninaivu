@@ -61,3 +61,62 @@ def test_other_failures_still_fall_back(fresh, monkeypatch):
     monkeypatch.setattr(venv.EnvBuilder, "create", broken)
 
     assert start.ensure_venv() == Path(sys.executable)
+
+
+def _fake_venv(root, script):
+    """A .venv whose python is a script, so it can claim any version."""
+    python = start.venv_python(root / ".venv")
+    python.parent.mkdir(parents=True)
+    python.write_text("#!/bin/sh\n" + script)
+    python.chmod(0o755)
+    (root / ".venv" / "lib").mkdir()
+    (root / ".venv" / "lib" / "old-package").write_text("x")
+    return python
+
+
+@posix_only
+def test_a_venv_from_an_older_python_is_made_again(fresh, monkeypatch, capsys):
+    """4.1 needs Python 3.14. A checkout updated from 4.0 still has the .venv
+    its Python 3.12 made, and the launcher went on to run Ninaivu in it."""
+    _fake_venv(fresh, "echo 1\n")          # answers the question "too old?" with yes
+    made = []
+
+    def create(self, env_dir):
+        made.append(Path(env_dir))
+        python = start.venv_python(Path(env_dir))
+        python.parent.mkdir(parents=True)
+        python.write_text("")
+    monkeypatch.setattr(venv.EnvBuilder, "create", create)
+
+    assert start.ensure_venv() == start.venv_python(fresh / ".venv")
+    assert made == [fresh / ".venv"]
+    assert not (fresh / ".venv" / "lib" / "old-package").exists()
+    assert "older" in capsys.readouterr().out
+
+
+@posix_only
+@pytest.mark.parametrize("script", ["echo 0\n", "exit 3\n"])
+def test_a_venv_that_is_new_enough_or_broken_is_left_alone(fresh, monkeypatch, script):
+    python = _fake_venv(fresh, script)
+    monkeypatch.setattr(venv.EnvBuilder, "create",
+                        lambda self, env_dir: pytest.fail("the .venv was made again"))
+
+    assert start.ensure_venv() == python
+    assert (fresh / ".venv" / "lib" / "old-package").exists()
+
+
+def test_the_floor_is_the_same_everywhere():
+    """One number, written in six places that cannot import each other."""
+    import re
+    floor = start.MIN_PYTHON
+    assert floor == (3, 14)
+    want = f">={floor[0]}.{floor[1]}"
+    for path in ("pyproject.toml", "extensions/gemini/pyproject.toml",
+                 "extensions/creative-studio/pyproject.toml"):
+        assert f'requires-python = "{want}"' in (ROOT / path).read_text(), path
+    for path in ("launcher/install-python-mac.sh", "launcher/start.cmd", "launcher/Ninaivu.command"):
+        found = re.findall(r"version_info >= \((\d+), (\d+)\)", (ROOT / path).read_text())
+        assert found and all((int(a), int(b)) == floor for a, b in found), path
+    docker = (ROOT / "installers" / "docker" / "Dockerfile").read_text()
+    images = set(re.findall(r"^FROM python:(\d+)\.(\d+)-slim@", docker, re.M))
+    assert images == {(str(floor[0]), str(floor[1]))}, "the Docker image runs another Python"

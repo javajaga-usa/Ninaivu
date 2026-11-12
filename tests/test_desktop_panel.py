@@ -345,7 +345,7 @@ def test_a_python_without_tk_is_told_what_to_install(monkeypatch):
     monkeypatch.setitem(sys.modules, "tkinter", None)       # import tkinter now fails
     monkeypatch.setattr(sys, "platform", "darwin")
     assert entry.main() == 1
-    assert "python-tk@3.12" in told[0] and "tray" in told[0]
+    assert "python-tk@3.14" in told[0] and "tray" in told[0]
 
 
 def test_a_panel_that_cannot_start_says_why(monkeypatch):

@@ -54,7 +54,7 @@ VENV_DIR = HERE / ".venv"
 #: the step after this one, and not taken here: it needs a generated lock
 #: naming every platform's wheels, which this repository does not keep yet.
 CONSTRAINTS = HERE / "requirements" / "constraints-tested.txt"
-MIN_PYTHON = (3, 12)            # what pyproject.toml requires
+MIN_PYTHON = (3, 14)            # what pyproject.toml requires
 # No token is shipped with Ninaivu. To authenticate against huggingface.co
 # (for example when downloading an OpenCLIP model the first time), set the
 # HF_TOKEN environment variable yourself before starting the launcher.
@@ -139,6 +139,22 @@ def in_virtualenv() -> bool:
     return sys.prefix != getattr(sys, "base_prefix", sys.prefix)
 
 
+def too_old(python: Path) -> bool:
+    """Whether the interpreter at ``python`` runs and is older than MIN_PYTHON.
+
+    One that does not run at all is not called old: that is a broken
+    environment, and what follows reports it as it always has.
+    """
+    check = ("import sys; print(int(sys.version_info[:2] < "
+             f"({MIN_PYTHON[0]}, {MIN_PYTHON[1]})))")
+    try:
+        done = subprocess.run([str(python), "-c", check], capture_output=True,
+                              text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return done.returncode == 0 and done.stdout.strip() == "1"
+
+
 def links_refused(exc: BaseException) -> bool:
     """Whether making the venv failed because the drive takes no symlinks."""
     return (not IS_WINDOWS and isinstance(exc, OSError)
@@ -151,6 +167,16 @@ def ensure_venv() -> Path:
         return Path(sys.executable)
 
     python = venv_python(VENV_DIR)
+    if python.exists() and too_old(python):
+        # Made by an older Ninaivu on a Python this one no longer runs on.
+        # Nothing of the family's is in it: only installed packages, which a
+        # new Python cannot use anyway.
+        say(f"The virtual environment in {VENV_DIR.name} was made with an older "
+            f"Python; making it again with {platform.python_version()}…")
+        shutil.rmtree(VENV_DIR, ignore_errors=True)
+        if python.exists():
+            die(f"Could not remove the old {VENV_DIR.name} folder. Close anything "
+                f"still running from it, delete {VENV_DIR} and start Ninaivu again.")
     if not python.exists():
         if importlib.util.find_spec("ensurepip") is None:
             # Debian and the distributions built on it (Ubuntu, MX Linux, Mint)
@@ -502,7 +528,9 @@ def main() -> int:
 
     if sys.version_info < MIN_PYTHON:
         die(f"Python {MIN_PYTHON[0]}.{MIN_PYTHON[1]}+ required "
-            f"(found {platform.python_version()}).")
+            f"(found {platform.python_version()}). Start Ninaivu with its own "
+            "launcher (start.cmd, start.sh or Ninaivu.command), which finds or "
+            "installs the right Python.")
 
     print()
     print(f"  {paint('Ninaivu', '1;36')}  ·  {platform.system()} "
