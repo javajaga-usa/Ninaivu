@@ -15,8 +15,12 @@ from pathlib import Path
 import pytest
 from PIL import Image, ImageStat
 
-from ninaivu.api import (_long_calls, api_letters, api_life_story, api_our_year,
-                         api_photo_talk, api_share, api_young_faces)
+from ninaivu.api import _long_calls, api_share
+from ninaivu.features.letters import routes as api_letters
+from ninaivu.features.life_story import routes as api_life_story
+from ninaivu.features.our_year import routes as api_our_year
+from ninaivu.features.photo_talk import routes as api_photo_talk
+from ninaivu.features.young_faces import routes as api_young_faces
 from ninaivu.server import auth
 from ninaivu.storage import db
 

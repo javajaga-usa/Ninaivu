@@ -244,7 +244,8 @@ def test_a_new_profile_on_a_reused_number_inherits_nothing_private(app, people, 
     """Profile numbers are reused (audit C-05): the next profile made after
     the newest is deleted gets its id, and must not get the deleted person's
     capsules, letters, "Only to me" photographs or private smart albums."""
-    from ninaivu.storage import capsules, smart
+    from ninaivu.features.capsules import storage as capsules
+    from ninaivu.features.smart import storage as smart
     conn = db.connect(app.config["MV_CONFIG"].db_path)
     admin = people["admin"].id
     ids = [r["id"] for r in conn.execute("SELECT id FROM assets ORDER BY id LIMIT 3")]
@@ -279,7 +280,7 @@ def test_a_new_profile_on_a_reused_number_inherits_nothing_private(app, people, 
 def test_a_capsule_whose_sealer_went_first_is_handed_on(app, people, sam):
     """D-11: Sam seals a capsule for Maya, Sam's profile is deleted, then
     Maya's: the capsule and its letter go to an administrator, not with her."""
-    from ninaivu.storage import capsules
+    from ninaivu.features.capsules import storage as capsules
     conn = db.connect(app.config["MV_CONFIG"].db_path)
     admin = people["admin"].id
     maya = auth.create_user(conn, "maya2", "riverbank77", role="family").id

@@ -1,6 +1,6 @@
 """Young faces, older names: who an unnamed child in an old photograph may be.
 
-``routes.py`` is what was ``api/api_young_faces.py``; the old name is kept as
+``routes.py`` is what was ``features/young_faces/routes.py``; the old name is kept as
 the very same module. It has no tables: it reads the family tree and the years
 of birth then and now keeps.
 """

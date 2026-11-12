@@ -120,10 +120,10 @@ table | assets | assets | 7 | CREATE TABLE assets (
     -- once, with the RAW kept beside it to download.
     raw_path        TEXT,
     raw_twin        INTEGER NOT NULL DEFAULT 0,
-    -- Photo stacks (``photo_stacks``, storage/stacks.py): the frames of a
+    -- Photo stacks (``photo_stacks``, features/stacks/storage.py): the frames of a
     -- burst and a photograph's edited copies share a key; the one shown
     -- carries how many there are, the rest are marked as stacked under it.
-    -- Written only by storage/stacks.py, never by a scan.
+    -- Written only by features/stacks/storage.py, never by a scan.
     stack_key       TEXT,
     stacked         INTEGER NOT NULL DEFAULT 0,
     stack_count     INTEGER NOT NULL DEFAULT 0,
@@ -626,7 +626,7 @@ table | person_born | person_born | 84 | CREATE TABLE person_born (
 table | life_story_words | life_story_words | 85 | CREATE TABLE life_story_words (
     person_id   INTEGER NOT NULL REFERENCES people_clusters(id) ON DELETE CASCADE,
     language    TEXT NOT NULL,
-    facts       TEXT NOT NULL,      -- media.life_story.fingerprint
+    facts       TEXT NOT NULL,      -- features.life_story.media.fingerprint
     written     TEXT NOT NULL,      -- {"opening", "chapters": [{"title", "text"}]}
     model       TEXT NOT NULL DEFAULT '',
     written_at  REAL NOT NULL,

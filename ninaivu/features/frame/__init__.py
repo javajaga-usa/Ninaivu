@@ -1,8 +1,8 @@
 """The living photo frame: a tablet or a television's browser, signed in,
 drifting through the library full screen.
 
-``routes.py`` is what was ``api/api_frame.py`` and ``media.py`` what was
-``media/frame.py``; the old names are kept as the very same modules. It has
+``routes.py`` is what was ``features/frame/routes.py`` and ``media.py`` what was
+``features/frame/media.py``; the old names are kept as the very same modules. It has
 no tables. Our Year and a life in photographs borrow its excerpt of a story
 (``media._excerpt``).
 """

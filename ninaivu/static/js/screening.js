@@ -1,7 +1,7 @@
 /**
  * The Screening tab — what family members sent for an administrator to look at.
  *
- * The front end for api/api_screening.py. A family member flags a photograph
+ * The front end for features/screening/routes.py. A family member flags a photograph
  * from the viewer or a selection in the family app; it waits here, with who
  * sent it and why, until an administrator makes one of four decisions on one
  * item or many at once:

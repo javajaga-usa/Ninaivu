@@ -16,10 +16,11 @@ import numpy as np
 import pytest
 
 from ninaivu.media import media
-from ninaivu.media import video_moments as finder_mod
+from ninaivu.features.video_moments import media as finder_mod
 from ninaivu.server.config import Config
 from ninaivu.server.settings_groups import GROUPS, OFF_THE_PAGE, TUNING_ONLY
-from ninaivu.storage import db, video_moments
+from ninaivu.storage import db
+from ninaivu.features.video_moments import storage as video_moments
 
 needs_ffmpeg = pytest.mark.skipif(not media.FFMPEG, reason="ffmpeg is not installed")
 

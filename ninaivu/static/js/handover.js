@@ -9,7 +9,7 @@
  *                     for every administrator, while somebody's claim waits
  *   takeoverSection   the entry on a successor's own profile sheet
  *
- * The server decides everything (api/api_handover.py); this only shows it.
+ * The server decides everything (features/handover/routes.py); this only shows it.
  * Nothing on this page ever asks for a password or a key to be typed in —
  * it asks where they are kept, and says so.
  */

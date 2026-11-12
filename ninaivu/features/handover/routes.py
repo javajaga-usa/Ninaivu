@@ -1,4 +1,4 @@
-"""The handover plan and the takeover code (storage/handover.py).
+"""The handover plan and the takeover code (features/handover/storage.py).
 
 Three audiences, three sets of routes:
 

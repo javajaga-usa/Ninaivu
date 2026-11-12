@@ -20,10 +20,13 @@ from pathlib import Path
 
 import pytest
 
-from ninaivu.api import api_letters, api_photo_talk
-from ninaivu.media import life_story, our_year
+from ninaivu.features.letters import routes as api_letters
+from ninaivu.features.photo_talk import routes as api_photo_talk
+from ninaivu.features.life_story import media as life_story
+from ninaivu.features.our_year import media as our_year
 from ninaivu.server import auth, date_policy
-from ninaivu.storage import db, letters as letters_store
+from ninaivu.storage import db
+from ninaivu.features.letters import storage as letters_store
 
 LETTER = "Dear Kannan,\nWe reached Madurai on Sunday."
 
@@ -54,7 +57,7 @@ def test_a_hidden_photograph_is_never_read_by_the_text_reader(as_admin, lettered
     target = _a_photograph(conn)
     read = []
     monkeypatch.setattr("ninaivu.media.ocr.available", lambda: True)
-    monkeypatch.setattr("ninaivu.media.letters.read_from_photo",
+    monkeypatch.setattr("ninaivu.features.letters.media.read_from_photo",
                         lambda picture: read.append(picture) or {"words": "x", "language": "en",
                                                                  "lines": 1})
     db.update_asset(conn, target, visibility=auth.VIS_HIDDEN)
@@ -195,8 +198,8 @@ def test_the_festival_albums_follow_a_new_date_limit_at_once(as_family, app, peo
 # -- moments in videos -----------------------------------------------------------------
 
 def test_moments_are_held_to_the_best_the_viewer_may_see(as_family, app, people, monkeypatch):
-    from ninaivu.api import api_video_moments
-    from ninaivu.storage import video_moments as store
+    from ninaivu.features.video_moments import routes as api_video_moments
+    from ninaivu.features.video_moments import storage as store
     conn = people["conn"]
     app.config["MV_CONFIG"].video_moments = True
     hidden, shown = [r[0] for r in conn.execute(
@@ -242,7 +245,7 @@ def test_two_openings_of_one_scene_write_their_own_part_files(as_family, app, pe
     from PIL import Image
 
     from ninaivu.media import media
-    from ninaivu.storage import video_moments as store
+    from ninaivu.features.video_moments import storage as store
     conn = people["conn"]
     app.config["MV_CONFIG"].video_moments = True
     clip = int(conn.execute("SELECT id FROM assets WHERE live_clip=0 AND raw_twin=0 "

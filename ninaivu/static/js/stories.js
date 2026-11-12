@@ -3,7 +3,7 @@
  * photograph, and say something yourself.
  *
  * Recording is the browser's own MediaRecorder: WebM or Ogg on most browsers,
- * MP4 on an iPhone, kept as it was made (ninaivu/storage/stories.py). The
+ * MP4 on an iPhone, kept as it was made (ninaivu/features/stories/storage.py). The
  * microphone is asked for when Record is pressed and let go of when it stops,
  * never before — somebody opening a photograph has not agreed to be listened
  * to. A file already on the device can be uploaded instead, which is also the

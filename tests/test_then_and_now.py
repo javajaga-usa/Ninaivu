@@ -14,13 +14,14 @@ import struct
 
 import pytest
 
-from ninaivu.api import api_then_and_now
-from ninaivu.media import then_and_now as pairing
+from ninaivu.features.then_and_now import routes as api_then_and_now
+from ninaivu.features.then_and_now import media as pairing
 from ninaivu.server import auth
 from ninaivu.server.config import Config
 from ninaivu.server.settings_groups import GROUPS, OFF_THE_PAGE
-from ninaivu.storage import db, family_tree
-from ninaivu.storage import then_and_now as born_store
+from ninaivu.storage import db
+from ninaivu.features.family_tree import storage as family_tree
+from ninaivu.features.then_and_now import storage as born_store
 
 #: Four directions of a small picture-search space: a temple tank, a beach,
 #: a doorstep, and a kitchen.

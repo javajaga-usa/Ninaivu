@@ -1,4 +1,4 @@
-"""Festival albums in the family app (media/festivals.py, static/js/festivals.js).
+"""Festival albums in the family app (features/festivals/media.py, static/js/festivals.js).
 
 Off until ``festival_albums`` is switched on (Settings → Advanced), when
 every route answers 404 as if it did not exist. Anybody who may open the
@@ -14,7 +14,7 @@ count and day, a cover, and the festival's next day.
 and every photograph's id, to open in the viewer.
 
 The picture search, when there is one, decides which of a festival's days
-were the festival (media/festivals.py); its words are turned into vectors
+were the festival (features/festivals/media.py); its words are turned into vectors
 once and the answer is kept until the library or its search vectors change,
 or for an hour.
 """

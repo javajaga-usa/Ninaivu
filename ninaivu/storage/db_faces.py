@@ -170,7 +170,7 @@ def replace_asset_faces(conn: sqlite3.Connection, asset_id: int,
                 named[free[wait_match[k]]] = int(row["person_id"])
                 carried_waiting.add(int(row["id"]))
 
-        from .ask_family import held_for, put_back           # noqa: PLC0415
+        from ..features.ask_family.storage import held_for, put_back           # noqa: PLC0415
         asked = held_for(conn, [int(r["id"]) for r in old_rows])
         conn.execute("DELETE FROM faces WHERE asset_id=?", (asset_id,))
         new_ids: list[int] = []
@@ -792,10 +792,10 @@ def merge_people(conn: sqlite3.Connection, source_id: int, target_id: int) -> in
                      (int(target_id), int(source_id)))
         # The family tree goes with the faces: deleting the row would take the
         # source's parents, children and spouse with it (ON DELETE CASCADE).
-        from .family_tree import carry_over                  # noqa: PLC0415
+        from ..features.family_tree.storage import carry_over                  # noqa: PLC0415
         carry_over(conn, int(source_id), int(target_id))
-        # So does the year they were born (storage/then_and_now.py).
-        from .then_and_now import carry_over as carry_born    # noqa: PLC0415
+        # So does the year they were born (features/then_and_now/storage.py).
+        from ..features.then_and_now.storage import carry_over as carry_born    # noqa: PLC0415
         carry_born(conn, int(source_id), int(target_id))
         conn.execute("DELETE FROM people_clusters WHERE id=?", (int(source_id),))
         conn.commit()

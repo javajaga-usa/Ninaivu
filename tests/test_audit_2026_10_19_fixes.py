@@ -5,7 +5,8 @@ the conditions the fix keeps.
 """
 from __future__ import annotations
 
-from ninaivu.storage import capsules, recycle
+from ninaivu.storage import recycle
+from ninaivu.features.capsules import storage as capsules
 
 
 # -- C-08: a photograph restored from the bin is back in its time capsule ----
@@ -48,7 +49,7 @@ def test_a_capsule_deleted_meanwhile_is_not_brought_back(scanned):
 # -- C-18: a long film's prompt stays inside what the model reads ------------
 
 def test_a_long_film_gives_each_moment_less_rather_than_overflowing():
-    from ninaivu.media import storyboard
+    from ninaivu.features.films import storyboard
     moments = [{"when": 1577836800 + n * 86400, "place": "Ooty", "people": ["Paati"],
                 "about": "அ" * 400, "story": "ஆ" * 400} for n in range(120)]
     messages = storyboard.prompt(moments, language="ta")
@@ -61,7 +62,7 @@ def test_a_long_film_gives_each_moment_less_rather_than_overflowing():
 # -- C-37: never cut a Tamil letter from its vowel sign -----------------------
 
 def test_text_is_cut_between_letters_not_inside_one():
-    from ninaivu.media import storyboard
+    from ninaivu.features.films import storyboard
     word = "தமிழ்"                      # த ம ி ழ ்
     assert storyboard.cut(word, 2) == "த", "not ம without its ி"
     assert storyboard.cut(word, 3) == "தமி"
@@ -74,7 +75,7 @@ def test_text_is_cut_between_letters_not_inside_one():
 
 def test_a_new_years_photograph_is_january_in_india(monkeypatch):
     import time
-    from ninaivu.media import storyboard
+    from ninaivu.features.films import storyboard
     if not hasattr(time, "tzset"):
         import pytest
         pytest.skip("needs time.tzset")

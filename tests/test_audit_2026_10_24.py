@@ -217,7 +217,8 @@ def test_copies_shown_to_different_people_are_left_alone(scanned):
 
 
 def test_a_copy_with_a_voice_story_is_the_one_kept(scanned):
-    from ninaivu.storage import exact_copies, stories
+    from ninaivu.storage import exact_copies
+    from ninaivu.features.stories import storage as stories
     cfg, conn, group = _two_copies(scanned)
     told = group["files"][-1]["id"]
     conn.executescript(stories.SCHEMA)

@@ -512,7 +512,7 @@ no longer be seen by them. Like an iPhone memory, a film plays soft music
 unless somebody chooses otherwise: one of four pieces of Ninaivu's own
 (Morning light, Courtyard veena, Together, Festival day), the one for the
 film's pace unless another is picked, with **Listen** to hear it first. The
-music is written on this computer as the film is made (`media/film_music.py`),
+music is written on this computer as the film is made (`features/films/music.py`),
 to the film's length and with the cuts on its beat, so nothing is downloaded
 and there is no song licence to think about; it fades in and out and gives way
 whenever a voice story or a clip's own sound plays. **No music** leaves it
@@ -730,7 +730,7 @@ search vectors and faces the library already has, so nothing new is read or
 downloaded and nothing is sent anywhere. The pairs are worked out when the
 page is first opened, then kept until faces or search vectors change, or for
 an hour. How long that first look takes on the real library, and whether the
-"looks like the same view" thresholds (in `ninaivu/media/then_and_now.py`)
+"looks like the same view" thresholds (in `ninaivu/features/then_and_now/media.py`)
 suit the family's photographs, has not been measured yet.
 
 ## A life in photographs (a trial)
@@ -828,7 +828,7 @@ matched. An administrator sees every match, with hidden and explicit ones
 marked. The phone's picture is compared on this computer and sent nowhere;
 it is held, as a scan is, for six hours in case it is taken in, then cleared.
 What counts as the same photograph (`SURE_BITS`, `MAYBE_BITS`, `SURE_LOOK`
-and `MAYBE_LOOK` in `ninaivu/media/find_print.py`) is a guess that has not
+and `MAYBE_LOOK` in `ninaivu/features/find_print/media.py`) is a guess that has not
 been tried on the family's real prints yet.
 
 ## Photo stacks (a trial)
@@ -946,7 +946,7 @@ albums are worked out when first opened, then kept until the library or its
 search vectors change, or for an hour. How long that first look takes on the
 real library, and whether the picture search's festival words suit the
 family's photographs, has not been measured yet; the words are in
-`ninaivu/media/festivals.py`. A festival on the edge of a rule (a lunar day
+`ninaivu/features/festivals/media.py`. A festival on the edge of a rule (a lunar day
 that begins at dawn) can come out a day from a family's calendar, which the
 days around it cover.
 

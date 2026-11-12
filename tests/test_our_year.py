@@ -12,8 +12,8 @@ import json
 
 import pytest
 
-from ninaivu.api import api_our_year
-from ninaivu.media import our_year
+from ninaivu.features.our_year import routes as api_our_year
+from ninaivu.features.our_year import media as our_year
 from ninaivu.server import auth
 from ninaivu.server.config import Config
 from ninaivu.server.settings_groups import GROUPS, OFF_THE_PAGE

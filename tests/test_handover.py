@@ -1,5 +1,5 @@
-"""The handover plan, and the door it gives a successor (storage/handover.py,
-api/api_handover.py).
+"""The handover plan, and the door it gives a successor (features/handover/storage.py,
+features/handover/routes.py).
 
 What is being protected, roughly in order of how much it would hurt:
 
@@ -21,9 +21,10 @@ import re
 import pytest
 
 from conftest import ADMIN, FAMILY, login
-from ninaivu.api import accounts_api, api_handover
+from ninaivu.api import accounts_api
+from ninaivu.features.handover import routes as api_handover
 from ninaivu.server import auth
-from ninaivu.storage import handover
+from ninaivu.features.handover import storage as handover
 
 SAM = ("sam", "sampassword9")
 DAY = 86400

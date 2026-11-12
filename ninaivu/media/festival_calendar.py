@@ -19,7 +19,7 @@ is taken as 06:00 and sunset as 18:00, which is near enough in Tamil Nadu.
 
 A festival on the very edge of a rule (a tithi that starts at sunrise, a
 sankranti at sunset) can come out a day from a family's own calendar. That
-is why an album takes a few days around each date (media/festivals.py), and
+is why an album takes a few days around each date (features/festivals/media.py), and
 why the picture search, not the date, decides which photographs belong.
 
 Pure functions of a year; nothing is stored.

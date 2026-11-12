@@ -1,4 +1,4 @@
-"""Then and now in the family app (media/then_and_now.py, static/js/then-and-now.js).
+"""Then and now in the family app (features/then_and_now/media.py, static/js/then-and-now.js).
 
 Off until ``then_and_now`` is switched on (Settings → Advanced), when every
 route answers 404 as if it did not exist.

@@ -1,9 +1,9 @@
-"""The words written for a life in photographs (media/life_story.py).
+"""The words written for a life in photographs (features/life_story/media.py).
 
 The writing model takes a minute or two to write somebody's chapters, so
 what it wrote is kept here and read back the next time the story is opened,
 after a restart too. Words are kept under the facts they were written from
-(``media.life_story.fingerprint``): one viewer who may see more photographs
+(``features.life_story.media.fingerprint``): one viewer who may see more photographs
 than another sees different facts, so neither is ever shown words written
 from the other's. When the photographs change, the facts change, and the
 words are written afresh; the oldest few are let go.
@@ -24,7 +24,7 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS life_story_words (
     person_id   INTEGER NOT NULL REFERENCES people_clusters(id) ON DELETE CASCADE,
     language    TEXT NOT NULL,
-    facts       TEXT NOT NULL,      -- media.life_story.fingerprint
+    facts       TEXT NOT NULL,      -- features.life_story.media.fingerprint
     written     TEXT NOT NULL,      -- {"opening", "chapters": [{"title", "text"}]}
     model       TEXT NOT NULL DEFAULT '',
     written_at  REAL NOT NULL,

@@ -1,6 +1,6 @@
 """Writing: one language model, on this computer, for everything that writes.
 
-The chapters and titles of a memory film (media/storyboard.py), Ask Ninaivu
+The chapters and titles of a memory film (features/films/storyboard.py), Ask Ninaivu
 and the interview mode all need the same thing: a model that reads a little
 of what the library knows and writes a few sentences of Tamil or English.
 They share one model and one capability, ``generate``, in the model host

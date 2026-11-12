@@ -5,7 +5,7 @@
  * read. A side panel, like the stories', holds a short talk: a question
  * typed (or one of the suggestions tapped), and the home computer's writing
  * model looks at the photograph and answers in a few sentences, in the
- * language the question was asked in (ninaivu/api/api_photo_talk.py).
+ * language the question was asked in (ninaivu/features/photo_talk/routes.py).
  *
  * Nothing is kept on the server. The talk about each photograph stays here
  * while the viewer is open, so going back to a photograph shows what was

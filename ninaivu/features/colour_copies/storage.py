@@ -1,6 +1,6 @@
 """Which photographs are colour copies of a black-and-white one, and of which.
 
-A colour copy (``colour_photos``, api/api_colour.py) is an edited copy like
+A colour copy (``colour_photos``, features/colour_copies/routes.py) is an edited copy like
 any other: a new file beside its original, saved the way the photo editor
 saves one, the original never touched. One row here per copy says which
 photograph it came from, so the viewer can lay the two side by side at any

@@ -1013,11 +1013,11 @@ class Config:
     #: The living photo frame: a tablet or a TV's browser, signed in, opens
     #: Ninaivu at ``/#frame`` and drifts through the library full screen,
     #: this day in past years first, with when, where, who and the start of
-    #: any story told about each photograph. See ninaivu/media/frame.py.
+    #: any story told about each photograph. See ninaivu/features/frame/media.py.
     photo_frame: bool = True
     #: Time capsules: photographs and a letter sealed for somebody in the
     #: family until a date. Nobody sees inside before then, not even whoever
-    #: sealed it. See ninaivu/storage/capsules.py.
+    #: sealed it. See ninaivu/features/capsules/storage.py.
     time_capsules: bool = True
     #: Ask Ninaivu: questions about the family's photographs, in Tamil or
     #: English, answered on this computer from what the library already
@@ -1032,7 +1032,7 @@ class Config:
     #: favourites and stories, a photograph for every month, then a book or a
     #: film of the year. Counted on this computer from what the library
     #: already knows; opening words by the on-device writing model when it is
-    #: downloaded. See ninaivu/media/our_year.py.
+    #: downloaded. See ninaivu/features/our_year/media.py.
     our_year: bool = setting(True, env="NINAIVU_OUR_YEAR")
     #: Moments inside videos: search finds the second inside a long video
     #: ("candles" opens the birthday video where the cake comes in), and the
@@ -1041,7 +1041,7 @@ class Config:
     #: picture-search model the gallery uses, and its scenes are kept with the
     #: second each starts. On this computer; nothing is sent anywhere. Needs
     #: ffmpeg and the picture search (AI settings). See
-    #: ninaivu/media/video_moments.py. Off since the household asked for it
+    #: ninaivu/features/video_moments/media.py. Off since the household asked for it
     #: off (October 2026): ``"video_moments": true`` in config.json turns it
     #: back on.
     video_moments: bool = setting(False, env="NINAIVU_VIDEO_MOMENTS")
@@ -1053,7 +1053,7 @@ class Config:
     #: tree and the years they were born). A strip above the gallery shows the
     #: pairs taken this week years ago; chosen pairs become a memory film with
     #: memory_films on. On this computer; nothing is sent anywhere. See
-    #: ninaivu/media/then_and_now.py.
+    #: ninaivu/features/then_and_now/media.py.
     then_and_now: bool = setting(True, env="NINAIVU_THEN_AND_NOW")
     #: A life in photographs: one person's life told decade by decade, from
     #: their page or the Create menu: each chapter the best photographs of
@@ -1063,7 +1063,7 @@ class Config:
     #: chapter by the on-device writing model when it is downloaded, kept for
     #: next time; plain words without it. Counted on this computer from what
     #: the library already knows; nothing is sent anywhere. See
-    #: ninaivu/media/life_story.py.
+    #: ninaivu/features/life_story/media.py.
     life_story: bool = setting(True, env="NINAIVU_LIFE_STORY")
     #: Share without strangers: on every share link, the faces nobody in the
     #: household has named are blurred: the photograph, its browser copy and
@@ -1081,7 +1081,7 @@ class Config:
     #: in Tamil or English. Needs ai_runtime, the writing model and its vision
     #: part (AI models page). Hidden and explicit photographs are never shown
     #: to the model; nothing is kept and nothing is sent anywhere. See
-    #: ninaivu/media/photo_talk.py.
+    #: ninaivu/features/photo_talk/media.py.
     photo_talk: bool = setting(True, env="NINAIVU_PHOTO_TALK")
     #: Festival albums: every Deepavali, every Pongal, Karthigai Deepam,
     #: Navaratri's golu and the rest, found without anybody tagging. Each
@@ -1089,7 +1089,7 @@ class Config:
     #: the photographs of the days around it are checked by the picture search
     #: (lamps, kolam, golu dolls, sugarcane), and the years are shown side by
     #: side from the first to now. Nothing is sent anywhere. See
-    #: ninaivu/media/festivals.py.
+    #: ninaivu/features/festivals/media.py.
     festival_albums: bool = setting(True, env="NINAIVU_FESTIVAL_ALBUMS")
     #: Letters read aloud: an old letter, a recipe card or a note in a
     #: grandparent's hand, photographed, is given its words, written out
@@ -1098,7 +1098,7 @@ class Config:
     #: aloud in the viewer. A memory film narrates a letter with that
     #: reading when nobody recorded a story about it. The voices are Meta's
     #: MMS models from the AI models page, never anybody's own voice. On
-    #: this computer; nothing is sent anywhere. See ninaivu/media/letters.py.
+    #: this computer; nothing is sent anywhere. See ninaivu/features/letters/media.py.
     letters_aloud: bool = setting(False, env="NINAIVU_LETTERS_ALOUD")
     #: Young faces, older names: who an unnamed child in an old photograph
     #: may be, from the faces the family has named in later years, the year
@@ -1113,7 +1113,7 @@ class Config:
     #: a copy of, by the picture fingerprint every photograph keeps and by the
     #: picture search, or says it has no copy yet and takes the print in as a
     #: scanned print. Compared on this computer; the phone's picture is sent
-    #: nowhere. See ninaivu/media/find_print.py.
+    #: nowhere. See ninaivu/features/find_print/media.py.
     find_print: bool = setting(True, env="NINAIVU_FIND_PRINT")
     #: Photo stacks: the frames of a burst, and a photograph with the copies
     #: edited from it, are one tile in the timeline, with how many there are
@@ -1122,7 +1122,7 @@ class Config:
     #: same day in the same folder, from the picture fingerprint every scan
     #: keeps; only photographs every viewer sees alike are stacked together.
     #: Nothing is moved or deleted, and albums, people, search and the
-    #: folders screen still list every frame. See ninaivu/storage/stacks.py.
+    #: folders screen still list every frame. See ninaivu/features/stacks/storage.py.
     photo_stacks: bool = setting(True, env="NINAIVU_PHOTO_STACKS")
 
     # --- Server ----------------------------------------------------------

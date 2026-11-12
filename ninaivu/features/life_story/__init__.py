@@ -1,8 +1,8 @@
 """A life in photographs: one person's life told decade by decade, from what
 the library already knows about them.
 
-``routes.py`` is what was ``api/api_life_story.py``, ``media.py`` what was
-``media/life_story.py`` and ``storage.py`` what was ``storage/life_story.py``;
+``routes.py`` is what was ``features/life_story/routes.py``, ``media.py`` what was
+``features/life_story/media.py`` and ``storage.py`` what was ``features/life_story/storage.py``;
 the old names are kept as the very same modules.
 """
 from .. import ON_THE_FAMILY_API, Feature, Tables

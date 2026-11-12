@@ -5,7 +5,7 @@ photographs it is about, inside the asker's own limits, and works out what
 can be said of them: how many, the first and the last, the years, the places
 and the people in them, and for the ones shown, their descriptions
 (storage/descriptions.py), the words read in them, and what was said in the
-voice stories told about them (storage/stories.py, story_words.py).
+voice stories told about them (features/stories/storage.py, story_words.py).
 
 Then it answers in two ways:
 

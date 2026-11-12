@@ -15,9 +15,10 @@ from datetime import date, timedelta
 import pytest
 
 from conftest import login
-from ninaivu.media import frame
+from ninaivu.features.frame import media as frame
 from ninaivu.server import auth
-from ninaivu.storage import capsules, db
+from ninaivu.storage import db
+from ninaivu.features.capsules import storage as capsules
 
 WEBM = b"\x1a\x45\xdf\xa3" + b"\x00" * 400
 

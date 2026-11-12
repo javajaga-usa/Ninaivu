@@ -14,15 +14,15 @@ Three kinds of pair, each an older photograph and a newer one:
   (:data:`VIEW_MATCH`), since nothing else says it is the same spot.
 * **The same person** (``person``): a named person's early photographs
   against their late ones, the best faces of each
-  (:func:`ninaivu.media.films.pick_then_and_now`), and **parent and child at
+  (:func:`ninaivu.features.films.media.pick_then_and_now`), and **parent and child at
   the same age** (``same_age``): Amma at six beside Arun at six, from the
-  family tree and the years they were born (storage/then_and_now.py).
+  family tree and the years they were born (features/then_and_now/storage.py).
 
 Nothing here reads a pixel or calls a model: it compares vectors already in
 memory (``db.embedding_store``) and dates and places already in the index, a
 few seconds over a large library, remembered until the library changes. Which
 photographs a viewer may see is decided by the caller, which hands only those
-rows in (api/api_then_and_now.py).
+rows in (features/then_and_now/routes.py).
 
 The thresholds are a first guess from CLIP and SigLIP 2's behaviour on
 photographs of the same scene (around 0.8 to 0.9) and of different scenes of
@@ -199,7 +199,7 @@ def place_pairs(rows: Sequence[dict[str, Any]], store: tuple, *,
 
     *rows* are the photographs the viewer may see (``id``, ``date_key``,
     ``gps_lat``, ``gps_lon``, ``city``, ``country``, ``dup_group`` and what
-    :func:`ninaivu.media.books.score` reads); *store* is
+    :func:`ninaivu.features.books.media.score` reads); *store* is
     ``db.embedding_store``'s answer."""
     cells: dict[tuple[int, int], list[dict[str, Any]]] = {}
     for row in rows:

@@ -1,6 +1,6 @@
 /**
  * Time capsules: photographs and a letter sealed for somebody in the family
- * until a date (ninaivu/storage/capsules.py, ninaivu/api/api_capsules.py).
+ * until a date (ninaivu/features/capsules/storage.py, ninaivu/features/capsules/routes.py).
  *
  * Three things on screen. The list, from the envelope beside Albums: every
  * capsule for you or sealed by you, each a closed envelope saying who it is

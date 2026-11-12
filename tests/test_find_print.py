@@ -15,7 +15,8 @@ import numpy as np
 import pytest
 from PIL import Image, ImageDraw, ImageFilter
 
-from ninaivu.media import find_print, jobs, media
+from ninaivu.media import jobs, media
+from ninaivu.features.find_print import media as find_print
 from ninaivu.server import auth
 from ninaivu.server.config import Config
 from ninaivu.server.settings_groups import GROUPS, OFF_THE_PAGE

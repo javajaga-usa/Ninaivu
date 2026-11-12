@@ -1,4 +1,4 @@
-"""Find this print in the family app (media/find_print.py, static/js/find-print.js).
+"""Find this print in the family app (features/find_print/media.py, static/js/find-print.js).
 
 Off until ``find_print`` is switched on (Settings → Advanced), when the route
 answers 404 as if it did not exist.

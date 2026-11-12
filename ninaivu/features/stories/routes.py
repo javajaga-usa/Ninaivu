@@ -1,7 +1,7 @@
 """Voice stories: recorded about a photograph, played back with it.
 
 The storage, and why a story has no visibility of its own, are in
-ninaivu/storage/stories.py. Here the one rule is that every route reaches a
+ninaivu/features/stories/storage.py. Here the one rule is that every route reaches a
 story through its item and puts that item through ``_guard`` — the check the
 original file, the thumbnail and the faces already go through — before saying
 anything about it. Somebody who may not open the photograph gets the same 404

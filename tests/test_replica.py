@@ -442,7 +442,7 @@ def test_films_play_on_the_pi_and_listing_them_writes_nothing(mac, people, tmp_p
     """Audit C-06: films were listed on the Pi but not handed over, so playing
     one gave 404; and listing them marked one being made on the Mac as failed,
     a write the Pi is never meant to make."""
-    from ninaivu.storage import films as film_store
+    from ninaivu.features.films import storage as film_store
     ids = [r["id"] for r in mac.conn.execute("SELECT id FROM assets ORDER BY id LIMIT 2")]
     owner = people["family"].id
     done = film_store.create(mac.conn, owner_id=owner, title="Madurai", subtitle="",

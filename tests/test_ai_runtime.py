@@ -28,7 +28,8 @@ from ninaivu.runtime import devices, speech
 from ninaivu.runtime.host import (HostCrashed, HostError, HostStopped, HostTimeout,
                                   ModelHost, Unavailable)
 from ninaivu.runtime.transcriber import Transcriber
-from ninaivu.storage import db, stories, story_words
+from ninaivu.storage import db, story_words
+from ninaivu.features.stories import storage as stories
 
 
 # ---------------------------------------------------------------------------

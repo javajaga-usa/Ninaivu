@@ -1,4 +1,4 @@
-"""Smart albums in the family app: a search kept under a name (storage/smart.py).
+"""Smart albums in the family app: a search kept under a name (features/smart/storage.py).
 
 Saved from whatever the gallery is showing — the search box read into
 people, a place, a kind and dates, plus the filters on screen — and opened

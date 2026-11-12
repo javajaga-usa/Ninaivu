@@ -15,7 +15,8 @@ import pytest
 
 from conftest import login
 from ninaivu.server import auth
-from ninaivu.storage import db, recycle, stories
+from ninaivu.storage import db, recycle
+from ninaivu.features.stories import storage as stories
 
 #: The first bytes of the containers a browser records into, padded out.
 WEBM = b"\x1a\x45\xdf\xa3" + b"\x00" * 400

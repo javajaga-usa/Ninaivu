@@ -1,6 +1,6 @@
 /**
  * Ask Ninaivu: a question about the family's photographs, in Tamil or
- * English, answered on this computer (ninaivu/api/api_ask_ninaivu.py).
+ * English, answered on this computer (ninaivu/features/ask_ninaivu/routes.py).
  *
  * One sheet: a box to type in, a few questions to start from, and under it
  * the answer — what was understood (the same chips the search box shows),

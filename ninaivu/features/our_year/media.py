@@ -15,7 +15,7 @@ Nothing here reads a pixel or calls a model: it is counting over the index,
 a second or two for a year of twenty thousand photographs, and remembered
 until the library changes (``db.cached_aggregate``). A few warm sentences to
 open with are written by the on-device writing model when it is downloaded
-(:func:`model_messages`, api/api_our_year.py); without it the page writes its
+(:func:`model_messages`, features/our_year/routes.py); without it the page writes its
 own from the same facts.
 
 Who sees what is never decided here. The year's photographs are read through

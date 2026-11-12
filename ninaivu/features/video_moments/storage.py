@@ -5,7 +5,7 @@ five moments and keeps the middle one), which is enough to find "the beach
 video" and never enough to find the candle being blown out at 14:32 of a
 twenty-minute birthday. This keeps, for every clip long enough to hold more
 than one scene, a vector for each scene and the second it starts at, made by
-the same picture-search model the gallery uses (media/video_moments.py), so a
+the same picture-search model the gallery uses (features/video_moments/media.py), so a
 search's words can be matched against every scene of every clip and answered
 with a time to open the clip at.
 

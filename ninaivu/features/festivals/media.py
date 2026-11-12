@@ -10,7 +10,7 @@ left out; a year where none of it was the festival has no page.
 
 Each festival becomes one album that grows every year: each year a column
 with its best photographs, the years side by side from the first to now
-(static/js/festivals.js), and a book of all of them (api/api_books.py).
+(static/js/festivals.js), and a book of all of them (features/books/routes.py).
 
 The picture search is a comparison, not a threshold: a photograph belongs to
 the festival when it looks more like the festival's words than like any of a

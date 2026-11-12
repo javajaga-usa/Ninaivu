@@ -3,9 +3,9 @@
  * seconds inside long videos that match it, each opening the clip there.
  *
  * The server keeps every long clip's scenes as picture-search vectors
- * (ninaivu/storage/video_moments.py) and answers a search with the clips and
+ * (ninaivu/features/video_moments/storage.py) and answers a search with the clips and
  * the seconds of their best scenes, already narrowed to what this viewer may
- * see (ninaivu/api/api_video_moments.py). This draws them in the same strip
+ * see (ninaivu/features/video_moments/routes.py). This draws them in the same strip
  * the On This Day memories use, and hands the viewer the second to start at.
  */
 import * as i18n from './i18n.js';

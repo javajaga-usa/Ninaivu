@@ -126,7 +126,7 @@ def _slim(index: Path) -> None:
             conn.execute("UPDATE recycled SET metadata=NULL")
         if "stories" in tables:
             # Voice stories, and the words typed beside them, are not sent to
-            # any outside service, this one included (storage/stories.py).
+            # any outside service, this one included (features/stories/storage.py).
             # Their sound is not in this copy either; the local backup has both.
             conn.execute("DELETE FROM stories")
         if "story_words" in tables:
@@ -150,7 +150,7 @@ def _slim(index: Path) -> None:
         for table in ("capsule_items", "capsules"):
             if table in tables:
                 # A time capsule's letter is the family's own words, sealed:
-                # kept at home like the voice stories (storage/capsules.py).
+                # kept at home like the voice stories (features/capsules/storage.py).
                 # The local backup has them.
                 conn.execute(f"DELETE FROM {table}")
         for table in ("ask_answers", "ask_faces", "ask_questions"):

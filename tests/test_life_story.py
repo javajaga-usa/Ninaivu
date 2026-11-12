@@ -15,12 +15,15 @@ import json
 
 import pytest
 
-from ninaivu.api import api_life_story
-from ninaivu.media import life_story
+from ninaivu.features.life_story import routes as api_life_story
+from ninaivu.features.life_story import media as life_story
 from ninaivu.server import auth
 from ninaivu.server.config import Config
 from ninaivu.server.settings_groups import GROUPS, OFF_THE_PAGE
-from ninaivu.storage import db, family_tree, life_story as words_store, then_and_now as born_store
+from ninaivu.storage import db
+from ninaivu.features.family_tree import storage as family_tree
+from ninaivu.features.life_story import storage as words_store
+from ninaivu.features.then_and_now import storage as born_store
 
 WEBM = b"\x1a\x45\xdf\xa3" + b"\x00" * 400
 

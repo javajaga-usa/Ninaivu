@@ -43,8 +43,9 @@ from ..utils import phrase, proxies, query
 from ..server import features
 from ..server import activity as activity_kit, auth, turn as turn_file
 from ..server import visibility
-from ..storage import colour_copies, db, new_files, recycle
-from ..storage import stories as stories_mod
+from ..storage import db, new_files, recycle
+from ..features.colour_copies import storage as colour_copies
+from ..features.stories import storage as stories_mod
 from ..storage import descriptions as descriptions_mod
 from ..media import components, media, stills, stripped_video, upright
 from ..media.scanner import LIVE_CLIP_MAX_SECONDS
@@ -480,7 +481,7 @@ def _filters_from_request() -> dict[str, Any]:
         "guest_search": current_user().is_guest,
     }
     if smart_id := _int_arg("smart"):
-        from .api_smart import apply_rules
+        from ..features.smart.routes import apply_rules
         apply_rules(filters, smart_id)
     # Words typed or spoken into the search box, or a tag picked from its
     # suggestions: a search, which for a family member leaves out more. So is
@@ -1166,7 +1167,7 @@ def _stacks_apply(conn, filters: dict[str, Any]) -> bool:  # noqa: ANN001
         return False
     # A read-only copy (the Pi's) shows the marks the home computer made.
     if not getattr(_cfg(), "replica_from", ""):
-        from ..storage import stacks                            # noqa: PLC0415
+        from ..features.stacks import storage as stacks                            # noqa: PLC0415
         stacks.refresh(conn)
     return True
 
@@ -1195,7 +1196,7 @@ def segments():
     limit = max(1, min(_int_arg("limit", 100_000), 200_000))
     offset = max(0, _int_arg("offset"))
 
-    # A burst, or a photograph and its copies, as one tile (storage/stacks.py).
+    # A burst, or a photograph and its copies, as one tile (features/stacks/storage.py).
     # Before the tag: bringing the marks up to date moves the counters in it.
     stacked = _stacks_apply(conn, filters)
     # A layout asked for again unchanged — the grid coming back to a view, a
@@ -1458,7 +1459,7 @@ def _public(row: dict[str, Any], scores: dict[int, float] | None = None) -> dict
         "color": row["color"],
         "has_thumb": bool(row["thumb"]),
         "duplicate": bool(row.get("dup_group")),
-        # In a photo stack (storage/stacks.py), and how many it holds when
+        # In a photo stack (features/stacks/storage.py), and how many it holds when
         # this is the one on top. The frames are asked for by id.
         "stack": (int(row.get("stack_count") or 0) or (1 if row.get("stack_key") else 0))
         if getattr(_cfg(), "photo_stacks", False) else 0,
@@ -2603,7 +2604,7 @@ def _stage_edited_copy(conn, cfg, source, payload, name, colour=False):
     }
     if colour:
         # Approved, it is recorded as this photograph's colour copy
-        # (storage/colour_copies.py), for the viewer's Before and after.
+        # (features/colour_copies/storage.py), for the viewer's Before and after.
         overrides["_colour_of"] = int(source["id"])
     staged = upload_review.stage(conn, cfg, _StagedBytes(payload), name,
                                  source["root"], folder, current_user().id,

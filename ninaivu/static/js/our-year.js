@@ -1,6 +1,6 @@
 /**
  * Our Year: the family's year in photographs, as cards to tap through
- * (ninaivu/media/our_year.py counts it, ninaivu/api/api_our_year.py serves it;
+ * (ninaivu/features/our_year/media.py counts it, ninaivu/features/our_year/routes.py serves it;
  * shown only while `our_year` is switched on).
  *
  * Full screen over the gallery, like the photo frame: one card at a time with

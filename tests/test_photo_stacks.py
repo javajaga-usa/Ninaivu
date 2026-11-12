@@ -13,7 +13,8 @@ import pytest
 
 from ninaivu.server.config import Config
 from ninaivu.server.settings_groups import GROUPS, OFF_THE_PAGE
-from ninaivu.storage import db, stacks
+from ninaivu.storage import db
+from ninaivu.features.stacks import storage as stacks
 
 
 def _row(aid, group="g", folder="f", day="2024-01-01", visibility=1, nsfw=0, private_to=None,

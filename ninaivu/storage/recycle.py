@@ -61,7 +61,7 @@ ORIGINALS = "_originals"
 #: Deleting the asset cascades through all of them; the first two are what a
 #: person arranged (albums, favourites, ratings), the next two what the
 #: pipeline made and people then named (faces) or searched by (the vector),
-#: and the last what somebody said about it (storage/stories.py, which keeps
+#: and the last what somebody said about it (features/stories/storage.py, which keeps
 #: the sound while an entry here still holds its row). Then the time capsules
 #: it was sealed into, which nobody could see were missing until the capsule
 #: opened (audit C-08), and what the engines worked out about it that takes
@@ -974,7 +974,7 @@ def purge(conn, entry_ids: Sequence[int], *, erase_stories: bool = True) -> dict
             conn.commit()
         # Their stories' sound was kept for a restore that can no longer come.
         # Erased only when somebody erased the photograph; otherwise kept aside.
-        from . import stories                                    # noqa: PLC0415
+        from ..features.stories import storage as stories                                    # noqa: PLC0415
         erased: set[str] = set()
         if erase_stories:
             for r in rows:

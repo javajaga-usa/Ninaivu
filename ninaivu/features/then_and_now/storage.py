@@ -1,4 +1,4 @@
-"""The year each person was born, for Then and now (media/then_and_now.py).
+"""The year each person was born, for Then and now (features/then_and_now/media.py).
 
 "Amma at six, beside Arun at six" needs the year each of them was born, and
 nothing else in the library knows it: a face has a name, never a birthday.

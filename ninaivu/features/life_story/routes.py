@@ -1,4 +1,4 @@
-"""A life in photographs in the family app (media/life_story.py,
+"""A life in photographs in the family app (features/life_story/media.py,
 static/js/life-story.js).
 
 Off until ``life_story`` is switched on (Settings → Advanced), when every
@@ -18,7 +18,7 @@ already written for these facts if there are some.
 ``POST /api/life/<person>/words`` with ``{"language": "ta"|"en"}`` asks the
 writing model for each chapter's title and sentences; without the model it
 answers 503 and the page writes its own from the same facts. What it wrote is
-kept (storage/life_story.py).
+kept (features/life_story/storage.py).
 ``PUT /api/life/<person>/born`` with ``{"year": 1948}`` (or null) keeps the
 year somebody was born, the same year Then and now uses.
 """
