@@ -57,7 +57,7 @@ python -m ninaivu ~/Pictures
 
 `python -m ninaivu.desktop.app` opens the Control Panel with its tray icon.
 The starters in `launcher/` do the setting up for you: `launcher\start.cmd`
-on Windows (installing Python 3.12 first if there is none) and
+on Windows (installing Python 3.14 first if there is none) and
 `sh launcher/start.sh ~/Pictures` on macOS or Linux make a virtual
 environment, install what is missing, find free ports and open your browser.
 The first screen makes the administrator; after that, add the household under
@@ -72,7 +72,7 @@ cp installers/docker/.env.example installers/docker/.env   # set MEDIA_DIR to yo
 docker compose -f installers/docker/docker-compose.yml up -d
 ```
 
-Python 3.12 or newer. Everything AI-related is optional: the gallery, roles, albums and sharing work with the core dependencies alone, and the models download only when you turn a feature on — search by description, the largest at about 2 GB, is added from the first-day walk-through if you want it. Ninaivu is tested on two kinds of computer — a small box with no graphics processor, and a machine with a GPU, Apple silicon or plenty of memory — and works out at start which yours is.
+Python 3.14 or newer. Everything AI-related is optional: the gallery, roles, albums and sharing work with the core dependencies alone, and the models download only when you turn a feature on — search by description, the largest at about 2 GB, is added from the first-day walk-through if you want it. Ninaivu is tested on two kinds of computer — a small box with no graphics processor, and a machine with a GPU, Apple silicon or plenty of memory — and works out at start which yours is.
 
 ## What it does
 
@@ -111,7 +111,7 @@ docs/           operator and user documentation, CHANGELOG, ROADMAP, CONTRIBUTIN
 
 ## Contributing
 
-See [CONTRIBUTING.md](docs/CONTRIBUTING.md). The short version: Python 3.12+, `ruff check`, `pytest`, one focused change per pull request, and a regression test for every fix that changes behaviour.
+See [CONTRIBUTING.md](docs/CONTRIBUTING.md). The short version: Python 3.14+, `ruff check`, `pytest`, one focused change per pull request, and a regression test for every fix that changes behaviour.
 
 ## Licence
 

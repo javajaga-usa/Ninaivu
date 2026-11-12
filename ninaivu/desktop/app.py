@@ -32,7 +32,7 @@ a start can take half a minute and a window that freezes meanwhile looks
 like one that has crashed. The tray's clicks come through the same queue.
 
 It needs Tk, which the python.org installers and the portable downloads
-bring (Homebrew's Python needs ``brew install python-tk@3.12``), and
+bring (Homebrew's Python needs ``brew install python-tk@3.14``), and
 ``psutil``. Without psutil it cannot tell whether Ninaivu is running, so
 :func:`main` says so rather than showing a panel that would call a running
 server stopped and start a second one.
