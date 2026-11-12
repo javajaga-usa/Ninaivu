@@ -9,8 +9,8 @@ sits where the source was (the legacy, sourceless layout Python has always
 imported from), the source is dropped, and the wheel's RECORD is rewritten
 for what is now in it, so pip installs it as any other wheel.
 
-The bytecode is tied to the Python that compiles it: a ``.pyc`` from 3.12
-loads only on 3.12. Every build runs this with the same Python it bundles, so
+The bytecode is tied to the Python that compiles it: a ``.pyc`` from 3.14
+loads only on 3.14. Every build runs this with the same Python it bundles, so
 the installers are consistent by construction; a mismatch fails at import,
 not quietly. The web files under ``static/`` and ``templates/`` are left as
 they are — a browser needs them as text, and they are not Python.

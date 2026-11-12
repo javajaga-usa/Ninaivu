@@ -2,7 +2,7 @@
 # copied from that release's SHA256SUMS. The build refuses a download that does
 # not match; a different PBS_PYTHON or PBS_RELEASE (python-version.txt) needs
 # its lines added here first.
-83dcb04777c798bd95f3687acf9ae84b09860272ee6bdfb05be8bcf9447f75b8  cpython-3.12.15+20261009-aarch64-apple-darwin-install_only.tar.gz
-b342ccfb577fda349d0237c98b24848234ca767c10f034628a5ff9fc858d662f  cpython-3.12.15+20261009-aarch64-unknown-linux-gnu-install_only.tar.gz
-194c8f0d9e0de6f1c4576e5dfa67819a48c764be87608b74b8ad43387a57b93b  cpython-3.12.15+20261009-x86_64-pc-windows-msvc-install_only.tar.gz
-5864001bf969db329fadc2b654c4878c6027d170c6bd77e28f88666260bcaf63  cpython-3.12.15+20261009-x86_64-unknown-linux-gnu-install_only.tar.gz
+ff8e1ddc02a9df3190b62d5af475cb642a02cfc77901ef780f9826cc23b51934  cpython-3.14.8+20261009-aarch64-apple-darwin-install_only.tar.gz
+2a99838d2ba71c91d9c72929ee73cdfad2ccd093d7746a14094f50e583989ec3  cpython-3.14.8+20261009-aarch64-unknown-linux-gnu-install_only.tar.gz
+6c03535bfa5888dd73b0c0ebd91b76a2fdfa06eedaa411b0c4c9e664db6b4bb4  cpython-3.14.8+20261009-x86_64-pc-windows-msvc-install_only.tar.gz
+83f9cb480b702548c592443f86209cf0fc03448d90692df257f095c01791dccc  cpython-3.14.8+20261009-x86_64-unknown-linux-gnu-install_only.tar.gz
