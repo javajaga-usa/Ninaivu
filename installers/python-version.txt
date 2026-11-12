@@ -5,10 +5,11 @@
 # still override it for a trial build. A new pair needs its four lines in
 # python-build-standalone.sha256 first.
 #
-# 3.12, and not 3.13 or 3.14: every package Ninaivu installs, the optional
-# ones on the AI models page included (PyTorch, llama.cpp, sherpa-onnx,
-# rapidocr), has wheels for 3.12 on all four, and it is the version the tests
-# run the pinned set with (requirements/constraints-tested.txt). Security
-# fixes to 3.12 come until October 2028.
-PBS_PYTHON=3.12.15
+# 3.14 since Ninaivu 4.1 (3.12 before): the one Python Ninaivu is tested on
+# and shipped with, on every system. Every package Ninaivu installs, the
+# optional ones on the AI models page included (PyTorch, onnxruntime,
+# sherpa-onnx, rapidocr), has a 3.14 build on all four at the versions in
+# requirements/constraints-tested.txt (checked on 11 November 2026);
+# llama.cpp is built on the computer when installed, as before.
+PBS_PYTHON=3.14.8
 PBS_RELEASE=20261009

@@ -64,7 +64,7 @@ pbs_python=${PBS_PYTHON:-$(pin PBS_PYTHON)}
 pbs_release=${PBS_RELEASE:-$(pin PBS_RELEASE)}
 # Ninaivu's bytecode (step 3) is compiled by this machine's python3, and a
 # .pyc loads only on the minor version that made it: a build run with 3.13
-# made an installer whose Python 3.12 could not import Ninaivu at all.
+# made an installer whose own Python could not import Ninaivu at all.
 host_python=$(python3 -c 'import sys; print("%d.%d" % sys.version_info[:2])')
 if [ "$host_python" != "${pbs_python%.*}" ]; then
     echo "python3 here is $host_python; the bundled Python is ${pbs_python%.*}, and the bytecode must be made by the same" >&2
@@ -92,7 +92,8 @@ if [ "$got" != "$want" ]; then
     exit 1
 fi
 tar -xzf "$build/$tarball" -C "$payload"           # unpacks to ./python
-rm -rf "$payload/python/lib/python3.12/test" "$payload/python/lib/python3.12/idlelib"
+minor=${pbs_python%.*}                             # 3.14.8 -> 3.14
+rm -rf "$payload/python/lib/python$minor/test" "$payload/python/lib/python$minor/idlelib"
 find "$payload/python" -name "__pycache__" -type d -prune -exec rm -rf {} +
 
 # 2. The wheels, for the target. Pure-Python ones are the same for every machine;
@@ -105,7 +106,7 @@ platform_args=()
 for p in "${platforms[@]}"; do platform_args+=(--platform "$p"); done
 fetch() {   # fetch REQUIREMENT → 0 if a wheel came, 1 if none exists for the target
     python3 -m pip download --quiet --dest "$payload/wheels" --only-binary=:all: \
-        --python-version 3.12 --implementation cp --abi cp312 --abi abi3 --abi none \
+        --python-version "$minor" --implementation cp --abi "cp${minor/./}" --abi abi3 --abi none \
         -c "$root/requirements/constraints-tested.txt" "${platform_args[@]}" "$1" 2>/dev/null
 }
 core=(flask pillow numpy waitress psutil)

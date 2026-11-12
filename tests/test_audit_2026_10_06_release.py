@@ -196,8 +196,7 @@ def _runs(*runs, event="push"):
 
 
 #: The jobs of a Tests & Linting run that tested all three computers.
-EVERY_SYSTEM = ("Lint", "Tests · ubuntu-latest · Python 3.12", "Tests · ubuntu-latest · Python 3.14",
-                "Tests · windows-latest · Python 3.12", "Tests · windows-latest · Python 3.14",
+EVERY_SYSTEM = ("Lint", "Tests · ubuntu-latest · Python 3.14", "Tests · windows-latest · Python 3.14",
                 "Basic tier · 2 GB, no GPU", "Full tier · Apple silicon, model stack")
 
 
