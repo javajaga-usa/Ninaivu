@@ -1,5 +1,10 @@
 # Changelog
 
+## 4.1.1 — 12 November 2026
+
+- **Opening Ninaivu again restores the existing Control Panel.** The desktop event queue keeps running after a callback or tray error, and another launch is acknowledged only after the window has been shown. The panel is briefly raised to the foreground, then returns to its original window level. Library, profile and server logic are unchanged.
+- Regression checks cover repeated window activation, callback recovery and delivery acknowledgements, including a real Tk window where a display is available.
+
 ## 4.1.0 — 12 November 2026
 
 - **Clearer logos for each app.** Ninaivu Album uses a strong-blue home and photograph, Admin uses orange controls, and the Control Panel has its own N mark. Logos inside the app are larger and transparent; desktop and phone icons keep their background tiles. Startup images and installer artwork follow the same designs.

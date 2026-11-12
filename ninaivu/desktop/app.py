@@ -39,6 +39,7 @@ server stopped and start a second one.
 """
 from __future__ import annotations
 
+import logging
 import os
 import queue
 import subprocess
@@ -62,6 +63,8 @@ from .control import Controller, Monitor, read_power
 from .progress import describe_step, heading, may_stop, percent, remaining, stop_warning, stuck_words
 from .logs import LogTail
 from ..utils.resources import budget
+
+log = logging.getLogger(__name__)
 
 ICON = Path(__file__).resolve().parents[1] / 'static' / 'icons' / 'panel' / 'icon-192.png'
 
@@ -1344,10 +1347,29 @@ class Dashboard:
             self.finished.wait(15)
 
     def pump(self):
-        """Empties the queue on Tk's own thread, the only one that may touch
-        the window."""
+        """Keep draining Tk's queue even if a reading or callback fails.
+
+        Reopening the app and tray clicks use this queue too. A failed
+        callback must not cancel their only route back to the window.
+        """
         if self.finished.is_set():
             return
+        try:
+            self._pump_events()
+        except Exception:                                      # one bad event, not the timer
+            log.exception("Control Panel event failed")
+        finally:
+            if not self.finished.is_set():
+                try:
+                    self._refresh_tray()
+                except Exception:
+                    log.exception("Control Panel tray refresh failed")
+                try:
+                    self.root.after(150, self.pump)
+                except tk.TclError:
+                    pass                                       # the window was destroyed
+
+    def _pump_events(self):
         while True:
             try:
                 kind, value = self.events.get_nowait()
@@ -1416,8 +1438,6 @@ class Dashboard:
                                             what, share, seconds)
             else:
                 self.notice.set(value)
-        self._refresh_tray()
-        self.root.after(150, self.pump)
 
     def _update_bar(self, canvas, value, max_val):
         p = self.palette
@@ -1815,16 +1835,51 @@ class Dashboard:
         except tk.TclError:
             return False
 
+    def request_show(self, timeout=1.5):
+        """Acknowledge another launch only after Tk has shown the window.
+
+        Called by the instance listener, never by Tk's thread. Its wait is
+        shorter than the launcher's socket timeout; Tk keeps all UI work.
+        """
+        shown = threading.Event()
+
+        def show():
+            if self.show_window():
+                shown.set()
+
+        self.post(show)
+        return shown.wait(timeout)
+
     def show_window(self):
-        """The window back from the tray, in front."""
+        """Restore from the tray or minimisation and request foreground focus."""
         if self.finished.is_set():
-            return
+            return False
         try:
             self.root.deiconify()
+            self.root.update_idletasks()
+            timer = getattr(self, '_raise_timer', None)
+            if timer is not None:
+                self.root.after_cancel(timer)
+            else:
+                self._normal_topmost = self.root.attributes('-topmost')
+            self.root.attributes('-topmost', True)
+
+            def restore_topmost():
+                self._raise_timer = None
+                try:
+                    self.root.attributes('-topmost', self._normal_topmost)
+                except tk.TclError:
+                    pass
+
+            self._raise_timer = self.root.after(200, restore_topmost)
             self.root.lift()
-            self.root.focus_force()
+            try:
+                self.root.focus_force()
+            except tk.TclError:
+                pass                                           # still restored and raised
+            return bool(self.root.winfo_viewable())
         except tk.TclError:
-            pass
+            return False
 
     def close_window(self):
         """The window's own close button. With an icon to find it in again,
@@ -2129,7 +2184,7 @@ def _open(options, instance):
     if minimised and not (board.tray is not None and board.tray.shown):
         root.deiconify()            # minimised only where there is an icon to find it in
     if instance is not None:
-        instance.serve(lambda: board.post(board.show_window),
+        instance.serve(board.request_show,
                        lambda which: board.post(lambda: board.open_in_browser(which == 'console')))
     if options.open:
         board.open_in_browser(options.open == 'console')    # starts Ninaivu first when stopped
