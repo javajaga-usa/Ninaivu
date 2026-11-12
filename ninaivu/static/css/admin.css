@@ -1754,7 +1754,13 @@ body.admin {
   .admin-tabs button { border-radius: 10px; }
   .admin-tabs button.active { box-shadow: none; background: linear-gradient(100deg, var(--accent-weak), color-mix(in srgb, var(--accent-2) 8%, transparent)); }
   .admin-tabs button.active .tab-icon { color: var(--accent-2); }
-  .tab-group-label { font-size: 9px; letter-spacing: .12em; }
+  .tab-group-label { font-size: 11px; letter-spacing: .06em; }
+}
+
+/* Keep console navigation comfortable on touch laptops as well as phones. */
+@media (pointer: coarse) {
+  .admin-tabs button, .admin-groups button { min-height: 44px; }
+  .admin-bar-actions .icon-btn { min-width: 44px; min-height: 44px; }
 }
 
 /* Each page opens with a short guide: the page's own icon in a tinted tile,

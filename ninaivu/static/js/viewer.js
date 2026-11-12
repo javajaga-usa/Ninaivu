@@ -231,6 +231,7 @@ export class Viewer extends EventTarget {
       this.dispatchEvent(new CustomEvent('album', { detail: { item: this.item } }));
     };
     if (q('#v-share')) q('#v-share').onclick = () => {
+      if (!this.item || this.item.id !== this.ids[this.index]) return;
       this.dispatchEvent(new CustomEvent('share', { detail: { item: this.item } }));
     };
     // Where it was taken, on Ninaivu's own map, and the photographs taken near
@@ -482,6 +483,8 @@ export class Viewer extends EventTarget {
     if (index < 0 || index >= this.ids.length) return;
     this.index = index;
     const id = this.ids[index];
+    const shareButton = this.root.querySelector('#v-share');
+    if (shareButton) shareButton.disabled = true;
 
     let item;
     try {
@@ -499,6 +502,7 @@ export class Viewer extends EventTarget {
     this.renderStage(item);
     this.resetTransform();
     this.renderChrome(item);
+    if (shareButton) shareButton.disabled = false;
     // The title is in now, and its height decides where the Live button goes.
     this.placeLiveBadge();
     this.stories?.show(item);

@@ -22,7 +22,7 @@ import { hideScrollBarsUntilUsed } from './scrollbars.js';
 import { claimBanner } from './handover.js';
 import { VideoMoments } from './video-moments.js';
 import { state, store } from './store.js';
-import { $, closeMenus, humanBytes, toast, wireMenu } from './ui.js';
+import { $, closeMenus, humanBytes, toast, wireMenu, wireModalFocus } from './ui.js';
 import {
   clearFilters, connectSidebar, loadAlbums, loadOccasions, loadPeople, occasionTitle,
   openStudioFor, renderAlbums, renderFilterBar, renderFolders, renderOccasions,
@@ -1458,6 +1458,7 @@ function wireChrome() {
   wireAlbums();
 
   document.querySelectorAll('.modal').forEach((modal) => {
+    wireModalFocus(modal);
     modal.addEventListener('click', (event) => {
       if (event.target === modal) modal.hidden = true;
     });

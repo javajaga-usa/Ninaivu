@@ -41,10 +41,10 @@ export function fileNameFrom(disposition, fallback = 'photo') {
 }
 
 /** A link with `download`, clicked: what every other browser does well. */
-function plainDownload(url) {
+function plainDownload(url, name = '') {
   const link = document.createElement('a');
   link.href = url;
-  link.download = '';
+  link.download = name;
   link.rel = 'noopener';
   document.body.appendChild(link);
   link.click();
@@ -58,8 +58,8 @@ function plainDownload(url) {
  * large photograph can take longer than that to arrive. Then the file is
  * ready and one more tap, on this, saves it.
  */
-function offerAgain(file) {
-  const holder = document.getElementById('toasts') || document.body;
+function offerAgain(file, target = null) {
+  const holder = target || document.getElementById('toasts') || document.body;
   const card = document.createElement('div');
   card.className = 'toast save-ready';
   card.setAttribute('role', 'status');
@@ -74,14 +74,45 @@ function offerAgain(file) {
   close.className = 'btn small ghost';
   close.textContent = i18n.t('Not now');
   const done = () => card.remove();
-  save.onclick = () => {
-    done();
-    navigator.share({ files: [file] }).catch(() => {});
+  save.onclick = async () => {
+    if (save.disabled) return;
+    save.disabled = true;
+    try {
+      await navigator.share({ files: [file] });
+      done();
+    } catch (error) {
+      if (error?.name === 'AbortError') done();
+      // Keep the prepared file available when Safari refuses the share sheet.
+    } finally { save.disabled = false; }
   };
   close.onclick = done;
   card.append(words, save, close);
   holder.appendChild(card);
   setTimeout(done, 30000);
+}
+
+/** Save an editor export, with its filename, without navigating away on iOS.
+ * A native dialog must hold its own retry control: the page behind it is inert. */
+export async function saveBlob(blob, name, { holder = null } = {}) {
+  if (isIOS()) {
+    if (typeof navigator.share === 'function' && typeof navigator.canShare === 'function' && typeof File === 'function') {
+      const file = new File([blob], name, { type: blob.type || 'application/octet-stream' });
+      if (navigator.canShare({ files: [file] })) {
+        try {
+          await navigator.share({ files: [file] });
+        } catch (error) {
+          if (error?.name !== 'AbortError') offerAgain(file, holder);
+        }
+        return;
+      }
+    }
+    const url = URL.createObjectURL(blob);
+    offerTab(url, name, holder, () => URL.revokeObjectURL(url));
+    return;
+  }
+  const url = URL.createObjectURL(blob);
+  try { plainDownload(url, name); }
+  finally { setTimeout(() => URL.revokeObjectURL(url), 10000); }
 }
 
 /**
@@ -136,8 +167,8 @@ export async function saveFile(url, { size = 0, archive = false, toast = null } 
 }
 
 /** A link to the file in a new tab, for a file the share sheet refuses. */
-function offerTab(url, name) {
-  const holder = document.getElementById('toasts') || document.body;
+function offerTab(url, name, target = null, release = () => {}) {
+  const holder = target || document.getElementById('toasts') || document.body;
   const card = document.createElement('div');
   card.className = 'toast save-ready';
   card.setAttribute('role', 'status');
@@ -149,8 +180,8 @@ function offerTab(url, name) {
   open.target = '_blank';
   open.rel = 'noopener';
   open.textContent = i18n.t('Open');
-  const done = () => card.remove();
-  open.addEventListener('click', () => setTimeout(done, 0));
+  const done = () => { card.remove(); release(); };
+  open.addEventListener('click', () => setTimeout(done, 10000));
   card.append(words, open);
   holder.appendChild(card);
   setTimeout(done, 30000);

@@ -8,7 +8,16 @@ import assert from 'node:assert/strict';
 import { launch } from './harness.mjs';
 const { chromium } = createRequire(import.meta.url)('playwright');
 const root = path.resolve('ninaivu/static');
+const savedBodies = [];
 const server = http.createServer(async (req,res) => {
+  if (req.url === '/api/asset/1/edited-copy' && req.method === 'POST') {
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    savedBodies.push({ type: req.headers['content-type'], bytes: Buffer.concat(chunks).length });
+    res.writeHead(201, { 'Content-Type': 'application/json' });
+    res.end('{"id":2}');
+    return;
+  }
   if(req.url==='/') {res.setHeader('Content-Type','text/html');res.end(`<link rel="stylesheet" href="/css/style.css"><link rel="stylesheet" href="/css/editor.css"><script type="module">
     import { PhotoEditor } from '/js/editor.js';
     const c=document.createElement('canvas');c.width=600;c.height=800;const x=c.getContext('2d');
@@ -28,17 +37,14 @@ try {
   browser=await launch();
   for(const viewport of [{width:1440,height:900},{width:390,height:844}]){
     const page=await browser.newPage({viewport});const errors=[];page.on('pageerror',e=>errors.push(e.message));
-    await page.route('**/api/asset/1/edited-copy',async route=>{
-      assert.equal(route.request().headers()['content-type'],'image/png');
-      assert.ok(route.request().postDataBuffer().length>100);
-      await route.fulfill({status:201,contentType:'application/json',body:'{"id":2}'});
-    });
     await page.goto(`http://127.0.0.1:${server.address().port}/`);
     await page.waitForFunction(()=>window.editor?.ready);
     const fits=await page.evaluate(()=>{
       const p=document.querySelector('#pe-photo').getBoundingClientRect(),v=document.querySelector('.pe-viewport').getBoundingClientRect();
-      return p.width<=v.width&&p.height<=v.height&&document.querySelector('dialog').getBoundingClientRect().width<=innerWidth;
-    });assert.ok(fits,'Photo and dialog must fit');
+      return { photo: { width: p.width, height: p.height }, viewport: { width: v.width, height: v.height },
+        dialogWidth: document.querySelector('dialog').getBoundingClientRect().width, windowWidth: innerWidth };
+    });assert.ok(fits.photo.width<=fits.viewport.width&&fits.photo.height<=fits.viewport.height&&fits.dialogWidth<=fits.windowWidth,
+      `Photo and dialog must fit: ${JSON.stringify(fits)}`);
     // The editor opens on Light, where the mask canvas takes no pointer events.
     // Pick a painting tool first, or the drag below paints nothing and the brush
     // has no area to work on.
@@ -123,6 +129,8 @@ try {
     await page.selectOption('#pe-format','image/png');
     assert.equal(await page.locator('#pe-quality-field').isVisible(),false,'PNG has no quality');
     await page.locator('[data-action="save"]').click();await page.waitForFunction(()=>window.saved?.id===2);
+    assert.equal(savedBodies.at(-1).type, 'image/png');
+    assert.ok(savedBodies.at(-1).bytes > 100, 'the server receives the exported image bytes');
     assert.deepEqual(errors,[]);console.log(`PASS ${viewport.width}×${viewport.height}: original/edited/split pixels, zoom, brushes, undo/redo, JPEG download, PNG export`);await page.close();
   }
 } finally {await browser?.close();server.close();}

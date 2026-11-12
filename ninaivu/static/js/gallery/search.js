@@ -25,10 +25,19 @@ export function connectSearch(context) {
 let voiceSearch = null;
 /** The pause after typing before the gallery is asked again. */
 let searchTimer = null;
+let suggestionVersion = 0;
+
+function dismissSuggestions() {
+  suggestionVersion++;
+  $('#suggestions').hidden = true;
+  $('#search').setAttribute('aria-expanded', 'false');
+  $('#search').removeAttribute('aria-activedescendant');
+}
 
 /** Forget a search that was about to be asked: something else was chosen. */
 export function stopSearch() {
   clearTimeout(searchTimer);
+  dismissSuggestions();
 }
 
 /** Show or hide the microphone (a setting, and for the family only). */
@@ -60,8 +69,8 @@ export function wireSearch() {
   });
 
   input.addEventListener('keydown', (event) => {
-    const options = [...list.querySelectorAll('li')];
-    const active = list.querySelector('[aria-selected="true"]');
+    const options = list.hidden ? [] : [...list.querySelectorAll('li')];
+    const active = list.hidden ? null : list.querySelector('[aria-selected="true"]');
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       if (!options.length) return;
       event.preventDefault();
@@ -70,21 +79,31 @@ export function wireSearch() {
         ? Math.min(options.length - 1, index + 1)
         : Math.max(0, index - 1);
       options.forEach((li, i) => li.setAttribute('aria-selected', String(i === next)));
+      input.setAttribute('aria-activedescendant', options[next].id);
     } else if (event.key === 'Enter' && active) {
+      event.preventDefault();
       active.click();
+    } else if (event.key === 'Enter') {
+      clearTimeout(searchTimer);
+      dismissSuggestions();
+      state.filters.q = input.value.trim();
+      ctx.reload({ resetScroll: true });
     } else if (event.key === 'Escape') {
-      list.hidden = true;
-      input.blur();
+      event.preventDefault();
+      dismissSuggestions();
     }
   });
 
-  input.addEventListener('blur', () => setTimeout(() => (list.hidden = true), 140));
+  input.addEventListener('blur', () => setTimeout(() => {
+    if (document.activeElement !== input) dismissSuggestions();
+  }, 140));
   $('#clear-search').onclick = () => {
     clearTimeout(searchTimer);
     input.value = '';
     $('#clear-search').hidden = true;
     state.filters.q = '';
-    list.hidden = true;
+    dismissSuggestions();
+    input.focus();
     ctx.reload({ resetScroll: true });
   };
 }
@@ -99,6 +118,8 @@ const SUGGESTION_KINDS = {
 };
 
 async function updateSuggestions(value) {
+  dismissSuggestions();
+  const version = suggestionVersion;
   const list = $('#suggestions');
   if (!value || value.length < 2) {
     list.hidden = true;
@@ -109,7 +130,7 @@ async function updateSuggestions(value) {
     data = await api.suggest(value);
   } catch { return; }
 
-  if ($('#search').value.trim() !== value) return;
+  if (version !== suggestionVersion || $('#search').value.trim() !== value || document.activeElement !== $('#search')) return;
 
   const entries = [
     ...(data.concepts || []).map((c) => ({ type: 'concept', value: c })),
@@ -123,6 +144,7 @@ async function updateSuggestions(value) {
   }
   for (const entry of entries) {
     const li = document.createElement('li');
+    li.id = `search-suggestion-${version}-${list.children.length}`;
     li.setAttribute('role', 'option');
     const kind = document.createElement('span');
     kind.className = 'kind';
@@ -138,7 +160,7 @@ async function updateSuggestions(value) {
     }
     li.onclick = () => {
       clearTimeout(searchTimer);
-      list.hidden = true;
+      dismissSuggestions();
       if (entry.type === 'tag') {
         $('#search').value = '';
         state.filters.q = '';
@@ -156,4 +178,5 @@ async function updateSuggestions(value) {
     list.appendChild(li);
   }
   list.hidden = false;
+  $('#search').setAttribute('aria-expanded', 'true');
 }

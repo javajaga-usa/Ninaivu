@@ -309,6 +309,22 @@ button { background: none; border: 0; cursor: pointer; }
 .icon-btn.on { color: var(--accent); background: var(--accent-weak); }
 .icon-btn:disabled { opacity: .35; cursor: not-allowed; pointer-events: none; }
 
+/* Enlarge standalone touch controls without changing virtual photo geometry.
+   Embedded controls in search fields keep their field's dimensions. */
+@media (pointer: coarse) {
+  .topbar > .nav-toggle, .topbar-actions > .icon-btn,
+  .topbar-actions > .profile-menu > .profile-btn {
+    min-width: 44px; min-height: 44px;
+  }
+  .modal-foot .btn, .sheet-foot .btn { min-height: 44px; }
+  .topbar-more .bar-menu-list .icon-btn, .profile-menu-list > button { min-height: 44px; }
+  .viewer .viewer-tools > .icon-btn, .viewer .viewer-tools-more .icon-btn {
+    min-width: 44px; min-height: 44px;
+  }
+  .searchbar input, .modal-card input, .sheet-card input,
+  .admin .field input, .admin .field select { font-size: 16px; }
+}
+
 .nav-toggle { flex: none; }
 
 /* Search ------------------------------------------------------------- */
@@ -1554,6 +1570,13 @@ button.job-row:focus-visible { outline: 2px solid var(--accent); outline-offset:
   animation: toast-in .2s var(--ease);
 }
 .toast.error { border-color: var(--danger); color: var(--danger); }
+/* Save/Open must accept taps even though the surrounding toast stack does not. */
+.save-ready {
+  pointer-events: auto; display: flex; align-items: center; flex-wrap: wrap;
+  gap: 8px; max-width: calc(100vw - 32px); border-radius: var(--r-lg);
+}
+.save-ready > span { overflow-wrap: anywhere; flex: 1 1 120px; }
+.save-ready .btn { min-height: 44px; }
 @keyframes toast-in { from { opacity: 0; transform: translateY(10px); } }
 
 /* ==========================================================================
@@ -1614,6 +1637,10 @@ button.job-row:focus-visible { outline: 2px solid var(--accent); outline-offset:
     padding: 6px; z-index: 70; min-width: 200px;
   }
   .topbar-more.open { display: flex; }
+  .topbar-more {
+    max-height: calc(100dvh - var(--topbar-h) - env(safe-area-inset-top, 0px) - 32px);
+    overflow-y: auto; overscroll-behavior: contain;
+  }
   .topbar-more .icon-btn {
     width: auto; height: 38px; justify-content: flex-start; gap: 12px; padding: 0 10px;
   }
@@ -1824,6 +1851,16 @@ button.job-row:focus-visible { outline: 2px solid var(--accent); outline-offset:
   padding: 22px; display: flex; flex-direction: column; gap: 16px;
 }
 .sheet-card.wide { width: min(860px, 100%); }
+@media (max-width: 760px), (max-height: 500px) {
+  .modal, .sheet {
+    padding: max(12px, env(safe-area-inset-top, 0px)) max(12px, env(safe-area-inset-right, 0px))
+      max(12px, env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-left, 0px));
+  }
+  .modal-card, .sheet-card {
+    max-height: calc(100dvh - max(12px, env(safe-area-inset-top, 0px)) - max(12px, env(safe-area-inset-bottom, 0px)));
+    overflow-y: auto; overscroll-behavior: contain;
+  }
+}
 .sheet-head { display: flex; align-items: center; justify-content: space-between; }
 .sheet-head h2 { font-size: 18px; font-weight: 650; letter-spacing: -.02em; }
 .sheet-section { display: flex; flex-direction: column; gap: 9px; }
@@ -2124,7 +2161,7 @@ body[data-role="guest"] .segmented button[data-layout="film"] { display: none; }
   right: max(14px, env(safe-area-inset-right));
   max-width: 440px;
   margin: 0 auto;
-  z-index: 1000;
+  z-index: 80;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -2143,6 +2180,11 @@ body[data-role="guest"] .segmented button[data-layout="film"] { display: none; }
   from { opacity: 0; transform: translateY(18px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* Installation is optional; it must never cover an active task or its buttons. */
+body:has(.modal:not([hidden]), .sheet:not([hidden]), .viewer:not([hidden]),
+  .gate:not([hidden]), .lock-screen:not([hidden]), .topbar-more.open,
+  .profile-menu-list.open) .ios-install-banner { display: none; }
 
 .ios-install-icon img {
   border-radius: 10px;
@@ -2463,6 +2505,8 @@ body:not([data-map-tiles]) #leaflet-map { background: var(--map-sea); }
 .dropzone.dragover, .dropzone:hover {
   border-color: var(--accent); background: var(--accent-weak);
 }
+.dropzone[aria-disabled="true"] { cursor: progress; opacity: .65; }
+.dropzone:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .dropzone svg {
   width: 42px; height: 42px; color: var(--accent); margin-bottom: 10px;
 }

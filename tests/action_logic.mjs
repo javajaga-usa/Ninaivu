@@ -134,11 +134,29 @@ const uploadNodes = new Map();
 const uploadContext = {
   $: selector => {
     if (selector === '#upload-list') return null;
-    if (!uploadNodes.has(selector)) uploadNodes.set(selector, { style: {}, value: 'old selection' });
+    if (!uploadNodes.has(selector)) uploadNodes.set(selector, {
+      style: {}, value: 'old selection', attributes: {},
+      setAttribute(key, value) { this.attributes[key] = value; },
+      removeAttribute(key) { delete this.attributes[key]; },
+    });
     return uploadNodes.get(selector);
   },
   FormData: class { append() {} },
-  fetch: async () => ({ ok: true, json: async () => ({ total: 0, uploaded: [], errors: [{ filename: 'bad.txt', error: 'Unsupported' }] }) }),
+  XMLHttpRequest: class {
+    upload = {};
+    open() {}
+    setRequestHeader() {}
+    send() {
+      this.upload.onprogress({ lengthComputable: true, loaded: 50, total: 100 });
+      assert.equal(uploadNodes.get('#upload-progress').attributes['aria-valuenow'], '50');
+      this.upload.onload();
+      assert.equal(uploadNodes.get('#upload-progress').attributes['aria-valuenow'], undefined);
+      this.status = 200;
+      this.response = { total: 0, uploaded: [], errors: [{ filename: 'bad.txt', error: 'Unsupported' }] };
+      this.onload();
+    }
+  },
+  uploading: false, progressTimer: null, clearTimeout() {}, reportUnauthorized() {},
   toast: message => uploadMessages.push(message), shell: { reload() {} }, setTimeout() {}, i18n,
 };
 // The upload dialog is a page of its own since 4.0 (pages/family/upload.js).
@@ -148,6 +166,8 @@ await uploadContext.handleUpload([{ name: 'bad.txt' }]);
 assert.match(uploadMessages[0], /Uploaded 0 items.*1 could not/);
 assert.match(uploadMessages[1], /Unsupported/);
 assert.equal(uploadNodes.get('#upload-file-input').value, '');
+assert.equal(uploadNodes.get('#upload-file-input').disabled, false);
+assert.equal(uploadContext.uploading, false);
 console.log('PASS: fully rejected uploads report failure and allow reselection');
 
 // Quick rotate clicks: one save in flight per photograph, and the last click's

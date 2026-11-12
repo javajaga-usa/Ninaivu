@@ -9,10 +9,13 @@ import { $, toast } from '../../ui.js';
 
 /* -- Sharing ------------------------------------------------------------ */
 let shareTargetItem = null;
+let shareVersion = 0;
 
 /** Bind the share dialog: once, when it is first opened. */
 export function wire() {
   $('#share-close')?.addEventListener('click', () => {
+    shareVersion++;
+    shareTargetItem = null;
     $('#share-modal').hidden = true;
   });
 
@@ -20,23 +23,31 @@ export function wire() {
     const button = $('#share-create-btn');
     if (!shareTargetItem || button.disabled) return;
     const target = shareTargetItem;
+    const version = shareVersion;
     button.disabled = true;
+    button.setAttribute('aria-busy', 'true');
     const expiry = Number($('#share-expiry').value || 30);
     const pwd = $('#share-password').value.trim() || null;
     const scope = target.type === 'album' ? 'album' : 'asset';
     try {
       const res = await api.createShare(scope, target.id, expiry, pwd);
-      if (shareTargetItem !== target) return;
+      if (version !== shareVersion || shareTargetItem !== target || $('#share-modal').hidden) return;
       const fullUrl = `${window.location.origin}${res.share_url}`;
       $('#share-url-text').value = fullUrl;
       $('#share-link-result').hidden = false;
       $('#share-options').hidden = true;
       $('#share-create-btn').hidden = true;
+      $('#share-copy-btn').focus();
       toast(i18n.t('Share link generated!'));
     } catch (err) {
-      toast(i18n.t('Could not create share link: {reason}', { reason: err.message }), true);
+      if (version === shareVersion && !$('#share-modal').hidden) {
+        toast(i18n.t('Could not create share link: {reason}', { reason: err.message }), true);
+      }
     } finally {
-      button.disabled = false;
+      if (version === shareVersion) {
+        button.disabled = false;
+        button.removeAttribute('aria-busy');
+      }
     }
   });
 
@@ -56,7 +67,12 @@ export function wire() {
 }
 
 export function openShareModal(item) {
+  if (!item) return;
+  shareVersion++;
   shareTargetItem = item;
+  $('#share-create-btn').disabled = false;
+  $('#share-create-btn').removeAttribute('aria-busy');
+  $('#share-url-text').value = '';
   $('#share-link-result').hidden = true;
   $('#share-options').hidden = false;
   $('#share-create-btn').hidden = false;
@@ -70,4 +86,5 @@ export function openShareModal(item) {
   const blurNote = $('#share-blur-note');
   if (blurNote) blurNote.hidden = !state.status?.moments?.share_blur;
   $('#share-modal').hidden = false;
+  $('#share-expiry').focus();
 }

@@ -853,15 +853,16 @@
 <div class="modal" id="upload-modal" hidden role="dialog" aria-modal="true" aria-labelledby="upload-title">
   <div class="modal-card">
     <h2 id="upload-title" data-i18n="Upload Photos & Videos">Upload Photos & Videos</h2>
-    <div class="dropzone" id="upload-dropzone">
+    <div class="dropzone" id="upload-dropzone" role="button" tabindex="0" aria-controls="upload-file-input" aria-label="Upload Photos & Videos" data-i18n-label="Upload Photos & Videos">
       <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
       <p><strong data-i18n="Drag and drop photos or videos here">Drag and drop photos or videos here</strong></p>
       <p class="hint" data-i18n="or click to browse from this device">or click to browse from this device</p>
       <input type="file" id="upload-file-input" multiple accept="image/*,video/*" hidden>
     </div>
-    <div class="upload-progress-bar" id="upload-progress" hidden>
+    <div class="upload-progress-bar" id="upload-progress" role="progressbar" aria-label="Upload Photos & Videos" data-i18n-label="Upload Photos & Videos" aria-valuemin="0" aria-valuemax="100" hidden>
       <div class="upload-progress-fill" id="upload-fill"></div>
     </div>
+    <p class="hint" id="upload-status" role="status" hidden></p>
     <div class="upload-list" id="upload-list"></div>
     <div class="modal-foot">
       <div class="spacer"></div>
@@ -1124,7 +1125,7 @@
     <p class="hint" data-i18n="Create an expiring, secure link to share this item without needing a permanent login.">Create an expiring, secure link to share this item without needing a permanent login.</p>
     <p class="hint" id="share-blur-note" hidden data-i18n="Faces nobody in the family has named are blurred for whoever opens the link. Videos are shared as they are.">Faces nobody in the family has named are blurred for whoever opens the link. Videos are shared as they are.</p>
     <div class="share-link-box" id="share-link-result" hidden>
-      <input type="text" class="share-url-input" id="share-url-text" readonly>
+      <input type="text" class="share-url-input" id="share-url-text" aria-label="Share link" data-i18n-label="Share link" readonly>
       <button class="btn primary small" id="share-copy-btn" data-i18n="Copy">Copy</button>
     </div>
     <div id="share-options">

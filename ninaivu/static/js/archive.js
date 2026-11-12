@@ -954,9 +954,12 @@ export class ArchivePanel {
   /* -- running ---------------------------------------------------------- */
 
   async run(mode, extra = {}) {
+    if (this.starting) return;
+    this.starting = true;
     const button = { copy: $('#ar-start'), 'dry-run': $('#ar-dry'), verify: $('#ar-audit') }[mode];
     const label = button.textContent;
     button.disabled = true;
+    button.setAttribute('aria-busy', 'true');
     button.textContent = i18n.t('Starting…');
     try {
       const result = await archiveApi.start({ ...this.job(mode), ...extra });
@@ -977,6 +980,8 @@ export class ArchivePanel {
       });
       this.toast(inLanguage([exc.message], exc.data?.problem_keys)[0], true);
     } finally {
+      this.starting = false;
+      button.removeAttribute('aria-busy');
       button.disabled = false;
       button.textContent = label;
       this.tick();

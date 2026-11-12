@@ -34,6 +34,7 @@
 
 import { reportUnauthorized } from './api.js';
 import * as i18n from './i18n.js';
+import { isIOS, saveBlob } from './save-file.js';
 import { initPalette, studioCommands } from './palette.js';
 import { Layer } from './studio/layer.js';
 import { PortraitSession } from './studio/portrait-session.js';
@@ -356,6 +357,12 @@ export class PhotoEditor {
     // Focus the room, not its first button, so no control opens wearing a ring.
     this.dialog.tabIndex = -1; this.dialog.focus();
     this.dialog.addEventListener('cancel', (e) => { e.preventDefault(); this.close(); });
+    this.preventLeaving = (event) => {
+      if (!this.dirty && !this.busy) return;
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', this.preventLeaving);
     const cycleTheme = () => {
       if (typeof window.cycleTheme === 'function') {
         window.cycleTheme();
@@ -434,7 +441,12 @@ export class PhotoEditor {
       if (paletteBtn && palette) paletteBtn.onclick = palette.open;
       this.selectPanel('light');
       this.updateSelections();
-      this.resizeObserver = new ResizeObserver(() => this.fit());
+      this.resizeObserver = new ResizeObserver(() => {
+        cancelAnimationFrame(this.fitFrame);
+        this.fitFrame = requestAnimationFrame(() => {
+          if (this.dialog.isConnected) this.fit();
+        });
+      });
       this.resizeObserver.observe(this.dialog.querySelector('.pe-viewport'));
       this.fit();
       this.photo.getContext('2d').putImageData(this.original, 0, 0);
@@ -617,6 +629,8 @@ export class PhotoEditor {
     // itself, so both exports wait only for the editor to be ready.
     q('[data-action="save"]').disabled = !this.ready || this.busy;
     q('[data-action="download"]').disabled = !this.ready || this.busy;
+    q('[data-action="save"]').setAttribute('aria-busy', String(this.busy));
+    q('[data-action="download"]').setAttribute('aria-busy', String(this.busy));
   }
 
   restore(redo = false) {
@@ -1141,10 +1155,13 @@ export class PhotoEditor {
     if (!viewport || !this.preview) return;
     // Follows .pe-viewport's padding, doubled, plus room for the drop shadow.
     const padding = innerWidth <= 760 ? 16 : 28;
-    const width = Math.max(1, Math.min(viewport.clientWidth - padding,
-      (viewport.clientHeight - padding) * this.preview.width / this.preview.height));
-    this.dialog.querySelector('.pe-picture').style.width =
-      `${width * Number(this.dialog.querySelector('#pe-zoom').value)}px`;
+    // Safari's scrollbars consume clientWidth/clientHeight when zooming.
+    // Use the stable outer box so their arrival cannot change the fit scale.
+    const width = Math.max(1, Math.min(viewport.offsetWidth - padding,
+      (viewport.offsetHeight - padding) * this.preview.width / this.preview.height));
+    const picture = this.dialog.querySelector('.pe-picture');
+    const desired = `${width * Number(this.dialog.querySelector('#pe-zoom').value)}px`;
+    if (picture.style.width !== desired) picture.style.width = desired;
   }
 
   /**
@@ -1490,12 +1507,9 @@ export class PhotoEditor {
       const { blob, type } = await this.renderExport();
       const ext = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' }[type];
       const stem = String(this.item.filename || 'photo').replace(/\.[^./\\]+$/, '');
-      const link = Object.assign(document.createElement('a'), {
-        href: URL.createObjectURL(blob), download: `${stem}-edited.${ext}`,
-      });
-      document.body.append(link); link.click(); link.remove();
-      setTimeout(() => URL.revokeObjectURL(link.href), 10_000);
-      this.status(`Downloaded ${link.download}.`);
+      const name = `${stem}-edited.${ext}`;
+      await saveBlob(blob, name, { holder: this.dialog.querySelector('footer') });
+      this.status(isIOS() ? i18n.t('{name} is ready', { name }) : `Downloaded ${name}.`);
     } catch (error) {
       this.status(error.message);
     } finally {
@@ -1506,6 +1520,8 @@ export class PhotoEditor {
   close() {
     if (this.busy) { this.status('Please wait while your copy is saving.'); return; }
     if (this.dirty && !window.confirm(i18n.t('Discard your unsaved photo edits?'))) return;
+    window.removeEventListener('beforeunload', this.preventLeaving);
+    cancelAnimationFrame(this.fitFrame);
     this.worker?.terminate();
     for (const job of this.jobs.values()) job.reject(new Error('Editor closed.'));
     this.jobs.clear(); this.resizeObserver?.disconnect();

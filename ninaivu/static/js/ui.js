@@ -99,6 +99,38 @@ export function whenShort(seconds) {
 
 /* -- messages -------------------------------------------------------------- */
 
+/** Keep keyboard navigation inside a modal and return to its opener on close. */
+export function wireModalFocus(modal) {
+  let opener = document.activeElement;
+  document.addEventListener('focusin', (event) => {
+    if (modal.hidden && !modal.contains(event.target)) opener = event.target;
+  });
+  const controls = () => [...modal.querySelectorAll(
+    'button, input, select, textarea, a[href], [tabindex]',
+  )].filter((node) => !node.disabled && node.tabIndex >= 0 && node.getClientRects().length);
+  new MutationObserver(() => {
+    if (modal.hidden) {
+      if (modal.contains(document.activeElement) || document.activeElement === document.body) {
+        if (opener?.isConnected && !opener.closest('[hidden]')) opener.focus();
+      }
+    } else if (!modal.contains(document.activeElement)) {
+      (controls()[0] || modal).focus();
+    }
+  }).observe(modal, { attributes: true, attributeFilter: ['hidden'] });
+  modal.tabIndex = -1;
+  modal.addEventListener('keydown', (event) => {
+    if (event.key !== 'Tab') return;
+    const items = controls();
+    const first = items[0], last = items.at(-1);
+    if (!first) { event.preventDefault(); modal.focus(); return; }
+    if (event.shiftKey && (document.activeElement === first || document.activeElement === modal)) {
+      event.preventDefault(); last.focus();
+    } else if (!event.shiftKey && (document.activeElement === last || document.activeElement === modal)) {
+      event.preventDefault(); first.focus();
+    }
+  });
+}
+
 /**
  * A message at the foot of the screen. *shownFor* is how long one that is not
  * an error stays: the family app's are 2.8 seconds, the console's 3.2.

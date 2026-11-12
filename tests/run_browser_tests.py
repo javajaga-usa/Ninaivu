@@ -298,6 +298,7 @@ def every_browser_test() -> list[Path]:
 WEBKIT_FLOWS = (
     "first_load_ui.mjs", "live_photos_ui.mjs", "selection_ui.mjs", "share_page_ui.mjs",
     "visibility_password_ui.mjs", "editor_panels_ui.mjs", "picker_ui.mjs",
+    "editor_ui.mjs", "premium_journeys_ui.mjs", "mobile_safari_ui.mjs", "search_select_ui.mjs",
 )
 
 

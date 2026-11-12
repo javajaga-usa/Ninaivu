@@ -4,9 +4,12 @@
 
 import * as i18n from '../../i18n.js';
 import { $, toast } from '../../ui.js';
+import { reportUnauthorized } from '../../http.js';
 
 /** The gallery around the dialog (app.js): to show what came in. */
 let shell;
+let uploading = false;
+let progressTimer;
 
 /* -- Local Upload ------------------------------------------------------- */
 /** Bind the upload dialog: once, when it is first opened. */
@@ -22,7 +25,13 @@ export function wire(context) {
     shell.reload();
   });
 
-  dropzone?.addEventListener('click', () => fileInput?.click());
+  dropzone?.addEventListener('click', () => { if (!uploading) fileInput?.click(); });
+  dropzone?.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      if (!uploading) fileInput?.click();
+    }
+  });
   fileInput?.addEventListener('change', (e) => {
     if (e.target.files?.length) handleUpload(Array.from(e.target.files));
   });
@@ -42,36 +51,67 @@ export function wire(context) {
 }
 
 async function handleUpload(files) {
-  if (!files.length) return;
+  if (!files.length || uploading) return;
+  uploading = true;
+  clearTimeout(progressTimer);
+  const dropzone = $('#upload-dropzone');
+  const fileInput = $('#upload-file-input');
+  fileInput.disabled = true;
+  dropzone.setAttribute('aria-disabled', 'true');
+  dropzone.setAttribute('aria-busy', 'true');
   const progress = $('#upload-progress');
   const fill = $('#upload-fill');
   const list = $('#upload-list');
+  const status = $('#upload-status');
+  status.hidden = false;
+  status.textContent = i18n.t('Uploading…');
   progress.hidden = false;
-  fill.style.width = '20%';
+  progress.setAttribute('aria-valuenow', '0');
+  fill.style.width = '0%';
 
   const formData = new FormData();
   files.forEach((f) => formData.append('files', f));
 
   try {
-    fill.style.width = '60%';
     // X-Requested-With: multipart is what a cross-origin form could also
     // send, so the server takes one only from a script that says so. See
     // _refuse_cross_origin_writes in ninaivu/__init__.py.
-    const response = await fetch('/api/upload', {
-      method: 'POST',
-      headers: { 'X-Requested-With': 'fetch' },
-      body: formData,
+    const result = await new Promise((resolve, reject) => {
+      const request = new XMLHttpRequest();
+      request.open('POST', '/api/upload');
+      request.setRequestHeader('X-Requested-With', 'fetch');
+      request.responseType = 'json';
+      request.upload.onprogress = (event) => {
+        if (!event.lengthComputable) return;
+        const percent = Math.round(event.loaded / event.total * 100);
+        fill.style.width = `${percent}%`;
+        progress.setAttribute('aria-valuenow', String(percent));
+      };
+      request.upload.onload = () => {
+        // Bytes have arrived; the server is still validating and filing them.
+        progress.removeAttribute('aria-valuenow');
+        status.textContent = i18n.t('Finishing up');
+      };
+      request.onload = () => {
+        if (request.status === 401) reportUnauthorized('/api/upload');
+        if (request.status < 200 || request.status >= 300 || !request.response) {
+          reject(new Error(i18n.fromServer(request.response || {}, i18n.t('Upload failed'))));
+        } else resolve(request.response);
+      };
+      request.onerror = request.onabort = () => reject(new Error(i18n.t('Upload failed')));
+      request.send(formData);
     });
-    const result = await response.json();
     fill.style.width = '100%';
-
-    if (!response.ok) throw new Error(i18n.fromServer(result, i18n.t('Upload failed')));
+    progress.setAttribute('aria-valuenow', '100');
 
     const count = result.total ?? result.uploaded?.length ?? 0;
     const failed = files.length - count;
     const sent = result.pending_approval
       ? i18n.t('Uploaded {items} for an administrator to approve.', { items: i18n.items(count) })
       : i18n.t('Uploaded {items}.', { items: i18n.items(count) });
+    status.textContent = failed > 0
+      ? `${sent} ${i18n.t('{count} could not be uploaded.', { count: failed.toLocaleString(i18n.locale()) })}`
+      : sent;
     toast(failed > 0
       ? `${sent} ${i18n.t('{count} could not be uploaded.', { count: failed.toLocaleString(i18n.locale()) })}`
       : sent, failed > 0);
@@ -97,14 +137,23 @@ async function handleUpload(files) {
         list.prepend(item);
       });
     }
-    setTimeout(() => { progress.hidden = true; }, 1200);
+    progressTimer = setTimeout(() => { progress.hidden = true; }, 1200);
   } catch (err) {
+    status.textContent = i18n.t('Upload failed: {reason}', { reason: err.message });
     toast(i18n.t('Upload failed: {reason}', { reason: err.message }), true);
     progress.hidden = true;
+  } finally {
+    uploading = false;
+    fileInput.disabled = false;
+    // Selecting the same file again must fire change after a failed attempt.
+    fileInput.value = '';
+    dropzone.removeAttribute('aria-disabled');
+    dropzone.removeAttribute('aria-busy');
   }
 }
 
 /** Open the upload dialog (the top bar's Upload button). */
 export function open() {
   $('#upload-modal').hidden = false;
+  $('#upload-dropzone').focus();
 }

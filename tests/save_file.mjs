@@ -1,14 +1,14 @@
 /** Saving on an iPhone keeps the app on screen: node --test tests/save_file.mjs. */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { SHARE_LIMIT, fileNameFrom, isIOS, saveFile } from '../ninaivu/static/js/save-file.js';
+import { SHARE_LIMIT, fileNameFrom, isIOS, saveBlob, saveFile } from '../ninaivu/static/js/save-file.js';
 
 const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15';
 const MAC = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15';
 
 /** A browser that records what saveFile asked of it. */
 function browser({ ua = IPHONE, share = true, shareFails = null, body = 'jpeg' } = {}) {
-  const seen = { clicked: [], opened: [], shared: [], fetched: [], cards: [] };
+  const seen = { clicked: [], names: [], opened: [], shared: [], fetched: [], cards: [] };
   Object.defineProperty(globalThis, 'navigator', { configurable: true, writable: true, value: {
     userAgent: ua, platform: ua.includes('Mac') ? 'MacIntel' : 'iPhone', maxTouchPoints: 0,
     ...(share ? {
@@ -27,8 +27,8 @@ function browser({ ua = IPHONE, share = true, shareFails = null, body = 'jpeg' }
   globalThis.document = {
     body: { appendChild() {} },
     getElementById: () => holder,
-    createElement: (tag) => ({ tag, dataset: {}, append() {}, setAttribute() {}, addEventListener() {},
-                               remove() {}, click() { seen.clicked.push(this.href); } }),
+    createElement: (tag) => ({ tag, dataset: {}, children: [], append(...nodes) { this.children.push(...nodes); }, setAttribute() {}, addEventListener() {},
+                               remove() { this.removed = true; }, click() { seen.clicked.push(this.href); seen.names.push(this.download); } }),
   };
   return seen;
 }
@@ -80,4 +80,33 @@ test('a share refused because the tap is too long ago offers one more tap', asyn
   seen = browser({ shareFails: 'AbortError' });
   await saveFile('/api/download/7');
   assert.equal(seen.cards.length, 0);
+});
+
+test('an edited image keeps its filename in the iPhone share sheet without fetching it again', async () => {
+  const seen = browser();
+  await saveBlob(new Blob(['edited'], { type: 'image/png' }), 'Amma-edited.png');
+  assert.equal(seen.shared[0].name, 'Amma-edited.png');
+  assert.equal(seen.shared[0].type, 'image/png');
+  assert.equal(seen.fetched.length + seen.clicked.length + seen.opened.length, 0);
+});
+
+test('a delayed editor export offers a working retry inside the native dialog', async () => {
+  const seen = browser({ shareFails: 'NotAllowedError' });
+  const cards = [];
+  await saveBlob(new Blob(['edited']), 'edited.jpg', { holder: { appendChild: card => cards.push(card) } });
+  assert.equal(seen.cards.length, 0, 'the retry must not sit behind the modal dialog');
+  const card = cards[0], save = card.children[1];
+  await save.onclick();
+  assert.equal(card.removed, undefined, 'a refused retry keeps the file ready');
+  assert.equal(save.disabled, false);
+  navigator.share = async () => {};
+  await save.onclick();
+  assert.equal(card.removed, true);
+});
+
+test('desktop editor exports retain the requested filename', async () => {
+  const seen = browser({ ua: MAC });
+  await saveBlob(new Blob(['edited']), 'family-edited.jpg');
+  assert.deepEqual(seen.names, ['family-edited.jpg']);
+  assert.equal(seen.shared.length, 0);
 });
