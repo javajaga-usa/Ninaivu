@@ -26,7 +26,6 @@ let body = null;
 let tabs = null;
 let footer = null;
 let found = null;
-let tab = 'places';
 let helpers = { toast: () => {}, openItems: () => Promise.resolve() };
 const chosen = new Map();
 let compare = null;
@@ -133,7 +132,6 @@ function lists() {
 }
 
 function showTab(name) {
-  tab = name;
   [...tabs.children].forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === name)));
   const all = lists();
   const grid = el('div', { class: 'tn-grid' });

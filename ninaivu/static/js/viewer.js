@@ -27,18 +27,6 @@ const LIVE_HOLD_MS = 260;
 // escape nothing.
 const asText = (value) => String(value ?? '');
 
-function formatBytes(n) {
-  if (!n) return '';
-  const units = ['B', 'KB', 'MB', 'GB'];
-  let i = 0;
-  let value = n;
-  while (value >= 1024 && i < units.length - 1) {
-    value /= 1024;
-    i++;
-  }
-  return `${i === 0 ? value : value.toFixed(1)} ${units[i]}`;
-}
-
 /** Plain English for where a rotation came from. */
 const ROTATION_WHY = {
   exif: 'from the camera',

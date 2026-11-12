@@ -51,6 +51,9 @@ const THUMB_CACHE = `ninaivu-thumbs-${THUMB_VERSION}`;
  * entries, and two sizes per picture, it held about three hundred photographs
  * and evicted the beginning of a scroll before the end of it.
  */
+// Not used since thumbnails stopped being kept (they are revalidated every
+// time); it and cacheFirst below go when the service worker is tidied in 4.1.
+// eslint-disable-next-line no-unused-vars
 const MAX_THUMBS = 4000;
 
 self.addEventListener('install', (event) => {
@@ -125,6 +128,7 @@ async function trim(cacheName, limit) {
 }
 
 /** For content addressed by a version in its URL: ask the network once, ever. */
+// eslint-disable-next-line no-unused-vars
 async function cacheFirst(request, cacheName, limit) {
   const cache = await caches.open(cacheName);
   const hit = await cache.match(request);
