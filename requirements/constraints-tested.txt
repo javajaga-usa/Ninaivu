@@ -76,7 +76,7 @@ pytest==9.2.0
 python-xlib==0.33
 PyYAML==6.0.3
 rawpy==0.28.0
-regex==2026.11.7
+regex==2026.11.9
 requests==2.34.2
 rich==15.0.0
 ruff==0.17.4
