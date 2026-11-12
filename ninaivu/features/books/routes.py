@@ -95,7 +95,7 @@ def _source() -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
             abort(404)
         meta["name"] = row["place"] or ""
     elif kind == "festival":
-        # Every year of a festival album (api/api_festivals.py), as this
+        # Every year of a festival album (features/festivals/routes.py), as this
         # viewer may see it; nothing while the albums are switched off.
         from ..festivals import media as festivals            # noqa: PLC0415
         from ..festivals.routes import _albums                # noqa: PLC0415

@@ -1,4 +1,4 @@
-"""Moments inside videos (storage/video_moments.py, media/video_moments.py).
+"""Moments inside videos (features/video_moments/storage.py, features/video_moments/media.py).
 
 Off until ``video_moments`` is switched on, when every route answers 404 as
 if it did not exist. Anybody who may search the gallery may search inside

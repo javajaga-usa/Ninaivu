@@ -203,7 +203,7 @@ class Keeper:
 | `mugil-display` | `mugil/display.py` | at once, then every 10 min | |
 | `ninaivu-descriptions` | `runtime/describer.py` | 2 min in, every 30 min, or `wake()` | |
 | `ninaivu-story-words` | `runtime/transcriber.py` | 1 min in, every 30 min, or `wake()` | |
-| `ninaivu-video-moments` | `media/video_moments.py` | 3 min in, every hour, or `wake()` | |
+| `ninaivu-video-moments` | `features/video_moments/media.py` | 3 min in, every hour, or `wake()` | |
 
 Not on it yet, each with its reason:
 

@@ -1,7 +1,7 @@
 """Speaking to search: a question spoken into the search box, written out on
 this computer.
 
-``routes.py`` is what was ``api/api_voice_search.py``; the old name is kept
+``routes.py`` is what was ``features/voice_search/routes.py``; the old name is kept
 as the very same module. The model stays in ``runtime/voice.py`` with the
 other models. It has no tables.
 """

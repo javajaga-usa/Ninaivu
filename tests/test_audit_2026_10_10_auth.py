@@ -22,7 +22,8 @@ import pytest
 from conftest import ADMIN, FAMILY, login
 from ninaivu.api import accounts_api
 from ninaivu.server import auth
-from ninaivu.storage import db, handover
+from ninaivu.storage import db
+from ninaivu.features.handover import storage as handover
 
 
 def cookie_line(response, name: str = auth.SESSION_COOKIE) -> str:

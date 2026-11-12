@@ -14,7 +14,7 @@ it; the viewer then does not offer it.
 
 ``POST /api/asset/<id>/talk`` with ``{"question": "…", "turns": [{"q", "a"}]}``
 turns the photograph upright, writes it as a small private JPEG for the model
-host, asks (runtime/llm.py ``look``, media/photo_talk.py) and removes the
+host, asks (runtime/llm.py ``look``, features/photo_talk/media.py) and removes the
 file as soon as the answer is back. Neither the question nor the answer is
 kept anywhere; the page holds the talk while it is open.
 """

@@ -1,6 +1,6 @@
 /**
  * Young faces, older names: who an unnamed child in an old photograph may be
- * (ninaivu/media/young_faces.py finds them, ninaivu/api/api_young_faces.py
+ * (ninaivu/media/young_faces.py finds them, ninaivu/features/young_faces/routes.py
  * serves them; shown only while `young_faces` is switched on, and only to the
  * family).
  *

@@ -30,7 +30,7 @@ are kept — "the blue folder in the steel almirah" — and :func:`secret_in`
 refuses text that looks like the backup key itself was pasted in.
 
 This module is storage and rules only; who may call what, and the activity
-log, are in ``api/api_handover.py``.
+log, are in ``features/handover/routes.py``.
 """
 
 from __future__ import annotations

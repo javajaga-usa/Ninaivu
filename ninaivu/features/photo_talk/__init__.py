@@ -1,8 +1,8 @@
 """Talk about this photo: questions about a photograph, answered on this
 computer by the model that can look.
 
-``routes.py`` is what was ``api/api_photo_talk.py`` and ``media.py`` what was
-``media/photo_talk.py``; the old names are kept as the very same modules. It
+``routes.py`` is what was ``features/photo_talk/routes.py`` and ``media.py`` what was
+``features/photo_talk/media.py``; the old names are kept as the very same modules. It
 has no tables; it reads the descriptions of photographs.
 """
 from .. import ON_THE_FAMILY_API, Feature

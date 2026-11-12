@@ -27,7 +27,8 @@ import time
 from pathlib import Path
 from typing import Any, Callable
 
-from ..storage import stories, story_words
+from ..storage import story_words
+from ..features.stories import storage as stories
 from ..words import said
 from . import speech
 from .host import HostError, HostStopped, ModelHost, Unavailable

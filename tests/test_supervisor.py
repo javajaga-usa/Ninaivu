@@ -742,7 +742,7 @@ def test_display_copies_start_at_once_and_a_stop_cuts_a_round_short(tmp_path):
 # -- group 4: the AI passes ---------------------------------------------------------
 
 def _group_4(tmp_path):
-    from ninaivu.media.video_moments import MomentFinder
+    from ninaivu.features.video_moments.media import MomentFinder
     from ninaivu.runtime.describer import Describer
     from ninaivu.runtime.transcriber import Transcriber
 

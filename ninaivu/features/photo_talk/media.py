@@ -13,7 +13,7 @@ and the family's own caption. It is told to use those names and no others,
 to say so when it cannot tell, and to copy writing as it is written.
 
 Nothing here is kept: not the question, not the answer. The route is
-api/api_photo_talk.py; the setting is ``photo_talk``.
+features/photo_talk/routes.py; the setting is ``photo_talk``.
 """
 from __future__ import annotations
 

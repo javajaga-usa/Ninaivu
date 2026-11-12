@@ -16,8 +16,11 @@ from pathlib import Path
 import pytest
 
 from ninaivu import Services
-from ninaivu.media import books, films
-from ninaivu.storage import books as book_store, db, films as film_store, resume
+from ninaivu.features.books import media as books
+from ninaivu.features.films import media as films
+from ninaivu.storage import db, resume
+from ninaivu.features.books import storage as book_store
+from ninaivu.features.films import storage as film_store
 
 
 # -- "Analysing with AI": the scan's analysis ---------------------------------------

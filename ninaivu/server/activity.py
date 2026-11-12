@@ -313,7 +313,7 @@ def _descriptions(services: Any, config: Any) -> dict[str, Any] | None:
 
 
 def _video_moments(services: Any, config: Any) -> dict[str, Any] | None:
-    """Finding the moments inside long videos (media/video_moments.py)."""
+    """Finding the moments inside long videos (features/video_moments/media.py)."""
     finder = getattr(services, "moment_finder", None)
     if finder is None or not finder.running:
         return None

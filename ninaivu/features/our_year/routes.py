@@ -1,4 +1,4 @@
-"""Our Year: the family's year in photographs (media/our_year.py,
+"""Our Year: the family's year in photographs (features/our_year/media.py,
 static/js/our-year.js).
 
 Off until ``our_year`` is switched on, when every route answers 404 as if it

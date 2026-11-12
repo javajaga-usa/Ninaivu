@@ -1,4 +1,4 @@
-"""The family tree in the family app (storage/family_tree.py).
+"""The family tree in the family app (features/family_tree/storage.py).
 
 Everything here is cut to the people this viewer may see on the People page —
 ``db.list_people`` with their own limits — before anything is sent or

@@ -1,4 +1,4 @@
-"""The living photo frame (media/frame.py, static/js/frame.js).
+"""The living photo frame (features/frame/media.py, static/js/frame.js).
 
 Two routes, both off until ``photo_frame`` is switched on, when they answer
 404 as if they did not exist. The batch is whatever the viewer may see, for

@@ -6,7 +6,7 @@ A trial of Ninaivu 2.0, off unless ``memory_films`` is switched on (Settings
 The same rules as photo books (features/books/routes.py), whose sources and pickers
 these are: every photograph and clip is found through ``db.query_assets``
 with this viewer's own limits, a voice story is only told over a photograph
-this viewer may open (a story has no visibility of its own, storage/stories.py),
+this viewer may open (a story has no visibility of its own, features/stories/storage.py),
 a song is only one this viewer could have found in the gallery, and the
 background process is handed a fixed list of files and never asks the index
 what else there is. Guests make no films.

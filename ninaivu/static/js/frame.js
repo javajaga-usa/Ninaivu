@@ -1,6 +1,6 @@
 /**
  * The living photo frame: the library drifting by, full screen, on a tablet
- * on the wall or a television's browser (ninaivu/media/frame.py picks what).
+ * on the wall or a television's browser (ninaivu/features/frame/media.py picks what).
  *
  * Opened from "Photo frame" in the top bar, or by opening Ninaivu at
  * `/#frame`, which is what a tablet's home-screen bookmark should point at.

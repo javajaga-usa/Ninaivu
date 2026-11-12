@@ -1,8 +1,8 @@
 """Photo stacks: a burst, or a photograph and its copies, shown as one tile
 with the best of them on top.
 
-``routes.py`` is what was ``api/api_stacks.py`` and ``storage.py`` what was
-``storage/stacks.py``; the old names are kept as the very same modules. The
+``routes.py`` is what was ``features/stacks/routes.py`` and ``storage.py`` what was
+``features/stacks/storage.py``; the old names are kept as the very same modules. The
 timeline asks this feature whether to fold its stacks (``api/api.py``
 ``_stacks_apply``).
 """

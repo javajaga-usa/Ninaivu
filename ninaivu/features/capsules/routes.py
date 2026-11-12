@@ -1,4 +1,4 @@
-"""Time capsules (storage/capsules.py, static/js/capsules.js).
+"""Time capsules (features/capsules/storage.py, static/js/capsules.js).
 
 Off until ``time_capsules`` is switched on, when every route answers 404 as if
 it did not exist. Family members and administrators seal and open them;

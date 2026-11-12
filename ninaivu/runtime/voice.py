@@ -17,7 +17,7 @@ anybody in the family. Both are licensed for non-commercial use, which a
 household's own library is.
 
 The server writes nothing but the words: it names the letter's sentences
-(media/letters.py) and a file to write, and the host answers with the
+(features/letters/media.py) and a file to write, and the host answers with the
 reading as a WAV beside it and when each sentence starts and ends, for the
 page to light the sentence being read. A Tamil sentence with an English
 word in it is read by both voices in turn, when both are downloaded.
@@ -174,7 +174,7 @@ def _resample(samples: Any, rate: int, to: int) -> Any:
 
 def speak(kept: dict[str, Any], *, sentences: Sequence[dict[str, Any]], language: str,
           out: str) -> dict[str, Any]:
-    """Read *sentences* (media/letters.py ``sentences``) aloud in *language*
+    """Read *sentences* (features/letters/media.py ``sentences``) aloud in *language*
     and write the reading to *out* as a 16-bit mono WAV.
 
     Answers with each sentence's ``start`` and ``end`` in seconds, the whole

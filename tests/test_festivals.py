@@ -14,9 +14,9 @@ from datetime import date, datetime, timezone
 
 import pytest
 
-from ninaivu.api import api_festivals
+from ninaivu.features.festivals import routes as api_festivals
 from ninaivu.media import festival_calendar as calendar
-from ninaivu.media import festivals
+from ninaivu.features.festivals import media as festivals
 from ninaivu.server import auth
 from ninaivu.server.config import Config
 from ninaivu.server.settings_groups import GROUPS, OFF_THE_PAGE

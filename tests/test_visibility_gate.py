@@ -290,7 +290,7 @@ def test_a_profile_whose_folder_is_gone_has_no_candidates(app, house, monkeypatc
 def test_the_stack_route_hides_the_bin_from_the_administrator(app, house, monkeypatch):
     """STACK_HIDES_THE_BIN_FROM_ADMIN, kept: the stack route leaves a binned
     frame out for the administrator too, who may open it by id."""
-    from ninaivu.api import api_stacks
+    from ninaivu.features.stacks import routes as api_stacks
     conn, ids, members = house
     binned = ids["2023/09/09/shot4.jpg"]
     with app.test_request_context("/api/stacks/1"):
@@ -463,7 +463,7 @@ def test_young_faces_reads_the_photographs_the_gate_lets_through(app, furnished,
     """The young-faces guard (api_young_faces._guard_sql) is the gate's listing:
     every picture the caller may open (explicit ones for the administrator
     only), not in the bin, not a screenshot."""
-    from ninaivu.api import api_young_faces
+    from ninaivu.features.young_faces import routes as api_young_faces
     conn, _, members = furnished
     if policy:
         db.set_meta(conn, date_policy.KEY, json.dumps(policy))

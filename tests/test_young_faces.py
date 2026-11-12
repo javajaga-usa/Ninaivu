@@ -18,7 +18,9 @@ import pytest
 from ninaivu.media import facematch, young_faces as guess
 from ninaivu.server.config import Config
 from ninaivu.server.settings_groups import GROUPS
-from ninaivu.storage import db, family_tree, then_and_now as born_store
+from ninaivu.storage import db
+from ninaivu.features.family_tree import storage as family_tree
+from ninaivu.features.then_and_now import storage as born_store
 
 DIM = 128
 SAME = facematch.SFACE.same

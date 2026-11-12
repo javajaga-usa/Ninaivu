@@ -1,6 +1,6 @@
 /**
  * Photo books: "Make a book" from an album, an occasion or a person, and the
- * list of books made (ninaivu/media/books.py does the work).
+ * list of books made (ninaivu/features/books/media.py does the work).
  *
  * The list opens with books Ninaivu offers on its own — the best of each
  * year, each trip, each person the family has named (/api/books/ideas).

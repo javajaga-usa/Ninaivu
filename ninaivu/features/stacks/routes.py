@@ -1,4 +1,4 @@
-"""Photo stacks in the family app (storage/stacks.py, static/js/stacks.js).
+"""Photo stacks in the family app (features/stacks/storage.py, static/js/stacks.js).
 
 Off until ``photo_stacks`` is switched on (Settings → Advanced), when every
 route answers 404 as if it did not exist.

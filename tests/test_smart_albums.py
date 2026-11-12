@@ -7,7 +7,7 @@ import pytest
 from conftest import ADMIN, FAMILY, GUEST, login
 from ninaivu import build_services, create_home_app
 from ninaivu.server import auth
-from ninaivu.storage import smart
+from ninaivu.features.smart import storage as smart
 
 
 def test_rules_keep_only_what_a_rule_may_say():

@@ -512,10 +512,10 @@ CREATE TABLE IF NOT EXISTS assets (
     -- once, with the RAW kept beside it to download.
     raw_path        TEXT,
     raw_twin        INTEGER NOT NULL DEFAULT 0,
-    -- Photo stacks (``photo_stacks``, storage/stacks.py): the frames of a
+    -- Photo stacks (``photo_stacks``, features/stacks/storage.py): the frames of a
     -- burst and a photograph's edited copies share a key; the one shown
     -- carries how many there are, the rest are marked as stacked under it.
-    -- Written only by storage/stacks.py, never by a scan.
+    -- Written only by features/stacks/storage.py, never by a scan.
     stack_key       TEXT,
     stacked         INTEGER NOT NULL DEFAULT 0,
     stack_count     INTEGER NOT NULL DEFAULT 0,
@@ -823,7 +823,7 @@ _INDEX_SCHEMA = """
 -- `raw_twin` ride along for the same reason: the second half of a live photo
 -- or of a RAW+JPEG shot is left out of every listing. `stacked` too: the
 -- frames under a photo stack's top one are left out of the timeline while
--- `photo_stacks` is on (storage/stacks.py).
+-- `photo_stacks` is on (features/stacks/storage.py).
 CREATE INDEX IF NOT EXISTS idx_assets_filter   ON assets(root, trashed, nsfw, visibility, kind, date_key, live_clip, raw_twin, stacked);
 CREATE INDEX IF NOT EXISTS idx_assets_gallery  ON assets(root, COALESCE(captured_at, mtime) DESC, id DESC, trashed, nsfw, visibility, kind, date_key, live_clip, raw_twin, stacked);
 -- The name and size sorts, the same shape: in order, with the filter columns
@@ -1840,7 +1840,7 @@ def init_db(db_path: Path | str) -> sqlite3.Connection:
     refresh_statistics(conn, force=unmeasured)
     # The sound of any story whose photograph went while Ninaivu was not
     # looking: deleted by a tool, or erased from the bin by the last run.
-    from . import stories                                 # noqa: PLC0415
+    from ..features.stories import storage as stories                                 # noqa: PLC0415
     stories.sweep(conn)
     _READY.add(key)
     return conn
@@ -2757,7 +2757,7 @@ def query_assets(
     total, and the count ran the whole WHERE a second time for each of them.
 
     ``stacks=True`` lists a photo stack as its top photograph alone (see
-    storage/stacks.py); the timeline asks for it while ``photo_stacks`` is on.
+    features/stacks/storage.py); the timeline asks for it while ``photo_stacks`` is on.
 
     ``search_shield=True`` is a family member's search (see
     :func:`search_shield_clause`): no screenshot or document, even one shown
@@ -2970,7 +2970,7 @@ def query_assets(
             also = _also_said(conn, text)
             if match and also:
                 # Words somebody typed beside a voice story count as the
-                # item's own (storage/stories.py), and so does the engine's
+                # item's own (features/stories/storage.py), and so does the engine's
                 # description of it (storage/descriptions.py). Only when one
                 # has them: the join below is what ranks the full-text
                 # answer, and an OR cannot be put beside a MATCH that is joined.
@@ -3130,7 +3130,7 @@ def _story_words(conn: sqlite3.Connection, text: str) -> tuple[str, list[Any]] |
     before stories existed, ranking and all. The rows it adds are still held
     to every limit of the query they join.
     """
-    from . import stories                                 # noqa: PLC0415
+    from ..features.stories import storage as stories                                 # noqa: PLC0415
     clause = stories.words_clause(text)
     if clause is None:
         return None
@@ -3514,7 +3514,7 @@ def picture_years(conn: sqlite3.Connection, roots: Sequence[str] | str | None = 
     """How many photographs this viewer can see in each year, newest first.
 
     The same limits as :func:`timeline`, for photographs only: what the
-    ready-made books (api/api_books.py) offer a "best of the year" for.
+    ready-made books (features/books/routes.py) offer a "best of the year" for.
     *gate*, a ``server.visibility.Viewer``, is the caller's limits when given.
     """
     if gate is not None:

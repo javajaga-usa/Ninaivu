@@ -1,6 +1,6 @@
 /**
  * Memory films: "Make a film" beside "Make a book", and the films made
- * (ninaivu/media/films.py does the work; a trial of Ninaivu 2.0, shown only
+ * (ninaivu/features/films/media.py does the work; a trial of Ninaivu 2.0, shown only
  * while `memory_films` is switched on).
  *
  * The same three steps as a book (static/js/books.js), in the same dialog
@@ -10,7 +10,7 @@
  * playing, with a Download button.
  *
  * Music: a film plays Ninaivu's own soft music unless somebody chooses
- * otherwise, the piece for its pace (media/film_music.py writes it on the
+ * otherwise, the piece for its pace (features/films/music.py writes it on the
  * server, so nothing is downloaded), and Listen plays a piece's opening.
  * Sound files in the library are for administrators alone, so anybody may
  * also bring a song of their own for their films ("Bring a song…"), kept for

@@ -1,6 +1,6 @@
 """Ask Ninaivu: a question in plain words, answered from the library.
 
-``routes.py`` is what was ``api/api_ask_ninaivu.py``; the old name is kept as
+``routes.py`` is what was ``features/ask_ninaivu/routes.py``; the old name is kept as
 the very same module. Reading the question and wording the answer are in
 ``ninaivu/ask/``, which search shares. It has no tables.
 """

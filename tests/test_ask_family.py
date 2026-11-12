@@ -18,7 +18,8 @@ from PIL import Image
 
 from conftest import ADMIN, FAMILY, login
 from ninaivu.media.faceindex import FaceIndexer
-from ninaivu.storage import ask_family, db
+from ninaivu.storage import db
+from ninaivu.features.ask_family import storage as ask_family
 
 
 def _vector(seed: int) -> bytes:

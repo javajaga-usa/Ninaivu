@@ -1,6 +1,6 @@
 /**
- * Find this print — the family app's side of ninaivu/media/find_print.py
- * (served by ninaivu/api/api_find_print.py; offered only while `find_print`
+ * Find this print — the family app's side of ninaivu/features/find_print/media.py
+ * (served by ninaivu/features/find_print/routes.py; offered only while `find_print`
  * is switched on, and only to the family).
  *
  * Point the phone at a framed photograph on the wall, or one print in an

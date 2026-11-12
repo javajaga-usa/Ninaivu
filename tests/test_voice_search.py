@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from ninaivu import runtime
-from ninaivu.api import api_voice_search
+from ninaivu.features.voice_search import routes as api_voice_search
 from ninaivu.server.config import Config
 from ninaivu.server.settings_groups import GROUPS, OFF_THE_PAGE
 

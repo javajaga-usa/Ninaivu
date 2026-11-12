@@ -11,7 +11,8 @@ can see the queue or decide.
 
 from conftest import GUEST, login, ids_of  # noqa: F401
 from ninaivu.server import auth
-from ninaivu.storage import db, screening
+from ninaivu.storage import db
+from ninaivu.features.screening import storage as screening
 
 
 def _send(client, ids, **extra):

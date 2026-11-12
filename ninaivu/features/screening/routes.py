@@ -3,7 +3,7 @@
 The family side (``/api/screening``, on the shared blueprint) takes one item
 from the viewer or many from a selection. It only ever takes items the caller
 can see now, narrowed by the gallery's own query, and takes them out of every
-family member's view at once (storage/screening.py, ``hold``): administrators
+family member's view at once (features/screening/storage.py, ``hold``): administrators
 still see them. The decision then settles them.
 
 The console side (``/api/admin/screening``, console only) lists the queue and
@@ -15,7 +15,7 @@ applies one decision to one item or many at once:
 * ``delete`` — into the recycle bin, where Recently deleted can put it back.
 
 Each decision is written to the audit log. The storage side is in
-ninaivu/storage/screening.py.
+ninaivu/features/screening/storage.py.
 """
 
 from __future__ import annotations
@@ -108,7 +108,7 @@ def _queue_item(row: dict[str, Any], entry: dict[str, Any],
         "thumb_v": _thumb_version(row),
         "rotation": int(row.get("rotation") or 0),
         "visibility_name": VIS_NAMES.get(level, "family"),
-        # Held from the family while it waits (storage/screening.py), which
+        # Held from the family while it waits (features/screening/storage.py), which
         # is not the same as an admin having hidden it.
         "held": row.get("vis_source") == screening.HOLD_SOURCE,
         "explicit": bool(row.get("nsfw")),

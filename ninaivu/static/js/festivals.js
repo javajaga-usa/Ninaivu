@@ -1,6 +1,6 @@
 /**
  * Festival albums: every Deepavali, every Pongal, side by side
- * (ninaivu/media/festivals.py finds them, ninaivu/api/api_festivals.py serves
+ * (ninaivu/features/festivals/media.py finds them, ninaivu/features/festivals/routes.py serves
  * them; shown only while `festival_albums` is switched on).
  *
  * Full screen over the gallery, like A life in photographs. It opens on the

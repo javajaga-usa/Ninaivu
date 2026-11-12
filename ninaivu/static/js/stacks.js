@@ -3,7 +3,7 @@
  *
  * The timeline shows a burst, or a photograph and the copies edited from it,
  * as one tile: its top photograph, with how many there are on it
- * (ninaivu/storage/stacks.py). Opened, a bar above the filmstrip shows every
+ * (ninaivu/features/stacks/storage.py). Opened, a bar above the filmstrip shows every
  * frame; pressing one opens it, and the frames join the viewer's sequence
  * right after the top one, so the arrows walk through them too. The
  * household can put another frame on top, or show the stack as separate
