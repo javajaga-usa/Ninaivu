@@ -35,7 +35,7 @@ What is kept with 3.x (decided 9 November 2026):
   stops before touching it and says how to restore the copy taken before
   the update. That restore is what going back is. So a step here may change
   or remove what 3.x had, not only add, as long as a 3.x index still upgrades.
-* **The old module paths go in 4.1** (``ninaivu.api.api_films`` and the
+* **The old module paths go in 4.1** (``ninaivu.features.films.routes`` and the
   other names kept for code that moved into ``ninaivu/features``):
   tests/test_migrations.py fails once the version says 4.1 and one is left.
 

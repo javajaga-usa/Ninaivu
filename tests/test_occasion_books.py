@@ -17,9 +17,9 @@ from PIL import Image, ImageDraw
 
 from conftest import ADMIN, FAMILY, GUEST, login
 from ninaivu import build_services, create_home_app
-from ninaivu.media import books
+from ninaivu.features.books import media as books
 from ninaivu.server import auth
-from ninaivu.storage import books as store
+from ninaivu.features.books import storage as store
 
 
 def _row(i: int, **extra):
@@ -436,7 +436,7 @@ def test_a_year_can_be_a_book(home):
 
 
 def test_ready_made_books_are_only_of_what_the_viewer_can_see(home, monkeypatch):
-    from ninaivu.api import api_books
+    from ninaivu.features.books import routes as api_books
     monkeypatch.setattr(api_books, "IDEA_MIN_PHOTOS", 1)
     ideas = home["family"].get("/api/books/ideas")
     assert ideas.status_code == 200

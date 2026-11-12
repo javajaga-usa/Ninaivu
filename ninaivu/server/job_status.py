@@ -128,7 +128,7 @@ def _story_words(services: Any, cfg: Any, conn: sqlite3.Connection) -> dict[str,
 
 
 def _video_moments(services: Any, cfg: Any, conn: sqlite3.Connection) -> dict[str, Any] | None:
-    from ..storage import video_moments                     # noqa: PLC0415
+    from ..features.video_moments import storage as video_moments                     # noqa: PLC0415
 
     worker = getattr(services, "moment_finder", None)
     state = worker.status() if worker is not None else {}

@@ -1,6 +1,6 @@
 """Finding the moments inside videos, in the background.
 
-Every clip long enough to hold more than one scene (storage/video_moments.py,
+Every clip long enough to hold more than one scene (features/video_moments/storage.py,
 ``MIN_SECONDS``) is read once by ffmpeg at a frame every few seconds, from its
 keyframes only where it has them, so a twenty-minute clip is a short read
 rather than a full decode. Each frame is turned into a vector by the
@@ -9,7 +9,7 @@ on-device engine, or CLIP through PyTorch), and frames in a row that look
 alike are folded into one scene, which keeps the second it starts at and the
 mean of its frames. A clip of a birthday is then "the cake comes in", "the
 candles", "the presents", each with its time, and the search finds the right
-one of them (api/api_video_moments.py).
+one of them (features/video_moments/routes.py).
 
 Only with ``video_moments`` switched on (Advanced settings), the AI passes on
 and a picture-search model loaded; otherwise it does nothing and starts

@@ -554,7 +554,7 @@ def forget_ai_reading(conn: sqlite3.Connection, *, root: str | None = None,
     Sound files are left alone: no pass reads them, and their tags are the
     file's own. Returns how many items had something taken back.
     """
-    # An item held while an administrator screens it (storage/screening.py)
+    # An item held while an administrator screens it (features/screening/storage.py)
     # is not hidden yet: Ignore puts it back as it was, reading and all.
     where = ["visibility >= 2", "kind != 'audio'",
              "COALESCE(vis_source, '') != 'screening'"]

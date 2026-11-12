@@ -10,10 +10,10 @@ every decade into a chapter, in Tamil or English, and ends with a book and a
 film of her.
 
 Nothing here reads a pixel or calls a model: it is counting over the index,
-remembered until faces, trips or places change (api/api_life_story.py). A
+remembered until faces, trips or places change (features/life_story/routes.py). A
 short title and a few sentences for each chapter are written by the
 on-device writing model when it is downloaded (:func:`model_messages`), from
-these facts only, and kept (storage/life_story.py); without it the page
+these facts only, and kept (features/life_story/storage.py); without it the page
 writes its own from the same facts.
 
 Who sees what is never decided here. The person's photographs are read

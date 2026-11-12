@@ -66,7 +66,7 @@ def test_a_worker_leaves_when_its_server_is_killed(tmp_path):
 
 def test_the_engine_and_film_workers_both_watch():
     import inspect
-    from ninaivu.media import films
+    from ninaivu.features.films import media as films
     assert "watch_parent()" in inspect.getsource(pool._worker_start)
     assert "watch_parent()" in inspect.getsource(films._encode_part)
 

@@ -12,8 +12,9 @@ from test_change_journal import FakeDrive, keeping  # noqa: F401
 from test_nested_library_folders import face, nested, person, photo, row  # noqa: F401
 
 from ninaivu.media.scanner import Scanner
-from ninaivu.storage import db, journal, stories
-from ninaivu.storage import films as film_store
+from ninaivu.storage import db, journal
+from ninaivu.features.stories import storage as stories
+from ninaivu.features.films import storage as film_store
 
 
 def _remove(n, which, **query):

@@ -12,13 +12,15 @@ import numpy as np
 import pytest
 
 from ninaivu import runtime
-from ninaivu.api import api_letters
-from ninaivu.media import letters, model_catalog
+from ninaivu.features.letters import routes as api_letters
+from ninaivu.media import model_catalog
+from ninaivu.features.letters import media as letters
 from ninaivu.runtime import voice as voice_mod
 from ninaivu.runtime.host import CAPABILITIES, resolve
 from ninaivu.server.config import Config
 from ninaivu.server.settings_groups import GROUPS
-from ninaivu.storage import db, letters as letters_store
+from ninaivu.storage import db
+from ninaivu.features.letters import storage as letters_store
 
 LETTER = ("அன்புள்ள கண்ணன்,\nநாங்கள் 1962 மார்ச் 12 அன்று மதுரை வந்து சேர்ந்தோம். "
           "அம்மா உன்னை நினைத்துக்கொண்டே இருக்கிறாள்.\n\nஆசீர்வாதங்களுடன், அப்பா")

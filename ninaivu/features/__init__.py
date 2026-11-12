@@ -53,7 +53,7 @@ Most features have moved whole into a package of their own here, with
 ``routes.py``, ``media.py`` and ``storage.py`` for what was
 ``api/api_<name>.py``, ``media/<name>.py`` and ``storage/<name>.py``. Their
 old module names are kept as the very same modules (see
-``api/api_books.py``), so nothing that imports them changed. Four have not
+``features/books/routes.py``), so nothing that imports them changed. Four have not
 moved: the descriptions of photographs and the change journal, which have no
 routes and are read and written by the core's search, scanner and console;
 Ask Ninaivu, beside its ``ninaivu/ask`` package; and scanning old prints,

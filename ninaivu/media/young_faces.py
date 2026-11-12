@@ -28,7 +28,7 @@ said as the reason. When two people fit nearly as well (sisters, often) both
 are offered, and a person answers.
 
 Everything here works on vectors and plain values; the caller reads the
-index with the viewer's own limits (api/api_young_faces.py). Nothing is
+index with the viewer's own limits (features/young_faces/routes.py). Nothing is
 written: a suggestion becomes a name only when a member of the family says
 yes, or a relative answers a "Who is this?" link. Every number below is a
 guess, chosen inside the empty band between same and different people that

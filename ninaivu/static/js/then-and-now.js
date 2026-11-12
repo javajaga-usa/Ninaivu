@@ -1,7 +1,7 @@
 /**
  * Then and now: the same place and the same person, years apart, with a
- * slider between the two (ninaivu/media/then_and_now.py finds the pairs,
- * ninaivu/api/api_then_and_now.py serves them; shown only while
+ * slider between the two (ninaivu/features/then_and_now/media.py finds the pairs,
+ * ninaivu/features/then_and_now/routes.py serves them; shown only while
  * `then_and_now` is switched on).
  *
  * Full screen over the gallery, like Our Year: the pairs as cards under three

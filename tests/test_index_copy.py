@@ -294,7 +294,7 @@ def test_the_copy_carries_no_share_links(home, tmp_path):
 def test_the_copy_carries_no_words_of_binned_voice_stories(home, tmp_path):
     """D-26: a binned photograph's story words wait in stories_left for a
     restore from the bin; they travel no more than the stories themselves."""
-    from ninaivu.storage import stories
+    from ninaivu.features.stories import storage as stories
     stories.init(home.conn)
     home.conn.execute(
         "INSERT INTO stories_left(file, root, rel_path, speaker, text, created_at) "

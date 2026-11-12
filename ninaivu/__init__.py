@@ -427,8 +427,8 @@ class Services:
                                    host=self.model_host,
                                    hold=self.analysis_hold)
         # The moments inside long videos, by the gallery's picture-search
-        # model, while video_moments is on (media/video_moments.py).
-        from .media.video_moments import MomentFinder             # noqa: PLC0415
+        # model, while video_moments is on (features/video_moments/media.py).
+        from .features.video_moments.media import MomentFinder             # noqa: PLC0415
         self.moment_finder = MomentFinder(cfg, lambda: db.connect(cfg.db_path),
                                           engine=lambda: self.engine,
                                           hold=self.analysis_hold)

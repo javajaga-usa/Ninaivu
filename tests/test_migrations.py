@@ -195,18 +195,15 @@ def test_37_does_not_open_an_index_40_has_opened(tmp_path, monkeypatch):
     assert (state / "index.db").read_bytes() == before
 
 
-def _version(text):
-    return tuple(int(part) for part in text.split(".")[:2])
-
-
-def test_the_old_module_paths_go_in_41():
+def test_the_old_module_paths_are_gone():
     """Code that moved into ninaivu/features kept its old import path for 4.0
-    only. Once the version says 4.1, every one of them must be gone."""
+    only: 52 small modules that made themselves the moved one. 4.1 removed
+    them, and nothing brings the trick back."""
     from pathlib import Path
     import ninaivu
     package = Path(ninaivu.__file__).parent
     kept = sorted(str(p.relative_to(package.parent)) for p in package.rglob("*.py")
                   if "sys.modules[__name__] = " in p.read_text(encoding="utf-8"))
-    assert kept, "the 4.0 names are found by the line that makes them the moved module"
-    if _version(ninaivu.__version__) >= (4, 1):
-        assert kept == [], "4.1 removes the old module paths: " + ", ".join(kept)
+    assert kept == [], "a module standing in for another: " + ", ".join(kept)
+    for gone in ("api/api_films.py", "media/films.py", "storage/films.py", "storage/stacks.py"):
+        assert not (package / gone).exists(), gone

@@ -15,7 +15,8 @@ import pytest
 
 from ninaivu.media import revealing
 from ninaivu.media.scanner import AI_VERSION
-from ninaivu.storage import db, smart
+from ninaivu.storage import db
+from ninaivu.features.smart import storage as smart
 
 from test_family_search_shield import (_ids, _judge, _picture_search, nearly,  # noqa: F401
                                        underwear)

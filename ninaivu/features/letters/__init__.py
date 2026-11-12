@@ -1,8 +1,8 @@
 """Letters read aloud: an old letter's words, written out from the
 photograph of it and read aloud in a Tamil or English voice, on this computer.
 
-``routes.py`` is what was ``api/api_letters.py``, ``media.py`` what was
-``media/letters.py`` and ``storage.py`` what was ``storage/letters.py``; the
+``routes.py`` is what was ``features/letters/routes.py``, ``media.py`` what was
+``features/letters/media.py`` and ``storage.py`` what was ``features/letters/storage.py``; the
 old names are kept as the very same modules.
 """
 from .. import ON_THE_FAMILY_API, Feature, Tables

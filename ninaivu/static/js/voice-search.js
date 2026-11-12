@@ -3,7 +3,7 @@
  *
  * Press it and say what you remember, in Tamil or English; press again, or
  * stop talking for a moment, and what was said is written down on the home
- * computer (ninaivu/api/api_voice_search.py) and searched as if typed. The
+ * computer (ninaivu/features/voice_search/routes.py) and searched as if typed. The
  * microphone is asked for when the button is pressed and let go of as soon
  * as the recording stops; the recording goes to Ninaivu alone, which throws
  * it away once it has been read.

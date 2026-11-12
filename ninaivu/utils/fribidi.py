@@ -6,7 +6,7 @@ first imported, by a bare file name, and turns raqm off when it is not
 found. Linux has FriBiDi as part of its desktop, so there it is found. The
 Mac and Windows have none, and without raqm Tamil was laid out letter by
 letter: a vowel sign written before its consonant landed after it, so books
-left the Tamil out rather than print it misspelt (``media/books.py``).
+left the Tamil out rather than print it misspelt (``features/books/media.py``).
 
 The portable builds now carry a copy beside their own Python
 (``installers/windows/build-portable.ps1``, ``installers/macos/build.sh``):

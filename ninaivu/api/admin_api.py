@@ -334,8 +334,8 @@ def attention():
     problems = len(logs.recent(PROBLEMS_COUNTED))
     # "Forgot password?" on the sign-in screen lands here (accounts_api.forgot).
     help_asked = count("SELECT COUNT(*) FROM users WHERE help_asked_at IS NOT NULL AND active=1")
-    # Items family members sent to be screened (api/api_screening.py).
-    from ..storage import screening                           # noqa: PLC0415
+    # Items family members sent to be screened (features/screening/routes.py).
+    from ..features.screening import storage as screening                           # noqa: PLC0415
     try:
         screen_asks = screening.open_count(conn)
     except sqlite3.Error:
@@ -364,8 +364,8 @@ def attention():
          "detail": said("Warnings and errors from the log, newest first.")},
     ]
     # The handover plan, gently: never written, not looked at for six months,
-    # or the backups changed since (api/api_handover.py).
-    from .api_handover import current_nudges                  # noqa: PLC0415
+    # or the backups changed since (features/handover/routes.py).
+    from ..features.handover.routes import current_nudges                  # noqa: PLC0415
     try:
         nudges = current_nudges(conn)
     except sqlite3.Error:

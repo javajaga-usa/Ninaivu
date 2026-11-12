@@ -1,7 +1,7 @@
 """What was said in each voice story, as the on-device AI engine wrote it down.
 
 One row per story in ``story_words`` (made with the stories, in
-storage/stories.py): the language it was told in, the words in that language,
+features/stories/storage.py): the language it was told in, the words in that language,
 an English translation when the story was not in English and the model can
 translate, and the pieces with their start and end, for subtitles.
 
@@ -16,7 +16,7 @@ again until a newer model makes it owed, as the job engine sets aside a file
 that crashed its worker twice.
 
 Who may read the words is decided exactly as who may hear the story: the
-route reaches them through the story's item (api/api_stories.py).
+route reaches them through the story's item (features/stories/routes.py).
 """
 from __future__ import annotations
 

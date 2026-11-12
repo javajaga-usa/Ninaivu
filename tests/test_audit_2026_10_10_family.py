@@ -17,9 +17,10 @@ import pytest
 from conftest import ADMIN, FAMILY, GUEST, login
 from ninaivu import build_services, create_admin_app, create_home_app
 from ninaivu.cloud import index_copy
-from ninaivu.media import books
+from ninaivu.features.books import media as books
 from ninaivu.server import auth
-from ninaivu.storage import family_tree, handover
+from ninaivu.features.family_tree import storage as family_tree
+from ninaivu.features.handover import storage as handover
 
 
 def _vector(seed: int) -> bytes:
@@ -151,7 +152,7 @@ def test_a_deleted_members_books_go_with_them(home):
 
 
 def books_dir_file(cfg, conn, book_id):
-    from ninaivu.storage import books as store
+    from ninaivu.features.books import storage as store
     return store.file_of(cfg.state_dir, store.get(conn, book_id))
 
 
@@ -190,7 +191,7 @@ def test_a_deleted_successors_waiting_claim_is_void(home):
                       password="teen-password-1", display_name="Teen",
                       role=auth.ROLE_FAMILY)
     assert handover.get_claim(conn, claim["id"])["state"] == handover.VOID
-    from ninaivu.api.api_handover import complete_due
+    from ninaivu.features.handover.routes import complete_due
     with home["app"].test_request_context():
         assert complete_due(conn, now=claim["due_at"] + 1) == 0
     assert auth.get_user(conn, nephew.id).role == auth.ROLE_FAMILY
@@ -208,7 +209,7 @@ def test_a_claim_older_than_the_profile_never_completes(home):
     conn.execute("INSERT INTO handover_claims(user_id, requested_at, due_at, state) "
                  "VALUES(?, ?, ?, 'waiting')", (teen.id, teen.created_at - 100, 1.0))
     conn.commit()
-    from ninaivu.api.api_handover import complete_due
+    from ninaivu.features.handover.routes import complete_due
     with home["app"].test_request_context():
         assert complete_due(conn, now=time.time()) == 0
     assert auth.get_user(conn, teen.id).role == auth.ROLE_FAMILY
@@ -236,7 +237,7 @@ def test_somebody_not_named_cannot_spend_the_households_handover_allowance(home)
     handover.save(conn, plan, wait_days=7, user_id=admin_id, destinations="")
     code = handover.make_code()
     handover.set_code(conn, admin_id, auth.hash_password(handover.normalise_code(code)))
-    from ninaivu.api import api_handover
+    from ninaivu.features.handover import routes as api_handover
     everywhere = api_handover._TRIES_EVERYWHERE[0]
     # Spread over many people, so no one person's allowance runs out first.
     for n in range(everywhere + 2):
@@ -332,7 +333,7 @@ def test_an_existing_loop_does_not_block_unrelated_relations():
 # -- prints --------------------------------------------------------------------------
 
 def test_a_print_batch_cannot_be_saved_twice_at_once(home, monkeypatch, tmp_path):
-    from ninaivu.api import api_scan_prints
+    from ninaivu.features.scan_prints import routes as api_scan_prints
     from ninaivu.media import print_scan
     folder = tmp_path / "batch"
     folder.mkdir()

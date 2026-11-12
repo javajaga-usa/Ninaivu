@@ -574,7 +574,7 @@ def view_shared(token: str):
         abort(404, description="Nothing here any more")
     # How many voice stories each has, which the page offers to play
     # (api_stories.py serves them under this link's token).
-    from ..storage import stories                             # noqa: PLC0415
+    from ..features.stories import storage as stories                             # noqa: PLC0415
     told = stories.counts(conn, [int(a["id"]) for a in assets])
 
     def public(asset: dict[str, Any]) -> dict[str, Any]:

@@ -13,7 +13,8 @@ import numpy as np
 import pytest
 
 from conftest import FAMILY, login
-from ninaivu.storage import db, family_tree
+from ninaivu.storage import db
+from ninaivu.features.family_tree import storage as family_tree
 
 
 def _person(conn, name, asset_id, pid):

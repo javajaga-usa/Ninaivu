@@ -82,7 +82,7 @@ EXTRAS = ("config.json", "library-path", "ninaivu-ca.crt", "ninaivu-ca.key",
 #: Extras a restore replaces only when the bundle actually carries them. An
 #: older bundle made before these were collected must not wipe the ones this
 #: machine has now. Nor take away the recorded voice stories (``stories``,
-#: storage/stories.py): a sound nobody's row names any more costs a little
+#: features/stories/storage.py): a sound nobody's row names any more costs a little
 #: disk, and one taken away cannot be recorded again.
 #: The thumbnail keys (``thumb-keys.json``, storage/roots.py) name every
 #: thumbnail made since 3.0; a bundle from before them must not take away the

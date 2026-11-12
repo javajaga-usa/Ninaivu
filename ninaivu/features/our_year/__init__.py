@@ -1,7 +1,7 @@
 """Our Year: the family's year in photographs, as cards.
 
-``routes.py`` is what was ``api/api_our_year.py`` and ``media.py`` what was
-``media/our_year.py``; the old names are kept as the very same modules. It
+``routes.py`` is what was ``features/our_year/routes.py`` and ``media.py`` what was
+``features/our_year/media.py``; the old names are kept as the very same modules. It
 has no tables.
 """
 from .. import ON_THE_FAMILY_API, Feature

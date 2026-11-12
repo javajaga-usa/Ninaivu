@@ -3,7 +3,7 @@
  *
  * On a photograph with no colour of its own (grey, or one tint all over, as
  * a sepia print), the viewer's menu offers Add colour. The home computer
- * colours it (ninaivu/api/api_colour.py, DDColor) and the result is laid
+ * colours it (ninaivu/features/colour_copies/routes.py, DDColor) and the result is laid
  * over the original with a line to drag between them: the original on the
  * left, the colour on the right. Keep makes it a copy beside the original,
  * through the photo editor's own save, so the original is never written to;

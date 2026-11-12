@@ -1,4 +1,4 @@
-"""Ninaivu's own music under memory films (media/film_music.py): written on
+"""Ninaivu's own music under memory films (features/films/music.py): written on
 this computer to the film's length, on a beat the cuts can land on, soft, and
 played unless somebody chooses otherwise."""
 
@@ -11,7 +11,8 @@ import wave
 import numpy as np
 import pytest
 
-from ninaivu.media import film_music, films
+from ninaivu.features.films import music as film_music
+from ninaivu.features.films import media as films
 import test_memory_films as base
 from test_memory_films import MONTHS, _photo, _tone, needs_ffmpeg
 

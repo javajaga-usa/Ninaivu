@@ -20,9 +20,10 @@ from PIL import Image, ImageDraw
 
 from conftest import ADMIN, FAMILY, GUEST, login
 from ninaivu import build_services, create_home_app
-from ninaivu.media import films
+from ninaivu.features.films import media as films
 from ninaivu.server import auth
-from ninaivu.storage import films as store, stories as story_store
+from ninaivu.features.films import storage as store
+from ninaivu.features.stories import storage as story_store
 
 needs_ffmpeg = pytest.mark.skipif(not shutil.which("ffmpeg") or not shutil.which("ffprobe"),
                                   reason="needs ffmpeg")
@@ -585,7 +586,7 @@ def test_growing_up_shares_the_years_out_and_holds_only_clear_faces():
     picked = films.pick_growing_up(rows, faces, count=12)
     # Counted by the household's own calendar, as pick_growing_up shares
     # them out: 1994-01-01 00:00 UTC is still 1993 in New York.
-    from ninaivu.media import storyboard
+    from ninaivu.features.films import storyboard
     years = [storyboard.local_time(r["when"]).tm_year for r in picked]
     assert len(picked) == 12 and years == sorted(years)
     assert {1, 2}.isdisjoint(r["id"] for r in picked)
@@ -667,7 +668,7 @@ def test_growing_up_and_then_and_now_films_are_made(tmp_path):
 
 
 def test_a_storyboard_from_dates_and_places_turns_where_the_film_does():
-    from ninaivu.media import storyboard
+    from ninaivu.features.films import storyboard
     day = 86400
     moments = ([{"id": i, "when": 1_600_000_000 + i * 3600, "place": "Madurai"} for i in range(5)]
                + [{"id": 10 + i, "when": 1_600_000_000 + 10 * day + i * 3600, "place": "Kodaikanal"}
@@ -681,7 +682,7 @@ def test_a_storyboard_from_dates_and_places_turns_where_the_film_does():
 
 
 def test_the_writing_model_s_storyboard_is_checked_before_it_is_used():
-    from ninaivu.media import storyboard
+    from ninaivu.features.films import storyboard
     from ninaivu.runtime import HostCrashed
     moments = [{"id": 100 + i, "when": 1_600_000_000 + i * 86400 * 5, "place": "", "people": ["Amma"],
                 "about": "A family at a temple.", "story": "அன்று மழை பெய்தது"} for i in range(9)]
@@ -797,7 +798,7 @@ def test_a_storyboard_is_drafted_from_what_the_viewer_may_see(home):
 def test_a_film_just_created_is_not_called_interrupted(home):
     """Audit C-46: a list fetched between a film's row being written and its
     making starting said it had been cut off by a restart."""
-    from ninaivu.api import api_films
+    from ninaivu.features.films import routes as api_films
     conn = home["conn"]
     user = conn.execute("SELECT id FROM users WHERE username=?", (FAMILY[0],)).fetchone()["id"]
     new = store.create(conn, owner_id=user, title="Just now", subtitle="", source_kind="album",
@@ -830,7 +831,7 @@ def test_a_photograph_in_two_pairs_keeps_every_pair_in_place(home, monkeypatch):
 
 def test_a_film_waits_for_room_and_songs_are_counted(home, monkeypatch):
     """Audit C-48: no free-space check before a film, and no limit on songs."""
-    from ninaivu.api import api_films
+    from ninaivu.features.films import routes as api_films
     monkeypatch.setattr(api_films, "_free_bytes", lambda folder: 1024)
     monkeypatch.setattr(films, "building", lambda: False)
     ids = [home["ids"]["shot1.jpg"]]
@@ -868,7 +869,7 @@ def test_what_a_crashed_render_left_is_swept(tmp_path, monkeypatch):
     import os
     import tempfile as tempfile_mod
 
-    from ninaivu.media import films as films_mod
+    from ninaivu.features.films import media as films_mod
     temp = tmp_path / "tmp"
     temp.mkdir()
     monkeypatch.setattr(tempfile_mod, "gettempdir", lambda: str(temp))

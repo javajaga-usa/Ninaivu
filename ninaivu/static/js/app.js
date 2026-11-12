@@ -2133,7 +2133,7 @@ function wireScrubber() {
    bank page, a document, something not for everyone. They leave every family
    member's view at once, the sender's too, and wait in the console's
    Screening queue, where an admin ignores (they come back), hides, marks
-   explicit or deletes them (api/api_screening.py). */
+   explicit or deletes them (features/screening/routes.py). */
 
 let screeningIds = [];
 

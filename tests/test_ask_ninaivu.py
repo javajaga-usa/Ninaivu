@@ -11,7 +11,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from ninaivu.api import api_ask_ninaivu
+from ninaivu.features.ask_ninaivu import routes as api_ask_ninaivu
 from ninaivu.ask import answer, question
 from ninaivu.media.scanner import Scanner
 from ninaivu.server.config import Config

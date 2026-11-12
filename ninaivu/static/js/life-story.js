@@ -1,6 +1,6 @@
 /**
  * A life in photographs: one person's life told decade by decade
- * (ninaivu/media/life_story.py tells it, ninaivu/api/api_life_story.py serves
+ * (ninaivu/features/life_story/media.py tells it, ninaivu/features/life_story/routes.py serves
  * it; shown only while `life_story` is switched on, and only to the family).
  *
  * Full screen over the gallery, like Then and now, and read like a book:

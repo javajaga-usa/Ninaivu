@@ -11,13 +11,14 @@ import pytest
 from PIL import Image, ImageOps
 
 from ninaivu import runtime
-from ninaivu.api import api_colour
+from ninaivu.features.colour_copies import routes as api_colour
 from ninaivu.media import media, model_catalog, onnx_tools, upload_review
 from ninaivu.runtime import colour as colour_mod
 from ninaivu.runtime.host import CAPABILITIES, resolve
 from ninaivu.server.config import Config
 from ninaivu.server.settings_groups import GROUPS, OFF_THE_PAGE
-from ninaivu.storage import colour_copies, db
+from ninaivu.storage import db
+from ninaivu.features.colour_copies import storage as colour_copies
 
 PORTRAIT = Path(__file__).parent / "data" / "portrait.jpg"
 

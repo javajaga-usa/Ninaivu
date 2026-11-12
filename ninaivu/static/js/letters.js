@@ -5,7 +5,7 @@
  * photograph beside its words: read off the photograph by the text reader
  * already on the home computer, or typed by the family, and always theirs to
  * correct. Kept words are read aloud in a calm Tamil or English voice
- * (ninaivu/api/api_letters.py, Meta's MMS voices, never anybody's own), and
+ * (ninaivu/features/letters/routes.py, Meta's MMS voices, never anybody's own), and
  * the sentence being read lights up; pressing a sentence plays from there.
  */
 

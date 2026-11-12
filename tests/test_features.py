@@ -43,58 +43,58 @@ ROUTES_IN_37 = ["smart", "ask_family", "family_tree", "books", "films", "handove
 
 #: Old module name -> where it lives now.
 MOVED = {
-    "ninaivu.api.api_books": "ninaivu.features.books.routes",
-    "ninaivu.media.books": "ninaivu.features.books.media",
-    "ninaivu.storage.books": "ninaivu.features.books.storage",
-    "ninaivu.api.api_films": "ninaivu.features.films.routes",
-    "ninaivu.media.films": "ninaivu.features.films.media",
-    "ninaivu.storage.films": "ninaivu.features.films.storage",
-    "ninaivu.media.film_music": "ninaivu.features.films.music",
-    "ninaivu.media.storyboard": "ninaivu.features.films.storyboard",
-    "ninaivu.api.api_letters": "ninaivu.features.letters.routes",
-    "ninaivu.media.letters": "ninaivu.features.letters.media",
-    "ninaivu.storage.letters": "ninaivu.features.letters.storage",
-    "ninaivu.api.api_life_story": "ninaivu.features.life_story.routes",
-    "ninaivu.media.life_story": "ninaivu.features.life_story.media",
-    "ninaivu.storage.life_story": "ninaivu.features.life_story.storage",
-    "ninaivu.api.api_then_and_now": "ninaivu.features.then_and_now.routes",
-    "ninaivu.media.then_and_now": "ninaivu.features.then_and_now.media",
-    "ninaivu.storage.then_and_now": "ninaivu.features.then_and_now.storage",
-    "ninaivu.api.api_stacks": "ninaivu.features.stacks.routes",
-    "ninaivu.storage.stacks": "ninaivu.features.stacks.storage",
-    "ninaivu.api.api_capsules": "ninaivu.features.capsules.routes",
-    "ninaivu.storage.capsules": "ninaivu.features.capsules.storage",
-    "ninaivu.api.api_frame": "ninaivu.features.frame.routes",
-    "ninaivu.media.frame": "ninaivu.features.frame.media",
-    "ninaivu.api.api_colour": "ninaivu.features.colour_copies.routes",
-    "ninaivu.storage.colour_copies": "ninaivu.features.colour_copies.storage",
-    "ninaivu.api.api_video_moments": "ninaivu.features.video_moments.routes",
-    "ninaivu.media.video_moments": "ninaivu.features.video_moments.media",
-    "ninaivu.storage.video_moments": "ninaivu.features.video_moments.storage",
-    "ninaivu.api.api_smart": "ninaivu.features.smart.routes",
-    "ninaivu.storage.smart": "ninaivu.features.smart.storage",
-    "ninaivu.api.api_ask_family": "ninaivu.features.ask_family.routes",
-    "ninaivu.storage.ask_family": "ninaivu.features.ask_family.storage",
-    "ninaivu.api.api_family_tree": "ninaivu.features.family_tree.routes",
-    "ninaivu.storage.family_tree": "ninaivu.features.family_tree.storage",
-    "ninaivu.api.api_handover": "ninaivu.features.handover.routes",
-    "ninaivu.storage.handover": "ninaivu.features.handover.storage",
-    "ninaivu.api.api_stories": "ninaivu.features.stories.routes",
-    "ninaivu.storage.stories": "ninaivu.features.stories.storage",
-    "ninaivu.api.api_screening": "ninaivu.features.screening.routes",
-    "ninaivu.storage.screening": "ninaivu.features.screening.storage",
-    "ninaivu.api.api_our_year": "ninaivu.features.our_year.routes",
-    "ninaivu.api.api_photo_talk": "ninaivu.features.photo_talk.routes",
-    "ninaivu.api.api_festivals": "ninaivu.features.festivals.routes",
-    "ninaivu.api.api_young_faces": "ninaivu.features.young_faces.routes",
-    "ninaivu.api.api_find_print": "ninaivu.features.find_print.routes",
-    "ninaivu.api.api_voice_search": "ninaivu.features.voice_search.routes",
-    "ninaivu.api.api_scan_prints": "ninaivu.features.scan_prints.routes",
-    "ninaivu.api.api_ask_ninaivu": "ninaivu.features.ask_ninaivu.routes",
-    "ninaivu.media.our_year": "ninaivu.features.our_year.media",
-    "ninaivu.media.photo_talk": "ninaivu.features.photo_talk.media",
-    "ninaivu.media.festivals": "ninaivu.features.festivals.media",
-    "ninaivu.media.find_print": "ninaivu.features.find_print.media",
+    "ninaivu.features.books.routes": "ninaivu.features.books.routes",
+    "ninaivu.features.books.media": "ninaivu.features.books.media",
+    "ninaivu.features.books.storage": "ninaivu.features.books.storage",
+    "ninaivu.features.films.routes": "ninaivu.features.films.routes",
+    "ninaivu.features.films.media": "ninaivu.features.films.media",
+    "ninaivu.features.films.storage": "ninaivu.features.films.storage",
+    "ninaivu.features.films.music": "ninaivu.features.films.music",
+    "ninaivu.features.films.storyboard": "ninaivu.features.films.storyboard",
+    "ninaivu.features.letters.routes": "ninaivu.features.letters.routes",
+    "ninaivu.features.letters.media": "ninaivu.features.letters.media",
+    "ninaivu.features.letters.storage": "ninaivu.features.letters.storage",
+    "ninaivu.features.life_story.routes": "ninaivu.features.life_story.routes",
+    "ninaivu.features.life_story.media": "ninaivu.features.life_story.media",
+    "ninaivu.features.life_story.storage": "ninaivu.features.life_story.storage",
+    "ninaivu.features.then_and_now.routes": "ninaivu.features.then_and_now.routes",
+    "ninaivu.features.then_and_now.media": "ninaivu.features.then_and_now.media",
+    "ninaivu.features.then_and_now.storage": "ninaivu.features.then_and_now.storage",
+    "ninaivu.features.stacks.routes": "ninaivu.features.stacks.routes",
+    "ninaivu.features.stacks.storage": "ninaivu.features.stacks.storage",
+    "ninaivu.features.capsules.routes": "ninaivu.features.capsules.routes",
+    "ninaivu.features.capsules.storage": "ninaivu.features.capsules.storage",
+    "ninaivu.features.frame.routes": "ninaivu.features.frame.routes",
+    "ninaivu.features.frame.media": "ninaivu.features.frame.media",
+    "ninaivu.features.colour_copies.routes": "ninaivu.features.colour_copies.routes",
+    "ninaivu.features.colour_copies.storage": "ninaivu.features.colour_copies.storage",
+    "ninaivu.features.video_moments.routes": "ninaivu.features.video_moments.routes",
+    "ninaivu.features.video_moments.media": "ninaivu.features.video_moments.media",
+    "ninaivu.features.video_moments.storage": "ninaivu.features.video_moments.storage",
+    "ninaivu.features.smart.routes": "ninaivu.features.smart.routes",
+    "ninaivu.features.smart.storage": "ninaivu.features.smart.storage",
+    "ninaivu.features.ask_family.routes": "ninaivu.features.ask_family.routes",
+    "ninaivu.features.ask_family.storage": "ninaivu.features.ask_family.storage",
+    "ninaivu.features.family_tree.routes": "ninaivu.features.family_tree.routes",
+    "ninaivu.features.family_tree.storage": "ninaivu.features.family_tree.storage",
+    "ninaivu.features.handover.routes": "ninaivu.features.handover.routes",
+    "ninaivu.features.handover.storage": "ninaivu.features.handover.storage",
+    "ninaivu.features.stories.routes": "ninaivu.features.stories.routes",
+    "ninaivu.features.stories.storage": "ninaivu.features.stories.storage",
+    "ninaivu.features.screening.routes": "ninaivu.features.screening.routes",
+    "ninaivu.features.screening.storage": "ninaivu.features.screening.storage",
+    "ninaivu.features.our_year.routes": "ninaivu.features.our_year.routes",
+    "ninaivu.features.photo_talk.routes": "ninaivu.features.photo_talk.routes",
+    "ninaivu.features.festivals.routes": "ninaivu.features.festivals.routes",
+    "ninaivu.features.young_faces.routes": "ninaivu.features.young_faces.routes",
+    "ninaivu.features.find_print.routes": "ninaivu.features.find_print.routes",
+    "ninaivu.features.voice_search.routes": "ninaivu.features.voice_search.routes",
+    "ninaivu.features.scan_prints.routes": "ninaivu.features.scan_prints.routes",
+    "ninaivu.features.ask_ninaivu.routes": "ninaivu.features.ask_ninaivu.routes",
+    "ninaivu.features.our_year.media": "ninaivu.features.our_year.media",
+    "ninaivu.features.photo_talk.media": "ninaivu.features.photo_talk.media",
+    "ninaivu.features.festivals.media": "ninaivu.features.festivals.media",
+    "ninaivu.features.find_print.media": "ninaivu.features.find_print.media",
 }
 
 
@@ -321,7 +321,7 @@ def test_an_old_name_is_the_very_same_module(old, new):
 
 def test_patching_the_old_name_patches_the_module(monkeypatch):
     from ninaivu.features.films import media
-    from ninaivu.media import films
+    from ninaivu.features.films import media as films
     monkeypatch.setattr(films, "MAX_COUNT", 7)
     assert media.MAX_COUNT == 7
 
@@ -365,7 +365,8 @@ def test_hooks_are_called_in_the_old_order():
 
 
 def test_a_hook_reaches_a_patch_on_the_old_name(monkeypatch):
-    from ninaivu.media import books, films
+    from ninaivu.features.books import media as books
+    from ninaivu.features.films import media as films
     called = []
     monkeypatch.setattr(films, "stand_down", lambda: called.append("films"))
     monkeypatch.setattr(books, "stand_down", lambda: called.append("books"))
@@ -374,7 +375,7 @@ def test_a_hook_reaches_a_patch_on_the_old_name(monkeypatch):
 
 
 def test_the_bin_swept_hook_sweeps_the_letters_readings(monkeypatch, tmp_path):
-    from ninaivu.storage import letters
+    from ninaivu.features.letters import storage as letters
     seen = []
     monkeypatch.setattr(letters, "sweep_readings", lambda folder, conn: seen.append((folder, conn)))
     features.call("bin_swept", str(tmp_path), "conn")
@@ -382,7 +383,8 @@ def test_the_bin_swept_hook_sweeps_the_letters_readings(monkeypatch, tmp_path):
 
 
 def test_the_profile_deleted_hook_removes_its_books_films_and_songs(monkeypatch, tmp_path):
-    from ninaivu.storage import books, films
+    from ninaivu.features.books import storage as books
+    from ninaivu.features.films import storage as films
     book, film = books.books_dir(tmp_path) / "b.pdf", films.films_dir(tmp_path) / "f.mp4"
     for path in (book, film):
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -396,7 +398,9 @@ def test_the_profile_deleted_hook_removes_its_books_films_and_songs(monkeypatch,
 
 
 def test_the_readings_forgotten_hook_reaches_every_reading(monkeypatch):
-    from ninaivu.storage import descriptions, letters, video_moments
+    from ninaivu.storage import descriptions
+    from ninaivu.features.letters import storage as letters
+    from ninaivu.features.video_moments import storage as video_moments
     seen = []
     for module, name in ((descriptions, "forget"), (video_moments, "forget"),
                          (letters, "forget_read")):

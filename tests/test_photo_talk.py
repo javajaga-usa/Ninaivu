@@ -20,8 +20,9 @@ import pytest
 from PIL import Image
 
 from ninaivu import runtime
-from ninaivu.api import api_photo_talk
-from ninaivu.media import model_catalog, photo_talk
+from ninaivu.features.photo_talk import routes as api_photo_talk
+from ninaivu.media import model_catalog
+from ninaivu.features.photo_talk import media as photo_talk
 from ninaivu.runtime import CAPABILITIES, Unavailable, host, llm
 from ninaivu.server import auth
 from ninaivu.server.config import Config

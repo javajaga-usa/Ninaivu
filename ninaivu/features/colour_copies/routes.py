@@ -8,7 +8,7 @@ they can see; guests may not.
 photograph: whether it looks black and white (a grey or a single-tint
 picture, read from its preview: media/onnx_tools.py), whether the colouring
 model is ready, the photograph it is a colour copy of, and the colour copies
-already made of it (storage/colour_copies.py).
+already made of it (features/colour_copies/storage.py).
 
 ``POST /api/asset/<id>/colour`` colours it and answers with the result as a
 JPEG, upright, which nothing keeps: the page shows it beside the original and,

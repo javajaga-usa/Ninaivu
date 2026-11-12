@@ -1,8 +1,8 @@
 """Time capsules: photographs and a few words sealed for somebody, opened on
 a day the family chooses.
 
-``routes.py`` is what was ``api/api_capsules.py`` and ``storage.py`` what was
-``storage/capsules.py``; the old names are kept as the very same modules.
+``routes.py`` is what was ``features/capsules/routes.py`` and ``storage.py`` what was
+``features/capsules/storage.py``; the old names are kept as the very same modules.
 """
 from .. import ON_THE_FAMILY_API, Feature, Tables
 

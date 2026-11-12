@@ -1,7 +1,7 @@
 """Find this print: the library photograph a framed print is a copy of.
 
-``routes.py`` is what was ``api/api_find_print.py`` and ``media.py`` what was
-``media/find_print.py``; the old names are kept as the very same modules. It
+``routes.py`` is what was ``features/find_print/routes.py`` and ``media.py`` what was
+``features/find_print/media.py``; the old names are kept as the very same modules. It
 has no tables, and shares the print scanner (``media/print_scan.py``) with
 scanning old prints.
 """
