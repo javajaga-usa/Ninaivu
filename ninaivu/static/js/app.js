@@ -22,7 +22,8 @@ import { hideScrollBarsUntilUsed } from './scrollbars.js';
 import { claimBanner } from './handover.js';
 import { VideoMoments } from './video-moments.js';
 import { state, store } from './store.js';
-import { $, closeMenus, humanBytes, toast, wireMenu, wireModalFocus } from './ui.js';
+import { $, closeMenus, humanBytes, toast, wireMenu } from './ui.js';
+import { activeDialog, installDialogLayer, registerDialog } from './dialogs.js';
 import {
   clearFilters, connectSidebar, loadAlbums, loadOccasions, loadPeople, occasionTitle,
   openStudioFor, renderAlbums, renderFilterBar, renderFolders, renderOccasions,
@@ -164,6 +165,7 @@ let screenLock;
 let profileSheet;
 
 async function init() {
+  installDialogLayer();
   // Before any request: the first one refused for maintenance shows the notice.
   new DowntimeNotice();
   // Enter in a field does what the button beside it does, everywhere.
@@ -1457,11 +1459,8 @@ function wireChrome() {
   wireSharing();
   wireAlbums();
 
-  document.querySelectorAll('.modal').forEach((modal) => {
-    wireModalFocus(modal);
-    modal.addEventListener('click', (event) => {
-      if (event.target === modal) modal.hidden = true;
-    });
+  document.querySelectorAll('.modal, .sheet').forEach((modal) => {
+    registerDialog(modal, { escape: true, backdrop: true });
   });
 }
 
@@ -1538,9 +1537,6 @@ function wireAccounts() {
     } catch { /* the reload shows what is true */ }
     window.location.reload();
   };
-  $('#profile-sheet').addEventListener('click', (event) => {
-    if (event.target === $('#profile-sheet')) $('#profile-sheet').hidden = true;
-  });
 }
 
 /* -- visibility (admins browsing the gallery) ---------------------------- */
@@ -2186,10 +2182,6 @@ function wireScreening() {
   if (!modal) return;
   const close = () => { modal.hidden = true; };
   $('#screen-close').onclick = $('#screen-cancel').onclick = close;
-  modal.addEventListener('mousedown', (event) => { if (event.target === modal) close(); });
-  modal.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') { event.stopPropagation(); close(); }
-  });
   $('#screen-form').onsubmit = sendScreening;
   $('#sel-screen').onclick = () => openScreening([...grid.selection].slice(0, 2000));
   const button = $('#v-screen');
@@ -2363,6 +2355,7 @@ function wireKeyboard() {
     const target = event.target;
     const typing = target.matches('input, textarea, select') || target.isContentEditable;
     const key = event.key.toLowerCase();
+    if (event.defaultPrevented || activeDialog()) return;
     if (!typing && key === 't' && !event.altKey && !event.ctrlKey && !event.metaKey) {
       cycleTheme();
       return;
@@ -2381,12 +2374,6 @@ function wireKeyboard() {
     }
     if (document.querySelector('.photo-editor[open]')) return;
     if ((event.key === 'Enter' || event.key === ' ') && target.closest('button, a, [role="button"]')) return;
-    const overlay = [...document.querySelectorAll('.modal, .sheet')].reverse()
-      .find((m) => !m.hidden);
-    if (overlay) {
-      if (event.key === 'Escape') { overlay.hidden = true; event.preventDefault(); }
-      return;
-    }
 
     if (viewer.isOpen) {
       if (typing) return;
@@ -2401,9 +2388,6 @@ function wireKeyboard() {
       return;
     }
     if (event.key === 'Escape') {
-      const overlay = [...document.querySelectorAll('.modal, .sheet')]
-        .find((m) => !m.hidden);
-      if (overlay) { overlay.hidden = true; return; }
       if (grid.selection.size) { grid.clearSelection(); return; }
       if (typing) target.blur();
       return;

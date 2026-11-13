@@ -35,6 +35,7 @@
 import { reportUnauthorized } from './api.js';
 import * as i18n from './i18n.js';
 import { isIOS, saveBlob } from './save-file.js';
+import { registerDialog } from './dialogs.js';
 import { initPalette, studioCommands } from './palette.js';
 import { Layer } from './studio/layer.js';
 import { PortraitSession } from './studio/portrait-session.js';
@@ -353,10 +354,12 @@ export class PhotoEditor {
     this.dialog.className = 'photo-editor';
     this.dialog.setAttribute('aria-labelledby', 'pe-title');
     this.dialog.innerHTML = this.markup();
-    document.body.append(this.dialog); this.dialog.showModal();
+    document.body.append(this.dialog);
+    this.dialogController = registerDialog(this.dialog, { escape: true, backdrop: false,
+      initialFocus: false, onDismiss: () => this.close() });
+    this.dialogController.open({ opener: this.previousFocus });
     // Focus the room, not its first button, so no control opens wearing a ring.
     this.dialog.tabIndex = -1; this.dialog.focus();
-    this.dialog.addEventListener('cancel', (e) => { e.preventDefault(); this.close(); });
     this.preventLeaving = (event) => {
       if (!this.dirty && !this.busy) return;
       event.preventDefault();
@@ -1525,6 +1528,6 @@ export class PhotoEditor {
     this.worker?.terminate();
     for (const job of this.jobs.values()) job.reject(new Error('Editor closed.'));
     this.jobs.clear(); this.resizeObserver?.disconnect();
-    this.dialog.close(); this.dialog.remove(); this.previousFocus?.focus();
+    this.dialogController.close(); this.dialog.remove(); this.dialogController.dispose();
   }
 }

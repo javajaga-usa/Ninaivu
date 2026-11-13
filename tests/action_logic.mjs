@@ -77,6 +77,7 @@ const context = {
     querySelector: () => null, querySelectorAll: () => [modal] },
   viewer: { isOpen: true, handleKey() { galleryActions++; }, closeMoreMenu() {} },
   closeMenus: () => false,
+  activeDialog: () => modal.hidden ? null : modal,
   $: () => ({ classList: { contains: () => false, remove() {} }, setAttribute() {} }),
 };
 vm.runInNewContext(source.slice(source.indexOf('function wireKeyboard()'), source.indexOf('\nlet lastPhase')), context);
@@ -88,13 +89,14 @@ assert.equal(galleryActions, 0);
 keyboard({ ...event, key: ' ', target: { matches: () => false, closest: () => ({}) } });
 assert.equal(galleryActions, 0);
 keyboard({ ...event, key: 'Escape' });
-assert.equal(modal.hidden, true);
+assert.equal(modal.hidden, false, 'the gallery leaves dialog dismissal to the shared layer');
 assert.equal(galleryActions, 0);
 
 const handlers = {};
 const input = { value: 'https://example.test/share', select() {}, focus() {} };
 const messages = [];
 const sharing = {
+  registerDialog: () => ({ close() {}, open() {} }),
   viewer: { addEventListener() {} }, navigator: {},
   $: selector => selector === '#share-url-text' ? input : { addEventListener(type, handler) { handlers[selector] = handler; } },
   toast: message => messages.push(message), i18n,

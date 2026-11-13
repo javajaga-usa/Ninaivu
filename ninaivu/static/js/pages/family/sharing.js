@@ -6,18 +6,18 @@ import { api } from '../../api.js';
 import * as i18n from '../../i18n.js';
 import { state } from '../../store.js';
 import { $, toast } from '../../ui.js';
+import { registerDialog } from '../../dialogs.js';
 
 /* -- Sharing ------------------------------------------------------------ */
 let shareTargetItem = null;
 let shareVersion = 0;
+let dialog;
 
 /** Bind the share dialog: once, when it is first opened. */
 export function wire() {
-  $('#share-close')?.addEventListener('click', () => {
-    shareVersion++;
-    shareTargetItem = null;
-    $('#share-modal').hidden = true;
-  });
+  dialog = registerDialog($('#share-modal'), { escape: true, backdrop: true, initialFocus: '#share-expiry',
+    onClose: () => { shareVersion++; shareTargetItem = null; } });
+  $('#share-close')?.addEventListener('click', () => dialog.close());
 
   $('#share-create-btn')?.addEventListener('click', async () => {
     const button = $('#share-create-btn');
@@ -85,6 +85,5 @@ export function openShareModal(item) {
   // Share without strangers (api_share.py): said before the link is made.
   const blurNote = $('#share-blur-note');
   if (blurNote) blurNote.hidden = !state.status?.moments?.share_blur;
-  $('#share-modal').hidden = false;
-  $('#share-expiry').focus();
+  dialog.open();
 }

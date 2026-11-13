@@ -9,6 +9,7 @@
 import { hideSecret } from './accounts.js';
 import { admin } from './api.js';
 import * as i18n from './i18n.js';
+import { registerDialog } from './dialogs.js';
 
 export const $ = (sel) => document.querySelector(sel);
 
@@ -98,38 +99,6 @@ export function whenShort(seconds) {
 }
 
 /* -- messages -------------------------------------------------------------- */
-
-/** Keep keyboard navigation inside a modal and return to its opener on close. */
-export function wireModalFocus(modal) {
-  let opener = document.activeElement;
-  document.addEventListener('focusin', (event) => {
-    if (modal.hidden && !modal.contains(event.target)) opener = event.target;
-  });
-  const controls = () => [...modal.querySelectorAll(
-    'button, input, select, textarea, a[href], [tabindex]',
-  )].filter((node) => !node.disabled && node.tabIndex >= 0 && node.getClientRects().length);
-  new MutationObserver(() => {
-    if (modal.hidden) {
-      if (modal.contains(document.activeElement) || document.activeElement === document.body) {
-        if (opener?.isConnected && !opener.closest('[hidden]')) opener.focus();
-      }
-    } else if (!modal.contains(document.activeElement)) {
-      (controls()[0] || modal).focus();
-    }
-  }).observe(modal, { attributes: true, attributeFilter: ['hidden'] });
-  modal.tabIndex = -1;
-  modal.addEventListener('keydown', (event) => {
-    if (event.key !== 'Tab') return;
-    const items = controls();
-    const first = items[0], last = items.at(-1);
-    if (!first) { event.preventDefault(); modal.focus(); return; }
-    if (event.shiftKey && (document.activeElement === first || document.activeElement === modal)) {
-      event.preventDefault(); last.focus();
-    } else if (!event.shiftKey && (document.activeElement === last || document.activeElement === modal)) {
-      event.preventDefault(); first.focus();
-    }
-  });
-}
 
 /**
  * A message at the foot of the screen. *shownFor* is how long one that is not
@@ -245,16 +214,15 @@ export function askPasswordToDelete(items, done, { password = true } = {}) {
   error.hidden = true;
   input.value = '';
   hideSecret(input);
-  modal.hidden = false;
-  (password ? input : confirm).focus();
-
-  const close = () => {
-    modal.hidden = true;
+  const dialog = registerDialog(modal, { escape: true, backdrop: true, onClose: () => {
     input.onkeydown = null;
     modal.onkeydown = null;
     confirm.onclick = null;
     $('#lf-delete-cancel').onclick = null;
-  };
+  } });
+  const close = () => dialog.close();
+  dialog.open();
+  (password ? input : confirm).focus();
 
   const attempt = async () => {
     if (password && !input.value) { input.focus(); return; }
@@ -285,9 +253,5 @@ export function askPasswordToDelete(items, done, { password = true } = {}) {
   $('#lf-delete-cancel').onclick = close;
   input.onkeydown = (event) => {
     if (event.key === 'Enter') { event.preventDefault(); attempt(); }
-    if (event.key === 'Escape') close();
-  };
-  modal.onkeydown = password ? null : (event) => {
-    if (event.key === 'Escape') close();
   };
 }

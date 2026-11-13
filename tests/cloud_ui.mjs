@@ -48,7 +48,9 @@ await page.evaluate(async () => {
     body: JSON.stringify({ username: 'dad', password: 'correcthorse1' }),
   });
 });
-await page.reload({ waitUntil: 'networkidle' });
+// The signed-in console keeps an event stream open. Readiness is the visible
+// navigation, not a quiet network connection.
+await page.reload({ waitUntil: 'domcontentloaded' });
 await page.waitForSelector('#tabs button[data-tab="cloud"]', { timeout: 20000 });
 
 // --- the tab opens ---------------------------------------------------------
@@ -97,7 +99,7 @@ ok('the secret is nowhere in the page after saving', !leaked);
 
 await page.check('#cl-enabled');
 await page.waitForTimeout(700);
-await page.reload({ waitUntil: 'networkidle' });
+await page.reload({ waitUntil: 'domcontentloaded' });
 await page.click('#tabs button[data-tab="cloud"]');
 await page.waitForTimeout(900);
 

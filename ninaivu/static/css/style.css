@@ -1875,6 +1875,27 @@ button.job-row:focus-visible { outline: 2px solid var(--accent); outline-offset:
   padding: 22px; display: flex; flex-direction: column; gap: 16px;
 }
 .sheet-card.wide { width: min(860px, 100%); }
+/* Shared dialog geometry follows the visual viewport, including the phone
+   keyboard. Only the layer owns scroll locking; viewer state stays intact. */
+html.dialog-open, html.dialog-open body { overflow: hidden; overscroll-behavior: none; }
+html.dialog-open.dialog-scrollable { scrollbar-gutter: stable; }
+.dialog-managed:is(.modal, .sheet, .palette) {
+  top: var(--dialog-top, 0px); left: var(--dialog-left, 0px);
+  right: auto; bottom: auto;
+  width: var(--dialog-width, 100vw); height: var(--dialog-height, 100dvh);
+  overflow-y: auto; overscroll-behavior: contain;
+  align-items: safe center;
+}
+.dialog-managed.dialog-keyboard:is(.modal, .sheet, .palette) {
+  padding: max(12px, env(safe-area-inset-top, 0px)) max(12px, env(safe-area-inset-right, 0px))
+    max(12px, env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-left, 0px));
+}
+.dialog-managed.dialog-keyboard > :is(.modal-card, .sheet-card, .palette-card) {
+  max-height: calc(var(--dialog-height, 100dvh) - max(20px, env(safe-area-inset-top, 0px)) - max(20px, env(safe-area-inset-bottom, 0px)));
+}
+.dialog-managed > :is(.modal-card:not(.map-modal-card), .sheet-card) {
+  overflow-y: auto; overscroll-behavior: contain;
+}
 @media (max-width: 760px), (max-height: 500px) {
   .modal, .sheet {
     padding: max(12px, env(safe-area-inset-top, 0px)) max(12px, env(safe-area-inset-right, 0px))

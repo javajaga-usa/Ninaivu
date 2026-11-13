@@ -44,6 +44,7 @@ import { consoleCommands, initPalette } from './palette.js';
 import { hideScrollBarsUntilUsed } from './scrollbars.js';
 import { consoleState as state } from './store.js';
 import { $, $$, consoleToast as toast, el } from './ui.js';
+import { installDialogLayer, registerDialog } from './dialogs.js';
 
 const adminApi = {
   overview: () => json('/api/admin/overview'),
@@ -180,6 +181,7 @@ function setupAdminIOSInstallPrompt() {
 }
 
 async function init() {
+  installDialogLayer();
   try {
     applyTheme(JSON.parse(localStorage.getItem('ninaivu.theme') || localStorage.getItem('mv.theme') || '"system"'));
   } catch { applyTheme('system'); }
@@ -602,17 +604,9 @@ function wireChrome() {
   screeningPanel = new ScreeningPanel({ toast, onChange: () => loadAttention() });
   screeningPanel.wire();
   $$('#faces-review-close').onclick = () => ($('#faces-review').hidden = true);
-  $$('#faces-review').addEventListener('click', (event) => {
-    if (event.target === $('#faces-review')) $('#faces-review').hidden = true;
-  });
   wireScrubber();
-  $$('#profile-sheet').addEventListener('click', (event) => {
-    if (event.target === $('#profile-sheet')) $('#profile-sheet').hidden = true;
-  });
-  document.addEventListener('keydown', (event) => {
-    if (event.key !== 'Escape') return;
-    const open = [...document.querySelectorAll('.modal, .sheet')].find((m) => !m.hidden);
-    if (open) open.hidden = true;
+  document.querySelectorAll('.modal, .sheet').forEach(node => {
+    registerDialog(node, { escape: true, backdrop: true });
   });
 }
 

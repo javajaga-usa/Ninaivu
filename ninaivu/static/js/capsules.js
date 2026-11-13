@@ -15,8 +15,10 @@
 
 import { thumbUrl } from './api.js';
 import * as i18n from './i18n.js';
+import { registerDialog } from './dialogs.js';
 
 let modal = null;
+let dialog;
 let toastFn = () => {};
 let openItemsFn = null;
 
@@ -104,9 +106,8 @@ function build() {
                  el('h2', { id: 'capsule-heading', text: i18n.t('Time capsules') }), closeButton(close)));
   card.append(el('div', { class: 'capsule-body' }));
   modal.append(card);
-  modal.addEventListener('mousedown', (event) => { if (event.target === modal) close(); });
-  modal.addEventListener('keydown', (event) => { if (event.key === 'Escape') close(); });
   document.body.appendChild(modal);
+  dialog = registerDialog(modal, { escape: true, backdrop: true });
   return modal;
 }
 
@@ -115,12 +116,12 @@ function body(heading, ...nodes) {
   modal.querySelector('#capsule-heading').textContent = heading;
   const box = modal.querySelector('.capsule-body');
   box.replaceChildren(...nodes);
-  modal.hidden = false;
+  dialog.open();
   return box;
 }
 
 function close() {
-  if (modal) modal.hidden = true;
+  dialog?.close();
 }
 
 function envelope(capsule, { large = false } = {}) {

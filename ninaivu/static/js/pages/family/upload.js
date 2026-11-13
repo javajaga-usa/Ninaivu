@@ -5,11 +5,13 @@
 import * as i18n from '../../i18n.js';
 import { $, toast } from '../../ui.js';
 import { reportUnauthorized } from '../../http.js';
+import { registerDialog } from '../../dialogs.js';
 
 /** The gallery around the dialog (app.js): to show what came in. */
 let shell;
 let uploading = false;
 let progressTimer;
+let dialog;
 
 /* -- Local Upload ------------------------------------------------------- */
 /** Bind the upload dialog: once, when it is first opened. */
@@ -20,10 +22,9 @@ export function wire(context) {
   const fileInput = $('#upload-file-input');
   const closeBtn = $('#upload-close');
 
-  closeBtn?.addEventListener('click', () => {
-    modal.hidden = true;
-    shell.reload();
-  });
+  dialog = registerDialog(modal, { escape: true, backdrop: true, initialFocus: '#upload-dropzone',
+    onClose: () => shell.reload() });
+  closeBtn?.addEventListener('click', () => dialog.close());
 
   dropzone?.addEventListener('click', () => { if (!uploading) fileInput?.click(); });
   dropzone?.addEventListener('keydown', (event) => {
@@ -154,6 +155,5 @@ async function handleUpload(files) {
 
 /** Open the upload dialog (the top bar's Upload button). */
 export function open() {
-  $('#upload-modal').hidden = false;
-  $('#upload-dropzone').focus();
+  dialog.open();
 }
