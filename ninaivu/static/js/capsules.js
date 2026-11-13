@@ -315,7 +315,9 @@ export async function openSealSheet(ids, { toast, onSealed } = {}) {
     }
   };
   body(i18n.t('Seal a time capsule'), form);
-  setTimeout(() => title.focus(), 50);
+  // The form is attached and visible now. A delayed focus can steal the
+  // cursor back from the letter after somebody has already started typing.
+  title.focus();
 }
 
 /* -- the day it opens -------------------------------------------------- */

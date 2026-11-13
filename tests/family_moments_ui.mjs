@@ -71,10 +71,15 @@ await page.click('#sel-capsule');
 await page.waitForSelector('.capsule-form', { timeout: 5000 });
 await page.fill('.capsule-form input[type="text"]', 'For Arun, on his eighteenth birthday');
 await page.fill('.capsule-form textarea', 'Dear Arun, these are from your first year.');
+await page.waitForTimeout(100);
+ok('writing the letter keeps its focus and preserves the capsule name',
+  (await page.inputValue('.capsule-form input[type="text"]')) === 'For Arun, on his eighteenth birthday'
+    && await page.locator('.capsule-form textarea').evaluate(node => node === document.activeElement));
 await shot('capsule-seal');
 await page.click('.capsule-form button[type="submit"]');
 await page.waitForSelector('.capsule-countdown', { timeout: 5000 });
-ok('sealed: a countdown, and no letter', !(await page.locator('.capsule-modal').textContent()).includes('Dear Arun'));
+const sealedText = await page.locator('.capsule-modal').textContent();
+ok('sealed: a countdown, and no letter', !sealedText.includes('Dear Arun'), sealedText);
 await shot('capsule-sealed');
 await page.click('.capsule-modal .btn.ghost:not(.danger-text)');
 await page.waitForSelector('.capsule-row', { timeout: 5000 });
