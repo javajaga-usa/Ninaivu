@@ -41,6 +41,30 @@ try {
   console.log('PASS: the iPhone gallery opens');
   await page.waitForSelector('#grid .cell');
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
+  const originalVoice = await page.locator('.searchbar').evaluate(node => node.classList.contains('has-voice'));
+  await page.locator('#search').fill('candles');
+  for (const width of [320, 375, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    for (const voice of [false, true]) {
+      await page.evaluate(voice => {
+        document.querySelector('.searchbar').classList.toggle('has-voice', voice);
+        document.querySelector('#voice-search').hidden = !voice;
+        document.querySelector('#search-mode').hidden = false;
+      }, voice);
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${width}px search stays inside the screen`);
+      assert.ok(await page.locator('#search').evaluate(node => {
+        const style = getComputedStyle(node);
+        return node.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight) >= 40;
+      }), `${width}px search leaves room to read the query`);
+    }
+  }
+  await page.evaluate(voice => {
+    document.querySelector('.searchbar').classList.toggle('has-voice', voice);
+    document.querySelector('#voice-search').hidden = !voice;
+    document.querySelector('#search-mode').hidden = true;
+  }, originalVoice);
+  await page.locator('#clear-search').tap();
+  console.log('PASS: typed search stays readable at 320, 375 and 390 pixels with AI and voice controls');
   await page.locator('#more-btn').tap();
   await page.locator('#upload-btn').tap();
   await page.waitForSelector('#upload-modal:not([hidden])');

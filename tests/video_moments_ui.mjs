@@ -117,8 +117,15 @@ await search(phone.page, 'candles');
 await phone.page.waitForSelector('#moments-banner:not([hidden]) .moment-card', { timeout: 10000 });
 await phone.page.waitForTimeout(500);
 await phone.shot('1-strip');
-const wide = await phone.page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1);
-ok('Phone: nothing wider than the screen', wide);
+const phoneLayout = await phone.page.evaluate(() => ({
+  viewport: innerWidth, width: document.documentElement.scrollWidth,
+  overflow: [...document.querySelectorAll('body *')].filter(node => node.getClientRects().length)
+    .map(node => ({ name: node.id || node.className || node.tagName, right: node.getBoundingClientRect().right }))
+    .filter(box => box.right > innerWidth + 1).slice(0, 15),
+}));
+const wide = phoneLayout.width <= phoneLayout.viewport + 1;
+ok('Phone: nothing wider than the screen', wide, JSON.stringify(phoneLayout));
+if (process.env.UI_OVERFLOW_SHOT) await phone.page.screenshot({ path: process.env.UI_OVERFLOW_SHOT });
 
 ok('no script errors', errors.length === 0, errors.join(' | '));
 await switchOn(desk.context, false);

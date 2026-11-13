@@ -330,7 +330,7 @@ button { background: none; border: 0; cursor: pointer; }
 /* Search ------------------------------------------------------------- */
 
 .searchbar {
-  position: relative; flex: 1 1 auto; max-width: 620px;
+  position: relative; flex: 1 1 auto; min-width: 0; max-width: 620px;
   display: flex; align-items: center;
 }
 .searchbar input {
@@ -1675,9 +1675,33 @@ button.job-row:focus-visible { outline: 2px solid var(--accent); outline-offset:
   .topbar-more .bar-menu-head { border-top: 1px solid var(--border-soft); margin-top: 4px; padding-top: 10px; }
   .topbar-more.open .topbar-more-label { display: inline; font-size: 14px; }
 
+  /* Keep the query readable beside full-size touch targets. The AI indicator
+     uses the magnifier's space, so it does not need a second trailing slot. */
+  .topbar:has(#search:focus, #search:not(:placeholder-shown)) > .brand { display: none; }
+  .searchbar input { min-width: 0; padding-left: 32px; }
+  .searchbar input:not(:placeholder-shown) { padding-right: 36px; }
+  .searchbar.has-voice input:not(:placeholder-shown) { padding-right: 68px; }
+  .searchbar .clear-search { right: 5px; }
+  .searchbar.has-voice .clear-search { right: 36px; }
+  .searchbar .voice-search { right: 4px; }
+  .searchbar .search-badge { left: 7px; right: auto; padding-inline: 4px; }
+  .searchbar:has(.search-badge:not([hidden])) .search-icon { opacity: 0; }
+
   /* A phone pinches to zoom, so the zoom buttons give their room on the
      viewer's bar to the file name. */
   #v-zoom-out, #v-zoom-in { display: none; }
+}
+
+@media (max-width: 360px) {
+  /* A narrow phone gives an active search its own row instead of squeezing
+     the text between navigation and account controls. */
+  .topbar:has(#search:focus, #search:not(:placeholder-shown)) {
+    --topbar-h: 96px;
+    flex-wrap: wrap; align-content: center; row-gap: 6px;
+  }
+  .topbar:has(#search:focus, #search:not(:placeholder-shown)) .searchbar {
+    order: 1; flex: 0 0 100%; max-width: none;
+  }
 }
 
 @media (max-width: 620px) {
