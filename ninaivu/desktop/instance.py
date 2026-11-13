@@ -37,6 +37,7 @@ from __future__ import annotations
 import contextlib
 import hmac
 import json
+import logging
 import os
 import secrets
 import socket
@@ -56,6 +57,8 @@ OPEN = (b'family', b'console')
 #: How long a second Ninaivu waits for the first to answer before opening anyway.
 PATIENCE = 6.0
 
+log = logging.getLogger(__name__)
+
 
 class Instance:
     """The lock and the listener of the Ninaivu that holds them."""
@@ -65,7 +68,7 @@ class Instance:
         self._handle = handle
         self._listener = listener
         self._token = token.encode('ascii')
-        self._on_show: Callable[[], None] | None = None
+        self._on_show: Callable[[], bool | None] | None = None
         self._on_open: Callable[[str], None] | None = None
         self._closed = threading.Event()
 
@@ -73,7 +76,7 @@ class Instance:
     def port(self) -> int:
         return self._listener.getsockname()[1]
 
-    def serve(self, on_show: Callable[[], None], on_open: Callable[[str], None] | None = None) -> None:
+    def serve(self, on_show: Callable[[], bool | None], on_open: Callable[[str], None] | None = None) -> None:
         """Answer the next Ninaivu opened, on a thread of its own: *on_show*
         for each one that brings the right token, or *on_open* with
         ``'family'`` or ``'console'`` for one opened to show that page."""
@@ -95,13 +98,16 @@ class Instance:
                         continue
                     if said[1] != SHOW and said[1] not in OPEN:
                         continue
-                    connection.sendall(SHOWN + b'\n')
                     if said[1] in OPEN and self._on_open is not None:
                         self._on_open(said[1].decode('ascii'))
                     elif self._on_show is not None:
-                        self._on_show()
+                        if self._on_show() is False:
+                            continue                           # Tk did not activate the window
+                    connection.sendall(SHOWN + b'\n')
                 except (OSError, ValueError):
                     continue
+                except Exception:
+                    log.exception("Control Panel activation failed")
 
     def close(self) -> None:
         """Let the next Ninaivu opened be the one. Called when the program
