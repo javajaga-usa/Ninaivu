@@ -52,7 +52,7 @@ backup and recovery.
 
 ## Where to start
 
-1. [Install](site/install.md) — one portable folder for Windows, a Mac with Apple silicon or Linux. Ten minutes.
+1. [Install](site/install.md) — portable folders for Windows and Apple-silicon Mac, a Debian installer for Linux. Ten minutes.
 2. [The first day](site/first-day.md) — the folder, the household, what the scan works out by itself.
 3. [Family and roles](site/family-and-roles.md) — who sees what.
 4. [Backup](site/backup.md) — a copy outside the house, tested every week.

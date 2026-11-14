@@ -1,10 +1,8 @@
 # Install
 
-Ninaivu runs on a computer that stays on: a desktop under the stairs, a mini
-PC, an old laptop, a Mac mini. Nothing is installed: Ninaivu comes as one
-folder that brings everything it needs with it — its own Python and every
-package — so nothing else has to be installed first, and deleting the folder
-removes everything it made.
+Ninaivu runs on a computer that stays on: a desktop, mini PC, old laptop or Mac mini.
+Windows and Mac use portable folders. Linux uses a Debian installer for Debian
+and Ubuntu. All three include their own Python and application packages.
 
 ## Download
 
@@ -16,11 +14,11 @@ Pick the file for your computer:
 | --- | --- |
 | Windows (64-bit) | `Ninaivu-<version>-windows-x64-portable.zip` |
 | Mac with Apple silicon (M1 and later) | `Ninaivu-<version>-macos-arm64-portable.zip` |
-| Linux PC (64-bit: Ubuntu, Debian and the like) | `Ninaivu-<version>-linux-x64-portable.tar.gz` |
+| Linux PC (64-bit: Ubuntu, Debian and the like) | `Ninaivu-<version>-linux-x64.deb` |
 
 The same page has this guide as a PDF, in English and Tamil.
 
-Put the folder somewhere you can write to and that stays put — your
+On Windows and Mac, put the folder somewhere you can write to and that stays put — your
 Documents, or a second disk. Ninaivu keeps the index of your library, the
 settings and the AI models inside it, so moving or copying the folder takes
 them along. Your photographs are not copied into it: they stay where they are.
@@ -57,29 +55,33 @@ Ninaivu keeps running, and its icon, or the Dock's, brings the window back.
 
 ## Linux
 
-Open a terminal in the folder it was downloaded to, unpack it and start it:
+Open the `.deb` with your software installer, or install it in a terminal:
 
 ```bash
-tar -xzf Ninaivu-<version>-linux-x64-portable.tar.gz
-cd Ninaivu-<version>-linux-x64-portable
-./ninaivu
+sudo apt install ./Ninaivu-<version>-linux-x64.deb
 ```
 
-No root is needed, and the machine needs no Python: the folder carries its
-own, with every package Ninaivu uses, and downloads nothing. `ninaivu` is
-the one thing in the folder to open, by a double-click too: it opens the
-Control Panel and starts Ninaivu. On a machine with no desktop (a server, or over
-ssh), `./ninaivu --server ~/Pictures` runs Ninaivu in that terminal with
-`~/Pictures` as the library; to have it start with the computer, see "The
-Linux system service" in the technical administrator guide.
+Open **Ninaivu** from the applications menu. It opens the Control Panel and
+starts Ninaivu. Your index, settings, models, logs and optional extras stay
+in `~/.ninaivu`; your original photographs stay where they are. Removing the
+package keeps this data. The package includes Python; the package manager
+installs any missing desktop libraries.
+
+Without a desktop, run `ninaivu --server ~/Pictures`. To start at boot, see
+"The Linux system service" in the technical administrator guide.
 
 ## Upgrading
 
 Ninaivu does not look on the internet for newer versions. When you want
 one, download the newer file from the same page.
 
-Unpack the newer version into a new folder **beside the old one, on the same
-drive**, and open it (`Ninaivu.exe`, `Ninaivu.app` or `./ninaivu`). Its
+**Linux:** close Ninaivu and install the newer `.deb` with the same command.
+Your home-folder library and settings remain in place. If an older portable
+copy kept its index in `data/`, stop it and copy that state to `~/.ninaivu`
+first, or set `NINAIVU_STATE_DIR` to that existing state folder.
+
+**Windows and Mac:** unpack the newer version into a new folder **beside the old one, on the same
+drive**, and open it (`Ninaivu.exe` or `Ninaivu.app`). Its
 Control Panel finds the older folder and asks whether to bring your library
 across. Say yes: it stops the older Ninaivu if it is running and moves the
 library, the settings and the AI models into the new folder. Nothing is

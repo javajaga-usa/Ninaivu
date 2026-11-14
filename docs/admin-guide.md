@@ -19,66 +19,48 @@ use it. This page is in English only.
 When reporting a problem, say which version (**System → Home & extensions** shows it
 under *This home*), what was done, and what the log said.
 
-## More on the portable downloads
+## More on the downloads
 
-Ninaivu ships as one portable folder per computer — Windows x64, macOS on Apple
-silicon and Linux x64 — each with its own Python and every package, and
-nothing installed. What each folder keeps, and where:
+Windows x64 and Apple-silicon Mac downloads are portable folders, each with
+its own Python and packages. Their index, settings and models are in `data/`,
+logs in `logs/`, and Control Panel files in `data/control/.ninaivu-control`.
+The Mac app moved alone into Applications instead uses `~/.ninaivu` and
+`~/Library/Application Support/Ninaivu`.
 
-| | Index, settings, accounts | AI models | Logs | Control Panel's own files |
-| --- | --- | --- | --- | --- |
-| Windows | `data` | `data\ai-models` | `logs` | `data\control\.ninaivu-control` |
-| macOS | `data` | `data/ai-models` | `logs` | `data/control/.ninaivu-control` |
-| Linux | `data` | `data/ai-models` | `logs` | `data/control/.ninaivu-control` |
+Linux x64 uses `Ninaivu-<version>-linux-x64.deb`, tested on Ubuntu and Debian
+12 and 13. Install with `sudo apt install ./Ninaivu-<version>-linux-x64.deb`.
+The package owns `/opt/ninaivu`, `/usr/bin/ninaivu` and the applications-menu
+entry. Each user's index, settings, accounts, models, logs and optional extras
+stay in `~/.ninaivu`; package upgrades and removal preserve that folder.
+`NINAIVU_STATE_DIR` overrides this location. Extras use a writable private
+venv in the state folder; the bundled core runtime remains package-owned.
 
-The program is apart from all of it: `app` on Windows and Linux,
-`Ninaivu.app` on a Mac. Up to 1.11, Windows and Linux kept the data inside
-`app` (`app\data`, `app\ai-models`, `app\.ninaivu-control`); a 1.12 folder
-that finds it there moves it to `data` on its first start
-(`ninaivu/desktop/portable.py`).
-
-The launchers (`Ninaivu.exe`, `Ninaivu.app`, `./ninaivu`) set
-`NINAIVU_HOME`, `NINAIVU_STATE_DIR`, `NINAIVU_AI_MODELS_DIR`,
-`NINAIVU_LOG_DIR`, `NINAIVU_PORTABLE` and `NINAIVU_PORTABLE_ROOT` (the folder
-itself) to those folders, and on Windows and Linux `NINAIVU_PROGRAM_DIR` to
-`app`; nothing outside the
-folder is written, except *Start Ninaivu when I sign in* (a registry value on
-Windows, a LaunchAgent on a Mac) when someone turns it on.
-
-- **macOS.** The app keeps its data in the folder only when it sits beside the
-  hidden `.ninaivu-portable` file the zip has. Dragged on its own into
-  Applications, it keeps to `~/.ninaivu` and
-  `~/Library/Application Support/Ninaivu`, as an installed app would.
-  `open -a Ninaivu --args --tray` opens it minimised to its menu-bar icon.
-- **Linux.** One download, `linux-x64`, for a 64-bit PC running Debian 12
-  or 13, Ubuntu or another current distribution; every release is opened on
-  Debian 12 and 13 before it is published. There is no arm64 (Raspberry Pi)
-  download.
-  `./ninaivu --server [PHOTOS] [options]` runs the server alone in
-  the terminal, with the same folders; `./ninaivu --tray` opens Ninaivu
-  minimised to its tray icon; `./ninaivu --where` prints the folders.
-  `ninaivu` is the folder's one starter, a small program that runs
-  `app/ninaivu.sh`, and may be reached through a symbolic link
-  (`ln -s ~/Ninaivu-…/ninaivu ~/bin/ninaivu`).
+Run `ninaivu` for the Control Panel, `ninaivu --tray` to start minimised,
+`ninaivu --server [PHOTOS] [options]` for the server alone, or
+`ninaivu --where` to print the folders. There is no arm64 release download.
+An older portable copy using `~/.ninaivu` shares that state after it is stopped.
+For an app-local `data/` index, stop the old copy and copy the state to
+`~/.ninaivu`, or set `NINAIVU_STATE_DIR` to the existing state location.
 
 ### The Linux system service
 
-The portable folder does not set itself up as a service. To have systemd start
-it at boot, as its own user rather than root, put the folder somewhere that
-user can write (`/opt/ninaivu`), and adapt `installers/systemd/ninaivu.service`:
+The Debian package does not enable a system service automatically. Install it,
+create a service account with a writable home, then adapt the example unit:
 
 ```ini
 User=ninaivu
-ExecStart=/opt/ninaivu/ninaivu --server /var/lib/ninaivu/photos --port 5000
-ReadWritePaths=/opt/ninaivu /var/lib/ninaivu
+Group=ninaivu
+WorkingDirectory=/opt/ninaivu
+Environment=NINAIVU_STATE_DIR=/var/lib/ninaivu/state
+ExecStart=/usr/bin/ninaivu --server /var/lib/ninaivu/photos --port 5000
+ReadWritePaths=/var/lib/ninaivu
 ```
 
 ```bash
-sudo useradd --system --user-group --home-dir /opt/ninaivu --shell /usr/sbin/nologin ninaivu
-sudo tar -xzf Ninaivu-<version>-linux-x64-portable.tar.gz -C /opt
-sudo mv /opt/Ninaivu-<version>-linux-x64-portable /opt/ninaivu
-sudo chown -R ninaivu: /opt/ninaivu
+sudo apt install ./Ninaivu-<version>-linux-x64.deb
+sudo useradd --system --user-group --create-home --home-dir /var/lib/ninaivu --shell /usr/sbin/nologin ninaivu
 sudo cp installers/systemd/ninaivu.service /etc/systemd/system/   # edited as above
+sudo systemctl daemon-reload
 sudo systemctl enable --now ninaivu
 ```
 
@@ -86,7 +68,7 @@ A library elsewhere has to be readable and writable by that user, for
 example `sudo setfacl -R -m u:ninaivu:rwX -m d:u:ninaivu:rwX /srv/photos`, and
 named in `ReadWritePaths=`. Run the maintenance commands as that user too, so
 the files they write stay its own:
-`sudo -u ninaivu /opt/ninaivu/ninaivu --server reset-password`.
+`sudo -u ninaivu env NINAIVU_STATE_DIR=/var/lib/ninaivu/state /usr/bin/ninaivu --server reset-password`.
 
 `sudo systemctl stop ninaivu` lets Ninaivu finish what is in hand: the
 service allows 45 seconds (`TimeoutStopSec`), and the log names anything that
@@ -1096,8 +1078,15 @@ read or written by an update, and neither is the state folder (the index,
 `config.json`, the thumbnails, `setup-code.txt`, the keys) or the AI models.
 
 Ninaivu never looks on the internet for a newer version, and nothing is
-ever downloaded or installed by Ninaivu itself. An update is a newer portable
-folder someone downloads from the releases page, when they choose to.
+ever downloaded or installed by Ninaivu itself. Download the newer version
+from the releases page when you choose to.
+
+**Linux Debian package:** stop Ninaivu and install the newer `.deb` with
+`sudo apt install ./Ninaivu-<version>-linux-x64.deb`, then restart. The package
+manager replaces program files; your state folder stays in place.
+
+The following bring-across and Go back steps apply to Windows and Mac portable
+folders, and older Linux portable downloads.
 
 **A portable folder updates itself from the one beside it.** Unpack the newer
 download beside the folder in use, on the same drive, and open it. Its
@@ -1141,7 +1130,7 @@ the `pull` and `up -d` below do it.
 | --- | --- | --- | --- |
 | Windows | extract the newer zip beside the old folder, open its `Ninaivu.exe` and bring the library across | everything in the zip (`Ninaivu.exe`, `app\python`, `app\tools`) | `data` (index, settings, people, models, the Control Panel's settings), the library |
 | macOS | unzip the newer one beside the old folder, open its `Ninaivu.app` and bring the library across | `Ninaivu.app` | `data` (index, settings, people, models, the Control Panel's settings), the library |
-| Linux | unpack the newer `.tar.gz` beside the old folder, run its `./ninaivu` and bring the library across | `ninaivu`, `app/python` | `data`, the library |
+| Linux | stop Ninaivu, install the newer `.deb` with `sudo apt install ./Ninaivu-<version>-linux-x64.deb`, then restart | `/opt/ninaivu`, launcher and menu entry | `~/.ninaivu` (or `NINAIVU_STATE_DIR`), original photographs |
 | An installed Ninaivu from 1.10 or earlier | **Mac:** drag the new `Ninaivu.app` on its own over the old one in Applications: on its own it keeps to `~/.ninaivu` as before. **Windows, Linux:** the installed copy keeps working; to move to the portable folder, stop it and copy its state folder (`%USERPROFILE%\.ninaivu`, `~/.ninaivu` or `~/.local/state/ninaivu`) into the new folder as `data` | the program | the old state folder, until it is removed by hand |
 | Docker | `docker compose pull` (or `build`), then `up -d` | the image | the `ninaivu_state` volume and `MEDIA_DIR` |
 | A checkout | `git pull`, then start it again | the source | the state folder, `.ai-models`, the library |
