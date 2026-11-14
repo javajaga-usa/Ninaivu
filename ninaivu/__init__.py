@@ -670,6 +670,18 @@ class Services:
             logging.getLogger(__name__).debug("the old smaller copies were left as they are",
                                               exc_info=True)
 
+    def _clear_compress_leftovers(self) -> None:
+        """Half-written compressed videos an earlier version left beside the
+        library's videos, often gigabytes each, removed once
+        (video_damage.clear_compress_leftovers). Nothing makes one any more."""
+        try:
+            from .media import video_damage                     # noqa: PLC0415
+            from .storage import db                             # noqa: PLC0415
+            video_damage.clear_compress_leftovers(db.connect(self.cfg.db_path))
+        except Exception:                                       # noqa: BLE001
+            logging.getLogger(__name__).exception(
+                "could not clear half-written compressed videos")
+
     def _wait_for_a_primary(self) -> None:
         """Two computers: a new Secondary not paired yet waits half an hour
         for its Primary from each start, and answers the Primary's question.
@@ -796,6 +808,7 @@ class Services:
             self._resume_archive(vision=_VisionOnceLoaded(self, model_ready))
             self._sweep_the_bin()
             self._tidy_records()
+            self._clear_compress_leftovers()
             # The scan, the folder watchers and the interrupted jobs before the
             # model too. They waited for it, and on a Pi it can take a minute
             # to load (a first start downloads it): new photographs were not

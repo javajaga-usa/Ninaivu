@@ -5,6 +5,7 @@ Each test names its finding.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 from ninaivu.storage import db
 
@@ -74,6 +75,45 @@ def test_the_damage_cache_starts_again_when_full(monkeypatch, tmp_path):
         clip.write_bytes(b"x")
         assert video_damage.damaged(clip) is True
     assert len(video_damage._damage_seen) <= 3
+
+
+def test_half_written_compressed_copies_from_before_are_removed_once(scanned):
+    """Compress & Replace is gone; what a restart in the middle of one left
+    beside a video goes at the next start, and nothing else in the folder."""
+    from ninaivu.media import video_damage
+    cfg, conn, _ = scanned
+    root = Path(cfg.active_root)
+    clip = root / "films" / "wedding.mp4"
+    clip.parent.mkdir()
+    clip.write_bytes(b"\x00\x00\x00\x18ftypisom" + bytes(64))
+    conn.execute("UPDATE assets SET kind='video', rel_path='films/wedding.mp4', "
+                 "folder='films', filename='wedding.mp4' WHERE id=(SELECT MIN(id) FROM assets)")
+    conn.commit()
+    left = clip.parent / ".wedding.0123456789ab.compress.tmp"
+    left.write_bytes(bytes(4096))
+    mine = clip.parent / ".wedding.notes.tmp"                 # somebody's own hidden file
+    mine.write_bytes(b"keep")
+    named_alike = clip.parent / "holiday.0123456789ab.compress.tmp"   # not hidden: not ours
+    named_alike.write_bytes(b"keep")
+
+    assert video_damage.clear_compress_leftovers(conn) == 1
+    assert not left.exists()
+    assert clip.exists() and mine.exists() and named_alike.exists()
+    # Once: a file of that name written afterwards is nobody's leftover.
+    left.write_bytes(bytes(16))
+    assert video_damage.clear_compress_leftovers(conn) == 0
+    assert left.exists()
+
+
+def test_the_leftovers_are_looked_for_again_while_a_drive_is_away(scanned):
+    from ninaivu.media import video_damage
+    cfg, conn, _ = scanned
+    conn.execute("UPDATE assets SET kind='video', root='/no/such/drive', rel_path='a/b.mp4' "
+                 "WHERE id=(SELECT MIN(id) FROM assets)")
+    conn.commit()
+    assert video_damage.clear_compress_leftovers(conn) == 0
+    assert conn.execute("SELECT 1 FROM meta WHERE key=?",
+                        (video_damage.LEFTOVERS_CLEARED,)).fetchone() is None
 
 
 # -- C-52: a manifest cell never runs as a formula -----------------------------

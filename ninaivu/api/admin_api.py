@@ -3193,10 +3193,8 @@ def locations_health():
 @admin_bp.get("/api/admin/space")
 @require_admin
 def space_report():
-    """Where the bytes are and what a light library would save
-    (storage/space.py): the library by kind of file, year and folder, with
-    the light copies' estimated size; exact and near duplicates; Ninaivu's
-    own state folder. Only reads. ``?fresh=1`` walks the state folder again
+    """Where the bytes are (storage/space.py): the library by kind of file,
+    year and folder; exact and near duplicates; Ninaivu's own state folder. Only reads. ``?fresh=1`` walks the state folder again
     instead of using the walk from the last few minutes."""
     from ..storage import space                               # noqa: PLC0415
     cfg = _cfg()
@@ -3213,8 +3211,7 @@ def space_report():
     extra: list = []
     forecast = space.forecast(conn, libraries, steps=space.steps_from(library, duplicates, extra))
     return jsonify({"library": library, "duplicates": duplicates, "state": state,
-                    "forecast": forecast,
-                    "shares": {k: list(v) for k, v in space.light_shares().items()}})
+                    "forecast": forecast})
 
 
 @admin_bp.get("/api/admin/fit")

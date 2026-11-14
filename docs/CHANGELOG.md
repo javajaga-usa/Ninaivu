@@ -1,5 +1,28 @@
 # Changelog
 
+## Unreleased
+
+An audit and clean-up of 4.2. Several things were removed because they are no longer wanted; nothing here touches an original.
+
+### Removed
+
+- **Making videos smaller.** Compress & Replace, Tidy copies and the smaller-videos trial are gone from the console's Large files page, with their routes (`/api/admin/large-files/compress`, `/api/admin/large-files/extra-copies`, `/api/admin/video-trial`). The page keeps Keep and Delete, and still marks a video that is damaged at its source. A compression waiting in the queue from an earlier version is dropped at start; a video already replaced stays as it is, with its original in the bin as before.
+- **Display copies.** The code that made the smaller copies of the two-computer set-up (not made since 4.0.1) is gone, and anything it left in the state folder (`display/`, `mugil-display.db`, `video-trial/`) is removed at start. An original that is on the Secondary only is still sent for and shown as it is, and **Bring every original back** is unchanged.
+- **The light-library estimate.** `ninaivu space` and `/api/admin/space` say where the bytes are by kind of file, year and folder; they no longer estimate what smaller copies would save.
+- **The stand-alone read-only replica.** `--replica-of`, `--replica-primary`, `--replica-wake` and the `ninaivu replica` command, which a Raspberry Pi ran, are gone. The Secondary of two computers serves the family as before.
+- **Debian 12.** The Linux download is opened on Debian 13 before a release and no longer on Debian 12. (Python older than 3.14 went in 4.1.)
+
+### Fixed
+
+- **The console loaded its opening page twice.** The first progress message after it opened, describing a scan that had ended earlier, drew everything again: six requests asked twice at every opening (23 down to 17).
+- Two tests that failed one run in many on a busy machine.
+
+### Housekeeping
+
+- 74 strings no page asks for any more are out of both languages.
+- Pictures of pages written by a browser test (`page-shots/`) had been checked in; they are removed and ignored. Two functions nothing called are gone.
+- The roadmap described 0.1.0; it now says where Ninaivu stands, what is open and what is not planned. The front pages of the guide said 3.5.1 and 0.1.0.
+
 ## 4.2.0 — 13 November 2026
 
 4.2 improves the family app on phones and makes dialogs, sharing, uploads and photo editing more consistent. It also includes the Control Panel activation fix from 4.1.1. Library, profile, storage and server logic are unchanged.

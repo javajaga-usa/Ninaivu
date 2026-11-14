@@ -1,9 +1,8 @@
-"""Where the library's bytes are, and what a light library would save.
+"""Where the library's bytes are.
 
 ``ninaivu space`` prints what the console's ``/api/admin/space`` answers:
-the library by kind of file, year and largest folders, the light copies'
-estimated size (storage/space.py says how the estimate is made), duplicates,
-and Ninaivu's own state folder. It opens the index read-only and changes
+the library by kind of file, year and largest folders, duplicates, and
+Ninaivu's own state folder. It opens the index read-only and changes
 nothing, so it can run while Ninaivu is serving.
 """
 
@@ -20,16 +19,16 @@ from . import use_utf8_output
 
 #: How each class is named in the printed report.
 LABELS = {
-    "jpeg": "JPEG photos (to AVIF)",
-    "raw": "RAW photos (to an AVIF rendition)",
-    "png": "PNG and screenshots (to lossless WebP)",
-    "heic": "iPhone HEIC photos (kept)",
-    "other_picture": "Other pictures (kept)",
-    "video": "Videos, mostly H.264 (to HEVC)",
-    "legacy_video": "Older videos: AVI, MKV, WMV, MTS (to HEVC)",
-    "phone_video": "iPhone videos (kept)",
-    "audio": "Sound (kept)",
-    "other": "Other files (kept)",
+    "jpeg": "JPEG photos",
+    "raw": "RAW photos",
+    "png": "PNG and screenshots",
+    "heic": "iPhone HEIC photos",
+    "other_picture": "Other pictures",
+    "video": "Videos",
+    "legacy_video": "Older videos: AVI, MKV, WMV, MTS",
+    "phone_video": "iPhone videos",
+    "audio": "Sound",
+    "other": "Other files",
 }
 
 
@@ -65,19 +64,12 @@ def print_report(data: dict) -> None:
     lib = data["library"]
     print(f"Library: {lib['files']:,} files, {size(lib['bytes'])}")
     print()
-    print(f"  {'Kind':<44} {'Files':>9} {'Now':>11} {'Light copy (estimate)':>25}")
+    print(f"  {'Kind':<36} {'Files':>9} {'Size':>11}")
     for row in lib["classes"]:
         if not row["files"]:
             continue
-        light = ("same" if row["kept_as_is"] else
-                 f"{size(row['light_bytes_low'])} to {size(row['light_bytes_high'])}")
-        print(f"  {LABELS.get(row['class'], row['class']):<44} {row['files']:>9,} "
-              f"{size(row['bytes']):>11} {light:>25}")
-    print()
-    print(f"  A light library would take {size(lib['light_bytes_low'])} to "
-          f"{size(lib['light_bytes_high'])}, saving {size(lib['saving_bytes_low'])} to "
-          f"{size(lib['saving_bytes_high'])}.")
-    print("  These are estimates from the kind of each file; no file was opened.")
+        print(f"  {LABELS.get(row['class'], row['class']):<36} {row['files']:>9,} "
+              f"{size(row['bytes']):>11}")
     print()
     print("By year:")
     for row in lib["years"]:
@@ -106,9 +98,7 @@ def print_report(data: dict) -> None:
         print(f"  {size(row['bytes']):>11}  {row['what']} at {row['path']}")
 
 
-STEPS = {"exact_duplicates": "Setting the exact copies aside",
-         "light_copies": "Light copies (the cautious estimate)",
-         "optimize_mac_storage": "Optimize Mac storage (originals that may live on the Secondary)"}
+STEPS = {"exact_duplicates": "Setting the exact copies aside"}
 
 
 def print_forecast(forecast: dict) -> None:

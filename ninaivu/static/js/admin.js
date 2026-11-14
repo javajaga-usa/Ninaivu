@@ -1627,9 +1627,15 @@ function onProgress(scan) {
     if (strapline) strapline.textContent = text;
   }
   const phase = `${scan.status}:${scan.added}:${scan.removed}`;
+  // The first message after the console opens describes a scan that ended
+  // before it did, and start() has just loaded everything: drawing it all
+  // again asked six routes twice on every opening.
+  const first = lastPhase === null;
   if (phase !== lastPhase && (scan.status === 'done' || scan.status === 'error')) {
     lastPhase = phase;
-    refresh();
+    if (!first) refresh();
+  } else if (first) {
+    lastPhase = '';
   }
 }
 
