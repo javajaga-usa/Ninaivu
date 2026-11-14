@@ -60,6 +60,7 @@ EVENTS: dict[str, str] = {
     "secondary_away": said("The always-on computer has not answered for a day"),
     "secondary_disk": said("The always-on computer's originals disk is failing or nearly full"),
     "primary_replaced": said("Another computer took over as the Primary, and this one is a single computer again"),
+    "weekly_health": said("The week's health: damaged files, free space, failed jobs and drives, once a week"),
 }
 
 #: Never send the same thing twice within this window. A drive left unplugged

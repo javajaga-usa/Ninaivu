@@ -20,6 +20,7 @@ import { DowntimeNotice } from './downtime.js';
 import { familyCommands, initPalette } from './palette.js';
 import { hideScrollBarsUntilUsed } from './scrollbars.js';
 import { claimBanner } from './handover.js';
+import { weekCard } from './health-week.js';
 import { VideoMoments } from './video-moments.js';
 import { state, store } from './store.js';
 import { $, closeMenus, humanBytes, toast, wireMenu } from './ui.js';
@@ -738,6 +739,14 @@ async function start(user) {
   // A successor's takeover waiting: every administrator is told, here too.
   if (state.user.role === 'admin' && !document.querySelector('.handover-banner')) {
     claimBanner(document.querySelector('main.content'), { toast });
+  }
+  // The week's health, for an administrator: damaged files, free space,
+  // failed jobs and drives (health-week.js). Once, however often they sign in.
+  if (state.user.role === 'admin' && !document.querySelector('.week-card')) {
+    const adminPort = state.status?.admin_port || 3000;
+    weekCard(document.querySelector('main.content'), {
+      consoleUrl: `${window.location.protocol}//${window.location.hostname}:${adminPort}`,
+    });
   }
 
   if (state.user.must_change) {
