@@ -1128,7 +1128,7 @@
       <input type="text" class="share-url-input" id="share-url-text" aria-label="Share link" data-i18n-label="Share link" readonly>
       <button class="btn primary small" id="share-copy-btn" data-i18n="Copy">Copy</button>
     </div>
-    <div id="share-options">
+    <form id="share-options">
       <label class="field">
         <span data-i18n="Expires in">Expires in</span>
         <select class="select" id="share-expiry">
@@ -1139,14 +1139,15 @@
       </label>
       <label class="field">
         <span data-i18n="Optional Password / PIN">Optional Password / PIN</span>
-        <input type="password" class="input" id="share-password" placeholder="Leave blank for none" data-i18n-placeholder="Leave blank for none">
+        <input type="password" class="input" id="share-password" autocomplete="new-password" placeholder="Leave blank for none" data-i18n-placeholder="Leave blank for none">
       </label>
-    </div>
+    </form>
+    <p class="hint share-status" id="share-status" role="status" aria-atomic="true" hidden></p>
     <div class="modal-foot">
       <div class="spacer"></div>
       <button class="btn ghost" id="share-close" data-i18n="Close">Close</button>
       <button class="btn primary" id="share-native-btn" hidden data-i18n="Share…">Share…</button>
-      <button class="btn primary" id="share-create-btn" data-i18n="Generate Link">Generate Link</button>
+      <button class="btn primary" id="share-create-btn" type="submit" form="share-options" data-i18n="Generate Link">Generate Link</button>
     </div>
   </div>
 </div>

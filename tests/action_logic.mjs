@@ -95,10 +95,12 @@ assert.equal(galleryActions, 0);
 const handlers = {};
 const input = { value: 'https://example.test/share', select() {}, focus() {} };
 const messages = [];
+const shareStatus = { classList: { toggle() {} }, set textContent(message) { messages.push(message); } };
 const sharing = {
   registerDialog: () => ({ close() {}, open() {} }),
   viewer: { addEventListener() {} }, navigator: {},
-  $: selector => selector === '#share-url-text' ? input : { addEventListener(type, handler) { handlers[selector] = handler; } },
+  $: selector => selector === '#share-url-text' ? input : selector === '#share-status' ? shareStatus
+    : { addEventListener(type, handler) { handlers[selector] = handler; } },
   toast: message => messages.push(message), i18n,
 };
 // The share dialog is a page of its own since 4.0 (pages/family/sharing.js).
