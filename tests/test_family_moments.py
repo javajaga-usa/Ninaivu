@@ -49,7 +49,7 @@ def test_both_are_off_until_switched_on(as_family, app):
     assert moments == {"frame": False, "capsules": False, "ask": False, "year": False,
                        "voice": False, "colour": False, "video_moments": False,
         "then_now": False, "life": False, "festivals": False, "letters": False, "young_faces": False, "talk": False,
-        "find_print": False, "share_blur": False, "stacks": False}
+        "find_print": False, "share_blur": False, "stacks": False, "easy_view": False}
 
 
 def test_the_status_says_which_are_on(as_family, switched_on):
@@ -57,7 +57,7 @@ def test_the_status_says_which_are_on(as_family, switched_on):
         "frame": True, "capsules": True, "ask": False, "year": False,
         "voice": False, "colour": False, "video_moments": False,
         "then_now": False, "life": False, "festivals": False, "letters": False, "young_faces": False, "talk": False,
-        "find_print": False, "share_blur": False, "stacks": False}
+        "find_print": False, "share_blur": False, "stacks": False, "easy_view": False}
 
 
 # --- the frame ---------------------------------------------------------------

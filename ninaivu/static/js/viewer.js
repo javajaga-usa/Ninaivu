@@ -437,6 +437,7 @@ export class Viewer extends EventTarget {
     this.talk?.close();
     this.letters?.close();
     this.stack?.hide();
+    this.easy?.close();
     this.root.hidden = true;
     this.clearStage();
     this.coolDown();
@@ -510,6 +511,7 @@ export class Viewer extends EventTarget {
     this.talk?.show(item);
     this.letters?.show(item);
     this.stack?.show(item);
+    this.easy?.show(item);
     if (this.slideshow) this.scheduleSlideshow();
     this.renderFilmstrip();
     if (!this.info.hidden) this.renderInfo(item);

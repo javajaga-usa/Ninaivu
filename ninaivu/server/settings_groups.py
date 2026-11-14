@@ -85,7 +85,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
     ),
     said("Advanced"): (
         "workers", "ai_runtime", "describe_photos", "memory_films", "our_year", "video_moments",
-        "then_and_now", "life_story", "festival_albums", "letters_aloud", "young_faces", "photo_talk", "find_print",
+        "then_and_now", "life_story", "festival_albums", "letters_aloud", "young_faces", "easy_view", "photo_talk", "find_print",
         "photo_stacks", "share_blur_strangers", "voice_search",
         "colour_photos", "thumb_sizes", "thumb_quality", "thumb_format", "video_thumbs",
         "video_thumb_offset", "perceptual_hash", "blur_threshold", "dark_threshold",

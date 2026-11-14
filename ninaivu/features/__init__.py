@@ -216,7 +216,7 @@ def _manifests() -> tuple[Feature, ...]:
     from . import films, find_print, frame, handover, letters, life_story  # noqa: PLC0415
     from . import our_year, photo_talk, screening, smart, stacks, stories  # noqa: PLC0415
     from . import then_and_now, video_moments, voice_search, young_faces  # noqa: PLC0415
-    from . import ask_ninaivu, scan_prints  # noqa: PLC0415
+    from . import ask_ninaivu, easy_view, scan_prints  # noqa: PLC0415
     return (
         smart.MANIFEST,
         ask_family.MANIFEST,
@@ -248,6 +248,7 @@ def _manifests() -> tuple[Feature, ...]:
         young_faces.MANIFEST,
         find_print.MANIFEST,
         voice_search.MANIFEST,
+        easy_view.MANIFEST,
     )
 
 
@@ -439,7 +440,7 @@ def from_extension(ext: Any) -> Feature:
 ORDER: tuple[str, ...] = (
     "smart", "ask_family", "family_tree", "books", "films", "handover", "stories", "capsules",
     "frame", "screening", "descriptions", "colour_copies", "video_moments", "then_and_now",
-    "life_story", "letters", "stacks", "journal",
+    "life_story", "letters", "stacks", "journal", "easy_view",
     # No tables: in the order their routes are put on.
     "scan_prints", "ask_ninaivu", "our_year", "photo_talk", "festivals", "young_faces",
     "find_print", "voice_search",
