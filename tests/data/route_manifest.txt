@@ -152,6 +152,7 @@ admin | POST                 | /api/admin/settings | admin | writes | same origi
 admin | GET                  | /api/admin/settings/all | admin | reads | - | admin.settings_all | -
 admin | POST                 | /api/admin/settings/all | admin | writes | same origin | admin.settings_all_change | -
 admin | POST                 | /api/admin/settings/index-folder | admin | writes | same origin | migration.index_folder | -
+admin | GET                  | /api/admin/setup-check | admin | reads | - | setup_check.setup_check_state | -
 admin | POST                 | /api/admin/shutdown | machine | writes | same origin | admin.shutdown | -
 admin | GET                  | /api/admin/space | admin | reads | - | admin.space_report | -
 admin | GET                  | /api/admin/storage-report | admin | reads | - | admin.storage_report | -
@@ -385,6 +386,14 @@ admin | GET                  | /api/download/zip | family | reads | - | api.down
 home  | GET                  | /api/download/zip | family | reads | - | api.download_zip | -
 admin | GET                  | /api/duplicates | family | reads | - | api.duplicates | -
 home  | GET                  | /api/duplicates | family | reads | - | api.duplicates | -
+admin | GET                  | /api/duplicates/review | family | reads | - | api.duplicates_review | -
+home  | GET                  | /api/duplicates/review | family | reads | - | api.duplicates_review | -
+admin | POST                 | /api/duplicates/review/decide | admin | writes | same origin | api.duplicates_decide | -
+home  | POST                 | /api/duplicates/review/decide | admin | writes | same origin | api.duplicates_decide | -
+admin | POST                 | /api/duplicates/review/put-back | admin | writes | same origin | api.duplicates_put_back | -
+home  | POST                 | /api/duplicates/review/put-back | admin | writes | same origin | api.duplicates_put_back | -
+admin | GET                  | /api/duplicates/review/set-aside | admin | reads | - | api.duplicates_set_aside | -
+home  | GET                  | /api/duplicates/review/set-aside | admin | reads | - | api.duplicates_set_aside | -
 admin | GET                  | /api/easy-view | family | reads | - | api.easy_view_mine | easy_view
 home  | GET                  | /api/easy-view | family | reads | - | api.easy_view_mine | easy_view
 admin | PUT                  | /api/easy-view | family | writes | same origin | api.easy_view_set_mine | easy_view
@@ -477,6 +486,8 @@ admin | POST                 | /api/handover/claims/<int:claim_id>/cancel | admi
 home  | POST                 | /api/handover/claims/<int:claim_id>/cancel | admin | writes | same origin | api.handover_cancel | handover
 admin | GET                  | /api/handover/me | family | reads | - | api.handover_me | handover
 home  | GET                  | /api/handover/me | family | reads | - | api.handover_me | handover
+admin | GET                  | /api/health/week | admin | reads | - | api.health_week | -
+home  | GET                  | /api/health/week | admin | reads | - | api.health_week | -
 admin | POST                 | /api/import/look | admin | writes | same origin | import.look | -
 admin | POST                 | /api/import/start | admin | writes | same origin | import.start | -
 admin | GET                  | /api/import/status | admin | reads | - | import.status | -

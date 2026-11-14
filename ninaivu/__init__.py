@@ -407,6 +407,10 @@ class Services:
         # "Is everything safe?", asked of every one of the above at once.
         from .server.safety import Safety                        # noqa: PLC0415
         self.safety = Safety(self)
+        # And what happened over the last week, for the administrator who
+        # looks once a week (server/health_week.py).
+        from .server.health_week import HealthWeek                # noqa: PLC0415
+        self.health_week = HealthWeek(self, notify=self._tell_somebody)
         self.scanner.workload = self.workload
         self.straightener = straighten.Straightener(cfg, self.scanner,
                                                     hold=self.workload.catchup_hold)
@@ -454,7 +458,8 @@ class Services:
         # handed to each keeper that has moved onto it.
         from .server.supervisor import Supervisor                 # noqa: PLC0415
         self.supervisor = Supervisor(self.scanner)
-        for keeper in (self.digest, self.library_drives, self.index_copy, self.restore_tests):
+        for keeper in (self.digest, self.library_drives, self.index_copy, self.restore_tests,
+                       self.health_week):
             keeper.supervisor = self.supervisor
         # The backups, the drive watch and the archive guardian.
         for keeper in (self.backups, self.disks, self.guardian):
@@ -754,6 +759,7 @@ class Services:
         self.backups.start()
         self.digest.start()
         self.disks.start()
+        self.health_week.start()
         self.library_drives.start()
         self.restore_tests.start()
         self.index_copy.start()
@@ -2411,6 +2417,7 @@ def _console_blueprints() -> tuple:
     from .api.components_api import components_bp
     from .api.migration_api import migration_bp
     from .api.server_api import server_bp
+    from .api.setup_check_api import setup_check_bp
     from .api.import_api import import_bp
     from .api.mugil_api import mugil_bp, mugil_peer_bp
     from .api.mugil_update_api import mugil_update_bp, mugil_update_peer_bp
@@ -2435,6 +2442,8 @@ def _console_blueprints() -> tuple:
         components_bp,
         # The Server page restarts and stops the whole of Ninaivu.
         server_bp,
+        # The Setup check asks the firewall, Tailscale and every library disk.
+        setup_check_bp,
         # Importing an export reads any folder on this machine: console only.
         import_bp,
         # Two computers: the Secondary writes the originals it is sent to its
