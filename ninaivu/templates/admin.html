@@ -1749,6 +1749,24 @@
       <div class="cards" id="copies-destinations"></div>
     </div>
 
+    <div class="block" id="drill-block">
+      <div class="block-head">
+        <div>
+          <h2 data-i18n="Backup drill">Backup drill</h2>
+          <p class="hint" data-i18n="Restores a few photographs chosen at random from every copy into a temporary folder and checks each one against the library's content fingerprint. Nothing in the library or in a copy is changed, and the temporary folder is removed afterwards.">Restores a few photographs chosen at random from every copy
+            into a temporary folder and checks each one against the library's
+            content fingerprint. Nothing in the library or in a copy is
+            changed, and the temporary folder is removed afterwards.</p>
+        </div>
+        <div class="fold-actions">
+          <button class="btn primary" id="drill-run" type="button" data-i18n="Verify my backup">Verify my backup</button>
+        </div>
+      </div>
+      <p class="drill-headline" id="drill-headline" role="status" aria-live="polite"></p>
+      <div class="cards" id="drill-copies"></div>
+      <ul class="drill-files" id="drill-files" hidden></ul>
+    </div>
+
     <div class="block" id="dh-block">
       <div class="block-head">
         <div>
