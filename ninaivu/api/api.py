@@ -234,12 +234,11 @@ def _safe_under(path: Path, root: Path) -> bool:
 def _asset_file(asset: dict[str, Any], *, viewing: bool = False) -> Path:
     """Resolve an asset's real path, refusing anything outside its root.
 
-    *viewing*: for being looked at, not taken away or worked on. An original
-    that is not on this computer is sent for from the Secondary, and shown as
-    it is. Only when the Secondary cannot send it now, and only for one let
-    go before 4.0.1, is its smaller display copy shown instead
-    (ninaivu/mugil/display.py): poorer to look at, but better than nothing
-    until the original is brought back (ninaivu/mugil/free.py)."""
+    An original that is not on this computer (one let go before 4.0.1) is
+    sent for from the Secondary and shown as it is; while the Secondary
+    cannot send it, it is not found, until it is brought back
+    (ninaivu/mugil/free.py). *viewing* is kept for the callers that say what
+    the file is for."""
     root = Path(asset["root"]).resolve()
     path = (root / asset["rel_path"]).resolve()
     if not _safe_under(path, root):
@@ -250,27 +249,9 @@ def _asset_file(asset: dict[str, Any], *, viewing: bool = False) -> Path:
         from ..mugil import fetch                                # noqa: PLC0415
         fetched = fetch.original(_cfg(), asset["root"], asset["rel_path"])
         if fetched is None:
-            shown = _display_copy(asset) if viewing else None
-            if shown is not None:
-                return shown                 # the Secondary is away
             abort(404)
         return fetched
     return path
-
-
-def _display_copy(asset: dict[str, Any]) -> Path | None:
-    """The display copy of an original that is on the Secondary only."""
-    from ..mugil import display, fetch                           # noqa: PLC0415
-    cfg = _cfg()
-    found = fetch.record_of(cfg.state_dir, asset["root"], asset["rel_path"])
-    return display.find(cfg.state_dir, found["digest"]) if found else None
-
-
-def _as_file(row: dict[str, Any], path: Path) -> dict[str, Any]:
-    """*row* with the kind of file *path* is: a display copy is an AVIF or
-    an MP4 whatever the original was."""
-    ext = path.suffix.lower().lstrip(".")
-    return row if not ext or ext == str(row.get("ext") or "").lower() else {**row, "ext": ext}
 
 
 def _viewer() -> dict[str, Any]:
@@ -1762,7 +1743,6 @@ def _leaving(row: dict[str, Any], path: Path) -> tuple[Path, str]:
 def original(asset_id: int):
     row = _gate(db.get_asset(_conn(), asset_id))
     path = _asset_file(row, viewing=True)
-    row = _as_file(row, path)
     etag = None
     if _strips_location(row):
         # A family member is shown a photograph taken at home without the
@@ -1851,7 +1831,6 @@ def still_preview(asset_id: int):
     if (row.get("kind") or "") != "picture":
         abort(404)
     path = _asset_file(row, viewing=True)
-    row = _as_file(row, path)
     if not stills.needs_rendition(row["ext"], "picture") and not request.args.get("fit"):
         # Already something a browser reads; no second copy needed — unless
         # the viewer is away from home and asked for one that fits the
@@ -3194,21 +3173,6 @@ def _move_to_bin(data: dict[str, Any], *, ask_password: bool):
     allowed_ids = [row["id"] for row in allowed]
     if not allowed_ids:
         return jsonify({"deleted": 0, "failed": []})
-
-    # A video being compressed or replaced is not deleted under the job: a
-    # Replace finishing afterwards would put the smaller file back at the
-    # deleted video's place, where the next scan finds it as a new item.
-    from ..media import video_compress                           # noqa: PLC0415
-    busy = sorted(video_compress.busy(allowed_ids))
-    if busy:
-        return jsonify({
-            "error": ("This video is being compressed. Stop that on the Large files "
-                      "page, or let it finish, and then delete it."
-                      if len(busy) == 1 else
-                      f"{len(busy)} of these videos are being compressed. Stop that on "
-                      "the Large files page, or let it finish, and then delete them."),
-            "busy": busy,
-        }), 409
 
     # The password is the gate, and it is the only one.
     #

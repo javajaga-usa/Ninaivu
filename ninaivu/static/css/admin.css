@@ -686,22 +686,20 @@ body.admin .ios-install-banner {
 .lf-all { display: flex; align-items: center; gap: 8px; cursor: pointer; font-weight: 600; }
 .lf-bar-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 
-/* Mildest to strongest, left to right: Keep green, Compress yellow, Replace
-   orange, Delete red. Outlined like the console's other Delete buttons, and
+/* Keep green, Delete red. Outlined like the console's other Delete buttons, and
    filled with their colour on hover. */
 .lf-bar {
-  --lf-keep: #1f8f4e; --lf-replace: #d0640f; --lf-delete: var(--danger);
+  --lf-keep: #1f8f4e; --lf-delete: var(--danger);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) .lf-bar {
-    --lf-keep: #4cc985; --lf-replace: #ff9a4d;
+    --lf-keep: #4cc985;
   }
 }
 :root[data-theme="dark"] .lf-bar {
-  --lf-keep: #4cc985; --lf-replace: #ff9a4d;
+  --lf-keep: #4cc985;
 }
 .lf-tone.keep { --tone: var(--lf-keep); }
-.lf-tone.replace { --tone: var(--lf-replace); }
 .lf-tone.delete { --tone: var(--lf-delete); }
 .btn.lf-tone {
   color: var(--tone); font-weight: 580; background: transparent;
@@ -717,7 +715,6 @@ body.admin .ios-install-banner {
 .lf-check { flex: none; width: 18px; height: 18px; margin: 0; cursor: pointer; }
 
 /* Compress / Replace: the job's line under the file's details. */
-.lf-compress-note.warn { color: var(--warn, #b8862f); }
 .lf-job {
   margin-top: 6px; font-size: 12px; color: var(--text-2);
   display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
@@ -1951,15 +1948,6 @@ body.admin {
 .tc-found .btn { margin-left: auto; }
 .tc-by-hand { margin-top: 12px; }
 .tc-by-hand summary { cursor: pointer; color: var(--text-2); }
-
-/* Smaller videos: a trial (static/js/video-trial.js) */
-.vt-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 10px; }
-.vt-list li { display: grid; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
-.vt-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; }
-.vt-pair figure { margin: 0; min-width: 0; }
-.vt-pair video { width: 100%; max-height: 50vh; background: #000; border-radius: 8px; }
-.vt-pair figcaption { font-size: 0.85em; opacity: 0.8; }
-.vt-said { font-weight: 600; }
 
 /* Background jobs (job-status.js) ------------------------------------------ */
 

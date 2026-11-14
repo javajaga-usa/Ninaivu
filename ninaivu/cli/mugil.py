@@ -33,7 +33,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from .replica import use_utf8_output
+from . import use_utf8_output
 
 #: The environment a service started without a terminal still needs, so it
 #: finds the same index, models and logs as the copy that set it up.

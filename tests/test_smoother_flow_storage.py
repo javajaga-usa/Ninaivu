@@ -29,7 +29,6 @@ from ninaivu.cloud import engine as engine_mod
 from ninaivu.cloud import keyring, offsite as offsite_mod
 from ninaivu.cloud.offsite import Offsite
 from ninaivu.cloud.service import CloudService
-from ninaivu.media import video_compress as vc
 from ninaivu.media.scanner import CLAIM_STORAGE_CHECK
 from ninaivu.storage import backup, db, mirror as mirror_mod, resume
 from ninaivu.utils.location import LocationFreeCopies
@@ -205,90 +204,6 @@ def test_the_service_starts_a_run_when_the_engine_says_it_will_not_see_it(cfg, m
     service._engine = SimpleNamespace(running=True, library_changed=lambda: False)
     service.library_changed()
     assert started == [True]
-
-
-# -- 3. a compressed video goes to the cloud backup ----------------------------
-
-def _compress_setup(tmp_path, monkeypatch):
-    folder = tmp_path / "lib" / "2024"
-    folder.mkdir(parents=True)
-    (folder / "party.mov").write_bytes(b"V" * 4000)
-    row = {"id": 7, "root": str(tmp_path / "lib"), "rel_path": "2024/party.mov",
-           "filename": "party.mov", "duration": 10.0, "size": 4000}
-    monkeypatch.setattr(admin_api, "_copy_place", lambda cfg, r: (r["root"], folder))
-    monkeypatch.setattr(vc, "same_disk_space", lambda folder, needed: True)
-    monkeypatch.setattr(vc, "encode", lambda s, t, d, report, cancelled, **_: t.write_bytes(b"v"))
-    monkeypatch.setattr(vc, "verify", lambda *a: {"frame": None})
-    cfg = SimpleNamespace(db_path=tmp_path / "index.db")
-    return cfg, row, folder
-
-
-def test_a_finished_compression_tells_the_backup(tmp_path, monkeypatch):
-    cfg, row, _folder = _compress_setup(tmp_path, monkeypatch)
-    monkeypatch.setattr(admin_api, "_publish_copy", lambda *a: {"mode": "copy"})
-    heard = []
-    cloud = SimpleNamespace(library_changed=lambda: heard.append(True))
-    work = admin_api._compress_work(cfg, row, "copy", 1, cloud=cloud)
-    assert work({"id": "job"}, lambda p: None, lambda: False) == {"mode": "copy"}
-    assert heard == [True]
-
-
-def test_a_failed_compression_does_not(tmp_path, monkeypatch):
-    cfg, row, _folder = _compress_setup(tmp_path, monkeypatch)
-
-    def refused(*a):
-        raise vc.CompressError("no")
-
-    monkeypatch.setattr(admin_api, "_publish_copy", refused)
-    heard = []
-    work = admin_api._compress_work(cfg, row, "copy", 1,
-                                    cloud=SimpleNamespace(library_changed=lambda: heard.append(1)))
-    with pytest.raises(vc.CompressError):
-        work({"id": "job"}, lambda p: None, lambda: False)
-    assert heard == []
-
-
-# -- 4. half-written compressed copies left by a restart -------------------------
-
-def _video_library(tmp_path):
-    lib = tmp_path / "lib"
-    films, elsewhere = lib / "films", lib / "other"
-    films.mkdir(parents=True)
-    elsewhere.mkdir()
-    (films / "party.mov").write_bytes(b"V")
-    conn = sqlite3.connect(":memory:")
-    conn.row_factory = sqlite3.Row
-    conn.execute("CREATE TABLE assets (root TEXT, rel_path TEXT, kind TEXT, trashed INT)")
-    conn.execute("INSERT INTO assets VALUES (?, 'films/party.mov', 'video', 0)", (str(lib),))
-    return conn, films, elsewhere
-
-
-def test_leftovers_beside_indexed_videos_are_cleared_and_nothing_else(tmp_path):
-    conn, films, elsewhere = _video_library(tmp_path)
-    old = time.time() - 2 * vc.STALE_TEMP_SECONDS
-    stale = vc.temporary_for(films, "party", "0123456789ab")
-    other = vc.temporary_for(films, "holiday", "ba9876543210")
-    fresh = vc.temporary_for(films, "party", "aaaaaaaaaaaa")    # an encode still writing
-    unrelated = films / "party.tmp"
-    beyond = vc.temporary_for(elsewhere, "party", "0123456789ab")  # no indexed video here
-    for path in (stale, other, fresh, unrelated, beyond):
-        path.write_bytes(b"x")
-    for path in (stale, other, unrelated, beyond):
-        os.utime(path, (old, old))
-    assert vc.clear_leftovers(conn) == 2
-    assert not stale.exists() and not other.exists()
-    assert fresh.exists() and unrelated.exists() and beyond.exists()
-
-
-def test_the_copy_of_a_compression_still_queued_is_left(tmp_path, monkeypatch):
-    conn, films, _elsewhere = _video_library(tmp_path)
-    monkeypatch.setitem(vc._jobs, "cafecafecafe", {"state": "queued"})
-    old = time.time() - 2 * vc.STALE_TEMP_SECONDS
-    queued = vc.temporary_for(films, "party", "cafecafecafe")
-    queued.write_bytes(b"x")
-    os.utime(queued, (old, old))
-    assert vc.clear_leftovers(conn) == 0
-    assert queued.exists()
 
 
 # -- 5. the off-site copy after a refusal ----------------------------------------

@@ -60,13 +60,20 @@ def test_the_rotate_button_turns_the_faces(scanned, as_family):
 
 # -- C-51: the probe caches stay bounded ---------------------------------------
 
-def test_the_video_caches_start_again_when_full(monkeypatch):
-    from ninaivu.media import video_compress
-    seen: dict = {}
-    monkeypatch.setattr(video_compress, "SEEN_MOST", 3)
+def test_the_damage_cache_starts_again_when_full(monkeypatch, tmp_path):
+    import subprocess
+    from types import SimpleNamespace
+    from ninaivu.media import media, video_damage
+    monkeypatch.setattr(video_damage, "SEEN_MOST", 3)
+    monkeypatch.setattr(video_damage, "_damage_seen", {})
+    monkeypatch.setattr(media, "FFPROBE", "ffprobe")
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: SimpleNamespace(
+        returncode=1, stderr=b"moov atom not found"))
     for n in range(7):
-        video_compress._remember(seen, (str(n), 0, 0.0), True)
-    assert len(seen) <= 3 and ("6", 0, 0.0) in seen
+        clip = tmp_path / f"{n}.mp4"
+        clip.write_bytes(b"x")
+        assert video_damage.damaged(clip) is True
+    assert len(video_damage._damage_seen) <= 3
 
 
 # -- C-52: a manifest cell never runs as a formula -----------------------------

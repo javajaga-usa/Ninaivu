@@ -16,7 +16,7 @@ import sqlite3
 import sys
 from pathlib import Path
 
-from .replica import use_utf8_output
+from . import use_utf8_output
 
 #: How each class is named in the printed report.
 LABELS = {

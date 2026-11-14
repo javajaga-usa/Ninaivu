@@ -50,10 +50,10 @@ Windows, a LaunchAgent on a Mac) when someone turns it on.
   Applications, it keeps to `~/.ninaivu` and
   `~/Library/Application Support/Ninaivu`, as an installed app would.
   `open -a Ninaivu --args --tray` opens it minimised to its menu-bar icon.
-- **Linux.** One download, `linux-x64`, for a 64-bit PC running Debian 12
-  or 13, Ubuntu or another current distribution; every release is opened on
-  Debian 12 and 13 before it is published. There is no arm64 (Raspberry Pi)
-  download.
+- **Linux.** One download, `linux-x64`, for a 64-bit PC running Debian 13,
+  Ubuntu or another current distribution; every release is opened on
+  Debian 13 before it is published. Debian 12 is not supported, and there
+  is no arm64 download.
   `./ninaivu --server [PHOTOS] [options]` runs the server alone in
   the terminal, with the same folders; `./ninaivu --tray` opens Ninaivu
   minimised to its tray icon; `./ninaivu --where` prints the folders.
@@ -307,9 +307,9 @@ had, the TV album still runs and the TV can be given its address by hand.
 ## Tuning to the machine
 
 At every start Ninaivu measures the computer (its cores, memory, graphics
-processor, whether it is a Raspberry Pi or another single-board computer, and
+processor, whether it is a single-board computer, and
 whether the library is on a spinning disk) and picks a profile: **Small box**
-(a Pi, under 6 GB of memory, or two cores), **Everyday computer**, or
+(under 6 GB of memory, or two cores), **Everyday computer**, or
 **Powerful computer** (eight cores and 16 GB, or a graphics processor and
 16 GB). The profile sizes the indexing workers, the analysis threads, the web
 threads, the image model's batch, the moments described per video, the backup

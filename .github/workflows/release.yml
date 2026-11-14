@@ -467,8 +467,9 @@ jobs:
             installers/linux/build/*-packages.txt
 
   # The Linux download on Debian, as a household's Debian desktop has it:
-  # the archive linux built, unpacked and used on Debian 12 (bookworm) and
-  # 13 (trixie) instead of the Ubuntu runner it was built on. It carries its
+  # the archive linux built, unpacked and used on Debian 13 (trixie) instead
+  # of the Ubuntu runner it was built on. Debian 12 is not supported or
+  # checked since 4.3. It carries its
   # own Python, so only what any Debian desktop already has is installed
   # here: an X server (Xvfb, so the Control Panel can be drawn) and the X,
   # font and GL libraries a desktop's Tk and OpenCV find there, and FriBiDi,
@@ -484,7 +485,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        debian: ["12", "13"]
+        debian: ["13"]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2

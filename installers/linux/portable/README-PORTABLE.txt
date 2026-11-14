@@ -3,9 +3,8 @@ Ninaivu, portable, for Linux
 
 ninaivu and app/ carry the program and its own Python and packages, so the computer needs none. The default library data
 lives in ~/.ninaivu in your home folder and stays when the program is deleted
-or replaced. For a 64-bit PC (x86-64) running Debian 12 or 13, Ubuntu or
-another current distribution. There is no download for arm64 computers such
-as a Raspberry Pi.
+or replaced. For a 64-bit PC (x86-64) running Debian 13, Ubuntu or
+another current distribution. There is no download for arm64 computers.
 
 To start
   1. Extract the archive somewhere you can write to (your home folder, or a

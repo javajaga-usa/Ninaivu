@@ -652,18 +652,12 @@ def test_the_sidecar_schedule_outlives_an_unexpected_error(tmp_path, clock, capl
 
 def _group_3(tmp_path):
     from ninaivu.mugil.courier import Courier
-    from ninaivu.mugil.display import DisplayCopies
     from ninaivu.mugil.wake import Waker
 
     cfg = SimpleNamespace(state_dir=str(tmp_path), mugil_role="", mugil_partner_url="")
-    display = DisplayCopies(cfg, lambda: None)
-    # Nothing is made since 4.0.1 (wanted() is False); the keeper itself is
-    # still checked until its code goes.
-    display.wanted = lambda: True
     return [
         (Courier(cfg, lambda: None), "mugil-keeper", "every 600 seconds"),
         (Waker(cfg), "mugil-wake", "every 30 seconds"),
-        (display, "mugil-display", "every 600 seconds"),
     ]
 
 
@@ -714,29 +708,6 @@ def test_the_first_copy_after_pairing_only_looks_for_itself(tmp_path, monkeypatc
         until(lambda: courier._wait() == courier_mod.LOOK_EVERY)
     finally:
         courier.stop(join=True)
-
-
-def test_display_copies_start_at_once_and_a_stop_cuts_a_round_short(tmp_path):
-    display = _group_3(tmp_path)[2][0]
-    display.supervisor = Supervisor()
-    inside = threading.Event()
-    display.wanted = lambda: True
-
-    def run_once() -> int:
-        inside.set()
-        display._stop.wait(5)
-        return 0
-
-    display.run_once = run_once
-    display.keep()
-    try:
-        assert inside.wait(5)                   # no wait before the first round
-        began = time.monotonic()
-        display.stop(join=True)
-        assert time.monotonic() - began < 2
-        assert display.supervisor.state("mugil-display") == sup.STOPPED
-    finally:
-        assert display.supervisor.stop(timeout=5) == []
 
 
 # -- group 4: the AI passes ---------------------------------------------------------

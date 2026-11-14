@@ -1,13 +1,11 @@
 /**
  * The console's Large files list: one set of buttons for the ticked rows.
  *
- * It had Compress, Replace, Keep and Delete on every row, which on a list of
- * forty large videos is a hundred and sixty buttons and no way to do the
- * same thing to several at once. Now each row has a tick box and the
- * buttons sit once, above the list: Keep, Compress & Replace (Compress and
- * Replace were two buttons until they became one step) and Delete. The server's answers are stubbed here so
- * the test needs no multi-gigabyte files; what it checks is that the buttons
- * send what the per-row ones sent, once per chosen file or once for all.
+ * Each row has a tick box and the buttons sit once, above the list: Keep
+ * and Delete. (Until 4.3 there was a Compress & Replace beside them; making
+ * videos smaller was removed.) The server's answers are stubbed here so the
+ * test needs no multi-gigabyte files; what it checks is that each button
+ * sends one request for everything that is ticked.
  *
  *   node tests/large_files_ui.mjs      (wants an instance on 3000 and 5000,
  *                                       admin dad / correcthorse1)
@@ -21,8 +19,7 @@ let items = [
   { id: 903, filename: 'VID_20220618_232007_HDR10.mp4', kind: 'video', size: 5.5 * GB, duration: 358, folder: 'Ninaivu Archive/2022/06/19' },
   { id: 904, filename: 'panorama.tif', kind: 'image', size: 1.2 * GB, folder: 'Scans' },
 ];
-const jobs = new Map();       // asset id -> job
-const asked = { compress: [], keep: [], del: [] };
+const asked = { compress: 0, keep: [], del: [] };
 
 const b = await launch();
 const p = await b.newPage({ viewport: { width: 1400, height: 900 } });
@@ -40,18 +37,9 @@ await p.route('**/api/admin/large-files/keep', (route) => {
   items = items.filter((item) => !ids.includes(item.id));
   return reply(route, { kept: ids.length });
 });
-await p.route('**/api/admin/large-files/compress', (route) => {
-  if (route.request().method() === 'GET') {
-    return reply(route, { jobs: [...jobs.values()], unavailable: null, preset: 'MP4 (H.264), up to 1080p' });
-  }
-  const body = route.request().postDataJSON();
-  asked.compress.push(body);
-  if (body.mode === 'replace' && body.password !== 'correcthorse1') {
-    return reply(route, { needs_password: true, error: 'That password is not right.' }, 401);
-  }
-  const job = { id: `j${body.id}`, asset_id: body.id, state: 'queued', ahead: jobs.size, progress: 0 };
-  jobs.set(body.id, job);
-  return reply(route, { job }, 202);
+await p.route('**/api/admin/large-files/compress*', (route) => {
+  asked.compress += 1;                 // the page must never ask for this again
+  return reply(route, { error: 'gone' }, 404);
 });
 await p.route('**/api/delete', (route) => {
   const body = route.request().postDataJSON();
@@ -71,21 +59,21 @@ await p.waitForSelector('.lf-row', { timeout: 15000 });
 
 ok('every file has a row', (await p.$$('.lf-row')).length === 4);
 ok('every row has a tick box', (await p.$$('.lf-row .lf-check')).length === 4);
-ok('no row carries its own Compress/Replace/Keep/Delete',
+ok('no row carries its own Keep or Delete',
   (await p.$$('.lf-row button')).length === 0);
 ok('the bar is shown above the list', await p.evaluate(() => {
   const bar = document.querySelector('#lf-bar');
   const list = document.querySelector('#lf-list');
   return !bar.hidden && (bar.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING);
 }));
-ok('there is no separate Compress button', !(await p.$('#lf-compress')));
-ok('Replace reads Compress & Replace', (await p.textContent('#lf-replace')).trim() === 'Compress & Replace',
-  await p.textContent('#lf-replace'));
+ok('nothing offers to compress a video',
+  !(await p.$('#lf-compress')) && !(await p.$('#lf-replace')) && !(await p.$('#lf-tidy'))
+  && !(await p.$('#lf-replace-modal')) && !(await p.$('#vt-block')));
 const disabled = () => p.evaluate(() => Object.fromEntries(
-  ['replace', 'keep', 'delete'].map((k) => [k, document.querySelector(`#lf-${k}`).disabled])));
+  ['keep', 'delete'].map((k) => [k, document.querySelector(`#lf-${k}`).disabled])));
 let state = await disabled();
 ok('with nothing ticked every button waits',
-  state.replace && state.keep && state.delete, JSON.stringify(state));
+  state.keep && state.delete, JSON.stringify(state));
 
 /* ---------- ticking: the box, the row, and Choose all ---------- */
 
@@ -97,65 +85,12 @@ ok('a ticked row is marked', await p.$eval('.lf-row[data-id="903"]', (n) => n.cl
 ok('the Choose all box is half-ticked', await p.$eval('#lf-all', (n) => n.indeterminate));
 state = await disabled();
 ok('with videos ticked every button is ready',
-  !state.replace && !state.keep && !state.delete, JSON.stringify(state));
+  !state.keep && !state.delete, JSON.stringify(state));
 
 await p.click('#lf-all');
 ok('Choose all ticks every row', (await p.$$('.lf-row.chosen')).length === 4);
 await p.click('#lf-all');
 ok('and again clears them', (await p.$$('.lf-row.chosen')).length === 0);
-
-/* ---------- a photo alone cannot be compressed ---------- */
-
-await p.click('.lf-row[data-id="904"] .lf-check');
-state = await disabled();
-ok('a photo alone leaves Compress & Replace off but Keep and Delete on',
-  state.replace && !state.keep && !state.delete, JSON.stringify(state));
-await p.click('.lf-row[data-id="904"] .lf-check');
-
-/* ---------- Compress & Replace: one password, one request per ticked video ---------- */
-
-await p.click('.lf-row[data-id="901"] .lf-check');
-await p.click('.lf-row[data-id="902"] .lf-check');
-await p.click('.lf-row[data-id="904"] .lf-check');      // a photo is left out
-await p.click('#lf-replace');
-await p.waitForSelector('#lf-replace-modal:not([hidden])');
-ok('the dialog asks about both videos, not the photo',
-  (await p.textContent('#lf-replace-what')).includes('2 files'), await p.textContent('#lf-replace-what'));
-await p.fill('#lf-replace-password', 'wrong');
-await p.click('#lf-replace-confirm');
-await p.waitForSelector('#lf-replace-error:not([hidden])');
-ok('a wrong password is said in the dialog', (await p.textContent('#lf-replace-error')).length > 0);
-await p.fill('#lf-replace-password', 'correcthorse1');
-await p.click('#lf-replace-confirm');
-await p.waitForSelector('#lf-replace-modal', { state: 'hidden' });
-await p.waitForFunction(() => document.querySelectorAll('.lf-job').length === 2, null, { timeout: 8000 });
-ok('Compress & Replace asked once for each ticked video, in order, with the password',
-  JSON.stringify(asked.compress.map((c) => [c.id, c.mode, c.password])) === JSON.stringify(
-    [[901, 'replace', 'wrong'], [901, 'replace', 'correcthorse1'], [902, 'replace', 'correcthorse1']]),
-  JSON.stringify(asked.compress));
-ok('each compressing row has its own line and Stop',
-  (await p.$$('.lf-row .lf-job button')).length === 2);
-ok('started videos are no longer ticked; the photo still is',
-  JSON.stringify(await p.$$eval('.lf-row.chosen', (ns) => ns.map((n) => n.dataset.id))) === '["904"]');
-
-/* ---------- a video already going is left out ---------- */
-
-await p.click('.lf-row[data-id="904"] .lf-check');
-await p.click('.lf-row[data-id="901"] .lf-check');     // already compressing
-await p.click('.lf-row[data-id="903"] .lf-check');
-asked.compress.length = 0;
-await p.click('#lf-replace');
-await p.waitForSelector('#lf-replace-modal:not([hidden])');
-ok('the dialog names only the video it can still act on',
-  (await p.textContent('#lf-replace-what')).includes('VID_20220618_232007_HDR10.mp4'),
-  await p.textContent('#lf-replace-what'));
-await p.fill('#lf-replace-password', 'correcthorse1');
-await p.press('#lf-replace-password', 'Enter');
-await p.waitForSelector('#lf-replace-modal', { state: 'hidden' });
-ok('and asks for the free video only',
-  JSON.stringify(asked.compress.map((c) => [c.id, c.mode])) === JSON.stringify([[903, 'replace']]),
-  JSON.stringify(asked.compress));
-await p.click('.lf-row[data-id="901"] .lf-check');
 
 /* ---------- Keep: one request for all ticked ---------- */
 
@@ -196,17 +131,9 @@ ok('an undamaged video is not marked',
   !(await p.textContent('.lf-row[data-id="907"] .lf-meta')).includes('damaged'));
 await p.click('.lf-row[data-id="906"] .lf-check');
 state = await disabled();
-ok('a damaged video alone can be kept or deleted, not compressed',
-  state.replace && !state.keep && !state.delete, JSON.stringify(state));
-await p.click('.lf-row[data-id="907"] .lf-check');
-asked.compress.length = 0;
-await p.click('#lf-replace');
-await p.waitForSelector('#lf-replace-modal:not([hidden])');
-await p.fill('#lf-replace-password', 'correcthorse1');
-await p.click('#lf-replace-confirm');
-await p.waitForFunction(() => document.querySelectorAll('.lf-row .lf-job button').length === 1, null, { timeout: 8000 });
-ok('Compress & Replace with both ticked asks only for the undamaged one',
-  JSON.stringify(asked.compress.map((c) => c.id)) === '[907]', JSON.stringify(asked.compress));
+ok('a damaged video can be kept or deleted', !state.keep && !state.delete, JSON.stringify(state));
+await p.click('.lf-row[data-id="906"] .lf-check');
+ok('the page never asked the server to compress anything', asked.compress === 0, String(asked.compress));
 
 /* ---------- a phone: the bar fits ---------- */
 

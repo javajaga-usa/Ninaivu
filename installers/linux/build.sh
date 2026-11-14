@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build Ninaivu for Linux, portable: one folder, in a .tar.gz, for a 64-bit PC
-# or an arm64 computer (a Raspberry Pi 4 or 5, an Ampere or Graviton server).
+# or an arm64 computer (an Ampere or Graviton server, a runner on a Mac).
 #
 #   bash installers/linux/build.sh
 #

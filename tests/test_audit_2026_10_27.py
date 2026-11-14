@@ -23,7 +23,6 @@ from __future__ import annotations
 import io
 import json
 import shutil
-import sys
 import time
 from types import SimpleNamespace
 
@@ -178,28 +177,8 @@ def test_an_upload_with_room_is_written_whole(tmp_path, monkeypatch):
 
 # --- A-05 ------------------------------------------------------------------------
 
-def test_no_python_runs_between_fork_and_exec_for_ffmpeg():
-    from pathlib import Path
-    for name in ("ninaivu/media/video_trial.py", "ninaivu/mugil/display.py"):
-        source = (Path(__file__).resolve().parents[1] / name).read_text(encoding="utf-8")
-        assert "preexec_fn=" not in source, name
-
-
-def test_the_lowered_run_gives_what_subprocess_run_gave():
-    from ninaivu.mugil import display
-    done = display.run_lowered([sys.executable, "-c",
-                                "import os, sys; print(os.nice(0) if hasattr(os, 'nice') else 10);"
-                                "sys.stderr.write('said'); sys.exit(3)"], timeout=30)
-    assert done.returncode == 3 and done.stderr == b"said"
-    if sys.platform != "win32":
-        assert int(done.stdout) >= 10                   # lowered from the parent
-
-
-def test_the_lowered_run_stops_a_program_that_takes_too_long():
-    import subprocess
-    from ninaivu.mugil import display
-    with pytest.raises(subprocess.TimeoutExpired):
-        display.run_lowered([sys.executable, "-c", "import time; time.sleep(30)"], timeout=0.5)
+# The smaller-videos trial and the display copies (media/video_trial.py,
+# mugil/display.py) were removed, and these three tests with them.
 
 
 # --- B-01 / B-02 ----------------------------------------------------------------

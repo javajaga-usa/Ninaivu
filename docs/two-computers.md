@@ -66,10 +66,6 @@ films. Only what changed goes. Each file is checked, and `replica.json` goes
 last, so a half-sent copy leaves the one before whole. On the Secondary it
 lands in `mugil-handover/` in the state folder.
 
-(Until 4.0 the same copy could also be written to a shared folder for a
-Raspberry Pi to serve. That way is retired: the Secondary is the always-on
-computer now.)
-
 The Secondary serves it from its own Ninaivu, on its own family app (port
 80). There is nothing to set up on the Secondary: no service of its own, no
 `--map` and no sudo. As soon as it is paired and the first hand-over has
@@ -110,32 +106,6 @@ them: the Primary by the name it paired with ("the main computer" when it
 gave none), this one by the house name or the computer's name. A photograph of a library the Secondary does not keep yet opens
 once its originals have arrived.
 
-### The old way: a service of its own
-
-Before 4.0 a second, read-only Ninaivu served the hand-over as a service of
-its own, with each of the Primary's library folders mounted read-only at the
-Primary's own path. It still works, for a Pi or a Secondary already set up
-so, but a paired Secondary does not need it:
-
-```bash
-cd /opt/ninaivu
-sudo -u ninaivu .venv/bin/python -m ninaivu replica unit \
-    --from ~ninaivu/.ninaivu/mugil-handover \
-    --map "/Volumes/JApple Extreme SSD/NinaivuMaster/Ninaivu Archive=/srv/n300/originals/Ninaivu Archive" \
-    --primary http://<mac>.<tailnet>.ts.net \
-    --output /tmp/ninaivu-replica.service
-sudo cp /tmp/ninaivu-replica.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now ninaivu-replica
-```
-
-It prints the few commands to run once as root before the first start.
-`--primary` is the Primary's family app address; `--wake <network address>`
-lets a change asked for there wake the Primary. If you used this way, stop the
-service (`sudo systemctl disable --now ninaivu-replica`) once the Secondary
-serves the view itself: both answering on port 80 would clash.
-`ninaivu replica status --from <folder>` says what a hand-over holds.
-
 ## Phone uploads while the Primary sleeps
 
 A sync app on a phone (PhotoSync and its kind) sends photographs to the phone
@@ -173,8 +143,8 @@ A library that used it still has originals that are on the Secondary only.
 They are written down in the index (`mugil_let_go`) and nothing treats them
 as missing: a rescan, the integrity check, the repair and the second copy
 all pass over them. Opened, such an original is sent for from the Secondary
-and shown as it is. Only when the Secondary cannot send it just then is its
-old smaller copy shown instead.
+and shown as it is. While the Secondary cannot send it, it cannot be opened:
+the old smaller copies are no longer kept or shown.
 
 **Bring every original back** (Mugil → Two computers, shown while any is
 away) copies each one from the Secondary to the place it had, with its own
@@ -182,8 +152,8 @@ modified time, and checks it against its fingerprint. It is one piece of
 work with its progress on the page; it waits while heavier work runs, stops
 when the Primary's disk would have less than 2 GB left, and can be stopped
 and started again. The two cannot be unpaired until every original is back.
-When none is away, the smaller copies (`display/` in the state folder) are
-removed.
+The smaller copies earlier versions kept (`display/` in the state folder)
+are removed at the next start.
 
 ## The copy out of the house, from the always-on computer
 
@@ -284,8 +254,8 @@ Notifications are set to go (a webhook, ntfy, or email).
 
 When the Secondary runs an older Ninaivu than the Primary, the Primary's
 Mugil page offers **Update the Secondary**. Choose the Linux portable
-download of the version the Primary runs (`Ninaivu-…-linux-x64-portable.tar.gz`,
-or `arm64` for a Pi), from the release page; Ninaivu never fetches it
+download of the version the Primary runs (`Ninaivu-…-linux-x64-portable.tar.gz`),
+from the release page; Ninaivu never fetches it
 itself. The Primary refuses a download of any other version, and sends it
 over the pairing, signed like the originals.
 

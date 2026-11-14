@@ -14,8 +14,6 @@ import threading
 
 import pytest
 
-from ninaivu.api import admin_api
-from ninaivu.media import video_compress as vc
 from ninaivu.server import auth
 from ninaivu.storage import db
 from test_large_library import ROOT, _fill, _open, _plans
@@ -40,27 +38,6 @@ def _on_a_thread(work):
     if "error" in out:
         raise out["error"]
     return out.get("value")
-
-
-# --- P-01: start-up ran on a closed connection ------------------------------
-
-def test_carrying_on_compressions_leaves_the_start_up_threads_connection_open(cfg):
-    """resume_compressions closed the thread's own connection, the one every
-    later step of start-up was handed: no interrupted job was carried on, the
-    screenshot rule and the warm-up never ran, and every start walked the
-    whole library."""
-    db.init_db(cfg.db_path)
-    vc._reset_for_tests()
-
-    def boot():
-        db.connect(cfg.db_path).execute("SELECT 1")
-        admin_api.resume_compressions(cfg)
-        return db.connect(cfg.db_path).execute("SELECT COUNT(*) FROM assets").fetchone()[0]
-
-    try:
-        assert _on_a_thread(boot) == 0
-    finally:
-        vc._reset_for_tests()
 
 
 def test_a_connection_somebody_closed_is_opened_again(tmp_path):

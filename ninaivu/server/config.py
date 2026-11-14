@@ -1198,19 +1198,15 @@ class Config:
     #: The most items one gallery request may ask for.
     max_page_size: int = 1000
 
-    # The family's read-only view served from a hand-over (ninaivu/replica/):
-    # on the Secondary, from what the Primary sent (mugil/handover.py). The
-    # Pi's own hand-over folder (``replica_dir``, ``replica_every_minutes``)
-    # was retired in 4.0; a config.json that still names them loads as it
-    # is, the two keys passed over.
-    #: From the command line: the hand-over folder this process serves a
-    #: read-only copy from (``--replica-of``). Empty: not a replica.
+    # The family's read-only view on the Secondary, served from what the
+    # Primary sent (mugil/handover.py, mugil/family_view.py). Set by the
+    # family view for its own copy of the settings, never saved.
+    #: The hand-over folder the read-only view is served from. Empty: this
+    #: is not a read-only view.
     replica_from: str = setting("", runtime=True)
-    #: The Primary's family app address, to send people to while it is
-    #: awake (``--replica-primary``).
+    #: The Primary's family app address, to send people to while it is awake.
     replica_primary_url: str = setting("", runtime=True)
-    #: The Primary's network (MAC) address, to wake it with
-    #: (``--replica-wake``).
+    #: The Primary's network (MAC) address, to wake it with.
     replica_wake_mac: str = setting("", runtime=True)
     #: The index file, when it is not ``index.db`` in the state folder: the
     #: replica serves each hand-over from a file of its own.

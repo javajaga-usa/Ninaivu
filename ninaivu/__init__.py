@@ -304,15 +304,6 @@ class Services:
                                      hold=lambda: self.workload.hold("upload"),
                                      notify=self._tell_somebody,
                                      file_backups=self._file_phone_backups)
-        # And the display copies the Primary works from (ninaivu/mugil/display.py).
-        from .mugil.display import DisplayCopies                # noqa: PLC0415
-        self.mugil_display = DisplayCopies(cfg, lambda: db.connect(cfg.db_path),
-                                           hold=lambda: self.workload.hold("upload"))
-        # And the smaller-videos trial, only once somebody starts it
-        # (media/video_trial.py).
-        from .media.video_trial import VideoTrial               # noqa: PLC0415
-        self.video_trial = VideoTrial(cfg, lambda: db.connect(cfg.db_path),
-                                      hold=lambda: self.workload.hold("upload"))
         # And the family app's read-only copy on the Secondary (mugil/handover.py).
         from .mugil.handover import Handover                    # noqa: PLC0415
         self.mugil_handover = Handover(cfg, hold=lambda: self.workload.hold("upload"))
@@ -455,9 +446,9 @@ class Services:
         # The second copy, the off-site copy, the sidecars and the catch-up.
         for keeper in (self.mirror, self.offsite, self.xmp, self.xmp_reader, self.catchup):
             keeper.supervisor = self.supervisor
-        # The two computers' keepers: sending the originals, waking the
-        # Primary, and the display copies.
-        for keeper in (self.mugil_courier, self.mugil_waker, self.mugil_display,
+        # The two computers' keepers: sending the originals and waking the
+        # Primary.
+        for keeper in (self.mugil_courier, self.mugil_waker,
                        self.mugil_handover, self.mugil_family_view):
             keeper.supervisor = self.supervisor
         # The schedule of the nightly storage check.
@@ -668,15 +659,15 @@ class Services:
         except OSError:
             pass
 
-    def _clear_display_copies(self) -> None:
-        """The smaller copies made up to 4.0.0 go once every original is on
-        this computer again (mugil/free.py). Never stops the start."""
+    def _clear_old_copies(self) -> None:
+        """What the retired display copies, smaller-videos trial and video
+        compression left in the state folder goes (mugil/free.py). Never
+        stops the start, and never touches the library."""
         try:
             from .mugil import free                             # noqa: PLC0415
-            from .storage import db                             # noqa: PLC0415
-            free.clear_display_copies(self.cfg.state_dir, db.connect(self.cfg.db_path))
+            free.clear_old_copies(self.cfg.state_dir)
         except Exception:                                       # noqa: BLE001
-            logging.getLogger(__name__).debug("the display copies were left as they are",
+            logging.getLogger(__name__).debug("the old smaller copies were left as they are",
                                               exc_info=True)
 
     def _wait_for_a_primary(self) -> None:
@@ -752,10 +743,8 @@ class Services:
         self.index_copy.start()
         self.mirror.keep()
         self.mugil_courier.keep()
-        self.mugil_display.keep()        # makes nothing since 4.0.1 (mugil/display.py)
-        self._clear_display_copies()
+        self._clear_old_copies()
         self.mugil_handover.keep()
-        self.video_trial.keep()
         self._wait_for_a_primary()
         self.repairer.keep()
         self.offsite.keep()
@@ -807,7 +796,6 @@ class Services:
             self._resume_archive(vision=_VisionOnceLoaded(self, model_ready))
             self._sweep_the_bin()
             self._tidy_records()
-            self._clear_compress_leftovers()
             # The scan, the folder watchers and the interrupted jobs before the
             # model too. They waited for it, and on a Pi it can take a minute
             # to load (a first start downloads it): new photographs were not
@@ -1182,26 +1170,6 @@ class Services:
             backup.tidy_records(self.cfg)
         except Exception:                                    # noqa: BLE001
             logging.getLogger(__name__).exception("could not tidy old records")
-
-    def _clear_compress_leftovers(self) -> None:
-        """Half-written compressed videos a restart left beside the library's
-        videos (video_compress.clear_leftovers), then the compressions it
-        interrupted queued again (admin_api.resume_compressions). Their hidden
-        copies, often gigabytes, used to stay where they were for good, and
-        the videos waited for somebody to press Compress again."""
-        try:
-            from .media import video_compress                # noqa: PLC0415
-            from .storage import db                          # noqa: PLC0415
-            video_compress.clear_leftovers(db.connect(self.cfg.db_path))
-        except Exception:                                    # noqa: BLE001
-            logging.getLogger(__name__).exception(
-                "could not clear half-written compressed videos")
-        try:
-            from .api.admin_api import resume_compressions   # noqa: PLC0415
-            resume_compressions(self.cfg, cloud=self.cloud)
-        except Exception:                                    # noqa: BLE001
-            logging.getLogger(__name__).exception(
-                "could not carry on the interrupted video compressions")
 
     def _keep_the_bin_swept(self) -> None:
         """The bin swept and the records tidied once a day, after start-up's.
@@ -1648,8 +1616,6 @@ class Services:
                             ("mugil_courier", "sending the originals"),
                             ("mugil_beacon", "answering the Primary"),
                             ("mugil_waker", "waking the Primary"),
-                            ("mugil_display", "making display copies"),
-                            ("video_trial", "the smaller-videos trial"),
                             ("mugil_handover", "sending the family app's copy"),
                             ("mugil_free", "bringing originals back"),
                             ("mugil_rebuild", "rebuilding the library"),

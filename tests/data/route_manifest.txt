@@ -53,12 +53,6 @@ admin | GET                  | /api/admin/journal/item/<int:asset_id> | admin | 
 admin | GET                  | /api/admin/keepsake | admin | reads | - | admin.keepsake_status | -
 admin | POST                 | /api/admin/keepsake | admin | writes | same origin | admin.keepsake_start | -
 admin | GET                  | /api/admin/large-files | admin | reads | - | admin.large_files | -
-admin | GET                  | /api/admin/large-files/compress | admin | reads | - | admin.compress_jobs | -
-admin | POST                 | /api/admin/large-files/compress | admin | writes | same origin | admin.compress_large_file | -
-admin | GET                  | /api/admin/large-files/compress/<job_id> | admin | reads | - | admin.compress_job | -
-admin | POST                 | /api/admin/large-files/compress/<job_id>/cancel | admin | writes | same origin | admin.compress_cancel | -
-admin | GET                  | /api/admin/large-files/extra-copies | admin | reads | - | admin.extra_copies | -
-admin | POST                 | /api/admin/large-files/extra-copies | admin | writes | same origin | admin.tidy_extra_copies | -
 admin | POST                 | /api/admin/large-files/keep | admin | writes | same origin | admin.keep_large_files | -
 admin | DELETE               | /api/admin/libraries | admin | writes | same origin | admin.remove_library | -
 admin | GET                  | /api/admin/libraries | admin | reads | - | admin.libraries | -
@@ -162,12 +156,6 @@ admin | GET                  | /api/admin/uploads | admin | reads | - | admin.pe
 admin | POST                 | /api/admin/uploads/<int:upload_id>/approve | admin | writes | same origin | admin.approve_upload | -
 admin | GET                  | /api/admin/uploads/<int:upload_id>/preview | admin | reads | - | admin.pending_upload_preview | -
 admin | POST                 | /api/admin/uploads/<int:upload_id>/reject | admin | writes | same origin | admin.reject_upload | -
-admin | GET                  | /api/admin/video-trial | admin | reads | - | admin.video_trial_status | -
-admin | GET                  | /api/admin/video-trial/<int:asset_id>/<which> | admin | reads | - | admin.video_trial_file | -
-admin | POST                 | /api/admin/video-trial/<int:asset_id>/verdict | admin | writes | same origin | admin.video_trial_verdict | -
-admin | POST                 | /api/admin/video-trial/clear | admin | writes | same origin | admin.video_trial_clear | -
-admin | POST                 | /api/admin/video-trial/pause | admin | writes | same origin | admin.video_trial_pause | -
-admin | POST                 | /api/admin/video-trial/start | admin | writes | same origin | admin.video_trial_start | -
 admin | GET                  | /api/admin/workload | admin | reads | - | server.workload_status | -
 admin | POST                 | /api/admin/workload | admin | writes | same origin | server.workload_settings | -
 admin | GET                  | /api/admin/xmp | admin | reads | - | admin.xmp_status | -

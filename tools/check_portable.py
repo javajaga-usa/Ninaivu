@@ -134,8 +134,7 @@ def unpack(archive: Path, into: Path) -> Path:
             if hasattr(tarfile, "tar_filter"):
                 tar.extractall(staging, filter="tar")
             else:
-                # Python 3.11 before 3.11.4 (Debian 12's own, which the
-                # Debian check runs this with) has no filters; the archive
+                # A Python older than 3.11.4 has no filters; the archive
                 # is the one this workflow just built.
                 tar.extractall(staging)  # noqa: S202
     elif archive.suffix == ".zip" and sys.platform == "darwin":

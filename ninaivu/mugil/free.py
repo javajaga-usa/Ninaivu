@@ -2,9 +2,9 @@
 
 Up to 4.0.0 the Primary could free space by letting originals go that the
 Secondary and the off-site copy both kept, and show them from a smaller
-display copy (display.py). The household found those copies poor to look
-at, and from 4.0.1 **nothing is let go and no smaller copy is made**: the
-Primary keeps, and shows, its originals.
+display copy. The household found those copies poor to look at, and from
+4.0.1 **nothing is let go and no smaller copy is made**: the Primary keeps,
+and shows, its originals.
 
 What is left here is the way back for a library that used it. Each original
 let go is written down in the index (``mugil_let_go``); **Bring every
@@ -15,8 +15,9 @@ Two computers page, stops when the disk has too little room left, and can
 be started again. Until an original is back it is still found: opened, it
 is sent for from the Secondary (fetch.py).
 
-When none is left, the display copies have nothing to stand in for and
-their folder is removed (:func:`clear_display_copies`).
+The smaller copies themselves are gone: nothing makes or shows one, and what
+earlier versions left in the state folder is removed at start
+(:func:`clear_old_copies`).
 """
 
 from __future__ import annotations
@@ -167,8 +168,6 @@ class Freeing:
                     self.live["back_bytes"] += size
                 else:
                     self.live["missed"] += 1
-            if summary(conn)["files"] == 0:
-                clear_display_copies(self.cfg.state_dir, conn)
         finally:
             if threading.current_thread() is self._thread:
                 conn.close()                      # this run's own thread is ending
@@ -193,24 +192,33 @@ def _room_for(root: Path, size: int) -> bool:
         return True                     # cannot tell: the copy itself will say
 
 
-def clear_display_copies(state_dir: str | Path, conn: sqlite3.Connection) -> bool:
-    """Remove the smaller copies once no original is on the Secondary only:
-    they stood in for those, and for nothing else. Whether they were removed."""
-    from . import display                                            # noqa: PLC0415
-    try:
-        if summary(conn)["files"]:
-            return False
-    except sqlite3.Error:
-        return False
-    folder = display.folder(state_dir)
-    ledger = Path(state_dir) / display.LEDGER
-    if not folder.exists() and not ledger.exists():
-        return False
-    shutil.rmtree(folder, ignore_errors=True)
-    for name in (display.LEDGER, display.LEDGER + "-wal", display.LEDGER + "-shm"):
-        (Path(state_dir) / name).unlink(missing_ok=True)
-    log.info("The smaller display copies were removed: every original is on this computer")
-    return True
+#: What the retired ways of making files smaller left in the state folder:
+#: the display copies and their record (made up to 4.0.0), the smaller-videos
+#: trial's copies and record, and the queue of videos waiting to be compressed.
+#: None of it is the library's; each was a cache or a list.
+OLD_FOLDERS = ("display", "video-trial")
+OLD_FILES = ("mugil-display.db", "video-trial.db", "compress-queue.json")
+
+
+def clear_old_copies(state_dir: str | Path) -> bool:
+    """Remove the smaller copies earlier versions kept in the state folder:
+    nothing shows or makes them any more. Never touches the library, and an
+    original that was let go is still sent for from the Secondary and can
+    still be brought back. Whether anything was removed."""
+    base = Path(state_dir)
+    removed = False
+    for name in OLD_FOLDERS:
+        if (base / name).is_dir():
+            shutil.rmtree(base / name, ignore_errors=True)
+            removed = True
+    for name in OLD_FILES:
+        for path in (base / name, base / (name + "-wal"), base / (name + "-shm")):
+            if path.is_file():
+                path.unlink(missing_ok=True)
+                removed = True
+    if removed:
+        log.info("The smaller copies earlier versions kept were removed from %s", base)
+    return removed
 
 
 def bring_back(cfg, conn: sqlite3.Connection, root: str, rel: str, *, partner=None) -> bool:
@@ -275,4 +283,4 @@ def bring_back_to_delete(cfg, conn: sqlite3.Connection, asset_ids) -> int:
     return back
 
 
-__all__ = ["Freeing", "REMOVED", "bring_back", "bring_back_to_delete", "clear_display_copies", "let_go", "summary", "wanted", "fingerprint"]
+__all__ = ["Freeing", "REMOVED", "bring_back", "bring_back_to_delete", "clear_old_copies", "let_go", "summary", "wanted", "fingerprint"]
