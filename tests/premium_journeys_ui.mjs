@@ -74,6 +74,8 @@ try {
   });
   await page.locator('#share-create-btn').click();
   await waitFor(page, () => answerShare);
+  assert.equal(await page.locator('#share-status').textContent(), 'Creating…');
+  assert.equal(await page.locator('#share-create-btn').isDisabled(), true);
   await page.locator('#share-close').click();
   await page.evaluate(() => document.querySelector('#v-share').click());
   await page.waitForSelector('#share-modal:not([hidden])');
@@ -82,12 +84,22 @@ try {
   assert.equal(await page.locator('#share-link-result').isHidden(), true);
   assert.equal(await page.locator('#share-create-btn').isEnabled(), true);
   assert.equal(await page.locator('#share-url-text').inputValue(), '');
+  assert.equal(await page.locator('#share-status').isHidden(), true, 'a previous operation leaves no feedback in a reopened dialog');
+  await page.unroute('**/api/shares');
+  await page.route('**/api/shares', route => route.fulfill({ status: 503, json: { error: 'Please retry' } }));
+  await page.locator('#share-password').fill('family-secret');
+  await page.locator('#share-password').press('Enter');
+  await page.waitForFunction(() => document.querySelector('#share-status').textContent.includes('Please retry'));
+  assert.equal(await page.locator('#share-create-btn').isEnabled(), true);
+  assert.equal(await page.locator('#share-create-btn').textContent(), 'Generate Link');
+  assert.equal(await page.locator('#share-password').inputValue(), 'family-secret', 'retry preserves the chosen password');
   await page.unroute('**/api/shares');
   await page.route('**/api/shares', route => route.fulfill({ json: { share_url: '/share/current' } }));
-  await page.locator('#share-create-btn').click();
+  await page.locator('#share-password').press('Enter');
   await page.waitForSelector('#share-link-result:not([hidden])');
   assert.match(await page.locator('#share-url-text').inputValue(), /\/share\/current$/);
   assert.equal(await page.locator('#share-copy-btn').evaluate(node => node === document.activeElement), true);
+  assert.equal(await page.locator('#share-status').textContent(), 'Share link generated!');
   assert.deepEqual(errors, []);
   console.log('PASS: reopening sharing ignores the previous request and leaves a clean, usable dialog');
 } finally {

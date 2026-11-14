@@ -954,6 +954,32 @@ def admin_copies():
 
 
 # ---------------------------------------------------------------------------
+# The backup drill: a few photographs back from every copy (ninaivu/copies/drill.py)
+# ---------------------------------------------------------------------------
+
+def _drill():
+    return current_app.config["MV_SERVICES"].backup_drill
+
+
+@cloud_bp.get("/api/admin/backup-drill")
+@require_admin
+def backup_drill():
+    """Whether a drill is running, how far it has got, and the last ones."""
+    return jsonify(_drill().status())
+
+
+@cloud_bp.post("/api/admin/backup-drill")
+@require_admin
+def backup_drill_run():
+    """Restore a few photographs from every copy into a temporary folder and
+    hold them to the library's fingerprints. Nothing in the library or at a
+    copy is changed."""
+    started = _drill().start()
+    auth.audit(db.connect(_cfg().db_path), current_user().id, "backup_drill", "run now")
+    return jsonify({"ok": True, "started": started, **_drill().status()})
+
+
+# ---------------------------------------------------------------------------
 # The off-site copy: encrypted, somewhere else (ninaivu/cloud/offsite.py)
 # ---------------------------------------------------------------------------
 

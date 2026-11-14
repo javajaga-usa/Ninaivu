@@ -737,6 +737,7 @@ div.year-trips figcaption span { opacity: .75; font-size: 12px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .fv-hero-img img { animation: none; }
+}
 
 /* -- Young faces, older names (static/js/young-faces.js) ------------------- */
 
@@ -813,4 +814,65 @@ div.year-trips figcaption span { opacity: .75; font-size: 12px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .yf-card { transition: none; }
+}
+
+/* -- Easy view (static/js/easy-view.js): calmer and larger, per profile ---- */
+
+/* Fewer buttons on the bar: nothing to add, make or rearrange. Search, the
+   language, Ask Ninaivu and the profile (the way out of easy view) stay. */
+html.easy-view .topbar .bar-menu,
+html.easy-view .topbar .view-menu,
+html.easy-view .topbar .zoom,
+html.easy-view .topbar #map-btn,
+html.easy-view .topbar .topbar-more-head { display: none !important; }
+
+html.easy-view .topbar .icon-btn,
+html.easy-view .topbar .profile-btn { min-width: 52px; min-height: 52px; }
+html.easy-view .topbar .icon-btn svg { width: 26px; height: 26px; }
+html.easy-view #search { font-size: 19px; min-height: 48px; }
+html.easy-view body { font-size: 17px; }
+html.easy-view .section-head { font-size: 18px; }
+
+/* The viewer: bigger arrows, and what is known of the photograph under it. */
+html.easy-view .viewer-nav { width: 68px; height: 68px; }
+html.easy-view .viewer-nav svg { width: 32px; height: 32px; }
+html.easy-view .viewer-title strong { font-size: 20px; }
+html.easy-view .viewer-title span { font-size: 16px; }
+html.easy-view .viewer-tools .icon-btn { min-width: 50px; min-height: 50px; }
+html.easy-view .filmstrip { display: none; }
+
+.easy-told {
+  position: absolute; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%); z-index: 215;
+  width: min(920px, calc(100% - 32px));
+  display: grid; gap: 12px;
+  padding: 16px 20px;
+  border-radius: 18px;
+  background: rgba(10, 9, 8, .78);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  color: #f6f2ea;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, .35);
+}
+.easy-told[hidden] { display: none; }
+.easy-words {
+  margin: 0; font-size: 24px; line-height: 1.45; font-weight: 500;
+  min-height: 1.45em; text-wrap: pretty;
+}
+.easy-told-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; }
+.easy-tell {
+  display: inline-flex; align-items: center; gap: 10px;
+  min-height: 56px; padding: 0 26px;
+  font-size: 20px; font-weight: 600;
+  border-radius: 999px;
+  background: var(--accent, #0a70bd); color: #fff; border: 0;
+}
+.easy-tell svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.easy-tell.busy { opacity: .7; cursor: progress; }
+.easy-each { display: inline-flex; align-items: center; gap: 10px; font-size: 18px; cursor: pointer; }
+.easy-each input { width: 24px; height: 24px; accent-color: var(--accent, #0a70bd); }
+
+@media (max-width: 600px) {
+  .easy-told { padding: 12px 14px; gap: 10px; }
+  .easy-words { font-size: 20px; }
+  .easy-tell { min-height: 52px; padding: 0 20px; font-size: 18px; }
 }

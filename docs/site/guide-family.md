@@ -235,6 +235,26 @@ leaves out photographs from before it, and each face then says how old they
 were. Only photographs you may open are looked at, and only people in your
 People row are suggested. Nothing is named until somebody says yes.
 
+### Easy view
+
+When an administrator has switched on `easy_view`, a profile can be shown the
+family app in **easy view**: made for a grandparent, with the largest
+photographs, bigger words and buttons, and the buttons for adding, making and
+rearranging out of the way. Turn it on in **Your profile** (the picture at the
+top right), or an administrator turns it on for you on the console's
+**People** page. It follows the profile to every phone and tablet.
+
+In easy view, under every photograph the viewer opens, it says in large
+letters who the family named in it (left to right), where and when it was
+taken, how long ago that was, and a caption somebody in the family wrote:
+"In this photograph: Paati and Thatha. Taken in Madurai, India. On Thursday,
+10 January 1985. That was 41 years ago." Nothing is guessed: a photograph
+nobody has named or dated is just "A photograph". **Tell me** reads it
+aloud, in Tamil or English as the app is set, in the calm voice letters are
+read in when the home computer has it, or the phone's own voice when not.
+Tick **Tell me each one** to hear each photograph as it opens. Untick easy
+view in **Your profile** to have the usual app back.
+
 ### Family tree
 
 The tree button beside **People** opens the family tree: a row for each

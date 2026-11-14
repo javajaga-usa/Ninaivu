@@ -213,6 +213,35 @@ Until the console has a button for it, `POST /api/admin/scrubber/stop`
 (signed in to the console) stops it after the file it is reading; a restart
 does not start it again, and Start carries on from where it stopped.
 
+## The setup check
+
+**System → Setup check** looks at what most often stops a family library
+working, and says for each line what is wrong and what to do about it. It
+only looks: nothing is changed, and nothing outside this computer is
+contacted. **Check again** looks afresh; otherwise an answer from the last
+half minute is shown again.
+
+- **Ports.** The family app and the console answer on their ports. If a port
+  was taken by another program when Ninaivu started, it says which, because
+  Ninaivu then stepped to the next port and saved addresses stop working. It
+  says whether Network access is on, the address phones at home use, and what
+  the firewall does: the Mac's firewall (and *Block all incoming
+  connections*), Windows Firewall's rule for the port and a network marked
+  Public, and on Linux whether ufw or firewalld is on, with the command to
+  allow the port.
+- **Drives.** Every folder Ninaivu keeps something in is there: the library
+  folders, its own folder, the copies of the index, the second copy and, on a
+  Secondary, the originals folder. A folder on a drive that is not plugged in
+  is named by the drive. One line per disk says how much is free, and warns
+  when a disk is nearly full or when the copies of the index share the
+  index's disk.
+- **Tailscale.** Only when it is how the household reaches Ninaivu away from
+  home: installed, connected, HTTPS certificates on for the tailnet, the
+  certificate fetched by Ninaivu, and Funnel off.
+- **Permissions.** Ninaivu can open and add to every library folder (on a Mac,
+  *Full Disk Access* is the usual answer), its own folder is private to its
+  account, and it is not running as root.
+
 ## Reaching Ninaivu from outside
 
 Ninaivu decides for every request whether it came from home or from the
@@ -906,6 +935,32 @@ the page is opened, reading the unnamed faces in pieces of 5,000, and kept
 until faces change or for an hour. How long that first look takes on the real
 library has not been measured yet. Nothing is sent anywhere.
 
+## Easy view (a trial)
+
+`easy_view` on the console's **Advanced settings** page (or
+`NINAIVU_EASY_VIEW=1`) lets a profile see the family app in **easy view**, for
+a grandparent: the timeline at its largest size, bigger words and buttons,
+and the Add photos, Create, layout, size and map controls hidden. Search, the
+language button, Ask Ninaivu and the profile stay. It is per profile and kept
+in the index (table `easy_view`), so it follows the person to every device:
+they turn it on in **Your profile**, or an administrator turns it on for
+anyone on the console's **People** page (family members and administrators;
+a guest is never offered it).
+
+In the viewer it writes, under every photograph, what the index already knows
+and the person may see: the people named in it left to right (as Talk about
+this photo lists them), the city and country, the day it was taken and how
+long ago (never a date from the file's own clock), and a caption typed by the
+family (never one written by AI). No model looks at the photograph, so a
+hidden or explicit one an administrator opens is told too. **Tell me** reads
+it aloud on the quick model host in the MMS voice letters are read in (Tamil
+or English, from the AI models page), keeping the reading as a small WAV in
+`easy-view/` in the state folder (the newest 400); without that voice the
+phone or browser reads it with its own. Routes: `GET/PUT /api/easy-view`,
+`GET /api/easy-view/people`, `PUT /api/easy-view/people/<id>`,
+`GET /api/asset/<id>/told`, `POST /api/asset/<id>/told/voice`. Not yet tried
+on the family's own devices.
+
 ## Festival albums (a trial)
 
 `festival_albums`, on by itself since 3.1 (`false` in `config.json`, or `NINAIVU_FESTIVAL_ALBUMS=0` for one launch, turns it off), puts **Festival albums** in the family app's
@@ -1172,8 +1227,8 @@ Ninaivu refuses a folder with no index in it (moving this index somewhere is
 **Move the index**, above), the folder it uses now, an index another Ninaivu
 is using, one a newer Ninaivu last opened, and one that has itself moved
 elsewhere. The setting is never written into `config.json`, and is not
-offered on the Secondary or on a read-only copy that follows another computer
-(the family view served with `--replica-of`).
+offered on the Secondary, whose family view is a read-only copy that follows
+the Primary.
 
 ## Environment variables and the state folder
 

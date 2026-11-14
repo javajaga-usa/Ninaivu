@@ -339,14 +339,21 @@ class Services:
         # own family port while the Primary is off (mugil/family_view.py).
         from .mugil.family_view import FamilyView               # noqa: PLC0415
         self.mugil_family_view = FamilyView(cfg)
-        #: On the Pi: the hand-over being served and its front door (set by
-        #: ``--replica-of``, ninaivu/__main__.py). None on the Mac.
+        #: The hand-over being served and its front door, where the Secondary's
+        #: family view sets them (mugil/family_view.py). None otherwise.
         self.replica = None
         self.replica_front = None
         # An encrypted copy away from home. See ninaivu/cloud/offsite.py.
         from .cloud.offsite import Offsite                      # noqa: PLC0415
         self.offsite = Offsite(cfg, lambda: db.connect(cfg.db_path),
                                hold=lambda: self.workload.hold("upload"))
+        # One button that restores a few photographs from every copy and
+        # holds them to the library's fingerprints. See ninaivu/copies/drill.py.
+        from .copies.drill import BackupDrill                   # noqa: PLC0415
+        self.backup_drill = BackupDrill(
+            cfg, connect_db=lambda: db.connect(cfg.db_path), mirror=self.mirror,
+            offsite=self.offsite, cloud=self.cloud, courier=self.mugil_courier,
+            backups=self.backups, restore_tests=self.restore_tests)
         # Damaged files put back from a copy that matches, and the storage
         # check on a schedule. See ninaivu/storage/repair.py.
         from .storage.repair import Repairer                    # noqa: PLC0415
@@ -391,6 +398,10 @@ class Services:
         # "Is everything safe?", asked of every one of the above at once.
         from .server.safety import Safety                        # noqa: PLC0415
         self.safety = Safety(self)
+        # And what happened over the last week, for the administrator who
+        # looks once a week (server/health_week.py).
+        from .server.health_week import HealthWeek                # noqa: PLC0415
+        self.health_week = HealthWeek(self, notify=self._tell_somebody)
         self.scanner.workload = self.workload
         self.straightener = straighten.Straightener(cfg, self.scanner,
                                                     hold=self.workload.catchup_hold)
@@ -438,7 +449,8 @@ class Services:
         # handed to each keeper that has moved onto it.
         from .server.supervisor import Supervisor                 # noqa: PLC0415
         self.supervisor = Supervisor(self.scanner)
-        for keeper in (self.digest, self.library_drives, self.index_copy, self.restore_tests):
+        for keeper in (self.digest, self.library_drives, self.index_copy, self.restore_tests,
+                       self.health_week):
             keeper.supervisor = self.supervisor
         # The backups, the drive watch and the archive guardian.
         for keeper in (self.backups, self.disks, self.guardian):
@@ -750,6 +762,7 @@ class Services:
         self.backups.start()
         self.digest.start()
         self.disks.start()
+        self.health_week.start()
         self.library_drives.start()
         self.restore_tests.start()
         self.index_copy.start()
@@ -1622,6 +1635,8 @@ class Services:
         attempt("the drive watch", self.disks.stop)
         attempt("the library drives", self.library_drives.stop)
         attempt("the test restore", self.restore_tests.stop)
+        if getattr(self, "backup_drill", None) is not None:
+            attempt("the backup drill", self.backup_drill.stop)
         attempt("the copy of the index", self.index_copy.stop)
         if getattr(self, "tv_album", None) is not None:
             attempt("the TV album", self.tv_album.close)
@@ -2381,6 +2396,7 @@ def _console_blueprints() -> tuple:
     from .api.components_api import components_bp
     from .api.migration_api import migration_bp
     from .api.server_api import server_bp
+    from .api.setup_check_api import setup_check_bp
     from .api.import_api import import_bp
     from .api.mugil_api import mugil_bp, mugil_peer_bp
     from .api.mugil_update_api import mugil_update_bp, mugil_update_peer_bp
@@ -2405,6 +2421,8 @@ def _console_blueprints() -> tuple:
         components_bp,
         # The Server page restarts and stops the whole of Ninaivu.
         server_bp,
+        # The Setup check asks the firewall, Tailscale and every library disk.
+        setup_check_bp,
         # Importing an export reads any folder on this machine: console only.
         import_bp,
         # Two computers: the Secondary writes the originals it is sent to its
@@ -2432,8 +2450,8 @@ def create_home_app(services: Services) -> Flask:
     _declared(app, FACE_HOME)
     front = getattr(services, "replica_front", None)
     if front is not None:
-        # A read-only copy served the old way, ``--replica-of``
-        # (ninaivu/replica/front.py), or the Secondary's family view itself.
+        # The Secondary's family view: a read-only copy
+        # (ninaivu/replica/front.py).
         from .replica import front as front_mod             # noqa: PLC0415
         front_mod.install(app, front)
     view = getattr(services, "mugil_family_view", None)
