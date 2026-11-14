@@ -705,6 +705,10 @@ def _run(cfg, args) -> int:
             app.config["MV_HTTPS"] = bool(args.https)
             # What decided over the console's Use HTTPS switch, if anything.
             app.config["MV_HTTPS_FIXED_BY"] = https_fixed_by
+            # The ports asked for, before a taken one was stepped past: the
+            # setup check says so when the family app is not where phones
+            # were told it is (server/setup_check.py).
+            app.config["MV_PORTS_ASKED"] = {"port": requested, "admin_port": requested_admin}
 
     conn = db.init_db(cfg.db_path)
     auth.init_auth_schema(conn)

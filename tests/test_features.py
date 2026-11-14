@@ -34,12 +34,16 @@ HEADER = ("# A fresh index's sqlite_master, row by row: type | name | table | ro
 TABLES_IN_37 = ["smart", "ask_family", "family_tree", "books", "handover", "stories", "capsules",
                 "screening", "descriptions", "colour_copies", "video_moments", "then_and_now",
                 "life_story", "letters", "stacks", "journal"]
+#: Features with tables added since 3.7, each after those before it.
+TABLES_SINCE_37 = ["easy_view"]
 #: The order api/api.py imported the features' routes in, in 3.7 (with those
 #: that have no tables, which were not features then, in their places).
 ROUTES_IN_37 = ["smart", "ask_family", "family_tree", "books", "films", "handover", "stories",
                 "screening", "scan_prints", "capsules", "frame", "ask_ninaivu", "our_year",
                 "life_story", "photo_talk", "festivals", "letters", "young_faces", "find_print",
                 "stacks", "colour_copies", "voice_search", "video_moments", "then_and_now"]
+#: Features added since 3.7, in the order their routes are put on after those.
+ROUTES_SINCE_37 = ["easy_view"]
 
 #: Old module name -> where it lives now.
 MOVED = {
@@ -103,8 +107,11 @@ def fresh_master() -> str:
     from ninaivu.storage import db
     with tempfile.TemporaryDirectory() as folder:
         conn = db.init_db(os.path.join(folder, "index.db"))
+        # SQLITE_ENABLE_STAT4 adds an optional ANALYZE table on some builds
+        # (including macOS); it is planner data, not application schema.
         rows = conn.execute(
-            "SELECT type, name, tbl_name, rootpage, sql FROM sqlite_master ORDER BY rowid").fetchall()
+            "SELECT type, name, tbl_name, rootpage, sql FROM sqlite_master "
+            "WHERE name != 'sqlite_stat4' ORDER BY rowid").fetchall()
         db.close_all()
     return HEADER + "".join(" | ".join(str(c) for c in row) + "\n" for row in rows)
 
@@ -167,21 +174,21 @@ def test_an_unknown_feature_is_a_key_error():
 def test_the_loader_order_is_the_old_order():
     assert features.names() == features.ORDER
     with_tables = [f.name for f in features.registry() if f.tables is not None]
-    assert with_tables == TABLES_IN_37
+    assert with_tables == TABLES_IN_37 + TABLES_SINCE_37
 
 
 def test_tables_are_made_in_order(monkeypatch):
     made = []
     monkeypatch.setattr(features.Tables, "__call__", lambda self, conn: made.append(self.module))
-    assert features.create_tables(sqlite3.connect(":memory:")) == TABLES_IN_37
+    assert features.create_tables(sqlite3.connect(":memory:")) == TABLES_IN_37 + TABLES_SINCE_37
     # ninaivu.features.<name>.storage, or ninaivu.storage.<name> for one not moved.
     assert [m.split(".")[2] if m.startswith("ninaivu.features.") else m.rsplit(".", 1)[-1]
-            for m in made] == TABLES_IN_37
+            for m in made] == TABLES_IN_37 + TABLES_SINCE_37
 
 
 def test_routes_are_put_on_in_the_old_order():
     import ninaivu.api  # noqa: F401 - its foot puts the features' routes on
-    assert features.routed() == ROUTES_IN_37
+    assert features.routed() == ROUTES_IN_37 + ROUTES_SINCE_37
     assert set(features.routed()) == {f.name for f in features.registry() if f.routes}
 
 

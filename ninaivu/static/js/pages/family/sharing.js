@@ -5,7 +5,7 @@
 import { api } from '../../api.js';
 import * as i18n from '../../i18n.js';
 import { state } from '../../store.js';
-import { $, toast } from '../../ui.js';
+import { $ } from '../../ui.js';
 import { registerDialog } from '../../dialogs.js';
 
 /* -- Sharing ------------------------------------------------------------ */
@@ -19,13 +19,16 @@ export function wire() {
     onClose: () => { shareVersion++; shareTargetItem = null; } });
   $('#share-close')?.addEventListener('click', () => dialog.close());
 
-  $('#share-create-btn')?.addEventListener('click', async () => {
+  $('#share-options')?.addEventListener('submit', async event => {
+    event.preventDefault();
     const button = $('#share-create-btn');
     if (!shareTargetItem || button.disabled) return;
     const target = shareTargetItem;
     const version = shareVersion;
     button.disabled = true;
     button.setAttribute('aria-busy', 'true');
+    button.textContent = i18n.t('Creating…');
+    setShareStatus(i18n.t('Creating…'));
     const expiry = Number($('#share-expiry').value || 30);
     const pwd = $('#share-password').value.trim() || null;
     const scope = target.type === 'album' ? 'album' : 'asset';
@@ -40,15 +43,16 @@ export function wire() {
       $('#share-options').hidden = true;
       $('#share-create-btn').hidden = true;
       $('#share-copy-btn').focus();
-      toast(i18n.t('Share link generated!'));
+      setShareStatus(i18n.t('Share link generated!'));
     } catch (err) {
       if (version === shareVersion && !$('#share-modal').hidden) {
-        toast(i18n.t('Could not create share link: {reason}', { reason: err.message }), true);
+        setShareStatus(i18n.t('Could not create share link: {reason}', { reason: err.message }), true);
       }
     } finally {
       if (version === shareVersion) {
         button.disabled = false;
         button.removeAttribute('aria-busy');
+        button.textContent = i18n.t('Generate Link');
       }
     }
   });
@@ -60,12 +64,12 @@ export function wire() {
       if (!navigator.clipboard?.writeText) throw new Error(i18n.t('Clipboard unavailable'));
       await navigator.clipboard.writeText(input.value);
       if (version !== shareVersion) return;
-      toast(i18n.t('Link copied to clipboard!'));
+      setShareStatus(i18n.t('Link copied to clipboard!'));
     } catch {
       if (version !== shareVersion) return;
       input.focus();
       input.select();
-      toast(i18n.t('Could not copy automatically. Copy the selected link manually.'), true);
+      setShareStatus(i18n.t('Could not copy automatically. Copy the selected link manually.'), true);
     }
   });
 
@@ -81,7 +85,7 @@ export function wire() {
       await navigator.share({ url, title: $('#share-title').textContent });
     } catch (error) {
       if (error.name !== 'AbortError' && version === shareVersion) {
-        toast(i18n.t('Could not open sharing. Copy the link instead.'), true);
+        setShareStatus(i18n.t('Could not open sharing. Copy the link instead.'), true);
       }
     } finally {
       if (version === shareVersion) {
@@ -92,12 +96,21 @@ export function wire() {
   });
 }
 
+function setShareStatus(message = '', error = false) {
+  const status = $('#share-status');
+  status.textContent = message;
+  status.hidden = !message;
+  status.classList.toggle('error', error);
+}
+
 export function openShareModal(item) {
   if (!item) return;
   shareVersion++;
   shareTargetItem = item;
   $('#share-create-btn').disabled = false;
   $('#share-create-btn').removeAttribute('aria-busy');
+  $('#share-create-btn').textContent = i18n.t('Generate Link');
+  setShareStatus();
   $('#share-url-text').value = '';
   $('#share-native-btn').hidden = true;
   $('#share-native-btn').disabled = false;

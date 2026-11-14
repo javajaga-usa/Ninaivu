@@ -20,6 +20,7 @@ import { DowntimeNotice } from './downtime.js';
 import { familyCommands, initPalette } from './palette.js';
 import { hideScrollBarsUntilUsed } from './scrollbars.js';
 import { claimBanner } from './handover.js';
+import { weekCard } from './health-week.js';
 import { VideoMoments } from './video-moments.js';
 import { checkShell, warmShell } from './shell-cache.js';
 import { state, store } from './store.js';
@@ -52,6 +53,7 @@ const features = {
   frame: () => import('./frame.js'),
   capsules: () => import('./capsules.js'),
   ask: () => import('./ask-ninaivu.js'),
+  easyView: () => import('./easy-view.js'),
 };
 
 /** *name* from feature *which*, fetched when first called; a fetch that
@@ -744,6 +746,14 @@ async function start(user) {
   // A successor's takeover waiting: every administrator is told, here too.
   if (state.user.role === 'admin' && !document.querySelector('.handover-banner')) {
     claimBanner(document.querySelector('main.content'), { toast });
+  }
+  // The week's health, for an administrator: damaged files, free space,
+  // failed jobs and drives (health-week.js). Once, however often they sign in.
+  if (state.user.role === 'admin' && !document.querySelector('.week-card')) {
+    const adminPort = state.status?.admin_port || 3000;
+    weekCard(document.querySelector('main.content'), {
+      consoleUrl: `${window.location.protocol}//${window.location.hostname}:${adminPort}`,
+    });
   }
 
   if (state.user.must_change) {
@@ -1651,6 +1661,7 @@ function showMoments() {
   if (viewer?.talk) viewer.talk.on = !!(on.talk && family);
   if (viewer) viewer.lettersOn = !!(on.letters && family);
   if (viewer?.stack) viewer.stack.on = !!on.stacks;
+  showEasyView(!!(on.easy_view && family));
   $('#sel-capsule').hidden = !(on.capsules && family);
   const who = state.user?.anonymous ? 0 : (state.user?.id ?? 0);
   if (momentsShownTo === who) return;
@@ -1660,6 +1671,27 @@ function showMoments() {
     openFrame();
   }
   if (on.capsules && family) announceCapsules({ toast, openItems });
+}
+
+/** Easy view (static/js/easy-view.js), fetched only when it is switched on
+ *  and somebody of the family is signed in; asked again when that changes. */
+let easyView = null;
+let easyAskedFor;
+
+function showEasyView(available) {
+  const who = `${state.user?.anonymous ? 0 : (state.user?.id ?? 0)}:${available}`;
+  if (easyAskedFor === who) return;
+  easyAskedFor = who;
+  if (!available) {
+    easyView?.off();
+    if (profileSheet) profileSheet.easyView = null;
+    return;
+  }
+  features.easyView().then(({ EasyView }) => {
+    easyView ??= new EasyView({ viewer, grid, zoomInput: $('#zoom') });
+    if (profileSheet) profileSheet.easyView = easyView;
+    return easyView.refresh();
+  }, (err) => toast(err.message, true));
 }
 
 /** The Create menu shows a heading only over something under it, and the

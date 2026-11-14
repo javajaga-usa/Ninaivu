@@ -851,6 +851,9 @@ def status():
             "find_print": bool(getattr(cfg, "find_print", False)),
             # A burst, or a photograph and its copies, as one tile (api_stacks.py).
             "stacks": bool(getattr(cfg, "photo_stacks", False)),
+            # A calmer, larger app for a grandparent, each photograph told
+            # aloud (features/easy_view).
+            "easy_view": bool(getattr(cfg, "easy_view", False)),
         },
         "capabilities": {
             "ffmpeg": components.ffmpeg_available(),
@@ -3871,6 +3874,8 @@ from . import (api_faces, api_library, api_phone_backup,             # noqa: E40
                api_portrait, api_share)
 _feature("smart")
 from . import api_straighten                                         # noqa: E402,F401
+# The week's health, for administrators on either app (server/health_week.py).
+from . import api_health_week                                        # noqa: E402,F401
 # "Who is this?" links and the family tree.
 _feature("ask_family")
 _feature("family_tree")
@@ -3882,6 +3887,8 @@ _feature("stories")
 from . import api_webdav                                            # noqa: E402,F401
 # "Only to me": a family member's items kept out of everybody else's view.
 from . import api_private                                           # noqa: E402,F401
+# The duplicates review, side by side: look, then keep one and hide or merge.
+from . import api_duplicates                                        # noqa: E402,F401
 # Sent for screening: family members flag items, an administrator decides.
 _feature("screening")
 
@@ -3933,3 +3940,6 @@ _feature("video_moments")
 
 # Then and now: the same place, the same person, years apart.
 _feature("then_and_now")
+
+# Easy view: a calmer, larger app for a grandparent, each photograph told aloud.
+_feature("easy_view")

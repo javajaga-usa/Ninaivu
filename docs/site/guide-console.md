@@ -217,6 +217,19 @@ waiting to be filed or refused; and the phones that have sent backups. Nothing
 a family member sends joins the library without passing here, unless you tick
 **Trust phone backups**; an administrator's own phone skips the review.
 
+### Screening
+
+![Screening](../screens/console-screening.jpg)
+
+Photographs and videos a family member sent for you to look at, from the
+viewer or the selection bar, each with who sent it, why, and their note. They
+leave every family member's view the moment they are sent; you still see them.
+**Ignore** puts one back exactly as it was. **Hide** is for documents and
+screenshots, **Mark explicit** for adult content only, and **Delete** moves it
+to the bin, which **Recently deleted** on the Folders page puts back. Choose
+several, or all, to decide for them at once; each decision is written to the
+Activity log.
+
 ### Straighten
 
 ![Straighten](../screens/console-straighten.jpg)
@@ -371,6 +384,8 @@ What this computer can do for Ninaivu — which kind of computer it is
 the last scans went, what is waiting — and what would help it do more.
 
 ### Tuning
+
+![Tuning](../screens/console-tuning.jpg)
 
 How hard Ninaivu works this computer. At every start it measures the
 processor, memory, graphics and drives and picks a profile: **Small box**

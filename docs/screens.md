@@ -62,13 +62,15 @@ PIN. It answers on its own port, bound to this computer by default.
 
 ![The first day](screens/console-first-day.jpg)
 
-Right after the administrator is made, the console walks through the five
-things a new library needs: the folder that holds the photographs, the
-household (family members with a PIN, guests with a password), what the scan
-should work out by itself, a copy outside the house, and the address to open
-on the household's phones. Each step can be skipped, and each uses the same
-routes as the page it stands for, so nothing here is a second way of doing
-anything. It opens once.
+Right after the administrator is made, the console walks through what a new
+library needs. It first asks how many computers will keep the library (one,
+or two: a Primary and a Secondary), and whether this is a new library or the
+index comes from another computer. Then come the folder that holds the
+photographs, the household (family members with a PIN, guests with a
+password), what the scan should work out by itself, a copy outside the house,
+and the address to open on the household's phones. Each step can be skipped,
+and each uses the same routes as the page it stands for, so nothing here is a
+second way of doing anything. It opens once.
 
 ![What the scan does by itself](screens/console-first-day-ai.jpg)
 
@@ -128,6 +130,16 @@ original's. It needs ffmpeg.
 
 Photographs the family sent from their phones, waiting to be filed or
 refused, and the phones that have sent backups.
+
+### Review — Screening
+
+![Screening](screens/console-screening.jpg)
+
+Photographs and videos a family member sent for an administrator to look at,
+each with who sent it and why. They leave the family's view the moment they
+are sent. **Ignore** puts one back as it was, **Hide** is for documents and
+screenshots, **Mark explicit** for adult content only, and **Delete** moves it
+to the bin; choose several to decide for them at once.
 
 ### Review — Straighten
 
@@ -193,6 +205,15 @@ Bringing photographs back from the cloud copy, in three steps: what to bring
 back, where to put it, and the encryption key. Nothing here ever overwrites a
 file that is already there.
 
+### Backup & health — Handover
+
+![Handover](screens/console-handover.jpg)
+
+Who looks after the library if you cannot: written down, printed, and a safe
+way for them to take over. The plan names successors in order, how many days
+an administrator has to stop a takeover, and a message to them; a printed
+sheet says where each key is kept without ever holding a password itself.
+
 ### AI — AI models
 
 ![AI models](screens/console-ai-models.jpg)
@@ -245,10 +266,12 @@ What this computer can do for Ninaivu, and what would help it do more.
 
 ### System — Tuning
 
+![Tuning](screens/console-tuning.jpg)
+
 The profile Ninaivu picked for this computer at start (Small box, Everyday
 computer, Powerful computer, or Peak performance chosen by hand), what was
 measured, and every number it sizes, each of which can be set by hand or put
-back to automatic. (No picture of this page yet.)
+back to automatic.
 
 ### System — Advanced settings
 
