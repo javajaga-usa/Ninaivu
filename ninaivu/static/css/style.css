@@ -2398,34 +2398,80 @@ body:has(.modal:not([hidden]), .sheet:not([hidden]), .viewer:not([hidden]),
 }
 #v-download-raw { text-decoration: none; }
 
-/* ── Duplicates review ─────────────────────────────────────────────────── */
+/* ── Duplicates review: copies side by side ────────────────────────────── */
 .dup-modal-card {
-  width: min(880px, 94vw); max-height: 90vh; display: flex; flex-direction: column;
+  width: min(1240px, 96vw); height: min(880px, 94vh); max-height: none;
+  display: flex; flex-direction: column; gap: 10px;
 }
-.dup-groups { overflow-y: auto; display: flex; flex-direction: column; gap: 18px; }
-.dup-group {
-  border: 1px solid var(--border); border-radius: var(--r-md); padding: 12px;
-  background: var(--surface-2);
+.dup-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.dup-head h2 { margin: 0; }
+.dup-tabs { display: flex; gap: 4px; }
+.dup-tab {
+  border: 0; background: none; color: var(--text-2); font: inherit; font-size: 13px;
+  padding: 6px 12px; border-radius: 999px; cursor: pointer;
 }
-.dup-group-head {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 10px; margin-bottom: 10px;
+.dup-tab.active { background: var(--accent-weak); color: var(--accent); font-weight: 600; }
+.dup-pane { display: flex; flex-direction: column; gap: 10px; flex: 1 1 auto; min-height: 0; }
+.dup-pane[hidden] { display: none; }
+.dup-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.dup-kinds { display: flex; gap: 6px; flex-wrap: wrap; }
+.dup-kinds b { font-weight: 600; margin-left: 2px; }
+.dup-zoom { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-2); }
+.dup-where { font-size: 13px; color: var(--text-2); min-width: 64px; text-align: center; font-variant-numeric: tabular-nums; }
+.dup-group-line { margin: 0; }
+.dup-compare { flex: 1 1 auto; min-height: 0; overflow: auto; }
+.dup-columns {
+  display: grid; gap: 12px; height: 100%;
+  grid-template-columns: repeat(var(--dup-cols, 2), minmax(260px, 1fr));
+  grid-auto-flow: column; grid-auto-columns: minmax(260px, 1fr);
 }
-.dup-thumbs { display: flex; flex-wrap: wrap; gap: 10px; }
-.dup-item {
-  position: relative; width: 140px; border-radius: var(--r-sm);
-  overflow: hidden; cursor: pointer; background: var(--bg-elev);
-  border: 2px solid transparent;
+.dup-col {
+  display: flex; flex-direction: column; gap: 10px; min-height: 0;
+  border: 1px solid var(--border); border-radius: var(--r-md); padding: 10px;
+  background: var(--surface-2); transition: border-color .15s, box-shadow .15s;
 }
-.dup-item img { display: block; width: 100%; height: 105px; object-fit: cover; }
-.dup-item.best { border-color: var(--accent); }
+.dup-col.kept { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent) inset; }
+.dup-frame {
+  position: relative; flex: 1 1 auto; min-height: 220px; border-radius: var(--r-sm);
+  overflow: hidden; background: var(--bg-elev); display: flex; align-items: center; justify-content: center;
+}
+.dup-frame img { max-width: 100%; max-height: 100%; object-fit: contain; display: block; }
+.dup-frame.zoomed { overflow: auto; display: block; cursor: grab; }
+.dup-frame.zoomed img { max-width: none; max-height: none; }
+.dup-badges { position: absolute; top: 8px; left: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
+.dup-frame.zoomed .dup-badges { position: sticky; top: 8px; left: 8px; width: max-content; }
 .dup-badge {
-  position: absolute; top: 6px; left: 6px; background: var(--accent);
-  color: #fff; font-size: 11px; font-weight: 600; padding: 2px 7px;
-  border-radius: 999px; letter-spacing: .02em;
+  background: var(--accent); color: #fff; font-size: 11px; font-weight: 600;
+  padding: 2px 8px; border-radius: 999px; letter-spacing: .02em;
 }
-.dup-item-meta {
-  display: block; font-size: 11px; color: var(--text-2); padding: 4px 6px;
+.dup-badge.soft { background: var(--accent-weak); color: var(--accent); }
+.dup-badge.warn { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+.dup-details { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin: 0; font-size: 12.5px; }
+.dup-detail { display: contents; }
+.dup-detail dt { color: var(--text-2); }
+.dup-detail dd { margin: 0; overflow-wrap: anywhere; }
+.dup-detail.differs dd { color: var(--accent); font-weight: 600; }
+.dup-keep { align-self: stretch; }
+.dup-foot { align-items: center; gap: 10px; flex-wrap: wrap; }
+.dup-foot .hint { margin: 0; }
+.dup-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.dup-actions[hidden] { display: none; }
+.dup-aside-list { overflow-y: auto; display: flex; flex-direction: column; gap: 10px; flex: 1 1 auto; }
+.dup-aside-row {
+  display: flex; align-items: center; gap: 14px; padding: 10px;
+  border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface-2);
+}
+.dup-aside-tiles { display: flex; gap: 8px; flex: 1 1 auto; overflow-x: auto; }
+.dup-aside-tile { margin: 0; width: 96px; flex: 0 0 auto; }
+.dup-aside-tile img { width: 96px; height: 72px; object-fit: cover; border-radius: var(--r-sm); display: block; opacity: .6; }
+.dup-aside-tile.kept img { opacity: 1; outline: 2px solid var(--accent); }
+.dup-aside-tile figcaption { font-size: 11px; color: var(--text-2); padding-top: 3px; }
+.dup-aside-info { display: flex; flex-direction: column; gap: 2px; }
+@media (max-width: 700px) {
+  .dup-modal-card { width: 100vw; height: 100dvh; border-radius: 0; }
+  .dup-columns { grid-template-columns: none; grid-auto-columns: 82%; height: auto; }
+  .dup-frame { min-height: 46vh; }
+  .dup-aside-row { flex-wrap: wrap; }
 }
 
 /* ── Map Modal & Geo Explorer ──────────────────────────────────────────── */
