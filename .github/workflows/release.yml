@@ -429,7 +429,7 @@ jobs:
           tools/ci_apt_install.sh xvfb
           xvfb-run -a python tools/check_portable.py check installers/linux/build/Ninaivu-*-linux-x64-portable.tar.gz --work "$RUNNER_TEMP/check"
       - name: Install, open as an ordinary user, and remove the Debian package
-        run: sudo python tools/check_deb.py installers/linux/build/Ninaivu-*-linux-x64.deb
+        run: sudo "$(command -v python)" tools/check_deb.py installers/linux/build/Ninaivu-*-linux-x64.deb
       - name: Two copies of it, paired
         run: python tools/check_portable.py pair installers/linux/build/Ninaivu-*-linux-x64-portable.tar.gz --work "$RUNNER_TEMP/pair"
 
