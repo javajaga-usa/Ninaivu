@@ -33,16 +33,16 @@ def test_deb_contains_the_runtime_menu_and_root_owned_metadata(tmp_path, monkeyp
     def dpkg(args, **kwargs):
         assert args[:4] == ["dpkg-deb", "--root-owner-group", "-Zxz", "--build"]
         stage = Path(args[4])
-        assert "Architecture: amd64" in (stage / "DEBIAN/control").read_text()
+        assert "Architecture: amd64" in (stage / "DEBIAN/control").read_text(encoding="utf-8")
         assert (stage / "opt/ninaivu/app/python/bin/python3").is_file()
         assert not (stage / "opt/ninaivu/logs").exists()
         assert (stage / "usr/bin/ninaivu").readlink() == Path("/opt/ninaivu/ninaivu")
-        assert "Exec=/usr/bin/ninaivu" in (stage / "usr/share/applications/ninaivu.desktop").read_text()
-        assert "NINAIVU_PACKAGE=deb" in (stage / "opt/ninaivu/app/ninaivu.sh").read_text()
+        assert "Exec=/usr/bin/ninaivu" in (stage / "usr/share/applications/ninaivu.desktop").read_text(encoding="utf-8")
+        assert "NINAIVU_PACKAGE=deb" in (stage / "opt/ninaivu/app/ninaivu.sh").read_text(encoding="utf-8")
 
     monkeypatch.setattr(module.subprocess, "run", dpkg)
     assert module.build(archive).name == f"{name}.deb"
-    assert (tmp_path / f"{name}-packages.txt").read_text() == "pinned wheels\n"
+    assert (tmp_path / f"{name}-packages.txt").read_text(encoding="utf-8") == "pinned wheels\n"
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX package launcher")
@@ -62,7 +62,7 @@ def test_installed_launcher_uses_a_user_runtime_and_home_state(tmp_path):
     assert values["NINAIVU_LOG_DIR"] == str(home / ".ninaivu/logs")
     python = values["NINAIVU_PYTHON"]
     assert python == str(home / ".ninaivu/runtime/bin/python3")
-    assert "include-system-site-packages = true" in (home / ".ninaivu/runtime/pyvenv.cfg").read_text()
+    assert "include-system-site-packages = true" in (home / ".ninaivu/runtime/pyvenv.cfg").read_text(encoding="utf-8")
     assert not (app.parent / "logs").exists()
     assert subprocess.check_output([python, "-c", "import sys; print(sys.prefix)"], text=True).strip() == str(home / ".ninaivu/runtime")
     # Reopening uses the same writable runtime instead of discarding Extras.
@@ -82,7 +82,7 @@ def test_debian_update_instructions_use_the_package_manager(monkeypatch):
 
 
 def test_release_publishes_deb_and_keeps_archives_only_for_internal_checks():
-    workflow = yaml.safe_load((ROOT / ".github/workflows/release.yml").read_text())
+    workflow = yaml.safe_load((ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8"))
     steps = workflow["jobs"]["release"]["steps"]
     publication = next(step for step in steps if "softprops/action-gh-release@" in step.get("uses", ""))
     files = publication["with"]["files"]
