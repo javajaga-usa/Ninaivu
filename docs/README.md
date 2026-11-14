@@ -21,4 +21,4 @@ under *More*.
 - [Development](development/) — repository structure, background work, review notes, signing the downloads.
 - [`Ninaivu-guide.pdf`](Ninaivu-guide.pdf) — the whole guide as one designed PDF to hand to the household: a cover, a contents with page numbers and links, a coloured opener for each chapter, callouts, framed screenshots, bookmarks and page references (`python tools/build_guide_pdf.py` rebuilds it from the site's pages; the look is in `tools/guide_pdf.css`, and it needs the Noto fonts, `fonts-noto-core` on Debian and Ubuntu).
 - [`Ninaivu-guide-ta.pdf`](Ninaivu-guide-ta.pdf) — the same guide in Tamil, from [`site/ta/`](site/ta/index.md); commands, keys and setting names stay in English (`python tools/build_guide_pdf.py --lang ta`).
-- The guide: [the family app](site/guide-family.md) and [the console](site/guide-console.md), rebuilt for 0.1.0 from the current screens (they replace the Hearth-era `user-guide.html` and `handbook.html`).
+- The guide: [the family app](site/guide-family.md) and [the console](site/guide-console.md), written from the current screens.

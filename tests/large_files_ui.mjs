@@ -2,7 +2,7 @@
  * The console's Large files list: one set of buttons for the ticked rows.
  *
  * Each row has a tick box and the buttons sit once, above the list: Keep
- * and Delete. (Until 4.3 there was a Compress & Replace beside them; making
+ * and Delete. (Until 4.2 there was a Compress & Replace beside them; making
  * videos smaller was removed.) The server's answers are stubbed here so the
  * test needs no multi-gigabyte files; what it checks is that each button
  * sends one request for everything that is ticked.

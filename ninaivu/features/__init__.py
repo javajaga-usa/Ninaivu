@@ -290,15 +290,6 @@ def create_tables(conn: sqlite3.Connection) -> list[str]:
     return made
 
 
-def _blueprints() -> list[Any]:
-    """The blueprints a feature's routes go on: the family API's and the
-    administrator's (``api/api.py``)."""
-    from flask import Blueprint                                    # noqa: PLC0415
-
-    from ..api import api as api_module                            # noqa: PLC0415
-    return [value for value in vars(api_module).values() if isinstance(value, Blueprint)]
-
-
 def register_routes(name: str) -> Feature:
     """Put feature *name*'s routes on its blueprints, by importing its routes
     module. Called from the foot of ``api/api.py``, in the place each was

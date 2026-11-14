@@ -469,7 +469,7 @@ jobs:
   # The Linux download on Debian, as a household's Debian desktop has it:
   # the archive linux built, unpacked and used on Debian 13 (trixie) instead
   # of the Ubuntu runner it was built on. Debian 12 is not supported or
-  # checked since 4.3. It carries its
+  # checked after 4.2. It carries its
   # own Python, so only what any Debian desktop already has is installed
   # here: an X server (Xvfb, so the Control Panel can be drawn) and the X,
   # font and GL libraries a desktop's Tk and OpenCV find there, and FriBiDi,

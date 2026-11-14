@@ -85,7 +85,9 @@ def test_with_every_stream_allowed_open_two_threads_still_answer_the_console(app
             sock.close()
         # A closed stream lets its thread go at its next write; wake it now
         # rather than at the next 20-second keep-alive.
-        deadline = time.monotonic() + 10
+        # (Thirty seconds, not ten: with four test processes on a busy
+        # machine the thread was once still on its way out at ten.)
+        deadline = time.monotonic() + 30
         while _streams.held() and time.monotonic() < deadline:
             app.config["MV_SCANNER"]._notify({"running": False})
             time.sleep(0.1)

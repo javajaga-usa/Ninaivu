@@ -141,7 +141,13 @@ def test_explorer_is_given_the_path_quoted_on_its_own(as_admin, mixed, library, 
     spaced.parent.mkdir()
     Image.new("RGB", (400, 300), (200, 100, 50)).save(spaced)
     root = Path(mixed.execute("SELECT root FROM assets LIMIT 1").fetchone()["root"])
-    as_admin.application.config["MV_SCANNER"]._run(root, full=False)
+    scanner = as_admin.application.config["MV_SCANNER"]
+    # _run is called here without start(), which is what clears a stop. The
+    # running app's watcher can see the fixture's files arrive and ask the
+    # scan before this one to hand over, and that leaves the stop set: this
+    # reading then ended at its first file as "Cancelled", one run in many.
+    scanner._stop.clear()
+    scanner._run(root, full=False)
     asset_id = mixed.execute("SELECT id FROM assets WHERE filename=?",
                              ("13. Cake and candles.jpg",)).fetchone()["id"]
 

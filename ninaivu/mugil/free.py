@@ -77,15 +77,6 @@ def summary(conn: sqlite3.Connection) -> dict[str, int]:
     return {"files": int(row[0]), "bytes": int(row[1])}
 
 
-def _library(state_dir: str | Path, root: str) -> str | None:
-    from .courier import SENT, sent_record                        # noqa: PLC0415
-    if not (Path(state_dir) / SENT).exists():
-        return None
-    with sent_record(state_dir) as conn:
-        row = conn.execute("SELECT library FROM libraries WHERE root=?", (str(root),)).fetchone()
-    return row["library"] if row else None
-
-
 class Freeing:
     """Brings every let-go original back, one at a time, as one piece of work.
 
