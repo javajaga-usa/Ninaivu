@@ -6,7 +6,7 @@ name: Docker Build & Push
 # version), tagged with that version, its major.minor and latest, and
 # labelled with it.
 #
-# Built for x64 (amd64) and arm64 (a Raspberry Pi 4 or 5, an arm64 server),
+# Built for x64 (amd64) and arm64 (Docker on an Apple-silicon Mac, an arm64 server),
 # each on a runner of its own kind rather than under emulation, and started:
 # each has to answer its health check before the job passes. The release
 # publishes one image for both; its arm64 half is built under emulation

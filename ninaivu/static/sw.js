@@ -6,6 +6,12 @@
  * Only the app shell is stored. Thumbnails and originals recheck access on
  * every request, because file dates and role date ranges can change.
  *
+ * The shell is the home page and the stamped files it names. The page is
+ * shown from the copy kept when the server is slow to answer (see
+ * SHELL_PATIENCE_MS) and checked against the server's own when that arrives;
+ * the modules it may open later are fetched quietly once it has settled
+ * (see warm), so a slow link or no link still opens them.
+ *
  * Everything else goes to the network every time (asking with the copy the
  * browser has, so an unchanged answer is a 304). In particular:
  *
@@ -108,6 +114,20 @@ function thumbnail(request) {
 }
 
 self.addEventListener('message', (event) => {
+  const data = event.data || {};
+  if (data.type === 'ninaivu:shell-changed?') {
+    const port = event.ports && event.ports[0];
+    const check = shellChecks.get(event.source && event.source.id);
+    if (event.source) shellChecks.delete(event.source.id);
+    event.waitUntil((check || Promise.resolve(false))
+      .catch(() => false)
+      .then((changed) => port && port.postMessage({ changed: Boolean(changed) })));
+    return;
+  }
+  if (data.type === 'ninaivu:warm' && Array.isArray(data.urls) && !CONSOLE) {
+    event.waitUntil(warm(data.urls.slice(0, 400)).catch(() => {}));
+    return;
+  }
   if (event.data === 'ninaivu:forget') {
     checked.clear();
     event.waitUntil((async () => {
@@ -213,20 +233,131 @@ function offlinePage() {
   );
 }
 
-async function networkFirstNavigation(request, cacheName) {
+/**
+ * How long a visit to the home page waits for the server before it is shown
+ * the copy kept from the last visit. At home, and from anywhere near, the
+ * server answers well inside this and the page is always the server's own.
+ * From the family in India, through Tailscale, the page alone was two round
+ * trips (connect, then ask) before the phone could even ask for the gallery:
+ * most of a second on every visit, for a page that had not changed. Waiting
+ * any longer than this buys nothing; the server's answer still arrives, is
+ * kept for the next visit, and is checked against the copy shown (below).
+ */
+const SHELL_PATIENCE_MS = 200;
+
+/**
+ * Client id -> the check of the copy it was shown: whether the server's page
+ * turned out to be a different build. The page asks once it is running
+ * (static/js/shell-cache.js) and reloads if so, rather than running last
+ * week's app against this week's server. Held in memory only; a worker the
+ * browser stopped in between answers "not changed" and the next visit is the
+ * server's own.
+ */
+const shellChecks = new Map();
+
+/** What names a build of the page: every stamped file it asks for. */
+function buildOf(text) {
+  return (text.match(/\/static\/[^"'\s?]+\?v=[\w.-]+/g) || []).sort().join(' ');
+}
+
+function shellResponse(response) {
+  return response && response.status === 200 && response.type === 'basic';
+}
+
+async function networkFirstNavigation(event, cacheName) {
+  const { request } = event;
   const cache = await caches.open(cacheName);
-  try {
-    const networkResponse = await fetch(request);
+  const asked = fetch(request).then((response) => {
     serverAway = false;
-    if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
-      cache.put(request, networkResponse.clone());
-    }
-    return networkResponse;
-  } catch {
+    return response;
+  }, (error) => {
     serverAway = true;
-    const hit = await cache.match(request) || await cache.match('/');
-    if (hit) return hit;
-    return offlinePage();
+    throw error;
+  });
+  // The server's answer, kept for next time, whichever answer is shown now.
+  const kept = asked.then(async (response) => {
+    if (shellResponse(response)) {
+      await cache.put(request, response.clone());
+    } else {
+      // A redirect, a sign-in page, an error: not the shell. Nothing kept
+      // may stand in for it on the next visit.
+      await cache.delete(request);
+    }
+    return response;
+  });
+  kept.catch(() => {});
+
+  const hit = await cache.match(request) || await cache.match('/');
+  if (!hit) {
+    try {
+      return await kept;
+    } catch {
+      return offlinePage();
+    }
+  }
+  // The server's own page when it comes quickly; the kept copy when it does
+  // not, or when there is no server.
+  const quick = await Promise.race([
+    kept.then((response) => response, () => null),
+    new Promise((resolve) => { setTimeout(() => resolve(undefined), SHELL_PATIENCE_MS); }),
+  ]);
+  if (quick) return quick;
+  if (quick === null) return hit;            // the server could not be reached
+
+  const shown = hit.clone();
+  const check = (async () => {
+    let fresh;
+    try {
+      fresh = await kept;
+    } catch {
+      return false;                          // offline: the copy is all there is
+    }
+    if (!shellResponse(fresh)) return true;  // not the shell any more: ask again
+    const [before, after] = await Promise.all([shown.text(), fresh.clone().text()]);
+    return buildOf(before) !== buildOf(after);
+  })();
+  const client = event.resultingClientId;
+  if (client) {
+    shellChecks.set(client, check);
+    if (shellChecks.size > 50) shellChecks.delete(shellChecks.keys().next().value);
+  }
+  event.waitUntil(check.catch(() => false));
+  return hit;
+}
+
+/**
+ * Files the page may open later (the editor, the films, the family tree…),
+ * fetched one at a time once it has settled, so that opening one of them
+ * through a slow link, or with no link at all, does not wait on the server.
+ * One at a time, so the gallery's own pictures keep the rest of the link.
+ */
+async function warm(urls) {
+  const cache = await caches.open(SHELL_CACHE);
+  // The home page itself first: the visit that registered this worker was
+  // not one it answered, so nothing kept it, and the next visit would wait
+  // on the server for it once more.
+  if (!(await cache.match('/'))) {
+    const page = await fetch('/', { credentials: 'same-origin' }).catch(() => null);
+    if (!page) return;
+    if (shellResponse(page)) await cache.put('/', page);
+  }
+  for (const href of urls) {
+    let url;
+    try {
+      url = new URL(href, self.location.origin);
+    } catch {
+      continue;
+    }
+    if (url.origin !== self.location.origin || !url.pathname.startsWith('/static/')
+        || !url.searchParams.has('v')) continue;
+    if (await cache.match(url.href)) continue;
+    const response = await fetch(url.href).catch(() => null);
+    if (!response) return;                   // the server went: try another visit
+    if (response.status === 200 && response.type === 'basic') {
+      const older = await cache.keys(url.href, { ignoreSearch: true });
+      await Promise.all(older.map((key) => cache.delete(key)));
+      await cache.put(url.href, response);
+    }
   }
 }
 
@@ -257,7 +388,7 @@ self.addEventListener('fetch', (event) => {
   // Only the home page is an offline shell. Navigating to media, shares or
   // an API URL must never store that response or substitute the home page.
   if (url.pathname === '/' && request.mode === 'navigate') {
-    event.respondWith(networkFirstNavigation(request, SHELL_CACHE));
+    event.respondWith(networkFirstNavigation(event, SHELL_CACHE));
     return;
   }
 

@@ -1,8 +1,8 @@
 """How hard Ninaivu works this computer: tuned to the machine it runs on.
 
-The same Ninaivu runs on a Raspberry Pi with four small cores and a USB disk,
+The same Ninaivu runs on a small box with four small cores and a USB disk,
 on a Mac mini with ten fast ones, and on a desktop with a graphics card. One
-set of numbers cannot suit all three: eight indexing threads starve a Pi and
+set of numbers cannot suit all three: eight indexing threads starve the small box and
 leave the Mac half idle. So at start Ninaivu measures the machine — its
 cores, its memory, whether it is a single-board computer, whether there is a
 graphics processor, and whether the library sits on a spinning disk — picks a
@@ -66,7 +66,7 @@ PROFILES = ("small", "medium", "large", "peak")
 
 PROFILE_WORDS: dict[str, dict[str, str]] = {
     "small": {"label": said("Small box"),
-              "description": said("A Raspberry Pi or a small always-on computer. Background work takes a little of the machine and leaves the rest for the system.")},
+              "description": said("A small always-on computer. Background work takes a little of the machine and leaves the rest for the system.")},
     "medium": {"label": said("Everyday computer"),
                "description": said("A laptop or an ordinary desktop. Background work takes half the cores.")},
     "large": {"label": said("Powerful computer"),

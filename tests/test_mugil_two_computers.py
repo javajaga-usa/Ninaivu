@@ -781,19 +781,23 @@ def test_one_computer_never_sends_for_an_original(cfg, scanned):
 
 
 def test_the_primary_makes_no_display_copies(two_apps, tmp_path):
-    """4.0.1: the smaller copies were poor to look at. None is made, nothing
-    is owed, and asking how it stands does not make the record again."""
-    from ninaivu.mugil import display
-    _first, services, _ = _paired(two_apps, tmp_path)
-    maker = services.mugil_display
-    assert not maker.wanted()
-    maker.keep()
-    assert maker.supervisor is None or maker.supervisor.state(maker.JOB) is None
-    assert maker.status() == {"wanted": False, "retired": True, "owed": 0, "doing": {}}
-    assert not (Path(services.cfg.state_dir) / display.LEDGER).exists()
-    assert not display.folder(services.cfg.state_dir).exists()
-    assert "display" not in {i["id"] for i in _first.get("/api/admin/mugil/checklist").get_json()["items"]
-                             if i["id"] == "display_copies"}
+    """The smaller copies were poor to look at: nothing makes one, the page
+    is told nothing about them, and what an earlier version left is removed."""
+    from ninaivu.mugil import free
+    first, services, _ = _paired(two_apps, tmp_path)
+    assert not hasattr(services, "mugil_display")
+    assert "display" not in first.get("/api/admin/mugil").get_json()
+    state = Path(services.cfg.state_dir)
+    (state / "display" / "ab").mkdir(parents=True)
+    (state / "display" / "ab" / "abcd.avif").write_bytes(b"small")
+    (state / "video-trial").mkdir()
+    for name in ("mugil-display.db", "mugil-display.db-wal", "video-trial.db", "compress-queue.json"):
+        (state / name).write_bytes(b"x")
+    assert free.clear_old_copies(state) is True
+    for name in ("display", "video-trial", "mugil-display.db", "mugil-display.db-wal",
+                 "video-trial.db", "compress-queue.json"):
+        assert not (state / name).exists(), name
+    assert free.clear_old_copies(state) is False
 
 
 def _let_go(services, conn, rows):
@@ -813,44 +817,26 @@ def _let_go(services, conn, rows):
 
 
 def test_an_original_on_the_secondary_only_is_shown_as_it_is(two_apps, tmp_path, scanned, monkeypatch):
-    """Up to 4.0.0 a let-go photograph was shown from its smaller display
-    copy. Now the original is sent for and shown; the copy made back then
-    stands in only while the Secondary cannot send it."""
-    from ninaivu.mugil import display, fetch
+    """A let-go photograph is sent for from the Secondary and shown as it
+    is. While the Secondary cannot send it there is nothing to show: no
+    smaller copy stands in for it any more."""
+    from ninaivu.mugil import fetch
     _primary_app, secondary_app, _ = two_apps
     first, services, _ = _paired(two_apps, tmp_path)
-    while services.mugil_display.run_once():          # as 4.0.0 had made them
-        pass
     cfg = services.cfg
     conn = db.connect(cfg.db_path)
-    with display.ledger(cfg.state_dir) as ledger:
-        made = {r["digest"] for r in ledger.execute(
-            "SELECT digest FROM copies WHERE outcome='made' AND kind='photo'")}
-    if not made:
-        pytest.skip("no AVIF encoder here")
     row = next(r for r in conn.execute(
         "SELECT id, root, rel_path FROM assets WHERE kind='picture' AND trashed=0")
-        if (fetch.record_of(cfg.state_dir, r["root"], r["rel_path"]) or {}).get("digest") in made)
+        if fetch.record_of(cfg.state_dir, r["root"], r["rel_path"]))
     original = (Path(row["root"]) / row["rel_path"]).read_bytes()
-    record = fetch.record_of(cfg.state_dir, row["root"], row["rel_path"])
-    copy = display.find(cfg.state_dir, record["digest"]).read_bytes()
     _let_go(services, conn, [(row["root"], row["rel_path"])])
     monkeypatch.setattr(fetch, "Partner", partner_through(secondary_app.test_client()))
     shown = first.get(f"/api/file/{row['id']}")
     assert shown.status_code == 200 and shown.get_data() == original
-    assert shown.mimetype != "image/avif"
-    # The Secondary away: the old copy, better than nothing.
+    # The Secondary away: not found, here or as a download.
     monkeypatch.setattr(fetch, "original", lambda *a, **k: None)
-    away = first.get(f"/api/file/{row['id']}")
-    assert away.status_code == 200 and away.get_data() == copy
+    assert first.get(f"/api/file/{row['id']}").status_code == 404
     assert first.get(f"/api/download/{row['id']}").status_code == 404
-
-
-def first_made_is_avif(state_dir):
-    from ninaivu.mugil import display
-    with display.ledger(state_dir) as conn:
-        row = conn.execute("SELECT file, kind FROM copies WHERE outcome='made' LIMIT 1").fetchone()
-    return row["file"].endswith(".avif" if row["kind"] == "photo" else ".mp4")
 
 
 # --- the two computers side by side ---------------------------------------------------
@@ -985,8 +971,6 @@ def _some_let_go(two_apps, tmp_path, scanned, monkeypatch, n=3):
     from ninaivu.mugil import fetch
     _primary_app, secondary_app, _ = two_apps
     first, services, folder = _paired(two_apps, tmp_path)
-    while services.mugil_display.run_once():          # as 4.0.0 had made them
-        pass
     cfg = scanned[0]
     through = partner_through(secondary_app.test_client())
     monkeypatch.setattr(fetch, "Partner", through)
@@ -1004,9 +988,8 @@ def _some_let_go(two_apps, tmp_path, scanned, monkeypatch, n=3):
 
 def test_every_original_let_go_comes_back(two_apps, tmp_path, scanned, monkeypatch):
     """A library that used Free space in 4.0.0: its originals are still
-    found, are brought back as one piece of work with its progress, and the
-    smaller copies go once every original is home."""
-    from ninaivu.mugil import display, free
+    found, and are brought back as one piece of work with its progress."""
+    from ninaivu.mugil import free
     first, services, conn, originals, mtimes = _some_let_go(two_apps, tmp_path, scanned, monkeypatch)
     cfg = scanned[0]
     assert free.summary(conn)["files"] == len(originals)
@@ -1023,8 +1006,6 @@ def test_every_original_let_go_comes_back(two_apps, tmp_path, scanned, monkeypat
     assert first.get(f"/api/download/{row['id']}").get_data() == originals[rel]
     status = first.get("/api/admin/mugil").get_json()["freeing"]
     assert status["let_go"]["files"] == len(originals) and status["on"] is False
-    # The smaller copies stay while an original is still away.
-    assert free.clear_display_copies(services.cfg.state_dir, conn) is False
 
     started = first.post("/api/admin/mugil/bring-back", json={"all": True})
     assert started.status_code == 200, started.get_json()
@@ -1036,8 +1017,6 @@ def test_every_original_let_go_comes_back(two_apps, tmp_path, scanned, monkeypat
         path = Path(cfg.roots[0]) / rel
         assert path.read_bytes() == data
         assert path.stat().st_mtime == pytest.approx(mtimes[rel], abs=1e-3)
-    assert not display.folder(services.cfg.state_dir).exists(), "the smaller copies are gone"
-    assert not (Path(services.cfg.state_dir) / display.LEDGER).exists()
 
 
 def test_bringing_back_stops_before_the_disk_is_full(two_apps, tmp_path, scanned, monkeypatch):
@@ -1058,7 +1037,6 @@ def test_what_the_secondary_cannot_send_stays_let_go(two_apps, tmp_path, scanned
     done = services.mugil_free.run()
     assert done["back"] == 0 and done["missed"] == len(originals), done
     assert free.summary(conn)["files"] == len(originals)
-    assert free.clear_display_copies(services.cfg.state_dir, conn) is False
 
 
 def test_the_secondary_reads_its_copy_again_before_saying_yes(tmp_path):

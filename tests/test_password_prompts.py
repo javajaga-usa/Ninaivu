@@ -25,7 +25,7 @@ def test_no_password_or_pin_is_asked_for_with_the_browser_prompt():
 def test_every_password_dialog_reads_out_its_error():
     for page, ids in {
         "index.html": ["delete-error"],
-        "admin.html": ["purge-error", "lf-delete-error", "lf-replace-error"],
+        "admin.html": ["purge-error", "lf-delete-error"],
     }.items():
         source = (TEMPLATES / page).read_text(encoding="utf-8")
         for name in ids:

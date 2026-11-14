@@ -1,21 +1,13 @@
-"""Where the bytes are, and what a light library would give back.
+"""Where the bytes are.
 
-Mugil with two computers (the "Mugil primary and secondary" plan) keeps every
-original on the Secondary, untouched, and lets the Mac work from light copies
-that look the same and take less room. Before anything is converted the
-household should see what that would actually save on *their* files, not on
-somebody's benchmark. This is that answer, and it only ever reads: the index
-for the library, a walk of the state folder for Ninaivu's own files.
+It only ever reads: the index for the library, a walk of the state folder
+for Ninaivu's own files.
 
-**The library** is grouped by what a light copy of each kind of file would
-be (:data:`CLASSES`): a camera JPEG as AVIF, a RAW as an AVIF rendition, an
-older video as HEVC. iPhone HEIC photos and iPhone videos are already
-efficient, and turning them would risk HDR and Live Photo details, so they
-are counted as kept. Each class carries a low and a high share of its size
-that the light copy would keep. These are *estimates*, from what each format
-typically does to that kind of file: no file is opened, and the codec of a
-video is guessed from its container and camera rather than read. Stage 2 of
-the plan measures the real figure on a sample of the household's own files.
+**The library** is grouped by kind of file (:data:`CLASSES`), by year and by
+folder. No file is opened: a file's kind is told from its extension, and an
+iPhone's video from its camera. (Until 4.2 each kind also carried an estimate
+of what a smaller "light copy" of it would take. Ninaivu makes no smaller
+copies any more, and the estimate went with them.)
 
 **Duplicates** are the exact copies the content fingerprints know of
 (storage/fingerprints.py, when ``content_fingerprints`` is on), and the
@@ -43,21 +35,19 @@ from ..server.config import RAW_EXTS
 #: How long the state folder's sizes are kept before they are walked again.
 STATE_MAX_AGE = 600.0
 
-#: ``(key, share kept low, share kept high)`` for each kind of file, in the
-#: order a report lists them. A share of 1.0 is a file kept as it is.
-CLASSES: tuple[tuple[str, float, float], ...] = (
-    ("jpeg", 0.40, 0.60),            # camera or Android JPEG -> AVIF, checked to look the same
-    ("raw", 0.10, 0.15),             # a RAW -> an AVIF rendition; the RAW stays on the Secondary
-    ("png", 0.60, 0.75),             # PNG and screenshots -> lossless WebP, pixel for pixel
-    ("heic", 1.0, 1.0),              # iPhone HEIC: already efficient; HDR and Live Photos kept
-    ("other_picture", 1.0, 1.0),     # GIF, TIFF, BMP, WebP, AVIF: kept as they are
-    ("video", 0.50, 0.60),           # H.264 in MP4, MOV, M4V, WebM -> HEVC, same size of picture
-    ("legacy_video", 0.20, 0.50),    # AVI, MKV, WMV, MTS, 3GP, MPEG -> HEVC in MP4
-    ("phone_video", 1.0, 1.0),       # an iPhone's own video: most likely HEVC already
-    ("audio", 1.0, 1.0),
-    ("other", 1.0, 1.0),
+#: The kinds of file, in the order a report lists them.
+CLASSES: tuple[str, ...] = (
+    "jpeg",              # a camera's or an Android phone's JPEG
+    "raw",
+    "png",               # PNG, screenshots among them
+    "heic",              # an iPhone's HEIC
+    "other_picture",     # GIF, TIFF, BMP, WebP, AVIF
+    "video",             # MP4, MOV, M4V, WebM
+    "legacy_video",      # AVI, MKV, WMV, MTS, 3GP, MPEG
+    "phone_video",       # an iPhone's own video
+    "audio",
+    "other",
 )
-_SHARES = {key: (low, high) for key, low, high in CLASSES}
 
 JPEG_EXTS = {"jpg", "jpeg", "jfif"}
 HEIC_EXTS = {"heic", "heif"}
@@ -105,13 +95,12 @@ def _roots_clause(roots: Iterable[str], column: str = "root") -> tuple[str, list
 
 def library_report(conn: sqlite3.Connection, roots: Iterable[str], *,
                    top_folders: int = 20) -> dict[str, Any]:
-    """The library's files by class, by year and by folder, with the light
-    library's estimated size. Files in the bin are left out: they are on
-    their way out, and Ninaivu does not make light copies of them."""
+    """The library's files by class, by year and by folder. Files in the
+    bin are left out: they are on their way out."""
     where, params = _roots_clause(roots)
     base = f"WHERE trashed=0 AND {where}"
 
-    classes = {key: {"files": 0, "bytes": 0} for key, _, _ in CLASSES}
+    classes = {key: {"files": 0, "bytes": 0} for key in CLASSES}
     for row in conn.execute(
             f"SELECT ext, kind, camera, COUNT(*) AS files, COALESCE(SUM(size), 0) AS bytes "
             f"FROM assets {base} GROUP BY ext, kind, camera", params):
@@ -119,18 +108,9 @@ def library_report(conn: sqlite3.Connection, roots: Iterable[str], *,
         entry["files"] += int(row["files"])
         entry["bytes"] += int(row["bytes"])
 
-    listed = []
-    total = light_low = light_high = 0
-    for key, low, high in CLASSES:
-        entry = classes[key]
-        size = entry["bytes"]
-        total += size
-        light_low += round(size * low)
-        light_high += round(size * high)
-        listed.append({"class": key, "files": entry["files"], "bytes": size,
-                       "light_bytes_low": round(size * low),
-                       "light_bytes_high": round(size * high),
-                       "kept_as_is": low >= 1.0})
+    listed = [{"class": key, "files": classes[key]["files"], "bytes": classes[key]["bytes"]}
+              for key in CLASSES]
+    total = sum(c["bytes"] for c in listed)
 
     years = [{"year": row["year"] or "", "files": int(row["files"]), "bytes": int(row["bytes"])}
              for row in conn.execute(
@@ -148,15 +128,9 @@ def library_report(conn: sqlite3.Connection, roots: Iterable[str], *,
     return {
         "files": sum(c["files"] for c in listed),
         "bytes": total,
-        "light_bytes_low": light_low,
-        "light_bytes_high": light_high,
-        # The saving is the larger when the light copies keep the smaller share.
-        "saving_bytes_low": total - light_high,
-        "saving_bytes_high": total - light_low,
         "classes": listed,
         "years": years,
         "folders": folders,
-        "estimate": True,
     }
 
 
@@ -280,11 +254,6 @@ def cached_state_report(state_dir: Path, *, elsewhere: Iterable[tuple[str, str]]
         return report
 
 
-def light_shares() -> dict[str, tuple[float, float]]:
-    """The share of its size each class's light copy is estimated to keep."""
-    return dict(_SHARES)
-
-
 # -- the forecast ------------------------------------------------------------
 #
 # How fast the library grows, and when each of its disks fills at that rate.
@@ -372,9 +341,8 @@ def forecast(conn: sqlite3.Connection, roots: Iterable[str], *, now: float | Non
 
 def steps_from(library: dict[str, Any], duplicates: dict[str, Any],
                extra: Iterable[tuple[str, int]] = ()) -> list[tuple[str, int]]:
-    """The steps a forecast offers, from the space report: setting the exact
-    copies aside, and light copies at the cautious end of their estimate."""
-    out = [("exact_duplicates", int(duplicates.get("exact", {}).get("spare_bytes") or 0)),
-           ("light_copies", int(library.get("saving_bytes_low") or 0))]
+    """The step a forecast offers, from the space report: setting the exact
+    copies aside. (*library* is taken for the callers that pass it.)"""
+    out = [("exact_duplicates", int(duplicates.get("exact", {}).get("spare_bytes") or 0))]
     out.extend(extra)
     return out

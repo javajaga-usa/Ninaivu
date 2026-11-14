@@ -28,7 +28,7 @@ The Mac app moved alone into Applications instead uses `~/.ninaivu` and
 `~/Library/Application Support/Ninaivu`.
 
 Linux x64 uses `Ninaivu-<version>-linux-x64.deb`, tested on Ubuntu and Debian
-12 and 13. Install with `sudo apt install ./Ninaivu-<version>-linux-x64.deb`.
+13. Install with `sudo apt install ./Ninaivu-<version>-linux-x64.deb`.
 The package owns `/opt/ninaivu`, `/usr/bin/ninaivu` and the applications-menu
 entry. Each user's index, settings, accounts, models, logs and optional extras
 stay in `~/.ninaivu`; package upgrades and removal preserve that folder.
@@ -187,7 +187,7 @@ And the maintenance commands, which work in a portable folder too (on Linux,
 | `ninaivu reset-password <name>` | a new password for someone, from this computer (a forgotten administrator password); the Control Panel's **Reset a password…** does the same |
 | `ninaivu import-lite <file>` | bring a Ninaivu Lite household across: people, who sees what, favourites, albums, share links (Ninaivu stopped, after its first scan) |
 | `ninaivu offsite-restore --recovery <file> <copy> <output>` | put the photographs back from an off-site copy, on any computer |
-| `ninaivu space` | where the library's bytes are and what a light library would save (estimates; reads only, safe while Ninaivu runs; `--json` for the raw figures) |
+| `ninaivu space` | where the library's bytes are, by kind of file, year and folder (reads only, safe while Ninaivu runs; `--json` for the raw figures) |
 | `ninaivu fit <folder>` | before copying the library to another disk: the kind of disk the folder is on, and every file whose name, case, Unicode spelling or size it could not keep, with a name that would work (reads only) |
 
 The storage check reads the whole library and takes hours on a large one.
@@ -318,9 +318,9 @@ had, the TV album still runs and the TV can be given its address by hand.
 ## Tuning to the machine
 
 At every start Ninaivu measures the computer (its cores, memory, graphics
-processor, whether it is a Raspberry Pi or another single-board computer, and
+processor, whether it is a single-board computer, and
 whether the library is on a spinning disk) and picks a profile: **Small box**
-(a Pi, under 6 GB of memory, or two cores), **Everyday computer**, or
+(under 6 GB of memory, or two cores), **Everyday computer**, or
 **Powerful computer** (eight cores and 16 GB, or a graphics processor and
 16 GB). The profile sizes the indexing workers, the analysis threads, the web
 threads, the image model's batch, the moments described per video, the backup
@@ -1216,8 +1216,8 @@ Ninaivu refuses a folder with no index in it (moving this index somewhere is
 **Move the index**, above), the folder it uses now, an index another Ninaivu
 is using, one a newer Ninaivu last opened, and one that has itself moved
 elsewhere. The setting is never written into `config.json`, and is not
-offered on the Secondary or on a read-only copy that follows another computer
-(the family view served with `--replica-of`).
+offered on the Secondary, whose family view is a read-only copy that follows
+the Primary.
 
 ## Environment variables and the state folder
 

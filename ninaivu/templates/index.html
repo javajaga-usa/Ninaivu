@@ -73,7 +73,11 @@
 <title>Ninaivu</title>
 <link rel="stylesheet" href="{{ asset('/static/css/style.css') }}">
 {% if tamil_font %}<link rel="stylesheet" href="{{ asset('/static/css/tamil-font.css') }}">{% endif %}
-<link rel="stylesheet" href="{{ asset('/static/css/editor.css') }}">
+<!-- The photo editor's sheet, switched on when the editor first opens
+     (static/js/shell-cache.js lazyStyle), which gives it its href: a browser
+     fetches even a disabled sheet. It stays here, in this place, so the
+     sheets after it still override it as they always did. -->
+<link rel="stylesheet" data-lazy-style="editor" data-href="{{ asset('/static/css/editor.css') }}">
 <link rel="stylesheet" href="{{ asset('/static/css/moments.css') }}">
 <link rel="stylesheet" href="{{ asset('/static/css/premium.css') }}">
 <link rel="icon" type="image/svg+xml" href="{{ asset('/static/icons/mark.svg') }}">
@@ -1321,7 +1325,7 @@
 
 <div class="ios-install-banner" id="ios-install-banner" hidden>
   <div class="ios-install-icon">
-    <img src="{{ asset('/static/icons/icon-180.png') }}" alt="Ninaivu" width="44" height="44">
+    <img src="{{ asset('/static/icons/icon-180.png') }}" alt="Ninaivu" width="44" height="44" loading="lazy">
   </div>
   <div class="ios-install-body">
     <strong id="ios-install-title" data-i18n="Install Ninaivu">Install Ninaivu</strong>

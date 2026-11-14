@@ -78,3 +78,8 @@ def test_the_first_activity_tick_does_not_load_the_page_again():
               / "app.js").read_text(encoding="utf-8")
     assert "if (lastPhase === null && (scan.status === 'done' || scan.status === 'error'))" \
         in app_js
+    # The console the same: it loaded everything twice at every opening.
+    admin_js = (Path(__file__).resolve().parents[1] / "ninaivu" / "static" / "js"
+                / "admin.js").read_text(encoding="utf-8")
+    assert "const first = lastPhase === null;" in admin_js
+    assert "if (!first) refresh();" in admin_js
