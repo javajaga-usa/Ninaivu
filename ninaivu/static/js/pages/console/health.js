@@ -16,6 +16,8 @@ const adminApi = {
   backupNow: () => admin.postAdminBackupsNow(),
   verifyBackup: () => admin.postAdminBackupsVerify(),
   clearProblems: () => admin.postAdminProblemsClear(),
+  drill: () => admin.getAdminBackupDrill(),
+  drillRun: () => admin.postAdminBackupDrill(),
 };
 
 /** The console around the page (admin.js). */
@@ -90,6 +92,123 @@ async function loadCopies() {
     : '';
   const cards = $('#copies-destinations');
   cards.replaceChildren(...(data.destinations || []).map(copyCard));
+}
+
+/* --- the backup drill --------------------------------------------------- */
+/*
+ * One button: a few photographs restored from every copy into a temporary
+ * folder and held to the library's fingerprints (ninaivu/copies/drill.py).
+ * This only asks and tells; while it runs the page asks again every two
+ * seconds.
+ */
+
+const DRILL_NAMES = {
+  ...COPY_NAMES,
+  index: i18n.key('Index backup'),
+};
+
+const DRILL_SAID = {
+  passed: i18n.key('Passed'),
+  failed: i18n.key('Failed'),
+  attention: i18n.key('Could not be checked'),
+  nothing: i18n.key('Nothing to check yet'),
+  off: i18n.key('Off'),
+};
+
+let drillTimer = null;
+
+function drillName(name) {
+  return DRILL_NAMES[name] ? i18n.t(DRILL_NAMES[name]) : name;
+}
+
+function drillCard(copy) {
+  const card = el('div', 'card');
+  card.appendChild(el('div', 'card-label', drillName(copy.name)));
+  const value = copy.checked
+    ? i18n.t('{passed} of {checked}', { passed: copy.passed, checked: copy.checked })
+    : '—';
+  card.appendChild(el('div', 'card-value', value));
+  let said = DRILL_SAID[copy.status] ? i18n.t(DRILL_SAID[copy.status]) : copy.status;
+  if (copy.status === 'passed' && copy.name !== 'index') {
+    said = i18n.t('Passed: {count} matched the library fingerprint', { count: copy.fingerprinted || 0 });
+  } else if (copy.reason) {
+    said = `${said}: ${copy.reason}`;
+  }
+  card.appendChild(el('div', 'card-sub', said));
+  if (copy.status === 'passed') card.classList.add('good');
+  if (copy.status === 'failed') card.classList.add('bad');
+  return card;
+}
+
+function showDrill(data) {
+  const button = $('#drill-run');
+  const head = $('#drill-headline');
+  const cards = $('#drill-copies');
+  const list = $('#drill-files');
+  if (!button || !head) return;
+  button.disabled = Boolean(data.running);
+  head.classList.remove('good', 'bad');
+  if (data.running) {
+    const step = data.progress?.step;
+    head.textContent = step
+      ? i18n.t('Checking {copy}…', { copy: drillName(step) })
+      : i18n.t('Checking…');
+    return;
+  }
+  const last = data.last;
+  if (!last) {
+    head.textContent = i18n.t('No drill yet. It takes a few minutes, most of it downloading.');
+    cards.replaceChildren();
+    list.hidden = true;
+    return;
+  }
+  const when = whenShort(last.ended_at);
+  const verdict = {
+    passed: i18n.t('Passed {when}: every copy that was checked brought its photographs back intact.', { when }),
+    failed: i18n.t('FAILED {when}: a copy did not bring its photographs back intact. The files are listed below.', { when }),
+    attention: i18n.t('Not finished {when}: a copy could not be checked. Nothing was found damaged.', { when }),
+    nothing: i18n.t('Nothing to check {when}: no copy is set up yet.', { when }),
+  };
+  head.textContent = verdict[last.status] || last.status;
+  if (last.status === 'passed') head.classList.add('good');
+  if (last.status === 'failed') head.classList.add('bad');
+  const copies = (last.copies || []).filter((c) => c.status !== 'off');
+  cards.replaceChildren(...copies.map(drillCard));
+  const bad = [];
+  for (const copy of copies) {
+    for (const file of copy.files || []) {
+      if (file.ok) continue;
+      bad.push(el('li', '', `${drillName(copy.name)} · ${file.path}${file.why ? ` — ${file.why}` : ''}`));
+    }
+  }
+  list.replaceChildren(...bad);
+  list.hidden = !bad.length;
+}
+
+async function loadDrill() {
+  clearTimeout(drillTimer);
+  let data;
+  try {
+    data = await adminApi.drill();
+  } catch (exc) {
+    return;                       // the panel is a convenience, never a blocker
+  }
+  showDrill(data);
+  if (data.running) drillTimer = setTimeout(loadDrill, 2000);
+}
+
+/** Restore a few photographs from every copy and check them (Health). */
+export async function runDrill() {
+  const button = $('#drill-run');
+  if (button) button.disabled = true;
+  try {
+    const data = await adminApi.drillRun();
+    if (!data.started) toast(i18n.t('A drill is already running.'));
+    showDrill(data);
+  } catch (exc) {
+    toast(exc.message, true);
+  }
+  loadDrill();
 }
 
 /* --- anything that went wrong ------------------------------------------- */
@@ -334,6 +453,7 @@ export async function verifyBackup() {
 export function wire(context) {
   shell = context;
   $$('#problem-refresh').onclick = () => loadProblems();
+  $$('#drill-run').onclick = () => runDrill();
   $$('#problem-clear').onclick = async () => {
     try {
       await adminApi.clearProblems();
@@ -347,6 +467,7 @@ export function wire(context) {
 /** The page has been opened, or the language changed while it is open. */
 export function show() {
   loadCopies();
+  loadDrill();
   loadProblems();
   loadBackups();
   loadDigest();

@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Verify my backup.** A Backup drill on Admin → Health restores five photographs chosen at random from every copy (the second disk, the off-site copy, Google Drive and the Secondary) into a temporary folder, and checks each one against the library's content fingerprint rather than against the copy's own record. It also unpacks the newest index backup. The page says passed or failed for each copy and lists any file that did not come back intact. Nothing in the library or in a copy is changed, and the temporary folder is removed afterwards.
+
 ## 4.2.0 — 13 November 2026
 
 4.2 improves the family app on phones and makes dialogs, sharing, uploads and photo editing more consistent. It also includes the Control Panel activation fix from 4.1.1. Library, profile, storage and server logic are unchanged.
