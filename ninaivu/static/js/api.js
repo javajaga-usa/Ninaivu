@@ -329,6 +329,7 @@ export const admin = (() => {
     getAdminServer: (options) => send('GET', '/api/admin/server', options),
     getAdminServerLog: (options) => send('GET', '/api/admin/server/log', options),
     getAdminSettingsAll: (options) => send('GET', '/api/admin/settings/all', options),
+    getAdminSetupCheck: (options) => send('GET', '/api/admin/setup-check', options),
     getAdminSpace: (options) => send('GET', '/api/admin/space', options),
     getAdminStorageReport: (options) => send('GET', '/api/admin/storage-report', options),
     getAdminTuning: (options) => send('GET', '/api/admin/tuning', options),

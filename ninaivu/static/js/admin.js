@@ -635,6 +635,7 @@ const PAGE_DESCRIPTIONS = {
   migration: i18n.key('Move Ninaivu to another computer, and tell it where the library went.'),
   handover: i18n.key('Who looks after the library if you cannot: written down, printed, and a safe way for them to take over.'),
   advanced: i18n.key('Every setting in its group, with what it means and its default.'),
+  'setup-check': i18n.key('Ports, drives, Tailscale and permissions: what is set up, and what to do about what is not.'),
   server: i18n.key('Watch the machine Ninaivu runs on, change its resource mode, restart it and read its log.'),
   performance: i18n.key('What this computer can do for Ninaivu, and what would help it do more.'),
   tuning: i18n.key('How much of this computer Ninaivu may use, sized to its cores, memory and drives.'),
@@ -747,6 +748,8 @@ const PAGE_MODULES = {
   // The extensions and the Gemini key, on Home & extensions and AI models.
   extensions: () => import('./pages/console/extensions.js'),
   'recycle-bin': () => import('./pages/console/recycle-bin.js'),
+  // The Setup check: asked when it is opened, and again on "Check again".
+  'setup-check': () => import('./pages/console/setup-check.js'),
 };
 const loadedPages = new Map();
 
@@ -862,6 +865,7 @@ function showTab(name) {
   if (name === 'health') openPage('health').then((page) => page?.show());
   if (name === 'health') { openPage('notifications'); openPage('scrubber'); }
   if (name === 'library') openPage('library').then((page) => page?.show());
+  if (name === 'setup-check') openPage('setup-check').then((page) => page?.show());
   // Only the visible tab holds an event stream open.
   if (name === 'archive') archive?.show(); else archive?.hide();
   if (name === 'cloud') cloud?.show(); else cloud?.hide();
