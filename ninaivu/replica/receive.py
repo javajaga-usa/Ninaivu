@@ -1,12 +1,12 @@
-"""Taking up the Primary's hand-over: on the Secondary, or the old way on a Pi.
+"""Taking up the Primary's hand-over on the Secondary.
 
-The Secondary's own Ninaivu does this since 4.0 (mugil/family_view.py), with
+The Secondary's own Ninaivu does this (mugil/family_view.py), with
 ``shared`` set and each index re-rooted onto its originals folder as it is
-taken up. ``ninaivu --replica-of`` still runs it as a process of its own,
-the old way, for a Pi or a hand-written service.
+taken up. (Until 4.2 ``ninaivu --replica-of`` could also run it as a process
+of its own; that way is gone.)
 
-The Pi reads the hand-over folder (:mod:`.publish`) and serves from its own
-copy of the index, in its own state folder: ``index-<generation>.db``. Each
+It reads the hand-over folder (``mugil-handover/``, written by
+mugil/handover.py) and serves from its own copy of the index, in its own state folder: ``index-<generation>.db``. Each
 generation is a file of its own, never written over the one before, because
 an SQLite file replaced under a connection that has it open is a corrupt
 file, and the write-ahead log beside it would be applied to the wrong

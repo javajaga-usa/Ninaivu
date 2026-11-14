@@ -24,9 +24,9 @@ before whole.
 family app while the Primary does not answer (mugil/family_view.py). The
 photographs themselves are the originals the Secondary keeps; each library's
 paths are re-rooted onto its folder there, through the Secondary's own record
-of which library is in which folder (mugil/hold.py). The old way,
+of which library is in which folder (mugil/hold.py). (The old way,
 ``ninaivu --replica-of`` as a service of its own with the originals bind
-mounted at the Primary's paths, still works.
+mounted at the Primary's paths, was removed in 4.2.)
 
 Nothing here changes the library, or runs with one computer.
 """

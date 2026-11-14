@@ -9,20 +9,17 @@ what the family sees, and last of all ``replica.json``, which names the
 snapshot and its checksum. A reader that finds the folder half-written sees
 the previous ``replica.json`` and the previous snapshot, both whole.
 
-This package serves it. Since 4.0 the Secondary's own Ninaivu does, on its
-own family app, with each library re-rooted onto its originals folder
-(mugil/family_view.py). The old way, still kept: ``ninaivu --replica-of <that folder>``
-(:mod:`.receive`) serves the family app from the newest snapshot that checks
-out, and takes up a newer one while it runs. It never writes to the library:
-the service mounts the originals read-only at the Primary's own library path
-(``ninaivu replica unit``), so every path and thumbnail name in the index is
-right as it is, and the app itself refuses every change but signing in and
-out (:mod:`.front`). While the Primary is awake, pages are sent to it; while
-it is off, the copy is served and says so in a line at the top.
+This package serves it, on the Secondary's own family app, with each
+library re-rooted onto its originals folder (mugil/family_view.py):
+:mod:`.receive` takes up the newest snapshot that checks out, and a newer one
+while it runs, and :mod:`.front` keeps the app read-only, refusing every
+change but signing in and out. While the Primary is awake, pages are sent to
+it; while it is off, the copy is served and says so in a line at the top.
 
-Until 4.0 the Primary could also write the hand-over into a shared folder
-for a Raspberry Pi to serve. That way (``replica_dir``, ``replica
-publish``) is retired; serving is what both used, and stays.
+Until 4.2 a second way was kept: a stand-alone read-only Ninaivu started with
+``--replica-of`` (and ``ninaivu replica unit`` to write its service), and
+before 4.0 a Raspberry Pi served a hand-over the Primary wrote into a shared
+folder (``replica_dir``). Both are gone; serving is what they used, and stays.
 """
 
 from __future__ import annotations

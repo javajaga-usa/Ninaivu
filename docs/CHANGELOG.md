@@ -15,6 +15,8 @@
 
 - **A weekly health digest for administrators.** The console's Overview has a new **This week** block under "Is everything safe?": the last seven days' damaged files (found by the storage check, unopenable when added, scan errors), free space on each library and index disk compared with a week ago, failed jobs (photographs the job engine set aside, archive runs, test restores, scans, background work failing now) and drive status (library folders not connected, drives logging errors). The last twelve weeks are kept under it. An administrator signed in to the family app sees the same four lines at the top of the gallery and can hide them until next week; family members and guests see nothing (`GET /api/health/week`, admin only). With notifications set up, each finished week is sent on Monday as counts only (new event `weekly_health`). Ninaivu notes the free space every six hours in `health-week.json` in its state folder; nothing in the index changes.
 
+- **The family app opens faster on a phone far from home.** The photo editor and Creative Studio load the first time **Edit** is pressed instead of with every page, a phone that has opened the app before shows the home page from the copy it kept when the server is slow to answer (and checks it against the server's own as soon as that arrives), and the app's files are fetched ahead quietly once the page has settled. Over a 300 ms, 2 Mbit link the first opening went from 5.4 to 4.8 seconds and a later one from 1.6 to 1.4.
+
 ### Audit and clean-up
 
 Several things were removed because they are no longer wanted; nothing here touches an original.
@@ -35,6 +37,9 @@ Several things were removed because they are no longer wanted; nothing here touc
 ### Housekeeping
 
 - 74 strings no page asks for any more are out of both languages.
+- The Tamil guide's *Remote access* page had no *Speed away from home* section; it has now, in both languages, with the phone's kept home page.
+- Comments in the two-computer family view no longer say the removed `--replica-of` and `ninaivu replica unit` still work.
+- The guide pictures and PDFs were retaken: the Large files picture still showed Tidy copies and the smaller-videos trial.
 - Pictures of pages written by a browser test (`page-shots/`) had been checked in; they are removed and ignored. Two functions nothing called are gone.
 - The roadmap described 0.1.0; it now says where Ninaivu stands, what is open and what is not planned. The front pages of the guide said 3.5.1 and 0.1.0.
 
