@@ -56,9 +56,10 @@ function renderBanner(data = view.summary) {
     return;
   }
   const count = data.counts.exact + data.counts.near;
-  $('#duplicates-headline').textContent = i18n.t(
-    count === 1 ? '{count} group of copies to review' : '{count} groups of copies to review',
-    { count: count.toLocaleString() })
+  const vars = { count: count.toLocaleString() };
+  $('#duplicates-headline').textContent = (count === 1
+    ? i18n.t('{count} group of copies to review', vars)
+    : i18n.t('{count} groups of copies to review', vars))
     + (data.total_wasted ? ` · ${i18n.t('{size} could be freed', { size: humanBytes(data.total_wasted) })}` : '');
   banner.hidden = false;
 }
