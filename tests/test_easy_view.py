@@ -201,3 +201,10 @@ def test_only_the_newest_readings_are_kept(easy, monkeypatch):
         os.utime(path, (stamp, stamp))
     api_easy._keep_few(cfg)
     assert sorted(p.name for p in where.glob("*.wav")) == ["2-k.wav", "3-k.wav"]
+
+
+def test_console_overview_reports_whether_easy_view_is_available(as_admin, cfg):
+    cfg.easy_view = False
+    assert as_admin.get("/api/admin/overview").get_json()["app"]["easy_view"] is False
+    cfg.easy_view = True
+    assert as_admin.get("/api/admin/overview").get_json()["app"]["easy_view"] is True

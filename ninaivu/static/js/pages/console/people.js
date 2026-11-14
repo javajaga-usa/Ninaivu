@@ -30,9 +30,9 @@ export function renderPeople() {
 
 /** Easy view (features/easy_view), for each family member and administrator,
  *  while `easy_view` is on: how a grandparent who never opens a menu gets it.
- *  The list is asked for each time the page is drawn; while the switch is
- *  off it is not there (404) and nothing is shown. */
+ *  The overview carries the switch so a disabled route is never requested. */
 async function showEasyView(slots) {
+  if (!state.overview?.app?.easy_view) return;
   let found;
   try {
     found = await admin.getEasyViewPeople();
