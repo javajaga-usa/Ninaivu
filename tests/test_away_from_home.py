@@ -34,8 +34,13 @@ def test_the_modules_are_fetched_stamped_and_kept(client):
     text = _importmap(html)
     stamp = re.search(r'"/static/js/grid\.js":"/static/js/grid\.js\?v=([0-9a-f]+)"', text).group(1)
     # Everything the gallery needs at start is asked for at once.
-    for module in ("grid.js", "grid-base.js", "preload-policy.js", "studio/colour.mjs"):
+    for module in ("grid.js", "grid-base.js", "preload-policy.js", "gallery/selection.js"):
         assert re.search(rf'<link rel="modulepreload" href="/static/js/{re.escape(module)}\?v=', html), module
+    # The photo editor and its studio wait for Edit (viewer.js), but are named
+    # stamped in the map, so the worker can keep them for a slow link.
+    for module in ("editor.js", "studio/develop.mjs"):
+        assert not re.search(rf'<link rel="modulepreload" href="/static/js/{re.escape(module)}\?v=', html), module
+        assert f'"/static/js/{module}":"/static/js/{module}?v=' in text, module
     # The one inline script the policy allows, by its exact hash.
     digest = base64.b64encode(hashlib.sha256(text.encode()).digest()).decode()
     policy = response.headers["Content-Security-Policy"]
@@ -56,7 +61,8 @@ def test_the_graph_follows_imports_into_subfolders():
     from ninaivu.server.modules import static_graph
 
     names = {p.relative_to(JS).as_posix() for p in static_graph(JS / "app.js", JS)}
-    assert {"app.js", "grid.js", "grid-base.js", "preload-policy.js", "studio/colour.mjs"} <= names
+    assert {"app.js", "grid.js", "grid-base.js", "preload-policy.js", "gallery/selection.js"} <= names
+    assert "editor.js" not in names and not any(n.startswith("studio/") for n in names)
     # Loaded on demand only: not preloaded.
     assert not any(n.startswith("ai-playground/") for n in names)
 

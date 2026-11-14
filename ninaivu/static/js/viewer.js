@@ -6,7 +6,7 @@
 
 import { api, thumbUrl } from './api.js';
 import { blurhashUrl } from './blurhash.js';
-import { PhotoEditor } from './editor.js';
+import { lazyStyle } from './shell-cache.js';
 import { StoryPanel } from './stories.js';
 import { ColourPanel } from './colour.js';
 import { TalkPanel } from './talk.js';
@@ -151,10 +151,21 @@ export class Viewer extends EventTarget {
     q('#v-zoom-in').onclick = () => this.zoomBy(1.5);
     q('#v-zoom-out').onclick = () => this.zoomBy(1 / 1.5);
     q('#v-rotate').onclick = () => this.rotate();
-    q('#v-edit').onclick = () => {
+    // The editor and its studio are a fifth of the page's scripts, and most
+    // visits never open them: they are fetched the first time Edit is pressed
+    // (or earlier, quietly, by the worker once the gallery has settled).
+    q('#v-edit').onclick = async () => {
+      const item = this.item;
       this.stopSlideshow();
       if (this.isKiosk) this.toggleKiosk();
-      new PhotoEditor(this.item, (copy) => {
+      let PhotoEditor;
+      try {
+        [{ PhotoEditor }] = await Promise.all([import('./editor.js'), lazyStyle('editor')]);
+      } catch {
+        this.toast?.(i18n.t('The editor could not load. Please refresh and try again.'));
+        return;
+      }
+      new PhotoEditor(item, (copy) => {
         this.toast?.(i18n.t('Edited copy saved — original kept'));
         this.onChange?.(copy);
         this.open([copy.id], 0);

@@ -21,6 +21,7 @@ import { familyCommands, initPalette } from './palette.js';
 import { hideScrollBarsUntilUsed } from './scrollbars.js';
 import { claimBanner } from './handover.js';
 import { VideoMoments } from './video-moments.js';
+import { checkShell, warmShell } from './shell-cache.js';
 import { state, store } from './store.js';
 import { $, closeMenus, humanBytes, toast, wireMenu } from './ui.js';
 import { activeDialog, installDialogLayer, registerDialog } from './dialogs.js';
@@ -165,6 +166,9 @@ let screenLock;
 let profileSheet;
 
 async function init() {
+  // Shown the kept copy of this page because the server was slow to answer?
+  // Then make sure it is still the server's build (static/js/shell-cache.js).
+  checkShell(() => !document.querySelector('#boot')?.classList.contains('done'));
   installDialogLayer();
   // Before any request: the first one refused for maintenance shows the notice.
   new DowntimeNotice();
@@ -687,6 +691,8 @@ function bootDone() {
   if (!box || box.hidden) return;
   bootStep('painted');
   box.classList.add('done');
+  // The rest of the shell, fetched quietly now that nobody is waiting.
+  warmShell();
   // Left in the DOM for the length of the fade, then taken out so it can
   // never swallow a click.
   setTimeout(() => { box.hidden = true; }, 400);
