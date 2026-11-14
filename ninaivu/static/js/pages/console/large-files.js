@@ -6,7 +6,7 @@
 import { admin, thumbUrl } from '../../api.js';
 import * as i18n from '../../i18n.js';
 import {
-  $, $$, askPasswordToDelete, bytesShort, consoleToast as toast, el, lfDescribe, plural, span,
+  $, $$, askPasswordToDelete, bytesShort, consoleToast as toast, el, plural, span,
 } from '../../ui.js';
 import { revealItem } from './common.js';
 
