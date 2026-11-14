@@ -923,6 +923,12 @@ body.admin .ios-install-banner {
 .copies-headline { font-size: 1.1rem; font-weight: 600; margin: 4px 0 8px; }
 .copies-bar { display: block; width: 100%; max-width: 420px; height: 6px; margin-bottom: 12px; accent-color: var(--accent); }
 .copies-bar[hidden] { display: none; }
+.drill-headline { font-size: 1.05rem; font-weight: 600; margin: 4px 0 8px; }
+.drill-headline.good { color: #22a45d; }
+.drill-headline.bad { color: var(--danger, #d64545); }
+.drill-files { margin: 10px 0 0; padding-left: 18px; font-size: 0.9rem; }
+.drill-files li { margin: 2px 0; overflow-wrap: anywhere; }
+.drill-files[hidden] { display: none; }
 .setting-field .row { display: flex; gap: 8px; }
 .setting-field .row .input { flex: 1; min-width: 0; }
 /* A setting's title, whether a label or a heading, is one size — a heading
