@@ -150,6 +150,7 @@ admin | POST                 | /api/admin/settings | admin | writes | same origi
 admin | GET                  | /api/admin/settings/all | admin | reads | - | admin.settings_all | -
 admin | POST                 | /api/admin/settings/all | admin | writes | same origin | admin.settings_all_change | -
 admin | POST                 | /api/admin/settings/index-folder | admin | writes | same origin | migration.index_folder | -
+admin | GET                  | /api/admin/setup-check | admin | reads | - | setup_check.setup_check_state | -
 admin | POST                 | /api/admin/shutdown | machine | writes | same origin | admin.shutdown | -
 admin | GET                  | /api/admin/space | admin | reads | - | admin.space_report | -
 admin | GET                  | /api/admin/storage-report | admin | reads | - | admin.storage_report | -

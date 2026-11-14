@@ -2402,6 +2402,7 @@ def _console_blueprints() -> tuple:
     from .api.components_api import components_bp
     from .api.migration_api import migration_bp
     from .api.server_api import server_bp
+    from .api.setup_check_api import setup_check_bp
     from .api.import_api import import_bp
     from .api.mugil_api import mugil_bp, mugil_peer_bp
     from .api.mugil_update_api import mugil_update_bp, mugil_update_peer_bp
@@ -2426,6 +2427,8 @@ def _console_blueprints() -> tuple:
         components_bp,
         # The Server page restarts and stops the whole of Ninaivu.
         server_bp,
+        # The Setup check asks the firewall, Tailscale and every library disk.
+        setup_check_bp,
         # Importing an export reads any folder on this machine: console only.
         import_bp,
         # Two computers: the Secondary writes the originals it is sent to its
