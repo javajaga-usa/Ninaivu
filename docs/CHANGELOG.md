@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Every picture in the guides is the app as it is now.** All 29 screenshots were retaken after the premium restyle, the flat buttons, the new menus and icon, the Folders screen, the console pass and the Import changes, and the Tuning, Screening and Handover pages have pictures for the first time. The console guide gains a Screening section in English and Tamil, the tour of the screens describes the first day's seven steps, and the three guide PDFs are rebuilt. `python tools/take_screenshots.py` takes them all again from a sample household, so the next restyle can do the same in a few minutes.
+
 ## 4.2.0 — 13 November 2026
 
 4.2 improves the family app on phones and makes dialogs, sharing, uploads and photo editing more consistent. It also includes the Control Panel activation fix from 4.1.1. Library, profile, storage and server logic are unchanged.
