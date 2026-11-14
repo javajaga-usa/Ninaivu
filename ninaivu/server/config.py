@@ -1108,6 +1108,16 @@ class Config:
     #: nothing is sent anywhere, and nothing is named until somebody says
     #: yes. See ninaivu/media/young_faces.py.
     young_faces: bool = setting(False, env="NINAIVU_YOUNG_FACES")
+    #: Easy view: for a grandparent, the family app with bigger photographs
+    #: and words, fewer buttons, and each photograph told aloud in Tamil or
+    #: English: who the family named in it, where and when it was taken and
+    #: how long ago that was, and a caption the family wrote. Turned on per
+    #: profile, by the person in their profile or by an administrator on the
+    #: console's People page. Said from what the index already knows (no
+    #: model looks at the photograph) in the voice letters are read in, or
+    #: the device's own; nothing is sent anywhere. See
+    #: ninaivu/features/easy_view/media.py.
+    easy_view: bool = setting(False, env="NINAIVU_EASY_VIEW")
     #: Find this print: photograph a framed print or a page of an album with
     #: the family app (Add photos menu) and Ninaivu finds the photograph it is
     #: a copy of, by the picture fingerprint every photograph keeps and by the

@@ -5173,5 +5173,18 @@
   "Bring in what only the Secondary's disk holds, put the new disk in, let the originals be sent again, then prove nothing was lost.": "Bring in what only the Secondary's disk holds, put the new disk in, let the originals be sent again, then prove nothing was lost.",
   "{count} files are only on the Secondary's disk ({size}). Bring them in on this page before the disk is replaced, or they go with it.": "{count} files are only on the Secondary's disk ({size}). Bring them in on this page before the disk is replaced, or they go with it.",
   "Nothing is only on the Secondary's disk: everything it holds is here too. The disk can be replaced, and the originals sent again.": "Nothing is only on the Secondary's disk: everything it holds is here too. The disk can be replaced, and the originals sent again.",
-  "Could not open sharing. Copy the link instead.": "Could not open sharing. Copy the link instead."
+  "Could not open sharing. Copy the link instead.": "Could not open sharing. Copy the link instead.",
+  "Bigger photographs and words, each told aloud": "Bigger photographs and words, each told aloud",
+  "Bigger photographs and words, fewer buttons": "Bigger photographs and words, fewer buttons",
+  "Easy view": "Easy view",
+  "Easy view is off.": "Easy view is off.",
+  "Easy view is on.": "Easy view is on.",
+  "Ninaivu is reading something else aloud; try again in a moment.": "Ninaivu is reading something else aloud; try again in a moment.",
+  "On must be true or false.": "On must be true or false.",
+  "Tell me": "Tell me",
+  "Tell me each one": "Tell me each one",
+  "This device cannot read aloud.": "This device cannot read aloud.",
+  "This device has no Tamil voice. The words are written under the photograph.": "This device has no Tamil voice. The words are written under the photograph.",
+  "This photograph could not be told aloud.": "This photograph could not be told aloud.",
+  "Under each photograph it says who is in it, where and when it was taken, and can read that aloud.": "Under each photograph it says who is in it, where and when it was taken, and can read that aloud."
 }

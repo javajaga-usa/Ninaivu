@@ -286,6 +286,12 @@ admin | GET                  | /api/asset/<int:asset_id>/talk | family | reads |
 home  | GET                  | /api/asset/<int:asset_id>/talk | family | reads | - | api.talk_status | photo_talk
 admin | POST                 | /api/asset/<int:asset_id>/talk | family | writes | same origin | api.talk | photo_talk
 home  | POST                 | /api/asset/<int:asset_id>/talk | family | writes | same origin | api.talk | photo_talk
+admin | GET                  | /api/asset/<int:asset_id>/told | family | reads | - | api.easy_view_told | easy_view
+home  | GET                  | /api/asset/<int:asset_id>/told | family | reads | - | api.easy_view_told | easy_view
+admin | POST                 | /api/asset/<int:asset_id>/told/voice | family | writes | same origin | api.easy_view_told_voice | easy_view
+home  | POST                 | /api/asset/<int:asset_id>/told/voice | family | writes | same origin | api.easy_view_told_voice | easy_view
+admin | GET                  | /api/asset/<int:asset_id>/told/voice.wav | family | reads | - | api.easy_view_told_file | easy_view
+home  | GET                  | /api/asset/<int:asset_id>/told/voice.wav | family | reads | - | api.easy_view_told_file | easy_view
 admin | GET                  | /api/assets | guest | reads | - | api.assets | -
 home  | GET                  | /api/assets | guest | reads | - | api.assets | -
 admin | POST                 | /api/assets/bulk | family | writes | same origin | api.bulk_update | -
@@ -377,6 +383,14 @@ admin | GET                  | /api/download/zip | family | reads | - | api.down
 home  | GET                  | /api/download/zip | family | reads | - | api.download_zip | -
 admin | GET                  | /api/duplicates | family | reads | - | api.duplicates | -
 home  | GET                  | /api/duplicates | family | reads | - | api.duplicates | -
+admin | GET                  | /api/easy-view | family | reads | - | api.easy_view_mine | easy_view
+home  | GET                  | /api/easy-view | family | reads | - | api.easy_view_mine | easy_view
+admin | PUT                  | /api/easy-view | family | writes | same origin | api.easy_view_set_mine | easy_view
+home  | PUT                  | /api/easy-view | family | writes | same origin | api.easy_view_set_mine | easy_view
+admin | GET                  | /api/easy-view/people | admin | reads | - | api.easy_view_people | easy_view
+home  | GET                  | /api/easy-view/people | admin | reads | - | api.easy_view_people | easy_view
+admin | PUT                  | /api/easy-view/people/<int:user_id> | admin | writes | same origin | api.easy_view_set_person | easy_view
+home  | PUT                  | /api/easy-view/people/<int:user_id> | admin | writes | same origin | api.easy_view_set_person | easy_view
 admin | GET                  | /api/events | admin | reads | - | api_admin.events | -
 admin | GET                  | /api/faces/asset/<int:asset_id> | family | reads | - | api.face_boxes | -
 home  | GET                  | /api/faces/asset/<int:asset_id> | family | reads | - | api.face_boxes | -

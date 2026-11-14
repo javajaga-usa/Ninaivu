@@ -710,6 +710,9 @@ export class ProfileSheet {
     this.houseName = houseName || '';
     //: 'home' or 'admin' — decides whether leaving is called signing out
     this.face = face || 'home';
+    //: Easy view (easy-view.js), set by the family app while `easy_view` is
+    //: on for this person; null otherwise.
+    this.easyView = null;
   }
 
   open(user) {
@@ -889,6 +892,27 @@ export class ProfileSheet {
       identity.appendChild(row);
       identity.appendChild(el('p', 'hint', i18n.t(
         'Untick to leave it off and sign in with your username instead.')));
+    }
+    // --- easy view, for a grandparent ------------------------------------
+    if (this.easyView) {
+      identity.appendChild(el('h3', null, i18n.t('Easy view')));
+      const row = el('label', 'toggle');
+      const input = el('input');
+      input.type = 'checkbox';
+      input.checked = !!this.easyView.on;
+      input.onchange = async () => {
+        try {
+          const on = await this.easyView.set(input.checked);
+          this.toast(on ? i18n.t('Easy view is on.') : i18n.t('Easy view is off.'));
+        } catch (exc) {
+          this.toast(exc.message, true);
+          input.checked = !input.checked;
+        }
+      };
+      row.append(input, el('span', null, i18n.t('Bigger photographs and words, fewer buttons')));
+      identity.appendChild(row);
+      identity.appendChild(el('p', 'hint', i18n.t(
+        'Under each photograph it says who is in it, where and when it was taken, and can read that aloud.')));
     }
     card.appendChild(identity);
 

@@ -5467,5 +5467,18 @@
   "This computer's disk is nearly full: the rest of the originals stay on the Secondary until there is room.": "இந்தக் கணினியின் வட்டு கிட்டத்தட்ட நிரம்பிவிட்டது: இடம் கிடைக்கும் வரை மீதமுள்ள அசல் கோப்புகள் இரண்டாம் கணினியிலேயே இருக்கும்.",
   "This time: {back} brought back ({size}); {missed} could not be.": "இந்த முறை: {back} திரும்பக் கொண்டுவரப்பட்டன ({size}); {missed} கொண்டுவர முடியவில்லை.",
   "{files} originals ({size}) are on the Secondary only. This computer no longer lets originals go or shows smaller copies: bring them back to see them here as they are.": "{files} அசல் கோப்புகள் ({size}) இரண்டாம் கணினியில் மட்டுமே உள்ளன. இந்தக் கணினி இனி அசல் கோப்புகளை விடுவிப்பதில்லை, சிறிய நகல்களையும் காட்டுவதில்லை: அவற்றை அப்படியே இங்கே பார்க்கத் திரும்பக் கொண்டுவாருங்கள்.",
-  "Could not open sharing. Copy the link instead.": "பகிர்வைத் திறக்க முடியவில்லை. பதிலாக இணைப்பை நகலெடுக்கவும்."
+  "Could not open sharing. Copy the link instead.": "பகிர்வைத் திறக்க முடியவில்லை. பதிலாக இணைப்பை நகலெடுக்கவும்.",
+  "Bigger photographs and words, each told aloud": "பெரிய படங்களும் எழுத்துகளும், ஒவ்வொரு படமும் வாசித்துச் சொல்லப்படும்",
+  "Bigger photographs and words, fewer buttons": "பெரிய படங்களும் எழுத்துகளும், குறைந்த பொத்தான்கள்",
+  "Easy view": "எளிய பார்வை",
+  "Easy view is off.": "எளிய பார்வை அணைக்கப்பட்டது.",
+  "Easy view is on.": "எளிய பார்வை இயக்கப்பட்டது.",
+  "Ninaivu is reading something else aloud; try again in a moment.": "நினைவு வேறொன்றை வாசித்துக்கொண்டிருக்கிறது; சிறிது நேரத்தில் மீண்டும் முயலுங்கள்.",
+  "On must be true or false.": "On என்பது true அல்லது false ஆக இருக்க வேண்டும்.",
+  "Tell me": "சொல்லுங்கள்",
+  "Tell me each one": "ஒவ்வொன்றையும் சொல்லுங்கள்",
+  "This device cannot read aloud.": "இந்தச் சாதனத்தால் வாசித்துக் காட்ட முடியாது.",
+  "This device has no Tamil voice. The words are written under the photograph.": "இந்தச் சாதனத்தில் தமிழ்க் குரல் இல்லை. சொற்கள் படத்தின் கீழே எழுதப்பட்டுள்ளன.",
+  "This photograph could not be told aloud.": "இந்தப் படத்தைப் பற்றி வாசித்துச் சொல்ல முடியவில்லை.",
+  "Under each photograph it says who is in it, where and when it was taken, and can read that aloud.": "ஒவ்வொரு படத்தின் கீழும் அதில் யார் இருக்கிறார்கள், எங்கே, எப்போது எடுக்கப்பட்டது என்று சொல்லும்; அதை வாசித்தும் காட்டும்."
 }
