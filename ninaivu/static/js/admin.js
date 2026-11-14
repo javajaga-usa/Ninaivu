@@ -20,7 +20,6 @@ import { CloudPanel } from './cloud.js';
 import { WorkloadPanel } from './workload.js';
 import { JobStatusPanel } from './job-status.js';
 import { DiskPanel } from './disks.js';
-import { VideoTrial } from './video-trial.js';
 import { JournalPanel } from './journal.js';
 import { SafetyPanel } from './safety.js';
 import { WeekPanel } from './health-week.js';
@@ -75,7 +74,6 @@ let cloud;
 let workload;
 let jobStatus;
 let diskPanel;
-let videoTrial;
 let journalPanel;
 let safetyPanel;
 let weekPanel;
@@ -556,8 +554,6 @@ function wireChrome() {
   diskPanel = new DiskPanel({ toast });
   journalPanel = new JournalPanel({ toast });
   diskPanel.wire();
-  videoTrial = new VideoTrial({ toast });
-  videoTrial.wire();
   safetyPanel = new SafetyPanel({ toast, openPage: (page) => showTab(page) });
   safetyPanel.wire();
   weekPanel = new WeekPanel({ toast, openPage: (page) => showTab(page) });
@@ -878,7 +874,6 @@ function showTab(name) {
   if (name === 'activity') workload?.show(); else workload?.hide();
   if (name === 'activity') jobStatus?.show(); else jobStatus?.hide();
   if (name === 'health') diskPanel?.show(); else diskPanel?.hide();
-  if (name === 'large-files') videoTrial?.show(); else videoTrial?.hide();
   if (name === 'health') journalPanel?.show();
   // The AI server page is Creative Studio's; without it, there is nothing to ask.
   if (name === 'ai-server' && activeExtensions.has('creative-studio')) aiServer?.show();
@@ -1641,9 +1636,15 @@ function onProgress(scan) {
     if (strapline) strapline.textContent = text;
   }
   const phase = `${scan.status}:${scan.added}:${scan.removed}`;
+  // The first message after the console opens describes a scan that ended
+  // before it did, and start() has just loaded everything: drawing it all
+  // again asked six routes twice on every opening.
+  const first = lastPhase === null;
   if (phase !== lastPhase && (scan.status === 'done' || scan.status === 'error')) {
     lastPhase = phase;
-    refresh();
+    if (!first) refresh();
+  } else if (first) {
+    lastPhase = '';
   }
 }
 

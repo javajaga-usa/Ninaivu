@@ -36,9 +36,8 @@ next time.
 changed on the Primary is kept beside the older one, which is set aside under
 a folder that says when. A file deleted on the Primary stays on the Secondary.
 
-This stage only adds copies. Nothing is ever taken off the Primary here:
-lighter display copies and fetching an original back when it is wanted come
-later, and only for files the Secondary has confirmed it holds.
+This only adds copies. Nothing is ever taken off the Primary: it keeps, and
+shows, its originals.
 """
 
 from __future__ import annotations

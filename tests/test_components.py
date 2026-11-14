@@ -181,7 +181,7 @@ def _tools_put_back(monkeypatch):
     """Every path refresh_tools writes, put back after each test. Asking
     whether ffmpeg is there looks again when it is not, and with ``which``
     made up that wrote None into ``media.FFMPEG`` for every test after: the
-    HEVC display copies in test_mugil_display then had "no encoder"."""
+    tests after it then found "no encoder"."""
     from ninaivu.archive import entertainment
     from ninaivu.media import media
     for module in (media, entertainment):

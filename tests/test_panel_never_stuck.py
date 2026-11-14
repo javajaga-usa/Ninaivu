@@ -80,7 +80,23 @@ def test_a_start_stopped_by_the_person_is_not_a_failed_start(tmp_path, monkeypat
 def _process(tmp_path, name):
     script = tmp_path / name
     script.write_text("import time\nwhile True:\n    time.sleep(0.1)\n")
-    return subprocess.Popen([sys.executable, str(script)])
+    process = subprocess.Popen([sys.executable, str(script)])
+    # Until the child has become the script it still carries this test run's
+    # own command line, and stop_start, which asks what a process is before
+    # ending it, took it for not Ninaivu: one run in many on a busy machine.
+    try:
+        import psutil
+        deadline = time.time() + 10
+        while time.time() < deadline:
+            try:
+                if name in " ".join(psutil.Process(process.pid).cmdline()):
+                    break
+            except psutil.Error:
+                pass
+            time.sleep(0.02)
+    except ImportError:
+        pass
+    return process
 
 
 def test_stop_this_start_ends_the_starting_ninaivu(tmp_path):

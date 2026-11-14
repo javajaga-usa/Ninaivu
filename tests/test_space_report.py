@@ -1,7 +1,8 @@
-"""The Space report: where the bytes are and what a light library would save.
+"""The Space report: where the bytes are.
 
-It only reads. These check the classes a file falls in, the sums and the
-estimate's direction, that duplicates and the state folder are counted, that
+It only reads. These check the classes a file falls in, the sums, that no
+estimate of a smaller copy is given any more, that duplicates and the state
+folder are counted, that
 only an administrator may ask, and that ``ninaivu space`` prints it from a
 read-only index.
 """
@@ -45,22 +46,11 @@ def ids(conn, root):
     ("mp3", "audio", None, "audio"),
     ("pdf", "unknown", None, "other"),
 ])
-def test_each_file_falls_in_the_class_its_light_copy_would_be(ext, kind, camera, expected):
+def test_each_file_falls_in_its_class(ext, kind, camera, expected):
     assert space.classify(ext, kind, camera) == expected
 
 
-def test_kept_classes_keep_their_whole_size():
-    shares = space.light_shares()
-    for key in ("heic", "phone_video", "other_picture", "audio", "other"):
-        assert shares[key] == (1.0, 1.0)
-    for key in ("jpeg", "raw", "png", "video", "legacy_video"):
-        low, high = shares[key]
-        assert 0 < low <= high < 1
-
-
-# --- the library ---------------------------------------------------------------
-
-def test_the_report_adds_up_and_the_estimate_points_the_right_way(scanned):
+def test_the_report_adds_up_and_estimates_no_smaller_copy(scanned):
     cfg, conn, _ = scanned
     root = cfg.active_root
     first, second, *rest = ids(conn, root)
@@ -73,12 +63,11 @@ def test_the_report_adds_up_and_the_estimate_points_the_right_way(scanned):
     by_class = {c["class"]: c for c in report["classes"]}
     assert by_class["jpeg"]["bytes"] == 10 * MB
     assert by_class["heic"]["bytes"] == 4 * MB
-    assert by_class["heic"]["light_bytes_low"] == by_class["heic"]["light_bytes_high"] == 4 * MB
+    assert set(by_class["heic"]) == {"class", "files", "bytes"}
     assert report["bytes"] == 14 * MB
     assert report["files"] == len(rest) + 2
-    assert report["light_bytes_low"] <= report["light_bytes_high"] <= report["bytes"]
-    assert report["saving_bytes_low"] == report["bytes"] - report["light_bytes_high"]
-    assert report["saving_bytes_high"] == report["bytes"] - report["light_bytes_low"]
+    assert not [key for key in report if "light" in key or "saving" in key]
+    assert not hasattr(space, "light_shares")
     years = {y["year"]: y["bytes"] for y in report["years"]}
     assert years["2019"] == 10 * MB and years["2024"] == 4 * MB
     sizes = [f["bytes"] for f in report["folders"]]
@@ -187,12 +176,10 @@ def test_only_an_admin_can_ask(app, people, who):
 
 def test_the_console_gets_the_whole_report(as_admin):
     body = as_admin.get("/api/admin/space").get_json()
-    assert set(body) == {"library", "duplicates", "state", "shares", "forecast"}
+    assert set(body) == {"library", "duplicates", "state", "forecast"}
     assert body["library"]["files"] > 0
-    assert body["library"]["estimate"] is True
-    assert {c["class"] for c in body["library"]["classes"]} == {k for k, _, _ in space.CLASSES}
+    assert {c["class"] for c in body["library"]["classes"]} == set(space.CLASSES)
     assert body["state"]["bytes"] > 0
-    assert body["shares"]["heic"] == [1.0, 1.0]
 
 
 def test_asking_changes_nothing(as_admin, scanned):
@@ -211,7 +198,7 @@ def test_the_command_prints_the_report_from_a_read_only_index(scanned, capsys):
     assert data["library"]["files"] > 0
     cli.print_report(data)
     out = capsys.readouterr().out
-    assert "A light library would take" in out
+    assert "Light copy" not in out and "light library" not in out
     assert "Ninaivu's own files" in out
     json.dumps(data)                            # the --json form can be written
 
@@ -261,10 +248,10 @@ def test_the_forecast_counts_new_photos_and_not_an_old_archive_imported(scanned)
     free = 10 * int(rate["bytes_per_month"])
     usage = lambda _path: SimpleNamespace(free=free, total=free * 4)       # noqa: E731
     answer = space.forecast(conn, [root], now=now, disk_usage=usage,
-                            steps=[("light_copies", 5 * int(rate["bytes_per_month"])),
-                                   ("exact_duplicates", 0)])
+                            steps=[("exact_duplicates", 5 * int(rate["bytes_per_month"])),
+                                   ("something_else", 0)])
     assert abs(answer["disks"][0]["months_left"] - 10) < 0.2
-    assert [s["step"] for s in answer["steps"]] == ["light_copies"]
+    assert [s["step"] for s in answer["steps"]] == ["exact_duplicates"]
     assert abs(answer["steps"][0]["months"] - 5) < 0.2
 
 

@@ -11,7 +11,7 @@ Only reads here: no original on this computer is opened for writing, moved
 or removed. Fingerprints missing from the index are worked out and stored
 there, as ``content_fingerprints`` would. What the Secondary confirmed is
 written to ``mugil-sent.db`` in the state folder, which later stages read
-before they let a light copy stand in for an original.
+before they answer for an original that is kept there.
 
 It makes way for the household like the cloud backup does (the ``upload``
 hold of server/workload.py), and on its own runs every

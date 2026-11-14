@@ -90,7 +90,7 @@ def test_the_release_workflow_builds_four_portable_downloads_and_signs_only_with
     yaml = pytest.importorskip("yaml")
     flow = yaml.safe_load((ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8"))
     # Three downloads: Windows x64, Apple silicon and Linux x64, the last
-    # also opened on Debian 12 and 13. No arm64 Linux (Raspberry Pi) build.
+    # also opened on Debian 13 (Debian 12 is not supported). No arm64 Linux build.
     assert set(flow["jobs"]) == {"gate", "windows", "macos", "linux", "debian", "pair-across",
                                  "release", "docker"}
     assert flow["jobs"]["release"]["needs"] == ["gate", "windows", "macos", "linux", "debian",
@@ -100,7 +100,7 @@ def test_the_release_workflow_builds_four_portable_downloads_and_signs_only_with
     assert flow["jobs"]["macos"]["runs-on"] == "${{ vars.MAC_RUNNER || 'macos-15' }}", "Apple silicon"
     debian = flow["jobs"]["debian"]
     assert debian["needs"] == "linux" and debian["container"] == "debian:${{ matrix.debian }}"
-    assert debian["strategy"]["matrix"]["debian"] == ["12", "13"]
+    assert debian["strategy"]["matrix"]["debian"] == ["13"]
     for job in ("windows", "macos", "linux"):
         assert "strategy" not in flow["jobs"][job], f"{job}: one build, no matrix"
     files = next(s for s in flow["jobs"]["release"]["steps"] if s.get("uses", "").startswith("softprops/"))["with"]["files"]

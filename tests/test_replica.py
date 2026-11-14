@@ -19,8 +19,7 @@ import numpy as np
 import pytest
 
 from ninaivu import Services, create_home_app
-from ninaivu.cli import replica as replica_cli
-from ninaivu.replica import MANIFEST, front as front_mod
+from ninaivu.replica import MANIFEST
 from ninaivu.replica.front import Front, magic_packet
 from ninaivu.mugil import handover
 from ninaivu.mugil.handover import Handover
@@ -381,61 +380,15 @@ def test_the_status_says_how_old_the_copy_is(pi):
     assert status["replica"] is True and status["as_of"] and status["primary_awake"] is False
 
 
-# -- the Pi's service ---------------------------------------------------------------
-
-def test_the_unit_mounts_each_library_read_only_at_the_macs_path(mac, tmp_path, capsys):
-    root = Path(mac.cfg.active_root)
-    (root / ".ninaivu-library").write_text(json.dumps({"id": "lib-123"}))
-    (Path(mac.cfg.state_dir) / "library-ids.json").write_text(json.dumps({str(root): "lib-123"}))
-    publish(mac.cfg, mac.dest)
-    mirror = tmp_path / "mirror"
-    copy = mirror / "ninaivu" / "Ninaivu Archive"
-    copy.mkdir(parents=True)
-    (copy / ".ninaivu-library").write_text(json.dumps({"id": "lib-123"}))
-    code = replica_cli.main(["unit", "--from", str(mac.dest), "--mirror", str(mirror),
-                             "--primary", "http://mini.local", "--wake", "3c:22:fb:12:34:56"])
-    assert code == 0
-    out = capsys.readouterr()
-    quote = replica_cli.systemd_quote
-    assert f"BindReadOnlyPaths={quote(str(copy))}:{quote(str(root))}" in out.out
-    assert "ProtectSystem=strict" in out.out and "--replica-primary http://mini.local" in out.out
-    assert "sudo mkdir -p" in out.err
-
-
-def test_the_unit_asks_for_a_library_it_cannot_find(mac, tmp_path, capsys):
-    publish(mac.cfg, mac.dest)
-    (tmp_path / "mirror").mkdir()
-    code = replica_cli.main(["unit", "--from", str(mac.dest), "--mirror", str(tmp_path / "mirror")])
-    assert code == 2 and "--map" in capsys.readouterr().err
-
-
-def test_systemd_quoting():
-    assert replica_cli.systemd_quote('/Volumes/J Apple/100% "x"') == \
-        '"/Volumes/J Apple/100%% \\"x\\""'
-
-
-def test_the_server_will_not_start_without_a_handover(tmp_path, capsys):
+def test_the_service_of_its_own_is_gone():
+    """The read-only view ran as a process of its own (``--replica-of``, with
+    a systemd unit written by ``ninaivu replica unit``) for a Raspberry Pi.
+    A paired Secondary serves it from its own Ninaivu; the old way is removed."""
     from ninaivu import __main__ as main_mod
-    cfg = _pi_config(tmp_path, tmp_path / "empty")
-    args = main_mod.build_parser().parse_args(["--replica-of", str(tmp_path / "empty")])
-    assert main_mod.take_up_replica(cfg, args) is False
-    assert "No hand-over" in capsys.readouterr().err
-
-
-def test_the_server_becomes_a_replica(mac, tmp_path):
-    from ninaivu import __main__ as main_mod
-    publish(mac.cfg, mac.dest)
-    cfg = _pi_config(tmp_path, mac.dest)
-    args = main_mod.build_parser().parse_args(
-        ["--replica-of", str(mac.dest), "--replica-primary", "http://mini.local"])
-    assert main_mod.take_up_replica(cfg, args) is True
-    assert args.no_admin is True and args.name == "ninaivu-pi"
-    assert cfg.replica_primary_url == "http://mini.local" and cfg.watch is False
-    assert Path(cfg.db_path).name.startswith("index-")
-    db.close_all()
-    assert front_mod.OPEN_WRITES >= {"/api/auth/login", "/api/auth/logout"}
-
-
+    assert "replica" not in main_mod.COMMANDS
+    with pytest.raises(SystemExit):
+        main_mod.build_parser().parse_args(["--replica-of", "anywhere"])
+    assert not hasattr(main_mod, "take_up_replica")
 
 
 def test_films_play_on_the_pi_and_listing_them_writes_nothing(mac, people, tmp_path):

@@ -153,7 +153,7 @@ for (const look of ['light', 'dark']) {
 
   // Large files needs a large file to offer these; the look is what is
   // checked here, so the dialogs are simply shown.
-  for (const [modal, name] of [['#lf-delete-modal', 'delete'], ['#lf-replace-modal', 'replace']]) {
+  for (const [modal, name] of [['#lf-delete-modal', 'delete']]) {
     await con.evaluate((m) => {
       document.querySelector(m).hidden = false;
       document.querySelector(`${m}-what`.replace('-modal-what', '-what')).textContent =

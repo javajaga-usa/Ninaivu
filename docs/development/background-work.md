@@ -200,7 +200,6 @@ class Keeper:
 | `ninaivu-daily-catchup` | `server/catchup.py` | every 30 s | |
 | `mugil-keeper` | `mugil/courier.py` | every 10 min, sooner for the first copy | network |
 | `mugil-wake` | `mugil/wake.py` | every 30 s | network |
-| `mugil-display` | `mugil/display.py` | at once, then every 10 min | |
 | `ninaivu-descriptions` | `runtime/describer.py` | 2 min in, every 30 min, or `wake()` | |
 | `ninaivu-story-words` | `runtime/transcriber.py` | 1 min in, every 30 min, or `wake()` | |
 | `ninaivu-video-moments` | `features/video_moments/media.py` | 3 min in, every hour, or `wake()` | |
@@ -220,7 +219,7 @@ Not on it yet, each with its reason:
   off with a growing wait.
 - Runs started on request or carried on at start-up (the copies' runs,
   sending the originals, freeing space, checking a copy made by hand,
-  rebuilding, an update, the smaller-videos trial), the beacon's listening
+  rebuilding, an update), the beacon's listening
   socket, and the hand-over keeper (`mugil/handover.py`).
 - The repair's check schedule (`ninaivu-check-schedule`), the replica's
   keepers (`ninaivu-replica-front`, `ninaivu-replica-receive`) and the

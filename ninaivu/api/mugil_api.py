@@ -199,8 +199,6 @@ def mugil_status():
         courier = _courier()
         answer["sending"] = courier.status() if courier is not None else {}
         answer["confirmed"] = {root: confirmed(cfg.state_dir, root) for root in cfg.roots}
-        maker = getattr(current_app.config["MV_SERVICES"], "mugil_display", None)
-        answer["display"] = maker.status() if maker is not None else {}
         sender = getattr(current_app.config["MV_SERVICES"], "mugil_handover", None)
         answer["handover"] = sender.status() if sender is not None else {}
         answer["freeing"] = _freeing().status() if _freeing() is not None else {}
@@ -922,8 +920,6 @@ def mugil_bring_back():
     conn = db.connect(cfg.db_path)
     back = 1 if free.bring_back(cfg, conn, str(data.get("root", "")), str(data["path"])) else 0
     left = free.summary(conn)
-    if not left["files"]:
-        free.clear_display_copies(cfg.state_dir, conn)
     _audit(f"brought back {back} originals from the Secondary")
     return jsonify({"back": back, "missed": 1 - back, "let_go": left})
 

@@ -56,6 +56,9 @@ installers/windows/wheels/
 installers/windows/installer.built.cfg
 site-build/
 
+# What tests/look_at_pages.mjs writes: pictures of the pages, to look at
+page-shots/
+
 # Built apps (installers/macos/build.sh), never checked in
 *.app/
 installers/linux/build/
