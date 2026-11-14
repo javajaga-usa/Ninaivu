@@ -1648,7 +1648,8 @@ class Services:
         attempt("the drive watch", self.disks.stop)
         attempt("the library drives", self.library_drives.stop)
         attempt("the test restore", self.restore_tests.stop)
-        attempt("the backup drill", self.backup_drill.stop)
+        if getattr(self, "backup_drill", None) is not None:
+            attempt("the backup drill", self.backup_drill.stop)
         attempt("the copy of the index", self.index_copy.stop)
         if getattr(self, "tv_album", None) is not None:
             attempt("the TV album", self.tv_album.close)
