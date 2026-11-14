@@ -68,7 +68,7 @@ def test_the_shared_modules_are_preloaded_at_start(app):
 #: The family's moments and the things it makes: fetched when first opened.
 FEATURES = ("ask-family.js", "family-tree.js", "books.js", "films.js", "our-year.js",
             "life-story.js", "festivals.js", "young-faces.js", "then-and-now.js", "frame.js",
-            "capsules.js", "ask-ninaivu.js")
+            "capsules.js", "ask-ninaivu.js", "easy-view.js")
 
 
 def test_the_family_features_are_not_in_the_gallerys_start(app):

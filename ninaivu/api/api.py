@@ -851,6 +851,9 @@ def status():
             "find_print": bool(getattr(cfg, "find_print", False)),
             # A burst, or a photograph and its copies, as one tile (api_stacks.py).
             "stacks": bool(getattr(cfg, "photo_stacks", False)),
+            # A calmer, larger app for a grandparent, each photograph told
+            # aloud (features/easy_view).
+            "easy_view": bool(getattr(cfg, "easy_view", False)),
         },
         "capabilities": {
             "ffmpeg": components.ffmpeg_available(),
@@ -3933,3 +3936,6 @@ _feature("video_moments")
 
 # Then and now: the same place, the same person, years apart.
 _feature("then_and_now")
+
+# Easy view: a calmer, larger app for a grandparent, each photograph told aloud.
+_feature("easy_view")

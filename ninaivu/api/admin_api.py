@@ -736,6 +736,7 @@ def overview():
             "remote_networks": list(cfg.remote_networks or []),
             "remote_hostname": cfg.remote_hostname,
             "outside_ai_for_family": bool(getattr(cfg, "outside_ai_for_family", False)),
+            "easy_view": bool(cfg.easy_view),
         },
         "library": {
             "root": cfg.active_root,

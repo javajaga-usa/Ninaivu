@@ -7,6 +7,7 @@
  */
 
 import { accountsApi, askSecret, avatarNode, roleBadge } from '../../accounts.js';
+import { admin } from '../../api.js';
 import * as i18n from '../../i18n.js';
 import { consoleState as state } from '../../store.js';
 import { $, $$, consoleToast as toast, el } from '../../ui.js';
@@ -18,7 +19,46 @@ export function renderPeople() {
   state.libraryCount = (state.overview?.library?.folders || []).length;
   const list = $('#people-list');
   list.innerHTML = '';
-  for (const person of state.people) list.appendChild(personCard(person));
+  const easySlots = new Map();
+  for (const person of state.people) {
+    const card = personCard(person);
+    if (person.role !== 'guest') easySlots.set(person.id, card.querySelector('.ap-easy'));
+    list.appendChild(card);
+  }
+  showEasyView(easySlots);
+}
+
+/** Easy view (features/easy_view), for each family member and administrator,
+ *  while `easy_view` is on: how a grandparent who never opens a menu gets it.
+ *  The overview carries the switch so a disabled route is never requested. */
+async function showEasyView(slots) {
+  if (!state.overview?.app?.easy_view) return;
+  let found;
+  try {
+    found = await admin.getEasyViewPeople();
+  } catch {
+    return;
+  }
+  const on = new Set(found?.on || []);
+  for (const [id, slot] of slots) {
+    if (!slot || !slot.isConnected) continue;
+    const row = el('label', 'toggle');
+    const input = el('input');
+    input.type = 'checkbox';
+    input.checked = on.has(id);
+    input.onchange = async () => {
+      try {
+        await admin.putEasyViewPeopleByUserId(id, { body: { on: input.checked } });
+        toast(i18n.t('Saved.'));
+      } catch (exc) {
+        toast(exc.message, true);
+        input.checked = !input.checked;
+      }
+    };
+    row.append(input, el('span', null, i18n.t('Bigger photographs and words, each told aloud')));
+    slot.replaceChildren(labelled(i18n.t('Easy view'), row));
+    slot.hidden = false;
+  }
 }
 
 function personCard(person) {
@@ -167,6 +207,11 @@ function personCard(person) {
       return wrap;
     })()));
   }
+
+  // Filled in by showEasyView while `easy_view` is on.
+  const easy = el('div', 'ap-easy');
+  easy.hidden = true;
+  controls.appendChild(easy);
 
   const actions = el('div', 'ap-actions');
   const toggle = el('button', 'btn small ghost', person.active ? i18n.t('Disable') : i18n.t('Enable'));

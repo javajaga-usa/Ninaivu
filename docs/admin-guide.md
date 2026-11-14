@@ -906,6 +906,32 @@ the page is opened, reading the unnamed faces in pieces of 5,000, and kept
 until faces change or for an hour. How long that first look takes on the real
 library has not been measured yet. Nothing is sent anywhere.
 
+## Easy view (a trial)
+
+`easy_view` on the console's **Advanced settings** page (or
+`NINAIVU_EASY_VIEW=1`) lets a profile see the family app in **easy view**, for
+a grandparent: the timeline at its largest size, bigger words and buttons,
+and the Add photos, Create, layout, size and map controls hidden. Search, the
+language button, Ask Ninaivu and the profile stay. It is per profile and kept
+in the index (table `easy_view`), so it follows the person to every device:
+they turn it on in **Your profile**, or an administrator turns it on for
+anyone on the console's **People** page (family members and administrators;
+a guest is never offered it).
+
+In the viewer it writes, under every photograph, what the index already knows
+and the person may see: the people named in it left to right (as Talk about
+this photo lists them), the city and country, the day it was taken and how
+long ago (never a date from the file's own clock), and a caption typed by the
+family (never one written by AI). No model looks at the photograph, so a
+hidden or explicit one an administrator opens is told too. **Tell me** reads
+it aloud on the quick model host in the MMS voice letters are read in (Tamil
+or English, from the AI models page), keeping the reading as a small WAV in
+`easy-view/` in the state folder (the newest 400); without that voice the
+phone or browser reads it with its own. Routes: `GET/PUT /api/easy-view`,
+`GET /api/easy-view/people`, `PUT /api/easy-view/people/<id>`,
+`GET /api/asset/<id>/told`, `POST /api/asset/<id>/told/voice`. Not yet tried
+on the family's own devices.
+
 ## Festival albums (a trial)
 
 `festival_albums`, on by itself since 3.1 (`false` in `config.json`, or `NINAIVU_FESTIVAL_ALBUMS=0` for one launch, turns it off), puts **Festival albums** in the family app's
