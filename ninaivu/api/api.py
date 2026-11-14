@@ -3882,6 +3882,8 @@ _feature("stories")
 from . import api_webdav                                            # noqa: E402,F401
 # "Only to me": a family member's items kept out of everybody else's view.
 from . import api_private                                           # noqa: E402,F401
+# The duplicates review, side by side: look, then keep one and hide or merge.
+from . import api_duplicates                                        # noqa: E402,F401
 # Sent for screening: family members flag items, an administrator decides.
 _feature("screening")
 

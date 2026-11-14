@@ -843,4 +843,21 @@ BEGIN
 END
 table | copies | copies | 143 | CREATE TABLE copies ( fingerprint TEXT NOT NULL, destination TEXT NOT NULL, state       TEXT NOT NULL, verified_at REAL NOT NULL DEFAULT 0, size        INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (fingerprint, destination)) WITHOUT ROWID
 index | idx_copies_destination | copies | 144 | CREATE INDEX idx_copies_destination ON copies(destination, state)
-table | sqlite_stat1 | sqlite_stat1 | 145 | CREATE TABLE sqlite_stat1(tbl,idx,stat)
+table | duplicate_reviews | duplicate_reviews | 145 | CREATE TABLE duplicate_reviews (
+    asset_id   INTEGER PRIMARY KEY REFERENCES assets(id) ON DELETE CASCADE,
+    keeper_id  INTEGER REFERENCES assets(id) ON DELETE SET NULL,
+    action     TEXT NOT NULL,
+    batch      INTEGER NOT NULL,
+    decided_by INTEGER,
+    decided_at REAL NOT NULL
+)
+index | idx_duplicate_reviews_batch | duplicate_reviews | 146 | CREATE INDEX idx_duplicate_reviews_batch ON duplicate_reviews(batch)
+table | duplicate_undo | duplicate_undo | 147 | CREATE TABLE duplicate_undo (
+    batch    INTEGER NOT NULL,
+    what     TEXT NOT NULL,
+    asset_id INTEGER NOT NULL,
+    ref      INTEGER,
+    before   TEXT
+)
+index | idx_duplicate_undo_batch | duplicate_undo | 148 | CREATE INDEX idx_duplicate_undo_batch ON duplicate_undo(batch)
+table | sqlite_stat1 | sqlite_stat1 | 149 | CREATE TABLE sqlite_stat1(tbl,idx,stat)

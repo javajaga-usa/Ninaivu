@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Review duplicates side by side.** The Duplicates view's *Review & clean up* opens a screen with every copy of a photograph in its own column: name, folder, when it was taken, size, pixels and sharpness, with whatever differs between the copies highlighted, and *Zoom in together* to compare the same corner of each at full size. Exact copies (the same bytes, by content fingerprint) and look-alikes (a burst, a resized or re-sent copy) are one list, filterable by either. An administrator keeps one and chooses *Hide the others*, *Merge into the kept one* (each person's favourite and stars, every album and a written caption carried onto it first) or *Not duplicates*; keys 1–9 choose, ← → move between groups. **Nothing is deleted and no file is touched**: hidden copies stay on disk, admins still see them as every hidden item, and *Set aside* lists each decision with *Put back*. A family member can compare but not decide, and only ever sees copies they are allowed to see. The old "Keep only the best" buttons, which sent copies to the bin, are gone from this screen.
+
 ## 4.2.0 — 13 November 2026
 
 4.2 improves the family app on phones and makes dialogs, sharing, uploads and photo editing more consistent. It also includes the Control Panel activation fix from 4.1.1. Library, profile, storage and server logic are unchanged.
