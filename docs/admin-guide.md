@@ -213,6 +213,35 @@ Until the console has a button for it, `POST /api/admin/scrubber/stop`
 (signed in to the console) stops it after the file it is reading; a restart
 does not start it again, and Start carries on from where it stopped.
 
+## The setup check
+
+**System → Setup check** looks at what most often stops a family library
+working, and says for each line what is wrong and what to do about it. It
+only looks: nothing is changed, and nothing outside this computer is
+contacted. **Check again** looks afresh; otherwise an answer from the last
+half minute is shown again.
+
+- **Ports.** The family app and the console answer on their ports. If a port
+  was taken by another program when Ninaivu started, it says which, because
+  Ninaivu then stepped to the next port and saved addresses stop working. It
+  says whether Network access is on, the address phones at home use, and what
+  the firewall does: the Mac's firewall (and *Block all incoming
+  connections*), Windows Firewall's rule for the port and a network marked
+  Public, and on Linux whether ufw or firewalld is on, with the command to
+  allow the port.
+- **Drives.** Every folder Ninaivu keeps something in is there: the library
+  folders, its own folder, the copies of the index, the second copy and, on a
+  Secondary, the originals folder. A folder on a drive that is not plugged in
+  is named by the drive. One line per disk says how much is free, and warns
+  when a disk is nearly full or when the copies of the index share the
+  index's disk.
+- **Tailscale.** Only when it is how the household reaches Ninaivu away from
+  home: installed, connected, HTTPS certificates on for the tailnet, the
+  certificate fetched by Ninaivu, and Funnel off.
+- **Permissions.** Ninaivu can open and add to every library folder (on a Mac,
+  *Full Disk Access* is the usual answer), its own folder is private to its
+  account, and it is not running as root.
+
 ## Reaching Ninaivu from outside
 
 Ninaivu decides for every request whether it came from home or from the

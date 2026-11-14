@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **A setup check in the console.** *System → Setup check* looks at ports, drives, Tailscale and permissions and says, line by line, what is fine and what to do about what is not, in plain words, in English and Tamil. It names a port another program took (so phones' saved addresses stopped working), whether Network access is on and the address phones use, and what the Mac's, Windows' or Linux's firewall does, with the command to allow the port. It names a drive that is not plugged in, a disk that is nearly full, and copies of the index kept on the index's own disk. With Tailscale it says whether it is installed, connected, given HTTPS certificates, and whether Funnel is on. It says when macOS keeps Ninaivu out of a library folder (Full Disk Access), when a folder can be read but not added to, when Ninaivu's own folder is open to other accounts, and when Ninaivu runs as root. It only looks: nothing is changed and nothing outside the computer is contacted.
+
 ## 4.2.0 — 13 November 2026
 
 4.2 improves the family app on phones and makes dialogs, sharing, uploads and photo editing more consistent. It also includes the Control Panel activation fix from 4.1.1. Library, profile, storage and server logic are unchanged.

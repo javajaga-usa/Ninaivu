@@ -5514,7 +5514,6 @@
   "Open System Settings, then Privacy & Security, then Full Disk Access. Turn on Ninaivu (or Terminal or Python, whichever starts it), then restart Ninaivu from the Server page.": "System Settings, பிறகு Privacy & Security, பிறகு Full Disk Access-ஐத் திறங்கள். நினைவுவை (அல்லது அதைத் தொடங்கும் Terminal அல்லது Python-ஐ) இயக்குங்கள், பிறகு சேவையகம் பக்கத்திலிருந்து நினைவுவை மறுதொடக்கம் செய்யுங்கள்.",
   "Open Tailscale on this computer and sign in, with the account the family's phones use. Then check again.": "இந்தக் கணினியில் Tailscale-ஐத் திறந்து, குடும்பத் தொலைபேசிகள் பயன்படுத்தும் கணக்கில் உள்நுழையுங்கள். பிறகு மீண்டும் சரிபாருங்கள்.",
   "Open Terminal as administrator (right-click Start, Terminal (Admin)) and run this once:": "Terminal-ஐ நிர்வாகியாகத் திறந்து (Start-ஐ வலது கிளிக் செய்து, Terminal (Admin)) இதை ஒருமுறை இயக்குங்கள்:",
-  "Open in a new tab": "புதிய தாவலில் திற",
   "Open that page": "அந்தப் பக்கத்தைத் திற",
   "Opening Ninaivu away from home is turned off.": "வீட்டுக்கு வெளியே நினைவுவைத் திறப்பது அணைக்கப்பட்டுள்ளது.",
   "Originals kept for the Primary": "முதன்மைக் கணினிக்காக வைத்திருக்கும் மூலக் கோப்புகள்",
@@ -5571,5 +5570,6 @@
   "macOS keeps apps out of some folders and drives until they are allowed.": "அனுமதிக்கப்படும் வரை சில கோப்புறைகளிலும் டிரைவ்களிலும் செயலிகளை macOS உள்ளே விடாது.",
   "{count} things need fixing": "சரிசெய்ய வேண்டியவை {count}",
   "{provider} needs a setting.": "{provider}-க்கு ஓர் அமைப்பு தேவை.",
-  "{what}: {path}": "{what}: {path}"
+  "{what}: {path}": "{what}: {path}",
+  "Open Tailscale’s page": "Tailscale-இன் பக்கத்தைத் திற"
 }

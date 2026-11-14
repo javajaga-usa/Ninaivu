@@ -5220,7 +5220,6 @@
   "Open System Settings, then Privacy & Security, then Full Disk Access. Turn on Ninaivu (or Terminal or Python, whichever starts it), then restart Ninaivu from the Server page.": "Open System Settings, then Privacy & Security, then Full Disk Access. Turn on Ninaivu (or Terminal or Python, whichever starts it), then restart Ninaivu from the Server page.",
   "Open Tailscale on this computer and sign in, with the account the family's phones use. Then check again.": "Open Tailscale on this computer and sign in, with the account the family's phones use. Then check again.",
   "Open Terminal as administrator (right-click Start, Terminal (Admin)) and run this once:": "Open Terminal as administrator (right-click Start, Terminal (Admin)) and run this once:",
-  "Open in a new tab": "Open in a new tab",
   "Open that page": "Open that page",
   "Opening Ninaivu away from home is turned off.": "Opening Ninaivu away from home is turned off.",
   "Originals kept for the Primary": "Originals kept for the Primary",
@@ -5277,5 +5276,6 @@
   "macOS keeps apps out of some folders and drives until they are allowed.": "macOS keeps apps out of some folders and drives until they are allowed.",
   "{count} things need fixing": "{count} things need fixing",
   "{provider} needs a setting.": "{provider} needs a setting.",
-  "{what}: {path}": "{what}: {path}"
+  "{what}: {path}": "{what}: {path}",
+  "Open Tailscale’s page": "Open Tailscale’s page"
 }

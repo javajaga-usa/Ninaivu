@@ -118,7 +118,7 @@ function row(check) {
     actions.appendChild(open);
   }
   if (check.link) {
-    const link = el('a', 'btn ghost small', i18n.t('Open in a new tab'));
+    const link = el('a', 'btn ghost small', i18n.t('Open Tailscale’s page'));
     link.href = check.link;
     link.target = '_blank';
     link.rel = 'noopener noreferrer';
