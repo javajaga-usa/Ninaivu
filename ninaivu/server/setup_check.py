@@ -38,7 +38,7 @@ import sys
 import threading
 import time
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import PurePosixPath
 from typing import Any, Callable
 
 from ..words import filled, said
@@ -415,16 +415,16 @@ def _gb(size: int) -> str:
 def _drive_of(path: str, platform: str) -> tuple[str, str]:
     """``(name, mount point)`` of the removable drive *path* is on, or
     ``("", "")`` when it is not on one Ninaivu can tell (the system disk)."""
-    parts = Path(path).parts
+    parts = PurePosixPath(path).parts
     if platform == "darwin" and len(parts) >= 3 and parts[1] == "Volumes":
-        return parts[2], str(Path(*parts[:3]))
+        return parts[2], str(PurePosixPath(*parts[:3]))
     if platform.startswith("linux") and len(parts) >= 3:
         if parts[1] == "mnt":
-            return parts[2], str(Path(*parts[:3]))
+            return parts[2], str(PurePosixPath(*parts[:3]))
         if parts[1] == "media" and len(parts) >= 4:
-            return parts[3], str(Path(*parts[:4]))
+            return parts[3], str(PurePosixPath(*parts[:4]))
         if parts[1] == "run" and len(parts) >= 5 and parts[2] == "media":
-            return parts[4], str(Path(*parts[:5]))
+            return parts[4], str(PurePosixPath(*parts[:5]))
     if platform == "win32" and re.match(r"^[A-Za-z]:", path or "") and not path.upper().startswith("C:"):
         return path[:2].upper(), path[:2].upper() + "\\"
     return "", ""

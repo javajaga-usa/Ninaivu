@@ -1151,24 +1151,53 @@
   </div>
 </div>
 
-<!-- Duplicates Review Modal -->
+<!-- Duplicates Review: copies side by side (pages/family/duplicates.js,
+     /api/duplicates/review). Exact copies by fingerprint and near ones by
+     look; an administrator keeps one and hides or merges the rest. Nothing
+     here deletes a file. -->
 <div class="modal" id="duplicates-modal" hidden role="dialog" aria-modal="true" aria-labelledby="duplicates-title">
   <div class="modal-card dup-modal-card">
-    <div style="display:flex; justify-content:space-between; align-items:center;">
+    <div class="dup-head">
       <h2 id="duplicates-title" data-i18n="Review duplicates">Review duplicates</h2>
+      <div class="dup-tabs" role="tablist">
+        <button class="dup-tab active" type="button" role="tab" data-dup-tab="review" aria-selected="true" data-i18n="To review">To review</button>
+        <button class="dup-tab" type="button" role="tab" data-dup-tab="aside" aria-selected="false" hidden data-i18n="Set aside">Set aside</button>
+      </div>
+      <div class="spacer"></div>
       <button class="icon-btn" id="duplicates-close-x" aria-label="Close" data-i18n-label="Close"><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
     </div>
-    <p class="hint" data-i18n="Ninaivu picks the sharpest, highest-resolution frame in each group as the one worth keeping — never over a favourite or a rating you've already given. Nothing is deleted until you say so.">
-      Ninaivu picks the sharpest, highest-resolution frame in each group as the
-      one worth keeping — never over a favourite or a rating you've already
-      given. Nothing is deleted until you say so.
-    </p>
-    <div class="dup-groups" id="duplicates-groups"></div>
-    <div class="modal-foot">
-      <button class="btn ghost small" id="duplicates-keep-all-best" data-i18n="Keep only the best, everywhere">Keep only the best, everywhere</button>
-      <div class="spacer"></div>
-      <button class="btn ghost" id="duplicates-close" data-i18n="Close">Close</button>
-    </div>
+
+    <section class="dup-pane" id="dup-review-pane">
+      <div class="dup-bar">
+        <div class="dup-kinds" role="radiogroup" aria-label="Which copies" data-i18n-label="Which copies">
+          <button class="chip active" type="button" data-dup-kind="all" data-i18n="All">All</button>
+          <button class="chip" type="button" data-dup-kind="exact"><span data-i18n="Exact copies">Exact copies</span> <b id="dup-count-exact"></b></button>
+          <button class="chip" type="button" data-dup-kind="near"><span data-i18n="Look alike">Look alike</span> <b id="dup-count-near"></b></button>
+        </div>
+        <div class="spacer"></div>
+        <label class="dup-zoom"><input type="checkbox" id="dup-zoom"> <span data-i18n="Zoom in together">Zoom in together</span></label>
+        <button class="icon-btn" id="dup-prev" type="button" aria-label="Previous group" data-i18n-label="Previous group"><svg viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></button>
+        <span class="dup-where" id="dup-where" aria-live="polite"></span>
+        <button class="icon-btn" id="dup-next" type="button" aria-label="Next group" data-i18n-label="Next group"><svg viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></button>
+      </div>
+      <p class="hint dup-group-line" id="dup-group-line"></p>
+      <div class="dup-compare" id="dup-compare"></div>
+      <div class="modal-foot dup-foot">
+        <p class="hint" id="dup-note" data-i18n="Nothing is deleted. Hidden copies stay on disk and can be put back.">Nothing is deleted. Hidden copies stay on disk and can be put back.</p>
+        <div class="spacer"></div>
+        <div class="dup-actions" id="dup-actions" hidden>
+          <button class="btn ghost small" id="dup-not" type="button" data-i18n="Not duplicates">Not duplicates</button>
+          <button class="btn ghost small" id="dup-hide" type="button" data-i18n="Hide the others">Hide the others</button>
+          <button class="btn primary small" id="dup-merge" type="button" data-i18n="Merge into the kept one">Merge into the kept one</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="dup-pane" id="dup-aside-pane" hidden>
+      <p class="hint" data-i18n="Copies hidden for the one kept, newest first. Putting back shows them to the family again and takes off what a merge added.">Copies hidden for the one kept, newest first. Putting back shows them to the family again and takes off what a merge added.</p>
+      <div class="dup-aside-list" id="dup-aside-list"></div>
+      <div class="modal-foot"><button class="btn ghost small" id="dup-aside-more" type="button" hidden data-i18n="Show more">Show more</button></div>
+    </section>
   </div>
 </div>
 
