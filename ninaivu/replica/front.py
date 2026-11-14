@@ -1,7 +1,9 @@
-"""The Pi's family app: one address, read-only, and the mini when it is awake.
+"""The Secondary's family view: one address, read-only, and the Primary when it is awake.
 
-Installed on the family app only when this process is a replica
-(``--replica-of``). Three rules, each a ``before_request`` after the app's
+Installed on the family view the Secondary serves from the Primary's
+hand-over while the Primary is off (mugil/family_view.py). Until 4.2 it was
+also a Raspberry Pi's, or a stand-alone ``--replica-of`` process's; "the Pi"
+and "the mini" below are the Secondary and the Primary. Three rules, each a ``before_request`` after the app's
 own (host names, sign-in, the screen lock):
 
 **Send people to the mini while it is awake.** The family bookmarks the Pi.
@@ -19,7 +21,7 @@ the index, whose copy here is replaced by the next hand-over anyway: a
 caption typed on the Pi would be lost without anybody being told.
 
 **Wake the mini when somebody needs it.** With the mini's network address
-given (``--replica-wake``), a refused change, or ``POST /api/replica/wake``,
+given (``replica_wake_mac``), a refused change, or ``POST /api/replica/wake``,
 sends it a Wake-on-LAN packet, at most once a minute. The mini needs "Wake
 for network access" on in its Energy settings.
 """
