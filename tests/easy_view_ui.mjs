@@ -72,6 +72,12 @@ ok('adding and making are out of the way', await page.locator('#add-btn').isHidd
     + ' ' + [...document.styleSheets].map((s) => s.href).join(',')));
 await shot('easy-view-timeline');
 
+// Exercise the device fallback even on hosts with downloaded voices.
+await page.route('**/api/asset/*/told?*', async (route) => {
+  const response = await route.fetch();
+  const answer = await response.json();
+  await route.fulfill({ response, json: { ...answer, voice: { ready: false }, audio: null } });
+});
 const first = await page.evaluate(() => Number(document.querySelector('#grid .cell[data-id]')?.dataset.id));
 await page.click(`#grid .cell[data-id="${first}"]`);
 await page.waitForSelector('#viewer:not([hidden]) .easy-told:not([hidden])', { timeout: 8000 });
