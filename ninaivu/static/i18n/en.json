@@ -259,6 +259,7 @@
   "(from the file name)": "(from the file name)",
   "(from the folder)": "(from the folder)",
   "Sudar could not load. Please refresh and try again.": "Sudar could not load. Please refresh and try again.",
+  "The editor could not load. Please refresh and try again.": "The editor could not load. Please refresh and try again.",
   "Ambient Frame mode active — click anywhere or Esc to exit": "Ambient Frame mode active — click anywhere or Esc to exit",
   "Aperture": "Aperture",
   "Camera": "Camera",

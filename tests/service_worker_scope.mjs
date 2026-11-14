@@ -6,7 +6,7 @@ const handlers = {};
 const intercepted = [];
 const thumbFetches = [];
 const context = vm.createContext({
-  URL, URLSearchParams, Response, Date, Map,
+  URL, URLSearchParams, Response, Date, Map, setTimeout, clearTimeout,
   // Signing out also empties the stored shell; nothing is stored here.
   caches: { keys: async () => [], delete: async () => true },
   fetch: (request, options) => {
@@ -79,7 +79,7 @@ console.log('PASS: offline navigation only caches the home shell; private URLs s
 // The console's copy: the offline page for its home page, nothing stored.
 const consoleHandlers = {};
 const consoleContext = vm.createContext({
-  URL, URLSearchParams, Response,
+  URL, URLSearchParams, Response, setTimeout, clearTimeout,
   fetch: () => Promise.reject(new TypeError('Failed to fetch')),
   caches: { open() { throw new Error('the console copy must not open a cache'); } },
   self: {
@@ -123,7 +123,7 @@ console.log('PASS: the console worker shows the offline page and stores nothing'
   let silent = false;
   const awayHandlers = {};
   const away = vm.createContext({
-    URL, URLSearchParams, Response,
+    URL, URLSearchParams, Response, setTimeout, clearTimeout,
     fetch: () => (silent ? new Promise(() => {}) : Promise.reject(new TypeError('Failed to fetch'))),
     caches: { open: async () => cache },
     self: {
