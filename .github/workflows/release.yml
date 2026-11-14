@@ -1,9 +1,9 @@
 name: Release installers
 
-# On a version tag: Ninaivu, portable, for three computers, attached to the
+# On a version tag: Ninaivu for three computers, attached to the
 # GitHub release — Windows x64 (a zip: Ninaivu.exe, app\ and logs\), macOS on
 # Apple silicon (a zip: the Ninaivu folder with Ninaivu.app) and Linux x64 (a
-# .tar.gz: the ninaivu script, app/ and logs/). Nothing is installed: each
+# .deb installer). Windows and Mac are portable folders. Each
 # carries its own Python and every package, and ships Ninaivu as bytecode,
 # not source. And the Docker image (x64).
 #
@@ -65,6 +65,7 @@ on:
       - "tools/build_guide_pdf.py"
       - "tools/check_bring_across.py"
       - "tools/check_portable.py"
+      - "tools/check_deb.py"
       - "ninaivu/mugil/**"
       - "ninaivu/api/mugil_api.py"
       - "ninaivu/media/components.py"
@@ -406,7 +407,7 @@ jobs:
             installers/macos/build/*-packages.txt
 
   linux:
-    name: Linux x64, portable
+    name: Linux x64, Debian installer
     needs: gate
     runs-on: ubuntu-latest
     timeout-minutes: 80
@@ -419,6 +420,7 @@ jobs:
         run: |
           python -m pip install -c requirements/build-tools.txt pip
           bash installers/linux/build.sh
+          python installers/linux/build-deb.py installers/linux/build/Ninaivu-*-linux-x64-portable.tar.gz
       # Xvfb, so the Control Panel can be drawn, and the folder's one starter
       # opened, as on a desktop. Nothing else is installed: what the download
       # needs, it carries.
@@ -426,6 +428,8 @@ jobs:
         run: |
           tools/ci_apt_install.sh xvfb
           xvfb-run -a python tools/check_portable.py check installers/linux/build/Ninaivu-*-linux-x64-portable.tar.gz --work "$RUNNER_TEMP/check"
+      - name: Install, open as an ordinary user, and remove the Debian package
+        run: sudo python tools/check_deb.py installers/linux/build/Ninaivu-*-linux-x64.deb
       - name: Two copies of it, paired
         run: python tools/check_portable.py pair installers/linux/build/Ninaivu-*-linux-x64-portable.tar.gz --work "$RUNNER_TEMP/pair"
 
@@ -449,6 +453,10 @@ jobs:
           fi
           echo "the latest release: $tag, in $repo"
           asset="Ninaivu-${tag#v}-linux-x64-portable.tar.gz"
+          if ! gh release view "$tag" --repo "$repo" --json assets -q '.assets[].name' | grep -Fxq "$asset"; then
+            echo "::notice::The previous Linux release uses a Debian package; its home-folder library is retained by the package install/remove checks."
+            exit 0
+          fi
           older="$RUNNER_TEMP/older"
           mkdir -p "$older"
           for attempt in 1 2 3 4 5; do
@@ -464,6 +472,7 @@ jobs:
           name: linux
           path: |
             installers/linux/build/*.tar.gz
+            installers/linux/build/*.deb
             installers/linux/build/*-packages.txt
 
   # The Linux download on Debian, as a household's Debian desktop has it:
@@ -498,6 +507,8 @@ jobs:
             fonts-dejavu-core libgl1 libegl1 libglib2.0-0 libsm6 libice6 libfribidi0
       - name: Use the archive as a household would
         run: xvfb-run -a python3 tools/check_portable.py check download/Ninaivu-*-linux-x64-portable.tar.gz --work "$RUNNER_TEMP/check"
+      - name: Install and remove the Debian package
+        run: python3 tools/check_deb.py download/Ninaivu-*-linux-x64.deb
       - name: Two copies of it, paired
         run: python3 tools/check_portable.py pair download/Ninaivu-*-linux-x64-portable.tar.gz --work "$RUNNER_TEMP/pair"
 
@@ -641,8 +652,8 @@ jobs:
           # `sha256sum -c --ignore-missing SHA256SUMS.txt` works in the folder
           # they were downloaded to.
           cd out
-          for file in windows/*.zip macos/*.zip linux/*.tar.gz \
-                      windows/*-packages.txt macos/*-packages.txt linux/*-packages.txt; do
+          for file in windows/*.zip macos/*.zip linux/*.deb \
+                      windows/*-packages.txt macos/*-packages.txt linux/*-linux-x64-packages.txt; do
             (cd "$(dirname "$file")" && sha256sum "$(basename "$file")")
           done > SHA256SUMS.txt
           cat SHA256SUMS.txt
@@ -659,7 +670,7 @@ jobs:
           subject-path: |
             out/windows/*.zip
             out/macos/*.zip
-            out/linux/*.tar.gz
+            out/linux/*.deb
             out/SHA256SUMS.txt
       # The notes say what is in this release (its section of the changelog)
       # and, honestly, whether the installers are signed: an unsigned one
@@ -671,7 +682,7 @@ jobs:
           {
             echo "Ninaivu $version — your family's photographs, on a computer at home."
             echo
-            echo "Ninaivu is portable: nothing is installed. Extract it anywhere you can write to (your Documents, a USB drive) and open it; deleting the folder removes everything it made. **Windows:** \`Ninaivu-$version-windows-x64-portable.zip\` — open \`Ninaivu.exe\`. **Mac (Apple silicon):** \`Ninaivu-$version-macos-arm64-portable.zip\` — open \`Ninaivu.app\` in the folder it makes. **Linux (x64: Ubuntu, Debian and the like):** \`Ninaivu-$version-linux-x64-portable.tar.gz\` — run \`./ninaivu\` (\`./ninaivu --server <photos>\` without a desktop). To update, unpack the newer one beside the old folder, on the same drive, and open it: it offers to bring the library across, and can give it back (README-PORTABLE.txt in each says more). Docker and running from source are in the technical administrator guide."
+            echo "**Windows:** \`Ninaivu-$version-windows-x64-portable.zip\` — open \`Ninaivu.exe\`. **Mac (Apple silicon):** \`Ninaivu-$version-macos-arm64-portable.zip\` — open \`Ninaivu.app\`. Extract these portable folders somewhere you can write to. **Linux (x64, Debian/Ubuntu):** \`Ninaivu-$version-linux-x64.deb\` — install with your software installer or \`sudo apt install ./Ninaivu-$version-linux-x64.deb\`, then open Ninaivu from the applications menu. Linux libraries, models, settings and logs stay in \`~/.ninaivu\` through upgrades and removal. Windows and Mac portable updates bring the old library across when opened beside the old folder. Docker and running from source are in the administrator guide."
             echo "Each one carries its own Python, so the computer needs none, and every package: nothing is downloaded when it runs. The checksums are in \`SHA256SUMS.txt\` (how to check one: the Security page of the docs); each \`*-packages.txt\` lists what that download carries."
             echo
             echo "**The guide**, to read or share: \`Ninaivu-guide.pdf\` (English) and \`Ninaivu-guide-ta.pdf\` (தமிழ்). For whoever looks after the technical side: \`Ninaivu-admin-guide.pdf\` (English)."
@@ -711,10 +722,10 @@ jobs:
           files: |
             out/windows/*.zip
             out/macos/*.zip
-            out/linux/*.tar.gz
+            out/linux/*.deb
             out/windows/*-packages.txt
             out/macos/*-packages.txt
-            out/linux/*-packages.txt
+            out/linux/*-linux-x64-packages.txt
             out/SHA256SUMS.txt
             out/Ninaivu-guide.pdf
             out/Ninaivu-guide-ta.pdf

@@ -8,10 +8,10 @@
  */
 
 import { computeLayout, visibleRange, sectionAt } from './layout.js';
-import { thumbUrl } from './api.js';
+import { api, thumbUrl } from './api.js';
 import * as i18n from './i18n.js';
 import {
-  LIVE_ICON, liveUrls, liveVideo, mayAutoplay, releaseVideo,
+  LIVE_ICON, liveVideo, mayAutoplay, releaseVideo,
 } from './live.js';
 
 const OVERSCAN = 900;      // px rendered above and below the viewport
@@ -356,18 +356,44 @@ export class Grid extends EventTarget {
   }
 
   /** Play a live photo's clip over its tile, once, then show the photograph. */
-  peekLive(node) {
+  async peekLive(node) {
     // Not while the grid scrolls: the tile only slid under a resting mouse.
     if (this.fast || this.scrolling || this.container.classList.contains('no-hover')
         || node.querySelector('.live-peek')
         || !node.matches(':hover')) return;
     const id = node.dataset.id;
-    const video = liveVideo(liveUrls(id), {
+    const request = {};
+    node.liveRequest = request;
+    const wanted = () => node.liveRequest === request && node.isConnected
+      && node.dataset.id === id && node.matches(':hover');
+    let item;
+    try {
+      item = await api.asset(id);
+    } catch {
+      return;
+    }
+    if (!wanted() || !item.live_src) return;
+    const video = liveVideo({ src: item.live_src, convert: item.live_convert }, {
       className: 'live-peek',
-      wanted: () => node.isConnected && node.dataset.id === id && node.matches(':hover'),
+      wanted,
     });
+    // Straighten changes the still's saved turn. Its companion needs that
+    // same turn, including after Undo, without changing either original.
+    const angle = ((Number(item.rotation) || 0) % 360 + 360) % 360;
+    const fit = () => {
+      const swap = angle === 90 || angle === 270;
+      video.style.inset = 'auto';
+      video.style.left = '50%';
+      video.style.top = '50%';
+      video.style.width = `${swap ? node.clientHeight : node.clientWidth}px`;
+      video.style.height = `${swap ? node.clientWidth : node.clientHeight}px`;
+      video.style.transform = `translate(-50%, -50%) rotate(${angle}deg)`;
+    };
+    node.liveResize = new ResizeObserver(fit);
+    node.liveResize.observe(node);
+    fit();
     video.dataset.playing = '1';
-    const done = () => this.stopLive(node);
+    const done = () => { if (wanted()) this.stopLive(node); };
     video.addEventListener('ended', done);
     video.addEventListener('live-unavailable', done);
     video.addEventListener('playing', () => node.classList.add('live-playing'));
@@ -376,6 +402,9 @@ export class Grid extends EventTarget {
   }
 
   stopLive(node) {
+    node.liveRequest = null;
+    node.liveResize?.disconnect();
+    node.liveResize = null;
     node.classList.remove('live-playing');
     releaseVideo(node.querySelector('.live-peek'));
   }
@@ -1076,6 +1105,10 @@ export class Grid extends EventTarget {
   }
 
   paintCell(node, cell) {
+    if (node.dataset.id !== String(cell.id) || node.dataset.liveVersion !== String(cell.v ?? '')) {
+      this.stopLive(node);
+    }
+    node.dataset.liveVersion = String(cell.v ?? '');
     this.positionCell(node, cell);
     node.dataset.id = String(cell.id);
     node.dataset.n = String(cell.n);
