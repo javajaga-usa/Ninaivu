@@ -511,6 +511,7 @@ MESSAGES = (
     said('The two passphrases do not match.'),
     said("The upload's library is no longer configured."),
     said("The upload's library is unavailable."),
+    said('The weekly health digest is not running here.'),
     said('The whole library cannot be changed in one go. Set the visibility on a folder, or on the photographs themselves.'),
     said('The whole library has no rule of its own to take away.'),
     said('The words can be at most {max_text} characters, and the name {max_speaker}.'),

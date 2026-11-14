@@ -189,6 +189,29 @@ The console's Overview runs the household's safety checks every time it
 opens — a copy outside the house, a backup that restores, copies of the
 index, healthy drives — and says what to do about each.
 
+### This week
+
+Under it, **This week** looks back over the last seven days, for whoever
+opens the console once a week rather than every day:
+
+- **Damaged files** — files the storage check found changed or unreadable
+  this week, files added this week that could not be opened, and errors the
+  library scans met.
+- **Free space** — how much room is left on each disk the library and the
+  index are on, and how much more or less there is than a week ago.
+- **Failed jobs** — photographs Ninaivu gave up on (faces, words in
+  photographs, video frames), archive runs and test restores that failed,
+  scans that stopped with an error, and background work failing right now.
+- **Drives** — library folders that are not connected, and drives logging
+  errors (on Windows, which records them).
+
+Ninaivu keeps the last twelve weeks under **Earlier weeks**. An administrator
+signed in to the family app sees the same four lines at the top of the
+gallery, with a link to the console and a button to hide them until next
+week; nobody else sees them. If notifications are set up (Health →
+Notifications), each Monday's summary is sent there too, as counts only:
+never a photograph, a file's path or a name.
+
 ## If something happens to you: the handover plan
 
 Usually one person knows how the library works. **Backup & health →

@@ -461,6 +461,8 @@ admin | POST                 | /api/handover/claims/<int:claim_id>/cancel | admi
 home  | POST                 | /api/handover/claims/<int:claim_id>/cancel | admin | writes | same origin | api.handover_cancel | handover
 admin | GET                  | /api/handover/me | family | reads | - | api.handover_me | handover
 home  | GET                  | /api/handover/me | family | reads | - | api.handover_me | handover
+admin | GET                  | /api/health/week | admin | reads | - | api.health_week | -
+home  | GET                  | /api/health/week | admin | reads | - | api.health_week | -
 admin | POST                 | /api/import/look | admin | writes | same origin | import.look | -
 admin | POST                 | /api/import/start | admin | writes | same origin | import.start | -
 admin | GET                  | /api/import/status | admin | reads | - | import.status | -

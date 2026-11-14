@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **A weekly health digest for administrators.** The console's Overview has a new **This week** block under "Is everything safe?": the last seven days' damaged files (found by the storage check, unopenable when added, scan errors), free space on each library and index disk compared with a week ago, failed jobs (photographs the job engine set aside, archive runs, test restores, scans, background work failing now) and drive status (library folders not connected, drives logging errors). The last twelve weeks are kept under it. An administrator signed in to the family app sees the same four lines at the top of the gallery and can hide them until next week; family members and guests see nothing (`GET /api/health/week`, admin only). With notifications set up, each finished week is sent on Monday as counts only (new event `weekly_health`). Ninaivu notes the free space every six hours in `health-week.json` in its state folder; nothing in the index changes.
+
 ## 4.2.0 — 13 November 2026
 
 4.2 improves the family app on phones and makes dialogs, sharing, uploads and photo editing more consistent. It also includes the Control Panel activation fix from 4.1.1. Library, profile, storage and server logic are unchanged.

@@ -3646,3 +3646,59 @@ input[type=range], input[type=checkbox], input[type=radio] { accent-color: var(-
   .stack-bar { animation: none; }
   .stack-frame { transition: none; }
 }
+
+/* The week's health, for an administrator (static/js/health-week.js) ----- */
+
+.week-card {
+  margin: 12px 18px 4px;
+  padding: 12px 16px;
+  border: 1px solid var(--border-soft, var(--border));
+  border-radius: 14px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 13px;
+}
+.week-card[hidden] { display: none !important; }
+.week-card[data-verdict="problem"] {
+  border-color: color-mix(in srgb, var(--danger, #ef4444) 40%, transparent);
+}
+.week-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.week-card-title { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.week-card-headline { color: var(--text-2); }
+.week-card-headline.sf-problem { color: var(--danger, #ef4444); }
+.week-card-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.week-card-parts {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 6px 16px;
+}
+.week-card-part {
+  display: grid;
+  grid-template-columns: 10px auto;
+  column-gap: 8px;
+  align-items: baseline;
+}
+.week-card-part .sf-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--text-3);
+  grid-row: span 2;
+  align-self: start;
+  margin-top: 5px;
+}
+.week-card-part .sf-dot.sf-ok { background: #22a45d; }
+.week-card-part .sf-dot.sf-attention { background: #e8a33a; }
+.week-card-part .sf-dot.sf-problem { background: var(--danger, #ef4444); }
+.week-card-name { font-weight: 600; }
+.week-card-line { color: var(--text-2); grid-column: 2; }
+@media (max-width: 600px) {
+  .week-card { margin: 10px 12px 4px; }
+}
