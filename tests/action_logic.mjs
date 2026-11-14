@@ -116,6 +116,26 @@ await handlers['#share-copy-btn']();
 assert.match(messages.pop(), /Link copied/);
 console.log('PASS: favorite failures and navigation, modal shortcuts, clipboard outcomes, viewer close and pending loads');
 
+// Safari cancels a gesture when the OS or browser takes it over. A canceled
+// horizontal drag must release its state without turning the photograph.
+const gesture = Object.assign(makeViewer(), {
+  pointers: new Map([[1, { x: 200, y: 100 }]]),
+  dragStart: { x: 200, y: 100, t: performance.now() },
+  transform: { scale: 1 }, media: { classList: { remove() {} } },
+  applyTransform() {}, step() { throw new Error('Canceled gesture navigated'); },
+});
+gesture.onPointerUp({ type: 'pointercancel', pointerId: 1, clientX: 0, clientY: 100 });
+assert.equal(gesture.dragStart, null);
+assert.equal(gesture.pointers.size, 0);
+gesture.onPointerUp({ type: 'pointerup', pointerId: 99, clientX: 0, clientY: 100 });
+let swiped = false;
+gesture.pointers.set(1, {});
+gesture.dragStart = { x: 200, y: 100, t: performance.now() };
+gesture.step = () => { swiped = true; };
+gesture.onPointerUp({ type: 'pointerup', pointerId: 1, clientX: 0, clientY: 100 });
+assert.equal(swiped, true, 'a completed swipe still changes the photograph');
+console.log('PASS: canceled and unrelated pointer events never turn the photograph');
+
 const filterContext = {
   state: { filters: { person: 7, q: 'beach', tag: 'trip', sort: 'date_desc' } },
   ctx: { stopSearch() {} },

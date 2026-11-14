@@ -5172,5 +5172,6 @@
   "Unpairing": "Unpairing",
   "Bring in what only the Secondary's disk holds, put the new disk in, let the originals be sent again, then prove nothing was lost.": "Bring in what only the Secondary's disk holds, put the new disk in, let the originals be sent again, then prove nothing was lost.",
   "{count} files are only on the Secondary's disk ({size}). Bring them in on this page before the disk is replaced, or they go with it.": "{count} files are only on the Secondary's disk ({size}). Bring them in on this page before the disk is replaced, or they go with it.",
-  "Nothing is only on the Secondary's disk: everything it holds is here too. The disk can be replaced, and the originals sent again.": "Nothing is only on the Secondary's disk: everything it holds is here too. The disk can be replaced, and the originals sent again."
+  "Nothing is only on the Secondary's disk: everything it holds is here too. The disk can be replaced, and the originals sent again.": "Nothing is only on the Secondary's disk: everything it holds is here too. The disk can be replaced, and the originals sent again.",
+  "Could not open sharing. Copy the link instead.": "Could not open sharing. Copy the link instead."
 }

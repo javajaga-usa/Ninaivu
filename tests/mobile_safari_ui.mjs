@@ -68,13 +68,20 @@ try {
   await page.locator('#more-btn').tap();
   await page.locator('#upload-btn').tap();
   await page.waitForSelector('#upload-modal:not([hidden])');
+  assert.equal(await page.locator('.dropzone-touch').isVisible(), true);
+  assert.equal(await page.locator('#upload-dropzone .hint').isVisible(), false);
   const chooserPromise = page.waitForEvent('filechooser');
   await page.locator('#upload-dropzone').tap();
   const chooser = await chooserPromise;
   console.log('PASS: a touch on Upload opens the phone file chooser');
-  await page.route('**/api/upload', route => route.fulfill({ json: { total: 1, uploaded: [{ filename: 'phone.png', rel_path: 'phone.png' }] } }));
+  const longName = 'family-holiday-'.repeat(16) + '.png';
+  await page.route('**/api/upload', route => route.fulfill({ json: { total: 1, uploaded: [{ filename: longName, rel_path: `2026/${longName}` }] } }));
   await chooser.setFiles({ name: 'phone.png', mimeType: 'image/png', buffer: Buffer.from('test') });
   await page.waitForFunction(() => document.querySelector('#upload-status').textContent.includes('Uploaded'));
+  await page.setViewportSize({ width: 320, height: 667 });
+  assert.ok(await page.locator('#upload-modal .modal-card').evaluate(node => node.scrollWidth <= node.clientWidth + 1),
+    'long uploaded filenames and paths wrap inside a small phone');
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.locator('#upload-close').tap();
   await page.locator('#grid .cell').first().tap();
   await page.waitForFunction(() => document.querySelector('#v-name').textContent.trim());
@@ -82,6 +89,15 @@ try {
     const box = node.getBoundingClientRect();
     return box.width >= 44 && box.height >= 44;
   }), 'the viewer offers a full touch target for sharing');
+  await page.evaluate(() => {
+    window.linkShares = [];
+    Object.defineProperty(navigator, 'canShare', { configurable: true, value: () => true });
+    Object.defineProperty(navigator, 'share', { configurable: true, value: async data => {
+      linkShares.push(data);
+      if (linkShares.length === 1) throw Object.assign(new Error('dismissed'), { name: 'AbortError' });
+      if (linkShares.length === 2) throw Object.assign(new Error('denied'), { name: 'NotAllowedError' });
+    } });
+  });
   await page.locator('#v-share').tap();
   await page.waitForSelector('#share-modal:not([hidden])');
   assert.equal(await page.locator('#ios-install-banner').isVisible(), false, 'the install banner must step aside for sharing');
@@ -94,6 +110,23 @@ try {
   assert.ok(await page.locator('#share-password').evaluate(node => parseFloat(getComputedStyle(node).fontSize) >= 16));
   await page.locator('#share-create-btn').tap();
   await page.waitForSelector('#share-link-result:not([hidden])');
+  const shareUrl = await page.locator('#share-url-text').inputValue();
+  await page.locator('#share-native-btn').tap();
+  await page.waitForFunction(() => !document.querySelector('#share-native-btn').disabled);
+  await page.locator('#share-native-btn').tap();
+  await page.waitForFunction(() => !document.querySelector('#share-native-btn').disabled);
+  assert.equal(await page.locator('#share-copy-btn').isEnabled(), true, 'copy remains available after native sharing fails');
+  await page.locator('#share-native-btn').tap();
+  await page.waitForFunction(() => !document.querySelector('#share-native-btn').disabled);
+  assert.deepEqual(await page.evaluate(() => linkShares.map(data => data.url)), [shareUrl, shareUrl, shareUrl]);
+  await page.evaluate(() => Object.defineProperty(navigator, 'clipboard', {
+    configurable: true, value: { writeText: async value => { window.copiedLink = value; } },
+  }));
+  await page.locator('#share-copy-btn').tap();
+  await page.waitForFunction(() => window.copiedLink);
+  assert.equal(await page.evaluate(() => copiedLink), shareUrl);
+  assert.equal(await page.locator('#share-url-text').evaluate(node => node === document.activeElement), false,
+    'successful copy does not focus the link field or open the keyboard');
   await page.evaluate(() => Object.defineProperty(navigator, 'clipboard', {
     configurable: true, value: { writeText: async () => { throw new Error('denied'); } },
   }));
@@ -121,11 +154,22 @@ try {
       return box.width <= innerWidth + 1 && box.height <= innerHeight + 1;
     });
     assert.ok(fits, `${viewport.width}×${viewport.height}: editor fits the phone`);
+    assert.ok(await editorPage.locator('.photo-editor').evaluate(node => {
+      const box = node.getBoundingClientRect();
+      return Math.abs(box.left) <= 1 && Math.abs(box.top) <= 1
+        && Math.abs(box.width - innerWidth) <= 1;
+    }), 'the phone editor stays full screen in either orientation');
+    assert.ok(await editorPage.locator('.photo-editor :is(.pe-save,.pe-download,.pe-export select)').evaluateAll(nodes =>
+      nodes.filter(node => node.getClientRects().length).every(node => node.getBoundingClientRect().height >= 44)),
+    'editor export controls have comfortable touch targets');
     await editorPage.locator('[data-panel="colour"]').tap();
     await editorPage.locator('[data-setting="saturation"]').fill('10');
     await editorPage.locator('[data-setting="saturation"]').dispatchEvent('change');
     await editorPage.waitForFunction(() => !editor.rendering);
     if (process.env.MOBILE_REVIEW_SHOTS) {
+      await editorPage.locator('fieldset[data-area="colour"]').evaluate(async node => {
+        await Promise.all(node.getAnimations().map(animation => animation.finished));
+      });
       await editorPage.screenshot({ path: `${process.env.MOBILE_REVIEW_SHOTS}/iphone-editor-${viewport.width}.png` });
     }
     const url = editorPage.url();

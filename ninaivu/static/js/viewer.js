@@ -1356,6 +1356,7 @@ export class Viewer extends EventTarget {
   }
 
   onPointerDown(event) {
+    if (event.button > 0) return;
     // The Live button is a button: captured to the stage, its click went to
     // the stage instead, so a tap on it did nothing at all.
     if (event.target.closest('video, audio, .filmstrip, .viewer-info, .live-badge')) return;
@@ -1400,6 +1401,7 @@ export class Viewer extends EventTarget {
   }
 
   onPointerUp(event) {
+    if (!this.pointers.has(event.pointerId)) return;
     const start = this.dragStart;
     this.pointers.delete(event.pointerId);
     this.media?.classList.remove('panning');
@@ -1412,7 +1414,7 @@ export class Viewer extends EventTarget {
     const elapsed = performance.now() - start.t;
 
     // A quick horizontal flick pages, but only when not zoomed in.
-    if (this.transform.scale <= 1.02 && Math.abs(dx) > 60
+    if (event.type !== 'pointercancel' && this.transform.scale <= 1.02 && Math.abs(dx) > 60
         && Math.abs(dx) > Math.abs(dy) * 1.6 && elapsed < 600) {
       this.step(dx < 0 ? 1 : -1);
       return;

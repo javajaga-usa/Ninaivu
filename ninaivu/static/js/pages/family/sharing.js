@@ -35,6 +35,8 @@ export function wire() {
       const fullUrl = `${window.location.origin}${res.share_url}`;
       $('#share-url-text').value = fullUrl;
       $('#share-link-result').hidden = false;
+      $('#share-native-btn').hidden = !navigator.share
+        || (navigator.canShare && !navigator.canShare({ url: fullUrl }));
       $('#share-options').hidden = true;
       $('#share-create-btn').hidden = true;
       $('#share-copy-btn').focus();
@@ -53,15 +55,39 @@ export function wire() {
 
   $('#share-copy-btn')?.addEventListener('click', async () => {
     const input = $('#share-url-text');
-    input.select();
+    const version = shareVersion;
     try {
       if (!navigator.clipboard?.writeText) throw new Error(i18n.t('Clipboard unavailable'));
       await navigator.clipboard.writeText(input.value);
+      if (version !== shareVersion) return;
       toast(i18n.t('Link copied to clipboard!'));
     } catch {
+      if (version !== shareVersion) return;
       input.focus();
       input.select();
       toast(i18n.t('Could not copy automatically. Copy the selected link manually.'), true);
+    }
+  });
+
+  $('#share-native-btn')?.addEventListener('click', async () => {
+    const button = $('#share-native-btn');
+    const url = $('#share-url-text').value;
+    if (!url || button.disabled || !navigator.share) return;
+    const version = shareVersion;
+    button.disabled = true;
+    button.setAttribute('aria-busy', 'true');
+    try {
+      // Call in the tap handler: awaiting other work first loses iOS activation.
+      await navigator.share({ url, title: $('#share-title').textContent });
+    } catch (error) {
+      if (error.name !== 'AbortError' && version === shareVersion) {
+        toast(i18n.t('Could not open sharing. Copy the link instead.'), true);
+      }
+    } finally {
+      if (version === shareVersion) {
+        button.disabled = false;
+        button.removeAttribute('aria-busy');
+      }
     }
   });
 }
@@ -73,6 +99,9 @@ export function openShareModal(item) {
   $('#share-create-btn').disabled = false;
   $('#share-create-btn').removeAttribute('aria-busy');
   $('#share-url-text').value = '';
+  $('#share-native-btn').hidden = true;
+  $('#share-native-btn').disabled = false;
+  $('#share-native-btn').removeAttribute('aria-busy');
   $('#share-link-result').hidden = true;
   $('#share-options').hidden = false;
   $('#share-create-btn').hidden = false;

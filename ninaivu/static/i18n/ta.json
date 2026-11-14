@@ -5466,5 +5466,6 @@
   "Every original is on this computer again.": "எல்லா அசல் கோப்புகளும் மீண்டும் இந்தக் கணினியில் உள்ளன.",
   "This computer's disk is nearly full: the rest of the originals stay on the Secondary until there is room.": "இந்தக் கணினியின் வட்டு கிட்டத்தட்ட நிரம்பிவிட்டது: இடம் கிடைக்கும் வரை மீதமுள்ள அசல் கோப்புகள் இரண்டாம் கணினியிலேயே இருக்கும்.",
   "This time: {back} brought back ({size}); {missed} could not be.": "இந்த முறை: {back} திரும்பக் கொண்டுவரப்பட்டன ({size}); {missed} கொண்டுவர முடியவில்லை.",
-  "{files} originals ({size}) are on the Secondary only. This computer no longer lets originals go or shows smaller copies: bring them back to see them here as they are.": "{files} அசல் கோப்புகள் ({size}) இரண்டாம் கணினியில் மட்டுமே உள்ளன. இந்தக் கணினி இனி அசல் கோப்புகளை விடுவிப்பதில்லை, சிறிய நகல்களையும் காட்டுவதில்லை: அவற்றை அப்படியே இங்கே பார்க்கத் திரும்பக் கொண்டுவாருங்கள்."
+  "{files} originals ({size}) are on the Secondary only. This computer no longer lets originals go or shows smaller copies: bring them back to see them here as they are.": "{files} அசல் கோப்புகள் ({size}) இரண்டாம் கணினியில் மட்டுமே உள்ளன. இந்தக் கணினி இனி அசல் கோப்புகளை விடுவிப்பதில்லை, சிறிய நகல்களையும் காட்டுவதில்லை: அவற்றை அப்படியே இங்கே பார்க்கத் திரும்பக் கொண்டுவாருங்கள்.",
+  "Could not open sharing. Copy the link instead.": "பகிர்வைத் திறக்க முடியவில்லை. பதிலாக இணைப்பை நகலெடுக்கவும்."
 }
