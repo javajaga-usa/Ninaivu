@@ -252,6 +252,14 @@ Notifications are set to go (a webhook, ntfy, or email).
 
 ## Updating the Secondary from the Primary
 
+The Linux `.deb` is updated on the Secondary itself: stop Ninaivu, install the
+newer package with `sudo apt install ./Ninaivu-<version>-linux-x64.deb`, then
+restart. Its home-folder library stays in place. The package does not grant
+the server permission to replace root-owned program files.
+
+The remote procedure below applies only to older portable Linux downloads;
+new releases provide a `.deb` instead.
+
 When the Secondary runs an older Ninaivu than the Primary, the Primary's
 Mugil page offers **Update the Secondary**. Choose the Linux portable
 download of the version the Primary runs (`Ninaivu-…-linux-x64-portable.tar.gz`),

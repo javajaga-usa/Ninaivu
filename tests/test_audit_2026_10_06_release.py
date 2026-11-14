@@ -407,7 +407,7 @@ def test_every_build_uses_the_tested_versions_and_lists_what_it_bundled():
         assert "constraints-tested.txt" in text, name
         assert "-packages.txt" in text, name
     release = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
-    for artifact in ("out/windows/*-packages.txt", "out/linux/*-packages.txt",
+    for artifact in ("out/windows/*-packages.txt", "out/linux/*-linux-x64-packages.txt",
                      "out/macos/*-packages.txt"):
         assert artifact in release
 

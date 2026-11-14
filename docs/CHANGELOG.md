@@ -1,6 +1,9 @@
 # Changelog
 
-## Unreleased
+## 4.3.0 — 14 November 2026
+
+- **Straighten also turns a Live Photo's moving preview.** The gallery reads the still's saved correction for its companion clip, including after Undo. Both original files stay unchanged.
+- **A Debian installer for Linux.** Install the `.deb` on Debian or Ubuntu and open Ninaivu from the applications menu. The package includes Python; your library, models, logs and optional extras stay in your home folder through upgrades and removal. Windows and Mac keep their portable downloads.
 
 - **Easy view, for a grandparent (a trial, off until switched on).** With `easy_view` on under Advanced settings, a profile can see the family app calmer and larger: the biggest photographs, bigger words and buttons, and the add, make and rearrange buttons out of the way. The person turns it on in Your profile, or an administrator turns it on for them on the console's People page, and it follows the profile to every device. Under each photograph the viewer says, in large letters, who the family named in it, where and when it was taken and how long ago, and a caption the family wrote; **Tell me** reads that aloud in Tamil or English, in the voice letters are read in or the device's own. Made only from what the index already knows; nothing is guessed and nothing is sent anywhere.
 - **Young faces, older names is styled again.** A missing brace in `moments.css` had put its whole page's styles inside a reduced-motion rule, so on most devices the page drew unstyled.

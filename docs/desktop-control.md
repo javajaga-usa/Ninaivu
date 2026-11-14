@@ -89,9 +89,9 @@ checkout's `.venv`; `sh launcher/start.sh --add-to-menu` puts it in a Linux
 desktop's application menu.
 
 **If you used Setup Ninaivu.command or Setup Ninaivu.sh.** They are gone in
-4.0. On a Mac or a Linux PC, use the portable download, whose `Ninaivu.app`
-or `ninaivu` is the one thing to open; it offers to bring your library across
-from the folder beside it. From a checkout, `python -m ninaivu` starts the
+4.0. On a Mac use the portable download and open `Ninaivu.app`; it offers to bring
+your library across from the folder beside it. On Debian or Ubuntu install the
+Linux `.deb` and open Ninaivu from the applications menu. From a checkout, `python -m ninaivu` starts the
 server and `python -m ninaivu.desktop.app` the Control Panel. The apps
 Setup Ninaivu.command made (**Ninaivu** and **Ninaivu Control Panel** in
 Applications) still point at the checkout's old root files and no longer
@@ -103,8 +103,9 @@ home folder**. Existing app-local libraries or earlier user data folders
 continue to be used, and `NINAIVU_STATE_DIR` still overrides the default.
 The Control Panel and terminal launcher use the same location. Move an existing
 index from **Migration** in the administrator console when you want to change
-that location. The Linux portable build also defaults to `~/.ninaivu/`, and keeps
-using an existing `data/` library or its forwarding note.
+that location. The Debian installer uses `~/.ninaivu/` too. For an older app-local `data/`
+library, stop the old copy and copy that state to `~/.ninaivu`, or set
+`NINAIVU_STATE_DIR` to its existing location.
 
 **Start**, **Stop**, **Restart**, resource modes and logs work through the same
 controller as on the Mac. **Start Ninaivu when I sign in** is available on Linux

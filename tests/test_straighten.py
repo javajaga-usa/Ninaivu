@@ -206,6 +206,33 @@ def test_applying_turns_the_index_and_undo_puts_it_back(straightener, monkeypatc
     assert all(r["rotation"] == 0 and r["rot_source"] == "none" for r in rows)
 
 
+def test_a_live_photo_keeps_its_clip_and_saved_turn_through_apply_and_undo(
+        straightener, monkeypatch, as_admin):
+    from pathlib import Path
+
+    job, cfg, conn = straightener
+    still = dict(conn.execute("SELECT * FROM assets WHERE kind='picture' LIMIT 1").fetchone())
+    photo = Path(still["root"]) / still["rel_path"]
+    movie = photo.with_suffix('.MOV')
+    movie.write_bytes(b'original live movie')
+    relative = movie.relative_to(still["root"]).as_posix()
+    conn.execute("INSERT INTO assets(root, rel_path, filename, kind, live_clip) "
+                 "VALUES (?,?,?,'video',1)", (still["root"], relative, movie.name))
+    conn.execute("UPDATE assets SET is_live=1, live_video_path=? WHERE id=?",
+                 (relative, still["id"]))
+    conn.commit()
+    original = (photo.read_bytes(), movie.read_bytes())
+    monkeypatch.setattr(orientnet, "predict", lambda img, state_dir=None: (90, 0.99))
+    job.survey([cfg.active_root]); _run(job)
+    job.apply([still["id"]], 0.0); _run(job)
+    shown = as_admin.get(f'/api/asset/{still["id"]}').get_json()
+    assert shown["rotation"] == 90 and shown["live_src"]
+    assert job.undo()["restored"] == 1
+    shown = as_admin.get(f'/api/asset/{still["id"]}').get_json()
+    assert shown["rotation"] == 0 and shown["live_src"]
+    assert (photo.read_bytes(), movie.read_bytes()) == original
+
+
 def test_a_turn_somebody_set_by_hand_is_never_surveyed(straightener, monkeypatch):
     """The whole point is that this never overwrites a human decision."""
     job, cfg, conn = straightener

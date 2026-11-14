@@ -203,8 +203,9 @@ def test_the_release_attests_the_provenance_of_what_it_attaches():
     assert re.search(r"attest-build-provenance@[0-9a-f]{40} # v\d+\.\d+\.\d+", text)
     subjects = step["with"]["subject-path"].split()
     assert "out/SHA256SUMS.txt" in subjects
-    for pattern in ("out/windows/*.zip", "out/macos/*.zip", "out/linux/*.tar.gz"):
+    for pattern in ("out/windows/*.zip", "out/macos/*.zip", "out/linux/*.deb"):
         assert pattern in subjects, pattern
+    assert "out/linux/*.tar.gz" not in subjects
     names = [s.get("name") or s.get("uses") for s in job["steps"]]
     assert names.index("Checksums") < names.index("Build provenance") < names.index("Publish the release")
 

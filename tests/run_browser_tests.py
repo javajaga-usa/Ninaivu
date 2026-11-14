@@ -220,7 +220,7 @@ def build_fixture_library(root: Path) -> None:
             f.write(b"\x00" * (65000 - jpg_path.stat().st_size))
 
     # The companion video fragment for the live photo
-    mov_path.write_bytes(b"\x00" * 70000)
+    _clip(mov_path, "2022-12-15T14:30:00Z")
 
 
 def wait_for_ready(url: str, timeout: float = 30.0) -> bool:
@@ -296,7 +296,7 @@ def every_browser_test() -> list[Path]:
 #: rather than 240 although the same wheel scrolls a bare page normally. That
 #: one needs a look on a real Mac and iPhone, not a looser test here.
 WEBKIT_FLOWS = (
-    "first_load_ui.mjs", "live_photos_ui.mjs", "selection_ui.mjs", "share_page_ui.mjs",
+    "first_load_ui.mjs", "live_photos_ui.mjs", "live_rotation_ui.mjs", "selection_ui.mjs", "share_page_ui.mjs",
     "visibility_password_ui.mjs", "editor_panels_ui.mjs", "picker_ui.mjs",
     "editor_ui.mjs", "premium_journeys_ui.mjs", "mobile_safari_ui.mjs", "search_select_ui.mjs",
     "dialog_layer_ui.mjs",

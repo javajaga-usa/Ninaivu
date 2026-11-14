@@ -21,6 +21,7 @@ What the windows say is worked out apart from Tk (:func:`update_steps`,
 """
 from __future__ import annotations
 
+import os
 import queue
 import threading
 import webbrowser
@@ -55,6 +56,15 @@ def update_steps(version: str, beside: Path | str | None) -> list[dict[str, str]
     """The three steps of an update, for the copy of *version* whose folder
     is in *beside*."""
     where = str(beside) if beside else "the folder this one is in"
+    if os.environ.get("NINAIVU_PACKAGE") == "deb":
+        return [
+            {"title": "Download the newer Debian package",
+             "detail": "Open the downloads page and take the Linux .deb installer."},
+            {"title": "Close Ninaivu and install the package",
+             "detail": "Open the .deb with your software installer, or run sudo apt install ./Ninaivu-<version>-linux-x64.deb."},
+            {"title": "Open Ninaivu from the applications menu",
+             "detail": "Your library, settings and models stay in your home folder. Removing the package keeps them too."},
+        ]
     return [
         {"title": "Download the newer version",
          "detail": "Ninaivu never looks for updates by itself. The button opens the "
@@ -234,7 +244,7 @@ def how_to_update(parent: tk.Misc, look: Look, *, version: str, folder: Path | N
     beside = folder.parent if folder is not None else None
     steps = update_steps(version, beside)
     steps[0]["action"] = ("Open the downloads page", lambda: open_url(DOWNLOADS))
-    if beside is not None:
+    if beside is not None and os.environ.get("NINAIVU_PACKAGE") != "deb":
         steps[1]["action"] = ("Show the folder", lambda: open_folder(beside))
     _steps(window, look, steps, numbered=True)
     if go_back is not None:

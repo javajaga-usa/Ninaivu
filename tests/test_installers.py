@@ -86,7 +86,7 @@ def test_the_mac_app_opens_the_control_panel_and_keeps_its_files_in_its_folder_o
     assert (MACOS / "portable" / "README-PORTABLE.txt").is_file()
 
 
-def test_the_release_workflow_builds_four_portable_downloads_and_signs_only_with_secrets():
+def test_the_release_workflow_builds_the_platform_downloads_and_signs_only_with_secrets():
     yaml = pytest.importorskip("yaml")
     flow = yaml.safe_load((ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8"))
     # Three downloads: Windows x64, Apple silicon and Linux x64, the last
@@ -104,8 +104,9 @@ def test_the_release_workflow_builds_four_portable_downloads_and_signs_only_with
     for job in ("windows", "macos", "linux"):
         assert "strategy" not in flow["jobs"][job], f"{job}: one build, no matrix"
     files = next(s for s in flow["jobs"]["release"]["steps"] if s.get("uses", "").startswith("softprops/"))["with"]["files"]
-    for wanted in ("out/windows/*.zip", "out/macos/*.zip", "out/linux/*.tar.gz"):
+    for wanted in ("out/windows/*.zip", "out/macos/*.zip", "out/linux/*.deb"):
         assert wanted in files
+    assert "out/linux/*.tar.gz" not in files
     assert "arm64-portable.tar" not in files and "linux-arm64" not in files
     for gone in (".exe", ".dmg", ".sh", "ninaivu.rb", "x86_64"):
         assert gone not in files

@@ -813,7 +813,7 @@ def bundled_tools_dir() -> Path | None:
     own Python (``app/tools/ffmpeg``; ``Ninaivu.app/Contents/Resources/tools/
     ffmpeg`` on a Mac), put there when the build was made
     (tools/bundle_ffmpeg.py). None for any other Ninaivu."""
-    if not os.environ.get("NINAIVU_PORTABLE"):
+    if not (os.environ.get("NINAIVU_PORTABLE") or os.environ.get("NINAIVU_PACKAGE") == "deb"):
         return None
     folder = Path(sys.base_prefix).parent / "tools" / "ffmpeg"
     return folder if folder.is_dir() else None
