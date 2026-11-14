@@ -189,7 +189,10 @@ def test_only_events_a_person_would_act_on_exist():
         # And a Primary that another computer took over from (its index was
         # moved): it stopped sending, and somebody who did not move it
         # should know at once.
-        "primary_replaced"}
+        "primary_replaced",
+        # Once a week, not every night: the week's damaged files, free
+        # space, failed jobs and drives, in counts (server/health_week.py).
+        "weekly_health"}
 
 
 def test_a_scrubber_report_says_what_happened_without_naming_files(monkeypatch):

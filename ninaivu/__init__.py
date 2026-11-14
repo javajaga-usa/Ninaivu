@@ -400,6 +400,10 @@ class Services:
         # "Is everything safe?", asked of every one of the above at once.
         from .server.safety import Safety                        # noqa: PLC0415
         self.safety = Safety(self)
+        # And what happened over the last week, for the administrator who
+        # looks once a week (server/health_week.py).
+        from .server.health_week import HealthWeek                # noqa: PLC0415
+        self.health_week = HealthWeek(self, notify=self._tell_somebody)
         self.scanner.workload = self.workload
         self.straightener = straighten.Straightener(cfg, self.scanner,
                                                     hold=self.workload.catchup_hold)
@@ -447,7 +451,8 @@ class Services:
         # handed to each keeper that has moved onto it.
         from .server.supervisor import Supervisor                 # noqa: PLC0415
         self.supervisor = Supervisor(self.scanner)
-        for keeper in (self.digest, self.library_drives, self.index_copy, self.restore_tests):
+        for keeper in (self.digest, self.library_drives, self.index_copy, self.restore_tests,
+                       self.health_week):
             keeper.supervisor = self.supervisor
         # The backups, the drive watch and the archive guardian.
         for keeper in (self.backups, self.disks, self.guardian):
@@ -747,6 +752,7 @@ class Services:
         self.backups.start()
         self.digest.start()
         self.disks.start()
+        self.health_week.start()
         self.library_drives.start()
         self.restore_tests.start()
         self.index_copy.start()

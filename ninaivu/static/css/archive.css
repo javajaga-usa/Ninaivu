@@ -456,3 +456,6 @@
 .sf-idle summary:hover { color: var(--text-2); }
 .sf-idle .sf-checks { margin-top: 6px; }
 .sf-idle .sf-check:first-child { border-top: 0; }
+/* The weeks kept before this one, under "This week" (health-week.js). */
+.hw-earlier { margin-top: 6px; }
+.hw-earlier[hidden] { display: none; }
