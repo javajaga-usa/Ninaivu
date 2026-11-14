@@ -1984,3 +1984,42 @@ body.admin {
   .job-status-row { grid-template-columns: 1fr auto; gap: 2px 12px; }
   .job-status-detail { grid-column: 1 / -1; }
 }
+
+/* The Setup check page (pages/console/setup-check.js): one list per area,
+   each line marked by what it needs. */
+#sc-headline[data-state="fix"] { color: var(--danger, #c1464a); }
+#sc-headline[data-state="warn"] { color: var(--warn, #8a6212); }
+#sc-headline[data-state="ok"] { color: var(--ok-text, #17804a); }
+.sc-areas { display: flex; flex-direction: column; gap: 18px; margin-top: 14px; }
+.sc-area h3 { margin: 0 0 8px; font-size: 13px; letter-spacing: .02em; color: var(--muted); }
+.sc-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.sc-check {
+  display: grid; grid-template-columns: 9.5em 1fr; gap: 4px 14px; align-items: baseline;
+  padding: 10px 12px; background: var(--bg-elev); border: 1px solid var(--border-soft);
+  border-left: 3px solid var(--ok, #1f9d55); border-radius: var(--r-sm);
+}
+.sc-check.warn { border-left-color: var(--warn, #b8862f); }
+.sc-check.fix { border-left-color: var(--danger, #d05b5b); }
+.sc-check.info { border-left-color: var(--border-soft); }
+.sc-mark { font-size: 11.5px; font-weight: 600; color: var(--ok-text, #17804a); }
+.sc-check.warn .sc-mark { color: var(--warn, #8a6212); }
+.sc-check.fix .sc-mark { color: var(--danger, #c1464a); }
+.sc-check.info .sc-mark { color: var(--muted); }
+.sc-body { min-width: 0; }
+.sc-body p { margin: 0; overflow-wrap: anywhere; }
+.sc-title { font-weight: 500; }
+.sc-detail { margin-top: 2px !important; font-size: 12.5px; color: var(--muted); }
+.sc-fix { margin-top: 6px !important; font-size: 13px; line-height: 1.5; }
+.sc-command {
+  display: flex; align-items: center; gap: 8px; margin-top: 8px; padding: 6px 8px;
+  border-radius: var(--r-sm); background: var(--surface-2, var(--bg));
+  border: 1px solid var(--border-soft);
+}
+.sc-command code {
+  flex: 1; min-width: 0; font-family: ui-monospace, monospace; font-size: 12px;
+  overflow-wrap: anywhere; user-select: all;
+}
+.sc-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+@media (max-width: 640px) {
+  .sc-check { grid-template-columns: 1fr; }
+}
