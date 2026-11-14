@@ -93,13 +93,13 @@ def _ledger(conn) -> dict[tuple[str, str], str]:
 def test_two_is_the_locations_table_and_three_is_the_ledger():
     names = [m.name for m in migrations.INDEX]
     assert names[1] == "where each photograph is"
-    assert names[2] == "the copies ledger" and migrations.latest(migrations.INDEX) == 3
+    assert names[2] == "the copies ledger" and migrations.latest(migrations.INDEX) >= 3
 
 
 def test_a_new_index_has_the_ledger(tmp_path):
     conn = db.init_db(tmp_path / "index.db")
     try:
-        assert migrations.recorded(conn) == 3
+        assert migrations.recorded(conn) == migrations.latest(migrations.INDEX)
         columns = [r[1] for r in conn.execute("PRAGMA table_info(copies)")]
         assert columns == ["fingerprint", "destination", "state", "verified_at", "size"]
         assert [r[1] for r in conn.execute("PRAGMA table_info(copies)") if r[5]] == [
@@ -114,7 +114,7 @@ def test_a_37_index_is_filled_from_what_the_engines_recorded(recorded):
     with courier.sent_record(cfg.state_dir) as sent:
         sent_before = [tuple(r) for r in sent.execute("SELECT * FROM sent ORDER BY 1, 2")]
     conn = _reopen_as_37(cfg, conn)
-    assert migrations.recorded(conn) == 3
+    assert migrations.recorded(conn) == migrations.latest(migrations.INDEX)
     got = _ledger(conn)
     r = recorded
     assert got == {

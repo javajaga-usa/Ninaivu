@@ -236,11 +236,19 @@ def _copies_ledger(conn: sqlite3.Connection) -> None:
     ledger.fill(conn)
 
 
+def _duplicate_review(conn: sqlite3.Connection) -> None:
+    """Migration 4: what the household decided on the duplicates review
+    (storage/duplicate_review.py). New tables only; no file is touched."""
+    from . import duplicate_review                         # noqa: PLC0415
+    duplicate_review.create(conn)
+
+
 #: The index (``index.db``).
 INDEX: tuple[Migration, ...] = (
     Migration(1, "what 3.7 has", _nothing),
     Migration(2, "where each photograph is", _locations),
     Migration(3, "the copies ledger", _copies_ledger),
+    Migration(4, "duplicate review decisions", _duplicate_review),
 )
 
 #: The archive's record of every file it copied (``archive.db``).

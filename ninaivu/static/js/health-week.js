@@ -47,7 +47,9 @@ async function ask(fresh) {
   const response = await fetch(`${URL}${fresh ? '?fresh=1' : ''}`,
     { headers: { Accept: 'application/json' }, credentials: 'same-origin' });
   if (!response.ok) return null;
-  return response.json();
+  const data = await response.json();
+  return data && data.current && Array.isArray(data.current.parts)
+    && Array.isArray(data.weeks) ? data : null;
 }
 
 //: The console pages a part's button opens.
