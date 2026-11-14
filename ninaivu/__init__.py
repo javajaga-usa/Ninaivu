@@ -356,6 +356,13 @@ class Services:
         from .cloud.offsite import Offsite                      # noqa: PLC0415
         self.offsite = Offsite(cfg, lambda: db.connect(cfg.db_path),
                                hold=lambda: self.workload.hold("upload"))
+        # One button that restores a few photographs from every copy and
+        # holds them to the library's fingerprints. See ninaivu/copies/drill.py.
+        from .copies.drill import BackupDrill                   # noqa: PLC0415
+        self.backup_drill = BackupDrill(
+            cfg, connect_db=lambda: db.connect(cfg.db_path), mirror=self.mirror,
+            offsite=self.offsite, cloud=self.cloud, courier=self.mugil_courier,
+            backups=self.backups, restore_tests=self.restore_tests)
         # Damaged files put back from a copy that matches, and the storage
         # check on a schedule. See ninaivu/storage/repair.py.
         from .storage.repair import Repairer                    # noqa: PLC0415
@@ -1641,6 +1648,8 @@ class Services:
         attempt("the drive watch", self.disks.stop)
         attempt("the library drives", self.library_drives.stop)
         attempt("the test restore", self.restore_tests.stop)
+        if getattr(self, "backup_drill", None) is not None:
+            attempt("the backup drill", self.backup_drill.stop)
         attempt("the copy of the index", self.index_copy.stop)
         if getattr(self, "tv_album", None) is not None:
             attempt("the TV album", self.tv_album.close)

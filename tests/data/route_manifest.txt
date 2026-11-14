@@ -7,6 +7,8 @@ admin | POST                 | /api/admin/ai-models/<model_id>/download | admin 
 admin | PATCH                | /api/admin/assets/<int:asset_id>/creation-date | admin | writes | same origin | admin.change_creation_date | -
 admin | GET                  | /api/admin/assignable | admin | reads | - | admin.assignable | -
 admin | GET                  | /api/admin/attention | admin | reads | - | admin.attention | -
+admin | GET                  | /api/admin/backup-drill | admin | reads | - | cloud.backup_drill | -
+admin | POST                 | /api/admin/backup-drill | admin | writes | same origin | cloud.backup_drill_run | -
 admin | GET                  | /api/admin/backups | admin | reads | - | admin.backups | -
 admin | POST                 | /api/admin/backups/now | admin | writes | same origin | admin.backup_now | -
 admin | POST                 | /api/admin/backups/verify | admin | writes | same origin | admin.verify_backup | -

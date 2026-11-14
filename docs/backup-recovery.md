@@ -137,6 +137,29 @@ that room nothing is changed and the console says why. The Control Panel
 shows each step while it runs (`checking the index`, `repairing the index`).
 Delete the `.damaged-` folder once Ninaivu works as it should.
 
+## Verify my backup: the backup drill
+
+Admin → Health → **Backup drill** → **Verify my backup** proves that every
+copy would bring the photographs back, in a few minutes. From each copy that
+is set up it restores five photographs chosen at random into a temporary
+folder in the state folder (`backup-drill/`):
+
+- **Second disk**: read off the disk.
+- **Off-site copy**: fetched and decrypted.
+- **Google Drive**: downloaded through the same checks a real restore makes.
+- **The Secondary**: read back there over the pairing.
+- **Index backup**: the newest one unpacked and opened.
+
+Each photograph is checked against the library's content fingerprint, not
+only against what the copy recorded when it was made. A copy whose own
+record agrees with its bytes but not with the photograph is caught. A file
+that has changed in the library since it was copied is checked against the
+copy's record instead, and the result says so.
+
+Nothing in the library or in a copy is changed. The temporary folder is
+removed afterwards, and the last ten results are kept in
+`backup-drill.json` in the state folder.
+
 ## Restore procedure
 
 1. Stop Ninaivu and disable automatic restarts for the duration of the restore.
