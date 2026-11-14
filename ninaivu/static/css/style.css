@@ -2748,6 +2748,8 @@ body[data-role="guest"] #map-btn { display: none; }
 }
 
 /* ── Share Modal ───────────────────────────────────────────────────────── */
+.share-status { overflow-wrap: anywhere; }
+.share-status.error { color: var(--danger); }
 .share-link-box {
   display: flex; gap: 8px; align-items: center; margin: 12px 0;
 }
