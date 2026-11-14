@@ -1,5 +1,17 @@
 # Changelog
 
+## 4.2.0 — 13 November 2026
+
+4.2 improves the family app on phones and makes dialogs, sharing, uploads and photo editing more consistent. It also includes the Control Panel activation fix from 4.1.1. Library, profile, storage and server logic are unchanged.
+
+- **Dialogs keep focus where it belongs.** Opening, dismissing and returning from dialogs follows the same keyboard and touch behavior across the family app and Admin. Escape and backdrop dismissal restore focus, and phone dialogs follow the visible viewport when the keyboard opens.
+- **Search fits the phone.** Mobile search stays within the available screen, with clearer loading and empty states instead of moving beyond the viewport.
+- **Uploads report their actual progress.** The upload dialog shows bytes sent and the server's finishing stage, prevents duplicate submissions, and allows the same file to be selected again after a failed attempt. Touch devices get a direct photo-picker prompt.
+- **Sharing works more naturally on iPhone.** A generated link can open the device's share sheet where supported. Clipboard failures offer a selected link to copy manually, and results from an older dialog no longer overwrite the current one.
+- **The photo editor fits touch screens and landscape layouts.** Controls have larger touch targets, the preview and tools fit the available viewport, and editing, saving and downloading give clearer feedback.
+- **Viewer gestures handle interrupted touches correctly.** A cancelled pointer gesture no longer changes photographs, and secondary mouse buttons do not begin a swipe.
+- **Browsing and actions are more consistent.** Gallery, album, archive and editor interactions share clearer feedback and responsive layouts. Browser regression checks cover these journeys in Chromium and WebKit, including phone-sized layouts.
+
 ## 4.1.1 — 12 November 2026
 
 - **Opening Ninaivu again restores the existing Control Panel.** The desktop event queue keeps running after a callback or tray error, and another launch is acknowledged only after the window has been shown. The panel is briefly raised to the foreground, then returns to its original window level. Library, profile and server logic are unchanged.
