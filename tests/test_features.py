@@ -107,8 +107,11 @@ def fresh_master() -> str:
     from ninaivu.storage import db
     with tempfile.TemporaryDirectory() as folder:
         conn = db.init_db(os.path.join(folder, "index.db"))
+        # SQLITE_ENABLE_STAT4 adds an optional ANALYZE table on some builds
+        # (including macOS); it is planner data, not application schema.
         rows = conn.execute(
-            "SELECT type, name, tbl_name, rootpage, sql FROM sqlite_master ORDER BY rowid").fetchall()
+            "SELECT type, name, tbl_name, rootpage, sql FROM sqlite_master "
+            "WHERE name != 'sqlite_stat4' ORDER BY rowid").fetchall()
         db.close_all()
     return HEADER + "".join(" | ".join(str(c) for c in row) + "\n" for row in rows)
 
