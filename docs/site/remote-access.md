@@ -72,7 +72,11 @@ connection, and each request is a longer round trip. Ninaivu keeps both down:
   most 2560 pixels and without its camera details; **Download** still gives the
   original;
 - thumbnails are fetched ahead several at a time over Tailscale Serve's single
-  connection.
+  connection;
+- on a phone that has opened the app before, the home page is shown from the
+  copy it kept when the server takes more than a moment to answer, and is
+  checked against the server's own as soon as that arrives; the photo editor
+  is only fetched the first time **Edit** is pressed.
 
 If it is still slow, run `tailscale ping` with the server's name from the
 device away from home: replies "via DERP" mean the connection is going through

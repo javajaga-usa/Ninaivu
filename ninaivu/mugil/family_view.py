@@ -5,8 +5,7 @@ ticked on the Primary, the Primary sends the Secondary a hand-over
 (mugil/handover.py) into ``mugil-handover/``. Until 4.0 a second, read-only
 Ninaivu served it as a service of its own: a hand-written systemd unit, the
 originals bind mounted at the Primary's paths with ``--map``, and sudo to set
-it up. That way still works (``--replica-of``, ``replica unit``), and is the
-old way.
+it up. That way (``--replica-of``, ``replica unit``) was removed in 4.2.
 
 Now the Secondary's own Ninaivu serves it, on its own family app (port 80),
 when this computer is a paired Secondary and a hand-over is there:
@@ -127,8 +126,8 @@ def reroot_index(index: Path | str, mapping: dict[str, str]) -> int:
 
 
 def _build_app(view_cfg, replica, front):
-    """The family app over the view's own copy of the index, as the old
-    ``--replica-of`` process built it (ninaivu/__main__.py), never started."""
+    """The family app over the view's own copy of the index, built the way the
+    removed ``--replica-of`` process built it, never started."""
     from .. import Services, __version__, create_home_app         # noqa: PLC0415
     # A guest in the Secondary's process: the archive's record and the watch
     # for a damaged index stay the Secondary's own.
