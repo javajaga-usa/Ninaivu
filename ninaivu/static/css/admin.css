@@ -1764,6 +1764,9 @@ body.admin {
 @media (pointer: coarse) {
   .admin-tabs button, .admin-groups button { min-height: 44px; }
   .admin-bar-actions .icon-btn { min-width: 44px; min-height: 44px; }
+  /* The console lets a phone zoom (no user-scalable=no), so a field typed
+     into must be at least 16px or Safari on iOS zooms the page on focus. */
+  .admin :is(input:not([type=checkbox]):not([type=radio]):not([type=range]), select, textarea) { font-size: 16px; }
 }
 
 /* Each page opens with a short guide: the page's own icon in a tinted tile,

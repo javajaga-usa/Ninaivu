@@ -1234,7 +1234,8 @@ def reveal(asset_id: int):
             # fallback.
             subprocess.Popen(["xdg-open", str(path.parent)])
     except OSError as exc:
-        return jsonify({**refusal("could not open a file manager: {exc}", exc=exc)}), 500
+        # No file manager here (a server with no desktop): not a fault.
+        return jsonify({**refusal("could not open a file manager: {exc}", exc=exc)}), 503
 
     return jsonify({"ok": True})
 
@@ -1273,7 +1274,8 @@ def reveal_folder():
         else:
             subprocess.Popen(["xdg-open", str(path)])
     except OSError as exc:
-        return jsonify({**refusal("could not open a file manager: {exc}", exc=exc)}), 500
+        # No file manager here (a server with no desktop): not a fault.
+        return jsonify({**refusal("could not open a file manager: {exc}", exc=exc)}), 503
     return jsonify({"ok": True})
 
 

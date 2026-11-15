@@ -118,7 +118,7 @@
     <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
     <input id="search" type="search" autocomplete="off" spellcheck="false"
            placeholder="Search" aria-label="Search" data-i18n-label="Search"
-           aria-controls="suggestions" aria-expanded="false">
+           role="combobox" aria-autocomplete="list" aria-controls="suggestions" aria-expanded="false">
     <button class="clear-search icon-btn" id="clear-search" hidden aria-label="Clear search" data-i18n-label="Clear search">
       <svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>
     </button>
@@ -441,8 +441,8 @@
     </section>
 
     <section class="side-block">
-      <h3 class="side-title" data-i18n="Sort">Sort</h3>
-      <select id="sort" class="select">
+      <h3 class="side-title" id="sort-title" data-i18n="Sort">Sort</h3>
+      <select id="sort" class="select" aria-labelledby="sort-title">
         <option value="date_desc" data-i18n="Newest first">Newest first</option>
         <option value="date_asc" data-i18n="Oldest first">Oldest first</option>
         <option value="name_asc" data-i18n="Name A–Z">Name A–Z</option>
@@ -868,7 +868,7 @@
   <!-- Photo stacks (static/js/stacks.js): every frame of a burst, above
        the filmstrip, while the photograph open is in a stack. -->
   <div class="stack-bar" id="v-stack" hidden></div>
-  <div class="filmstrip" id="filmstrip"></div>
+  <div class="filmstrip" id="filmstrip" tabindex="0" role="group" aria-label="Filmstrip" data-i18n-label="Filmstrip"></div>
 </div>
 
 <!-- ------------------------------------------------------------------ -->
@@ -1127,7 +1127,7 @@
     </div>
     <p class="hint" id="album-modal-subtitle" data-i18n="Choose an existing album or create a new one.">Choose an existing album or create a new one.</p>
     <div class="album-create-box">
-      <input type="text" class="input" id="album-new-name" placeholder="New album name" data-i18n-placeholder="New album name" maxlength="120">
+      <input type="text" class="input" id="album-new-name" aria-label="New album name" data-i18n-label="New album name" placeholder="New album name" data-i18n-placeholder="New album name" maxlength="120">
       <button class="btn primary small" id="album-create-btn" data-i18n="Create">Create</button>
     </div>
     <div class="album-modal-list-wrap">
