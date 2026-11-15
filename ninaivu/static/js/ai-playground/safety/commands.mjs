@@ -96,19 +96,29 @@ export const isPortraitRetouchRequest=text=>typeof text==='string'&&/\b(skin|hai
 //: A new hairstyle — a cut, a fringe, curls, a braid — is drawn by the image
 //: model, so it goes to the generative engine, not to the retouch studio, which
 //: only works on the hair that is there. Colour and fullness are the studio's.
-export const isHairstyleRequest=text=>typeof text==='string'&&/\b(hairstyle|haircut|hair\s*cut|bob|pixie|bangs|fringe|curly|curls|wavy|waves|(?:long|short|straight|wavy)\b[^.!?]{0,24}\bhair|braid(?:s|ed)?|plait(?:s|ed)?|ponytail|bun|updo|mohawk|dreadlocks|locs|afro|buzz\s*cut|crew\s*cut|undercut|bald|(?:add|give|grow)\b[^.!?]*\b(?:beard|moustache|mustache))\b/i.test(text);
+export const isHairstyleRequest=text=>typeof text==='string'&&/\b(hairstyle|haircut|hair\s*cut|bob|pixie|bangs|fringe|curly|curls|wavy|waves|(?:long|short|straight|wavy)\b[^.!?]{0,24}\bhair|braid(?:s|ed)?|plait(?:s|ed)?|(?:side\s*)?parting|ponytail|bun|updo|mohawk|dreadlocks|locs|afro|buzz\s*cut|crew\s*cut|undercut|bald|(?:add|give|grow)\b[^.!?]*\b(?:beard|moustache|mustache))\b/i.test(text);
 
-//: The hairstyles Sudar offers as ideas, each a request the image model understands.
-//: Every one keeps the face and the rest of the photograph as they are. Fuller or
-//: thicker hair is not here: that is the retouch studio's Fuller hair, on this machine.
+//: The hairstyles Sudar offers, each as [title, request, kind, drawing]:
+//:   request  what a whole-picture engine is asked (the Ask panel's ideas, when
+//:            no Paint and ask workflow is set up); it says to keep the face
+//:   kind     how much room around the head the style needs (studio/hairstyle-mask.mjs REACH)
+//:   drawing  what the AI server's Paint and ask workflow is asked to draw in the
+//:            hair area only; the face is put back from the photograph afterwards
+//: Fuller or thicker hair is not here: that is the retouch studio's Fuller hair, on this machine.
+const KEEP=' Keep the face, expression, skin and everything else exactly as it is.';
+const DRAW=' Natural for this person, in the same light, colour and focus as the photograph; where hair no longer covers, continue the background and clothing that are there.';
+const style=(title,look,kind)=>[title,`Give this person ${look}.${KEEP}`,kind,`${look[0].toUpperCase()}${look.slice(1)}.${DRAW}`];
 export const HAIRSTYLES=[
-  ['Short crop','Give this person a short, neat cropped hairstyle. Keep the face, expression, skin and everything else exactly as it is.'],
-  ['Bob','Give this person a chin-length bob haircut. Keep the face, expression, skin and everything else exactly as it is.'],
-  ['Long straight','Give this person long, straight hair past the shoulders. Keep the face, expression, skin and everything else exactly as it is.'],
-  ['Long wavy','Give this person long, soft wavy hair. Keep the face, expression, skin and everything else exactly as it is.'],
-  ['Curly','Give this person full curly hair. Keep the face, expression, skin and everything else exactly as it is.'],
-  ['Braid','Give this person a long single braid over one shoulder. Keep the face, expression, skin and everything else exactly as it is.'],
-  ['Bun','Give this person a neat low bun with the hair pulled back. Keep the face, expression, skin and everything else exactly as it is.'],
-  ['Fringe','Give this person a straight fringe across the forehead, keeping the rest of the hair as it is. Keep the face, expression, skin and everything else exactly as it is.'],
-  ['Neat beard','Give this person a neat, well-groomed short beard. Keep the face, expression, skin and everything else exactly as it is.'],
+  style(i18n.key('Short crop'),'a short, neat cropped hairstyle','head'),
+  style(i18n.key('Bob'),'a chin-length bob haircut','head'),
+  style(i18n.key('Long straight'),'long, straight hair past the shoulders','long'),
+  style(i18n.key('Long wavy'),'long, soft wavy hair','long'),
+  style(i18n.key('Curly'),'full curly hair','long'),
+  style(i18n.key('Braid'),'a long single braid over one shoulder','long'),
+  style(i18n.key('Two plaits'),'two neat plaits tied with ribbons, one over each shoulder','long'),
+  style(i18n.key('Jasmine plait'),'a long plait with a string of fresh white jasmine flowers along it','long'),
+  style(i18n.key('Bun'),'a neat low bun with the hair pulled back','up'),
+  style(i18n.key('Fringe'),'a straight fringe across the forehead, keeping the rest of the hair as it is','fringe'),
+  style(i18n.key('Oiled side parting'),'neatly combed, oiled hair with a side parting','head'),
+  style(i18n.key('Neat beard'),'a neat, well-groomed short beard','beard'),
 ];
