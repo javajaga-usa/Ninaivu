@@ -8,7 +8,7 @@ was unplugged all week. Each of those is on a page of its own, and the
 administrator who opens the console once a week had to visit every one to
 find out.
 
-This gathers the last seven days into four parts, each with one of the
+This gathers the last seven days into five parts, each with one of the
 safety page's words (``ok``, ``attention``, ``problem``):
 
 * **damaged** — files the storage check found changed or unreadable this
@@ -20,7 +20,9 @@ safety page's words (``ok``, ``attention``, ``problem``):
   aside, archive runs, test restores and scans that did not finish well,
   and background work that is failing now;
 * **drives** — library folders that are not connected, and drives logging
-  errors (where the computer records them).
+  errors (where the computer records them);
+* **drill** — the latest backup drill (copies/drill.py), which runs by
+  itself once a week: whether every copy brought its photographs back.
 
 It does no work of its own and changes nothing but its own small file
 (``health-week.json`` in the state folder): a reading of the free space every
@@ -139,7 +141,7 @@ def week_start(now: float) -> float:
 
 
 # ---------------------------------------------------------------------------
-# The four parts
+# The five parts
 # ---------------------------------------------------------------------------
 
 def damaged(services, conn: sqlite3.Connection, since: float, now: float) -> dict[str, Any]:
@@ -440,9 +442,68 @@ def drives(services, conn: sqlite3.Connection, since: float, now: float) -> dict
         "warning": len(watching), "watched": bool(report.get("supported"))}, items)
 
 
-PARTS: list[Callable[..., dict[str, Any]]] = [damaged, space, jobs, drives]
+#: A drill this many days past its schedule is worth a look.
+DRILL_LATE_DAYS = 2
+
+
+def drill(services, conn: sqlite3.Connection, since: float, now: float) -> dict[str, Any]:
+    """The latest backup drill that had finished by *now*: whether every copy
+    brought its photographs back, and whether it is keeping to its week."""
+    keeper = getattr(services, "backup_drill", None)
+    history = []
+    if keeper is not None:
+        history = [d for d in keeper.history() if float(d.get("ended_at") or 0) <= now]
+    every = int(getattr(keeper, "every_days", 0) or 0) if keeper is not None else 0
+    last = history[0] if history else None
+    numbers: dict[str, Any] = {"status": "none", "every_days": every, "checked": 0,
+                               "passed": 0, "failed": 0, "ended_at": None, "age_days": None,
+                               "scheduled": False, "this_week": 0}
+    if last is None:
+        line = (_line(said("No backup drill has run yet. It runs by itself once every {days} days, or from the Health page."), days=every) if every
+                else _line(said("No backup drill has run yet, and it is not scheduled.")))
+        return _part("drill", said("Backup drill"), ATTENTION, [line], "health", numbers)
+
+    copies = [c for c in last.get("copies") or [] if c.get("status") != "off"]
+    # The index backup is opened, not counted in photographs.
+    photos = [c for c in copies if c.get("name") != "index"]
+    checked = sum(int(c.get("checked") or 0) for c in photos)
+    passed = sum(int(c.get("passed") or 0) for c in photos)
+    ended = float(last.get("ended_at") or 0)
+    age = max(0.0, (now - ended) / DAY)
+    result = str(last.get("status") or "")
+    numbers.update(status=result, checked=checked, passed=passed, failed=checked - passed,
+                   ended_at=ended, age_days=round(age, 1), scheduled=bool(last.get("scheduled")),
+                   this_week=sum(1 for d in history if float(d.get("ended_at") or 0) >= since))
+    when = datetime.fromtimestamp(ended).strftime("%d %b")
+    items = [{"name": c.get("name"), "status": c.get("status"),
+              "checked": int(c.get("checked") or 0), "passed": int(c.get("passed") or 0)}
+             for c in copies]
+    if result == "failed":
+        status = PROBLEM
+        lines = [_line(said("The backup drill on {when} failed: {failed} of {checked} photographs did not come back intact."),
+                       when=when, at=ended, failed=f"{checked - passed:,}", checked=f"{checked:,}")]
+    elif result == "passed":
+        status = OK
+        lines = [_line(said("The backup drill on {when} passed: {passed} of {checked} photographs came back intact."),
+                       when=when, at=ended, passed=f"{passed:,}", checked=f"{checked:,}")
+                 if checked else _line(said("The backup drill on {when} passed."), when=when, at=ended)]
+    elif result == "nothing":
+        status = ATTENTION
+        lines = [_line(said("The backup drill on {when} had nothing to check: no copy is set up yet."),
+                       when=when, at=ended)]
+    else:
+        status = ATTENTION
+        lines = [_line(said("The backup drill on {when} could not check every copy. Nothing was found damaged."), when=when, at=ended)]
+    if every and age > every + DRILL_LATE_DAYS:
+        status = status if status == PROBLEM else ATTENTION
+        lines.append(_line(said("No drill for {days} days: the computer may have been off or busy."),
+                           days=int(age)))
+    return _part("drill", said("Backup drill"), status, lines, "health", numbers, items)
+
+
+PARTS: list[Callable[..., dict[str, Any]]] = [damaged, space, jobs, drives, drill]
 _TITLES = {"damaged": said("Damaged files"), "space": said("Free space"),
-           "jobs": said("Failed jobs"), "drives": said("Drives")}
+           "jobs": said("Failed jobs"), "drives": said("Drives"), "drill": said("Backup drill")}
 
 
 # ---------------------------------------------------------------------------
@@ -494,6 +555,7 @@ def message(digest: dict[str, Any]) -> tuple[str, str]:
     damaged_n = numbers.get("damaged", {})
     jobs_n = numbers.get("jobs", {})
     drives_n = numbers.get("drives", {})
+    drill_n = numbers.get("drill", {})
     space_part = next((p for p in digest["parts"] if p["id"] == "space"), {"items": []})
     tight = sum(1 for d in space_part.get("items", []) if d.get("status") != OK)
     detail = "\n".join([
@@ -502,9 +564,21 @@ def message(digest: dict[str, Any]) -> tuple[str, str]:
         f"Disks short of space: {tight}",
         f"Library folders not connected: {int(drives_n.get('away', 0))}; "
         f"drives logging errors: {int(drives_n.get('failing', 0)) + int(drives_n.get('warning', 0))}",
+        _drill_said(drill_n),
         "The console's Overview has the whole week.",
     ])
     return f"Ninaivu's week: {digest['headline']}", detail
+
+
+def _drill_said(numbers: dict[str, Any]) -> str:
+    """The drill's line of the notification: its verdict and counts."""
+    status = str(numbers.get("status") or "none")
+    if status == "none":
+        return "Backup drill: none has run yet"
+    age = numbers.get("age_days")
+    ago = f", {float(age):.0f} days ago" if age is not None else ""
+    return (f"Backup drill: {status}{ago}; {int(numbers.get('passed', 0)):,} of "
+            f"{int(numbers.get('checked', 0)):,} photographs came back intact")
 
 
 class HealthWeek:

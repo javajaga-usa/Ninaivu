@@ -204,9 +204,13 @@ opens the console once a week rather than every day:
   scans that stopped with an error, and background work failing right now.
 - **Drives** — library folders that are not connected, and drives logging
   errors (on Windows, which records them).
+- **Backup drill** — the latest drill: whether every copy brought its
+  photographs back intact. The drill runs by itself once a week when nobody
+  is using the library; a drill that failed is something to act on, and no
+  drill for more than nine days is worth a look.
 
 Ninaivu keeps the last twelve weeks under **Earlier weeks**. An administrator
-signed in to the family app sees the same four lines at the top of the
+signed in to the family app sees the same five lines at the top of the
 gallery, with a link to the console and a button to hide them until next
 week; nobody else sees them. If notifications are set up (Health →
 Notifications), each Monday's summary is sent there too, as counts only:
