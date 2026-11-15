@@ -35,7 +35,7 @@ TABLES_IN_37 = ["smart", "ask_family", "family_tree", "books", "handover", "stor
                 "screening", "descriptions", "colour_copies", "video_moments", "then_and_now",
                 "life_story", "letters", "stacks", "journal"]
 #: Features with tables added since 3.7, each after those before it.
-TABLES_SINCE_37 = ["easy_view"]
+TABLES_SINCE_37 = ["easy_view", "event_albums"]
 #: The order api/api.py imported the features' routes in, in 3.7 (with those
 #: that have no tables, which were not features then, in their places).
 ROUTES_IN_37 = ["smart", "ask_family", "family_tree", "books", "films", "handover", "stories",
@@ -43,7 +43,7 @@ ROUTES_IN_37 = ["smart", "ask_family", "family_tree", "books", "films", "handove
                 "life_story", "photo_talk", "festivals", "letters", "young_faces", "find_print",
                 "stacks", "colour_copies", "voice_search", "video_moments", "then_and_now"]
 #: Features added since 3.7, in the order their routes are put on after those.
-ROUTES_SINCE_37 = ["easy_view"]
+ROUTES_SINCE_37 = ["easy_view", "event_albums"]
 
 #: Old module name -> where it lives now.
 MOVED = {

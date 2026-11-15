@@ -100,6 +100,7 @@ OPEN: dict[str, tuple[str, str]] = {
     "api.occasions": ("guest", GATE),
     "api.memories_on_this_day": ("guest", GATE),
     "api.thumb": ("guest", GATE),
+    "api.placeholders_for": ("guest", GATE),
     "api.still_preview": ("guest", GATE),
     "api.original": ("guest", GATE),
     "api.live_video": ("guest", GATE),
