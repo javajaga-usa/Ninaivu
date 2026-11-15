@@ -359,6 +359,15 @@ page cannot read the phone's library by itself or keep going in the
 background — and it skips what is already here and resumes where it stopped.
 The limit is 512 MB per upload. Guests cannot upload.
 
+On a slow or patchy connection it bends rather than breaks. It sends small
+pieces at first and sizes the rest to the speed it finds, so a dropped
+connection costs seconds rather than minutes. A piece that stalls is sent
+again. With no signal at all it waits for one and carries on when the phone
+is back online. A file the home computer turns away is marked and the rest
+still go. If the page is closed part-way, the backup screen says next time
+how many files did not finish; choose them again and each carries on from
+the byte it had reached.
+
 To have the phone back up without opening anything, make a **phone key** for
 it and give it to a sync app such as PhotoSync: [Backing up by
 itself](backup.md#backing-up-by-itself).
