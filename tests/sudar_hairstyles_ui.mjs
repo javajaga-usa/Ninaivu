@@ -6,7 +6,9 @@ import {launch} from './harness.mjs';
 const root=path.resolve('ninaivu/static');
 const server=http.createServer(async(req,res)=>{
   if(req.url==='/'){res.setHeader('Content-Type','text/html');res.end('<html data-theme="light"><link rel="stylesheet" href="/static/css/style.css"><button id="nav">x</button></html>');return;}
-  const target=path.resolve(root,'.'+req.url.replace(/^\/static/,''));
+  const target=path.resolve(root,'.'+new URL(req.url,'http://x').pathname.replace(/^\/static/,''));
+  // Only files under ninaivu/static are served, whatever the request asks for.
+  if(!target.startsWith(root+path.sep)){res.writeHead(404).end();return;}
   try{res.setHeader('Content-Type',target.endsWith('.css')?'text/css':'text/javascript');res.end(await fs.readFile(target));}catch{res.writeHead(404).end();}
 });
 await new Promise(r=>server.listen(0,'127.0.0.1',r));
