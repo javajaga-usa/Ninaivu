@@ -46,7 +46,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "phone_backup_trusted", "phone_upload_max_gb", "upload_quota_gb", "lock_roots",
         "first_day_done",
         "home_lat", "home_lon", "home_radius_m", "strip_location",
-        "photo_frame", "time_capsules", "ask_ninaivu",
+        "photo_frame", "time_capsules", "ask_ninaivu", "offline_albums",
     ),
     said("Backup"): (
         "cloud_enabled", "cloud_folder_name", "cloud_autostart", "cloud_rate_kbps",
@@ -114,6 +114,7 @@ ALWAYS_ON: tuple[str, ...] = (
     "change_journal", "perceptual_hash", "video_thumbs", "quality_scan", "occasion_scan",
     # Nothing reaches anybody but the administrator, or the person on their
     # own device, until they choose it.
+    "offline_albums",
     "event_albums",
 )
 #: On by default, and on in fact only once the model each needs is on this

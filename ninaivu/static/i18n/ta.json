@@ -5669,5 +5669,8 @@
   "The weekly backup drill found a copy that did not bring its photographs back intact": "வாராந்திரக் காப்புப்பிரதிப் பயிற்சி, தன் புகைப்படங்களை முழுமையாகத் திருப்பித் தராத ஒரு நகலைக் கண்டது",
   "It does not run by itself. Set how often under Advanced settings → Backup.": "இது தானாக நடக்காது. எவ்வளவு அடிக்கடி என்பதை மேம்பட்ட அமைப்புகள் → காப்புப்பிரதி என்பதில் அமைக்கவும்.",
   "Runs by itself every {days} days when nobody is using the library. Next: {when}.": "யாரும் நூலகத்தைப் பயன்படுத்தாதபோது {days} நாட்களுக்கு ஒருமுறை தானாக நடக்கும். அடுத்தது: {when}.",
-  "Runs by itself every {days} days when nobody is using the library. The next one is due now.": "யாரும் நூலகத்தைப் பயன்படுத்தாதபோது {days} நாட்களுக்கு ஒருமுறை தானாக நடக்கும். அடுத்தது இப்போது நடக்க வேண்டியது."
+  "Runs by itself every {days} days when nobody is using the library. The next one is due now.": "யாரும் நூலகத்தைப் பயன்படுத்தாதபோது {days} நாட்களுக்கு ஒருமுறை தானாக நடக்கும். அடுத்தது இப்போது நடக்க வேண்டியது.",
+  "No album is saved on this device yet. Albums you open while connected are kept here for when there is no signal.": "இந்தச் சாதனத்தில் இன்னும் எந்த ஆல்பமும் சேமிக்கப்படவில்லை. இணைப்பில் இருக்கும்போது நீங்கள் திறக்கும் ஆல்பங்கள், சிக்னல் இல்லாதபோது பார்க்க இங்கே வைக்கப்படும்.",
+  "No signal: these are the albums kept on this device. The rest of the library comes back when Ninaivu can be reached.": "சிக்னல் இல்லை: இவை இந்தச் சாதனத்தில் வைக்கப்பட்ட ஆல்பங்கள். நினைவுடன் இணைப்பு கிடைத்ததும் மீதி நூலகம் திரும்பும்.",
+  "Saved albums": "சேமித்த ஆல்பங்கள்"
 }

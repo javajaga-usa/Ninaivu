@@ -24,6 +24,7 @@ import { weekCard } from './health-week.js';
 import { VideoMoments } from './video-moments.js';
 import { loadEventAlbums } from './event-albums.js';
 import { checkShell, warmShell } from './shell-cache.js';
+import { closeSavedAlbums, keepAlbum, offerSavedAlbums, tellViewer } from './offline-albums.js';
 import { state, store } from './store.js';
 import { $, closeMenus, humanBytes, toast, wireMenu } from './ui.js';
 import { activeDialog, installDialogLayer, registerDialog } from './dialogs.js';
@@ -577,6 +578,10 @@ function setServerOffline() {
     rootPath.textContent = i18n.t('Server offline');
   }
 
+  // Albums kept on this device for when there is no signal: offered on the
+  // banner, and opened at once when there is no gallery to show instead.
+  offerSavedAlbums({ open: !grid?.layout?.cells?.length }).catch(() => {});
+
   if (!reconnectTimer) {
     reconnectTimer = setInterval(() => checkConnection(false), 3000);
   }
@@ -600,6 +605,7 @@ async function checkConnection(manual = false) {
       reconnectTimer = null;
     }
     serverIsOffline = false;
+    closeSavedAlbums();
 
     const banner = $('#offline-banner');
     if (banner) banner.hidden = true;
@@ -918,6 +924,8 @@ async function refreshStatus(asked = null) {
     return;
   }
   showAwayLibraries(state.status);
+  // Whose albums this device may keep for offline, if the household allows it.
+  tellViewer(state.user, state.status?.moments?.offline_albums !== false);
   const { stats, ai, user } = state.status;
   if (user) {
     state.user = user;
@@ -1076,6 +1084,21 @@ async function loadFacetLists() {
   renderFolders();
 }
 
+/** An album opened on its own, with nothing else narrowing it, is kept on
+ *  this device for when there is no signal (static/js/offline-albums.js). */
+function keepForOffline(filters, segments, sizes) {
+  if (!filters.album || state.status?.moments?.offline_albums === false) return;
+  const narrowed = Object.entries(filters).some(([key, value]) => key !== 'album' && key !== 'sort'
+    && value !== undefined && value !== null && value !== '' && value !== false && value !== 0
+    && !(Array.isArray(value) && value.length === 0));
+  if (narrowed) return;
+  const album = (state.albums || []).find((a) => Number(a.id) === Number(filters.album));
+  if (!album) return;
+  try {
+    keepAlbum({ user: state.user, album, segments, sizes });
+  } catch { /* a convenience, never a blocker */ }
+}
+
 function currentFilters() {
   const filters = { ...state.filters };
   if (state.view === 'favorites') filters.favorites = true;
@@ -1139,6 +1162,7 @@ async function reload({ resetScroll = false } = {}) {
     showVideoMoments(filters.q || '', !data.total);
     paging.next = next;
     grid.setData(segments, { resetScroll });
+    keepForOffline(filters, segments, data.thumb_sizes);
     rememberSkeleton();
     // A view opened again, or the app opened again, comes back where it was
     // left, as a photo app does.
