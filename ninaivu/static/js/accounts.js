@@ -17,6 +17,13 @@ const el = (tag, className, text) => {
   return node;
 };
 
+/** Ask the service worker to drop every cache it keeps (sw.js "ninaivu:forget"). */
+export function forgetDevice() {
+  try {
+    navigator.serviceWorker?.controller?.postMessage('ninaivu:forget');
+  } catch { /* no worker, nothing kept */ }
+}
+
 async function json(url, options = {}) {
   const isForm = options.body instanceof FormData;
   // A FormData body must keep the browser's own multipart Content-Type,
@@ -52,7 +59,14 @@ export const accountsApi = {
   state: () => json('/api/auth/state'),
   setup: (body) => json('/api/auth/setup', { method: 'POST', body }),
   login: (body) => json('/api/auth/login', { method: 'POST', body }),
-  logout: () => json('/api/auth/logout', { method: 'POST' }),
+  // Every way out empties what this device kept for the person leaving:
+  // thumbnails and the albums kept for offline (static/sw.js). The server's
+  // Clear-Site-Data does the same, but browsers honour it over HTTPS only,
+  // and at home Ninaivu is usually opened over plain HTTP.
+  logout: () => {
+    forgetDevice();
+    return json('/api/auth/logout', { method: 'POST' });
+  },
   forgot: (body) => json('/api/auth/forgot', { method: 'POST', body }),
   me: () => json('/api/me'),
   updateMe: (body) => json('/api/me', { method: 'POST', body }),

@@ -55,3 +55,18 @@ def test_the_household_can_switch_it_off(app, as_family):
     assert as_family.get("/api/status").get_json()["moments"]["offline_albums"] is True
     app.config["MV_SERVICES"].cfg.offline_albums = False
     assert as_family.get("/api/status").get_json()["moments"]["offline_albums"] is False
+
+
+def test_every_sign_out_asks_the_worker_to_forget():
+    """The server's Clear-Site-Data is honoured over HTTPS only, and at home
+    Ninaivu is opened over plain HTTP: the profile sheet's Log off, the
+    console's Sign out and a session ended from elsewhere each left the kept
+    albums on the device for the next person to find with no signal."""
+    accounts = (ROOT / "ninaivu" / "static" / "js" / "accounts.js").read_text(encoding="utf-8")
+    logout = accounts[accounts.index("  logout: () =>"):]
+    logout = logout[:logout.index("},")]
+    assert "forgetDevice()" in logout
+    assert "postMessage('ninaivu:forget')" in accounts
+    app = (ROOT / "ninaivu" / "static" / "js" / "app.js").read_text(encoding="utf-8")
+    ended = app[app.index("onUnauthorized(async () => {"):]
+    assert "forgetCachedShell()" in ended[:400]
