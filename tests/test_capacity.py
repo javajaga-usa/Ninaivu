@@ -279,3 +279,26 @@ def test_graphics_reports_where_the_model_host_runs():
     loaded = capacity.graphics(SimpleNamespace(device="model host", image_device="coreml",
                                                planned_device="coreml"))
     assert loaded["ai_device"] == "coreml" and loaded["in_use"] == "coreml"
+
+
+def test_a_second_report_does_not_wait_to_measure_the_cpu(monkeypatch):
+    """The Performance page waited 0.3 s on every opening and Refresh to
+    measure the processor. A report soon after another uses the times since."""
+    psutil = pytest.importorskip("psutil")
+    from collections import namedtuple
+    from types import SimpleNamespace
+    Times = namedtuple("Times", "user system idle")
+    monkeypatch.setattr(capacity, "_last_cpu", None)
+    clock = iter([100.0, 101.0, 500.0])
+    monkeypatch.setattr(capacity, "time", SimpleNamespace(monotonic=lambda: next(clock)))
+    readings = iter([Times(10.0, 0.0, 90.0),
+                     Times(40.0, 10.0, 150.0),
+                     Times(40.0, 10.0, 150.0)])
+    monkeypatch.setattr(psutil, "cpu_times", lambda: next(readings))
+    waited = []
+    monkeypatch.setattr(psutil, "cpu_percent", lambda interval: waited.append(interval) or 12.0)
+    assert capacity._machine_cpu() == 12.0            # nothing to compare with: measured
+    assert capacity._machine_cpu() == 40.0            # 40 busy of 100 since the first
+    assert waited == [0.3]
+    assert capacity._machine_cpu() == 12.0            # too long ago: measured again
+    assert waited == [0.3, 0.3]
