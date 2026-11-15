@@ -22,6 +22,7 @@ import zipfile
 import mimetypes
 import os
 import queue
+import re
 import secrets
 import threading
 import time
@@ -39,7 +40,8 @@ from flask import (
 from PIL import Image
 
 from .. import __version__, about, ai as ai_mod
-from ..utils import phrase, proxies, query
+from ..utils import phrase, proxies, query, tamil_words
+from ..ask import question as asked_kit
 from ..server import features
 from ..server import activity as activity_kit, auth, turn as turn_file
 from ..server import visibility
@@ -317,8 +319,11 @@ def _dates_from_phrase(text: str) -> tuple[str, str, str]:
     if explicit or not text or not getattr(cfg, "date_phrase_search", True):
         return text, request.args.get("from", ""), request.args.get("to", "")
 
+    # Tamil months, "last year" and a year with its ending glued on
+    # ("2019ல்") read as the English the date reader knows (ask/question.py).
+    read = asked_kit.tamil_dates(text) if tamil_words.has_tamil(text) else text
     remaining, window = query.parse(
-        text, southern=getattr(cfg, "southern_hemisphere", False))
+        read, southern=getattr(cfg, "southern_hemisphere", False))
     if window is None:
         return text, "", ""
     g.date_hint = {"matched": window.label, "from": window.date_from,
@@ -399,8 +404,32 @@ def _understand(text: str, kinds: list[str], person: int | None,
             or not getattr(_cfg(), "phrase_search", True)):
         return text, None
     people, places = _phrase_vocabulary()
-    found = phrase.parse(text, people=people, places=places, kind_set=bool(kinds),
-                         person_set=bool(person), favorites_set=favorites)
+    # "Amma", "அம்மா" and "Mom" are one person when the family named one
+    # person by any of them (utils/tamil_words.py). Read as the name they
+    # stand for, so the chip says the name the family gave.
+    named = dict(people)
+    spelled = tamil_words.aliases(people)
+    found = phrase.parse(text, people=[*people, *spelled], places=places,
+                         kind_set=bool(kinds), person_set=bool(person),
+                         favorites_set=favorites)
+    found.people = list(dict.fromkeys((pid, named.get(pid, name)) for pid, name in found.people))
+    if tamil_words.has_tamil(text):
+        # A name written in Tamil with its ending (அம்மாவுடன், with Amma) and
+        # a Tamil place name; the words left keep only what is searched for.
+        more, place, used = asked_kit.tamil_mentions(
+            found.text, [] if person else [*people, *spelled], places)
+        for pid, _name in more:
+            if all(pid != p for p, _ in found.people):
+                found.people.append((pid, named.get(pid, _name)))
+        if place and not found.place:
+            found.place = place
+        if used:
+            left = [w for w in re.findall(r"[\w஀-௿'&+-]+", found.text)
+                    if w not in used and w not in asked_kit.TAMIL_ENDINGS]
+            found.text = " ".join(left)
+        found.text = tamil_words.for_words(found.text)
+        if not found.matched:
+            return found.text, None
     if not found.matched:
         return text, None
     g.understood = found.chips()
@@ -532,7 +561,10 @@ def _semantic_ids(text: str, roots, conn) -> tuple[list[int] | None, dict[int, f
     engine = _engine()
     if not text or engine is None or not getattr(engine, "semantic", False):
         return None, {}
-    vector = _text_vector(engine, text)
+    # The picture model reads "temple" far better than "கோவில்": a Tamil
+    # word for what a photograph shows goes to it in English, and stays as
+    # typed for the voice stories and descriptions below.
+    vector = _text_vector(engine, tamil_words.for_pictures(text))
     if vector is None:
         return None, {}
     ids, buffer, dim, index = db.embedding_store(conn)

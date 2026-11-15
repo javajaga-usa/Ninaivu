@@ -60,6 +60,16 @@ as written, nobody tagged anything. On a Basic machine search covers names,
 dates, places, people and the words in file and folder names. The map button
 shows every located photograph grouped by place.
 
+One search can say who, where and when together: "Amma at the temple, 2019"
+narrows to the photographs Amma is in, from 2019, and looks for a temple in
+them. It works the same typed in Tamil — "அம்மாவுடன் கோவிலில், 2019ல்" — with
+the endings Tamil puts on a name, a place or a year. A person the family
+named Amma is found as அம்மா or Mom too, Paati as பாட்டி or Grandma, as long
+as only one person is named by that word; the chips under the search box say
+what was understood. Tamil words for what is in a photograph (கோவில்,
+கடற்கரை, கல்யாணம், பொங்கல் and others) are given to the image model in
+English, which it reads better.
+
 **Selecting.** Click the circle on a tile, Shift-click for a range, `X` on
 the focused tile, or ⌘/Ctrl+A for everything shown. With a selection you can
 favourite, download or add to an album at once; an administrator also

@@ -258,6 +258,12 @@ def _leftover(text: str, drop: set[str] = frozenset()) -> str:
     return " ".join(kept).strip(" -'")
 
 
+#: For the gallery's search box, which reads Tamil the same way (api.py).
+tamil_dates = _tamil_dates
+tamil_mentions = _tamil_mentions
+TAMIL_ENDINGS = _TAMIL_ENDINGS
+
+
 def understand(asked: str, *, people: Iterable[tuple[int, str]] = (),
                places: Iterable[str] = (), today: date | None = None,
                southern: bool = False) -> Question:
