@@ -7,6 +7,8 @@ import {isBackgroundRemovalRequest, isBackgroundBlurRequest, isObjectRemovalRequ
 import {isClothingColorRequest} from '../services/recolor.mjs';
 import {openPortraitStudio} from './portrait.js';
 import {openRemoveObject} from './removeobject.js';
+import {PortraitSession} from '../../studio/portrait-session.js';
+import {hairstyleMasks} from '../../studio/hairstyle-mask.mjs';
 import {openRecolor} from './recolor.js';
 import * as i18n from '../../i18n.js';
 import {errorText} from '../utils/messages.mjs';
@@ -255,6 +257,13 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
               <button class="btn" data-remove-object hidden style="align-self:flex-start;">${i18n.t('Remove object')}</button>
             </div>
 
+            <div class="ap-magic-card" data-hairstyle-card>
+              <h3><svg class="ap-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 20c-1.5-5-1-11 3-14 2-1.5 5-1.5 7 0 4 3 4.5 9 3 14"/><path d="M9 10c1 2 4 3 7 2M8 14c0 3 1 5 2 6M16 14c0 3-1 5-2 6"/></svg>${i18n.t('Hairstyles')}</h3>
+              <p>${i18n.t('Try a new hairstyle on one person. Only their hair and the space around it are redrawn, on the AI server at home; the face and everyone else are put back exactly as they were.')}</p>
+              <div class="ap-hairstyle-ideas" data-hairstyle-magic></div>
+              <small data-hairstyle-needs hidden style="font-size:11px; color:var(--ap-dim); line-height:1.4;">${i18n.t('Hairstyles need the Creative Studio extension with an AI server that has a Paint and ask workflow. An administrator sets it up under AI → AI server.')}</small>
+            </div>
+
             <div class="ap-magic-card" data-add-hair-card hidden>
               <h3><svg class="ap-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20c0-6 3-10 7-12 4 2 7 6 7 12M12 8c-2 3-2 7 0 12M9 9c-3 3-3 8-1 11M15 9c3 3 3 8 1 11"/></svg>${i18n.t('Add hair · generative')}</h3>
               <p>${i18n.t('Paint where there should be hair — a receding hairline, a thin crown, a bald patch — and the AI server draws this person\'s own hair there. For hair that is there but thin, Skin & hair retouch has Fuller hair and Add hair, with no model at all.')}</p>
@@ -359,11 +368,21 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
   // A hairstyle is drawn, not adjusted: choosing one puts its request in the
   // box and turns the engine to a generative one, and the person still presses
   // Generate and reviews the preview. Shown only when such an engine is on.
-  const hairstyles=$('.ap-hairstyle-ideas');
-  for(const [title,prompt] of HAIRSTYLES) {
+  //
+  // With a Paint and ask workflow on the AI server, a hairstyle is drawn the
+  // face-safe way instead: only the hair and the room around it are sent, and
+  // the face is put back from the photograph (see hairstyle()).
+  const hairstyles=$('[data-hairstyles] .ap-hairstyle-ideas');
+  for(const style of HAIRSTYLES) {
+    const [title,prompt]=style;
     const button=document.createElement('button');button.type='button';button.className='btn';button.textContent=i18n.t(title);
-    button.onclick=()=>{if(busy)return;$('#ap-prompt').value=prompt;clearPlan();useGenerativeEngine();$('#ap-prompt').focus();};hairstyles.append(button);
+    button.onclick=()=>{if(busy)return;if(inpaintReady()){hairstyle(style);return;}$('#ap-prompt').value=prompt;clearPlan();useGenerativeEngine();$('#ap-prompt').focus();};hairstyles.append(button);
   }
+  for(const style of HAIRSTYLES) {
+    const button=document.createElement('button');button.type='button';button.className='btn';button.textContent=i18n.t(style[0]);
+    button.onclick=()=>{if(!busy&&bitmap)hairstyle(style);};$('[data-hairstyle-magic]').append(button);
+  }
+  const inpaintReady=()=>(capabilities.server_jobs||[]).includes('inpaint');
   /** The generative engine that is on, if one is: the image model here or on the AI server first, Gemini only when it is the one there is. */
   const generativeMode=()=>capabilities.image_model&&capabilities.image_provider?'generate':$('[data-provider] option[value="gemini-edit"]')?'gemini-edit':null;
   function useGenerativeEngine(){
@@ -461,7 +480,9 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
     $('[data-remove-object]').hidden=!capabilities.object_removal;
     $('[data-add-hair-card]').hidden=!(capabilities.server_jobs||[]).includes('inpaint');$('[data-add-hair]').disabled=value||!bitmap;
     $('[data-recolor]').disabled=value||!bitmap;
-    $('[data-hairstyles]').hidden=!generativeMode();
+    $('[data-hairstyles]').hidden=!generativeMode()&&!inpaintReady();
+    $('[data-hairstyle-needs]').hidden=inpaintReady();
+    dialog.querySelectorAll('[data-hairstyle-magic] button, [data-hairstyles] button').forEach(b=>b.disabled=value||!bitmap||(b.closest('[data-hairstyle-magic]')&&!inpaintReady()));
     const serverJobs=capabilities.server_jobs||[],localJobs=capabilities.local_jobs||[],tools=capabilities.enhance_tools||{};let anyServer=false,anyLocal=false;
     const needs=$('[data-enhance-needs]');needs.replaceChildren();
     for(const button of dialog.querySelectorAll('[data-server-job]')){
@@ -849,6 +870,49 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
   }
   $('[data-add-hair]').onclick = () => { if(!busy && bitmap) addHair(); };
 
+  /**
+   * A new hairstyle for one person, drawn on the AI server where their hair is
+   * and nowhere else. The faces are found the way the retouch studio finds them;
+   * the person's hair and the room the style needs are painted in to start with,
+   * their face and everybody else are kept, and whatever comes back, the kept
+   * pixels are the photograph's own. *style* is one of HAIRSTYLES, or a typed
+   * request as `[text, text, 'head', text]`.
+   */
+  async function hairstyle(style) {
+    if(busy || !bitmap) return;
+    if(!inpaintReady()){ status(i18n.t('Hairstyles need the Creative Studio extension with an AI server that has a Paint and ask workflow. An administrator sets it up under AI → AI server.')); return; }
+    const [title,,kind,drawing]=style;
+    lock(true); status(i18n.t('Finding the faces…'));
+    let source=null;
+    try {
+      const blob = await service.applyAdjustments(bitmap, history.current, {maxSide: 1600, type: 'image/png'}); if(closed) return;
+      source = await createImageBitmap(blob); if(closed) return;
+      const session = new PortraitSession({source});
+      await session.analyse(); if(closed) return;
+      const faces = session.state === 'ready' ? session.faces().filter(f => f.inside) : [];
+      const ask = {
+        title: i18n.t('Hairstyle · {style}', {style: i18n.t(title)}),
+        lede: i18n.t('Their hair is marked in pink and their face in green. Only the pink is redrawn; the green is put back exactly as it was.'),
+        prompt: drawing,
+        done: i18n.t('Done. Apply it to the photo, download it, or draw again for another try.'),
+        file: 'ninaivu-hairstyle.png',
+      };
+      if(faces.length) {
+        const shown = document.createElement('canvas'); shown.width = source.width; shown.height = source.height;
+        shown.getContext('2d').drawImage(source, 0, 0);
+        ask.people = faces.map((face, n) => ({id: face.id, label: i18n.t('Person {n}', {n: n + 1}), thumb: session.thumb(face.id, shown, 36)}));
+        ask.masks = (id, w, h) => hairstyleMasks({width: w, height: h, maps: session.payload(w, h).maps, faces: session.faces(), target: [id], kind});
+      } else {
+        // Nothing to keep without a face: say so, and let the hair be painted by hand.
+        ask.lede = (session.message ? session.message + ' ' : '') + i18n.t('No face was found to keep, so paint the hair yourself; everything you paint is redrawn.');
+      }
+      openRemoveObject(source, service, {provider: 'ai-server', onApply: resultBitmap => takeOnto(resultBitmap, i18n.t('New hairstyle applied. Save a copy to keep it.')), ask});
+      source = null;
+      status(faces.length ? i18n.t('Check the marked hair, then draw it.') : i18n.t('Paint the hair, then draw it.'));
+    } catch(error) { if(!closed) status(errorText(error, i18n.t)); }
+    finally { source?.close(); if(!closed) lock(false); }
+  }
+
   let serverURL = null, serverBlob = null;
   function clearServerResult(){ if(serverURL) URL.revokeObjectURL(serverURL); serverURL = null; serverBlob = null; $('.ap-server-result img').removeAttribute('src'); $('.ap-server-result').hidden = true; }
   const serverTitles = {upscale: i18n.t('Upscaled result'), restore: i18n.t('Faces restored result'), colorize: i18n.t('Colourised result'), revive: i18n.t('Revived old photo')};
@@ -943,6 +1007,7 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
     // nothing honest to do but say so, rather than hand it to a tool that
     // only retouches the hair that is there.
     if(isHairstyleRequest(asked) && !/\b(fuller|thicker|thinning|volume|grey|gray|colou?r|dye|brunette|blonde|black|brown|highlights?)\b/i.test(asked)){
+      if(inpaintReady()){ await hairstyle([asked, asked, /\b(long|braid|plait|wavy|curly|curls|ponytail)/i.test(asked) ? 'long' : /\b(beard|moustache|mustache)\b/i.test(asked) ? 'beard' : /\b(bun|updo)\b/i.test(asked) ? 'up' : /\b(fringe|bangs)\b/i.test(asked) ? 'fringe' : 'head', asked]); return; }
       if(!useGenerativeEngine()){ status(i18n.t('A new hairstyle needs a generative engine: the Creative Studio extension with an image model or AI server, or Gemini. Fuller hair, strands, grey and colour are in Skin & hair retouch.')); return; }
     } else {
       if(isPortraitRetouchRequest(asked)){ await portraitStudio(); return; }
