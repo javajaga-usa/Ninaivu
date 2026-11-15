@@ -9,8 +9,6 @@ changes, and the helper that makes the rest of the library's finishes.
 """
 from __future__ import annotations
 
-import time
-
 import numpy as np
 
 from ninaivu.media import placeholders
@@ -169,18 +167,24 @@ def test_the_route_is_declared_for_the_gate():
 
 
 def test_a_slow_filler_stops_when_asked(tmp_path):
+    import threading
+
     calls = []
+    third = threading.Event()
 
     def rows(after, limit):
         calls.append(after)
-        time.sleep(0.01)
+        if len(calls) >= 3:
+            third.set()
         return [{"id": after + 1, "thumb": ""}]
 
     filler = placeholders.Filler(placeholders.Store(tmp_path), rows=rows,
                                  source=lambda r: tmp_path, version=lambda r: "1")
     filler.start()
-    time.sleep(0.2)
+    # It goes on batch after batch (waited for, not timed: CI machines are slow)…
+    assert third.wait(timeout=30)
+    # …until asked to stop, and then it does.
     filler.stop.set()
     filler.thread.join(timeout=5)
     assert not filler.thread.is_alive()
-    assert len(calls) >= 2
+    assert calls[:3] == [0, 1, 2], "each batch starts after the last"
