@@ -613,6 +613,8 @@ admin | POST                 | /api/phone-keys | family | writes | same origin |
 home  | POST                 | /api/phone-keys | family | writes | same origin | api.phone_keys_make | -
 admin | DELETE               | /api/phone-keys/<int:key_id> | family | writes | same origin | api.phone_keys_revoke | -
 home  | DELETE               | /api/phone-keys/<int:key_id> | family | writes | same origin | api.phone_keys_revoke | -
+admin | GET                  | /api/placeholders | guest | reads | - | api.placeholders_for | -
+home  | GET                  | /api/placeholders | guest | reads | - | api.placeholders_for | -
 admin | POST                 | /api/portrait/analyse | family | writes | same origin | api.portrait_analyse | -
 home  | POST                 | /api/portrait/analyse | family | writes | same origin | api.portrait_analyse | -
 admin | GET                  | /api/preview/<int:asset_id> | guest | reads | - | api.still_preview | -

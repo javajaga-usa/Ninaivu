@@ -3855,6 +3855,8 @@ from . import api_webdav                                            # noqa: E402
 from . import api_private                                           # noqa: E402,F401
 # The duplicates review, side by side: look, then keep one and hide or merge.
 from . import api_duplicates                                        # noqa: E402,F401
+# Blurred previews for the gallery's tiles, a few hundred at a time.
+from . import api_placeholders                                      # noqa: E402,F401
 # Sent for screening: family members flag items, an administrator decides.
 _feature("screening")
 
