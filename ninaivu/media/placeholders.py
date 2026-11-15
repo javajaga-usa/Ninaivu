@@ -80,7 +80,7 @@ def encode_rgb(pixels: np.ndarray) -> bytes:
     """The preview of an image given as an ``h × w × 3`` array of 0..255."""
     h, w = pixels.shape[:2]
     if not w or not h:
-        raise ValueError("an empty picture has no preview")
+        raise ValueError(f"{w}x{h}")
     rgb = pixels.astype(np.float64) / 255.0
     r, g, b = rgb[..., 0], rgb[..., 1], rgb[..., 2]
     lum = (r + g + b) / 3
