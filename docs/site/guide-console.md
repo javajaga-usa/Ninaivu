@@ -262,6 +262,17 @@ with no other administrator to reset it, is set from the Control Panel's
 **Reset a password…** on the computer Ninaivu runs on. [The
 steps.](troubleshooting.md#someone-forgot-their-password-or-pin)
 
+**What each person sees**, at the foot of the page, answers "why can't Paati
+find the wedding?" without signing in as her. Press **Check** and each
+profile gets a line: how many of the library's items the family app lets
+them open, and, for the rest, the first reason each is kept from them —
+outside their folders, outside their role's dates, somebody else's *Only to
+me*, explicit, screenshots and documents, hidden, or recordings (which only
+administrators hear). An administrator's line says they see everything,
+hidden and explicit items included. The last line is what anybody sees with
+nobody signed in. It uses the same rules the family app uses, so the numbers
+are what each person would get, and pressing **Check** changes nothing.
+
 ### Visibility
 
 ![Visibility](../screens/console-visibility.jpg)
