@@ -9,12 +9,12 @@
  *
  *   node tests/estimate_progress_ui.mjs /some/big/folder
  *      (wants a console on 3000, admin dad / correcthorse1, and a source
- *       folder large enough that walking it takes more than a second)
+ *       folder and a destination; progress readings are controlled here,
+ *       and the final estimate comes from the real folder walk)
  */
 import { launch, ok, done, HOME, ADMIN } from './harness.mjs';
 
-// A folder big enough that walking it takes more than a second, which
-// is the whole point of this test — see the header.
+// The final estimate still comes from walking this real folder.
 const SOURCE = process.env.NINAIVU_SRC_BIG || process.env.NINAIVU_SRC_A
   || process.argv[2];
 const DEST = process.env.NINAIVU_DEST || process.argv[3];
@@ -72,6 +72,29 @@ await p.waitForTimeout(1000);
 
 /* ---------- sample the whole sequence ---------- */
 
+// A fast walk may expose just one nonzero count before it finishes. Hold
+// its real final response while supplying known progress snapshots, so a
+// missing repaint or poll always fails, regardless of the runner's disk.
+let progressFiles = 1;
+let countingStarted = false;
+let releaseEstimate;
+const estimateReady = new Promise(resolve => { releaseEstimate = resolve; });
+const capacityRoute = async route => {
+  // Form edits also peek at the last estimate. Let those finish normally;
+  // only Count files starts the fresh walk whose result is held here.
+  if (!route.request().postDataJSON()?.fresh) return route.continue();
+  countingStarted = true;
+  const response = await route.fetch();
+  await estimateReady;
+  await route.fulfill({ response });
+};
+const progressRoute = route => countingStarted ? route.fulfill({ json: {
+  known: true, files: progressFiles, bytes: progressFiles * 1024,
+  elapsed: progressFiles, folder: 'DCIM',
+} }) : route.continue();
+await p.route('**/api/archive/capacity', capacityRoute);
+await p.route('**/api/archive/capacity/progress?*', progressRoute);
+
 await p.fill('#ar-source-input', SOURCE);
 await p.click('#ar-add-source');
 await p.fill('#ar-dest-input', DEST);
@@ -80,45 +103,44 @@ await p.waitForTimeout(500);
 await p.click('#ar-count-files');
 
 const frames = [];
-for (let i = 0; i < 60; i += 1) {
-  await p.waitForTimeout(70);
-  frames.push(await line());
+try {
+  for (const count of [1, 2, 3]) {
+    progressFiles = count;
+    await p.waitForFunction(value => document.querySelector('#ar-capacity')
+      ?.innerText.includes(`${value} files so far`), count, { timeout: 15000 });
+    frames.push(await line());
+  }
+} finally {
+  releaseEstimate();
 }
+await p.waitForFunction(() => {
+  const node = document.querySelector('#ar-capacity');
+  return node && !node.classList.contains('working') && /files,/.test(node.innerText);
+}, null, { timeout: 30000 });
+frames.push(await line());
+await p.unroute('**/api/archive/capacity', capacityRoute);
+await p.unroute('**/api/archive/capacity/progress?*', progressRoute);
 
 const working = frames.filter((f) => f.working);
 const counting = frames.filter((f) => /Counting…/.test(f.text));
 const finished = frames.filter((f) => !f.working && !f.hidden && /files,/.test(f.text));
 
-// The point of this test is to watch a walk that is still going. A folder that a
-// fast disk walks in a few milliseconds is over before any frame can catch it,
-// whatever its size in this fixture, and there is nothing to watch: say so, and
-// check only what can still be checked, rather than failing for being quick.
-// A slow runner can also spend the first seconds starting the walk and then
-// do all of it between two polls of its progress: every counting frame says
-// "0 files so far" and the next says it is done (CI, 27 October 2026). That
-// walk was quick too, not stuck, and has no moving count to watch.
-const neverMoved = counting.every((f) => /\b0 files so far/.test(f.text));
-const tooFast = (counting.length === 0 || neverMoved) && finished.length > 0;
-const whileItWorks = (label, condition, detail) => (tooFast
-  ? console.log(`SKIP  ${label} — the folder was walked faster than it can be watched here`)
-  : ok(label, condition, detail));
-
 ok('the line appears as soon as a source is added',
   frames.slice(0, 6).some((f) => !f.hidden), JSON.stringify(frames[0]));
-whileItWorks('there is a spinner while it works',
+ok('there is a spinner while it works',
   working.length > 0 && working.every((f) => f.spinner));
-whileItWorks('it reports a running count, not a static word',
+ok('it reports a running count, not a static word',
   counting.length > 0, working.map((f) => f.text).slice(0, 3).join(' | '));
-whileItWorks('the count moves',
+ok('the count moves',
   new Set(counting.map((f) => f.text.match(/([\d,]+) files so far/)?.[1])).size > 1,
   counting.map((f) => f.text.match(/([\d,]+) files/)?.[1]).join(','));
-whileItWorks('it says which folder it is in',
+ok('it says which folder it is in',
   counting.some((f) => f.where.length > 0),
   JSON.stringify(counting[0] || {}));
 ok('the folder is shortened rather than a full deep path',
   counting.every((f) => !f.where || f.where.length < 70),
   counting.map((f) => f.where).find((w) => w.length >= 70) || '');
-whileItWorks('it shows an elapsed time',
+ok('it shows an elapsed time',
   counting.some((f) => /· \d+[smh]/.test(f.text)),
   counting[0]?.text);
 
