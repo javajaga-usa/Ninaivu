@@ -257,8 +257,10 @@ def test_debian_shortcuts_execute_native_launcher_directly():
     from ninaivu.desktop.shortcuts import program, describe, FACES
     prog = program({'NINAIVU_PACKAGE': 'deb', 'HOME': '/home/family',
                     'NINAIVU_LAUNCHER': '/usr/bin/ninaivu'}, 'linux', Path('/state/control'))
-    assert describe(FACES[0], prog, 'linux') == {
-        'argv': ['/usr/bin/ninaivu', '--open', 'family'], 'workdir': '/home/family'}
+    described = describe(FACES[0], prog, 'linux')
+    assert described['argv'] == ['/usr/bin/ninaivu', '--open', 'family']
+    # Compared as paths: run on Windows, the same folder is written with backslashes.
+    assert Path(described['workdir']) == Path('/home/family')
 
 
 def test_fresh_debian_first_launch_creates_all_three_icons(tmp_path):
@@ -272,5 +274,7 @@ def test_fresh_debian_first_launch_creates_all_three_icons(tmp_path):
         text = entry.read_text()
         assert '/usr/bin/ninaivu' in text
         assert 'sh /usr/bin/ninaivu' not in text
-        assert entry.stat().st_mode & 0o111
+        # Windows has no execute bit to set; Linux, where a .deb runs, does.
+        if sys.platform != 'win32':
+            assert entry.stat().st_mode & 0o111
     assert shortcuts.settle(control, environ=env, platform='linux', desktop=desktop) == []
