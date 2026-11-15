@@ -475,7 +475,26 @@
          really gets: its certificate warning, "can't connect", or a working reply. #}
       <a class="btn ghost small" id="offline-check" href="/readyz" target="_blank" rel="noopener" data-i18n="Check connection">Check connection</a>
       <button class="btn ghost small" id="offline-retry-btn" data-i18n="Retry now">Retry now</button>
+      <button class="btn primary small" id="offline-saved-btn" type="button" hidden data-i18n="Saved albums">Saved albums</button>
     </div>
+
+    {# Albums kept on this device for when there is no signal
+       (static/js/offline-albums.js, static/sw.js). #}
+    <section class="offline-albums" id="offline-albums" hidden role="dialog" aria-modal="true" aria-labelledby="offline-albums-title">
+      <header class="offline-albums-head">
+        <button class="btn ghost small" id="offline-albums-back" type="button" hidden data-i18n="Back">Back</button>
+        <h2 id="offline-albums-title" data-i18n="Saved albums">Saved albums</h2>
+        <button class="btn ghost small" id="offline-albums-close" type="button" data-i18n="Close">Close</button>
+      </header>
+      <p class="hint offline-albums-note" data-i18n="No signal: these are the albums kept on this device. The rest of the library comes back when Ninaivu can be reached.">No signal: these are the albums kept on this device. The rest of the library comes back when Ninaivu can be reached.</p>
+      <div class="offline-albums-body" id="offline-albums-body"></div>
+      <div class="offline-photo" id="offline-photo" hidden>
+        <img id="offline-photo-img" alt="">
+        <button class="btn ghost small offline-photo-prev" id="offline-photo-prev" type="button" aria-label="Previous" data-i18n-label="Previous">‹</button>
+        <button class="btn ghost small offline-photo-next" id="offline-photo-next" type="button" aria-label="Next" data-i18n-label="Next">›</button>
+        <button class="btn ghost small offline-photo-close" id="offline-photo-close" type="button" data-i18n="Close">Close</button>
+      </div>
+    </section>
 
     {# A library folder that is not plugged in. Its photographs stay in the
        index, so the gallery is not empty and not wrong — but without this it

@@ -32,6 +32,20 @@
  * admin who opens the console while the server is down is told so in the same
  * words instead of getting the browser's own error.
  *
+ * ALBUMS KEPT FOR OFFLINE
+ *
+ * The one exception to "listings are never stored": the few albums a family
+ * member or administrator opened most recently, so the family can look
+ * through them where there is no signal (static/js/offline-albums.js). Kept
+ * for the person who opened them only, and wiped the moment somebody else is
+ * signed in on the device, on sign-out with everything else, and after
+ * OFFLINE_DAYS. Only thumbnails and the album's name and order are kept,
+ * never an original; hidden and explicit photographs are never kept, even
+ * for an administrator. They are used only when the server cannot be
+ * reached: while it can, every thumbnail is asked of it as above, and each
+ * album opened is kept again from what the server answered, so a photograph
+ * somebody lost access to is dropped from the kept copy on the next visit.
+ *
  * The caches are versioned. Changing CACHE_VERSION drops every old one on the
  * next activation, which is how a stale app shell gets cleaned up.
  */
@@ -50,6 +64,14 @@ const CONSOLE = new URLSearchParams(self.location.search || '').has('console');
 const THUMB_VERSION = 'v9-date-access';
 const SHELL_CACHE = `ninaivu-shell-${CACHE_VERSION}`;
 const THUMB_CACHE = `ninaivu-thumbs-${THUMB_VERSION}`;
+/** The albums kept for offline (see ALBUMS KEPT FOR OFFLINE above). */
+const OFFLINE_CACHE = 'ninaivu-offline-v1';
+/** Where in it the list of kept albums is, and whose they are. */
+const OFFLINE_META = '/__ninaivu/offline-albums.json';
+/** The most albums kept, the most photographs of each, and for how long. */
+const OFFLINE_ALBUMS = 6;
+const OFFLINE_ITEMS = 240;
+const OFFLINE_DAYS = 30;
 
 /**
  * Thumbnails are small (a 256px WEBP is tens of kilobytes) and a library is
@@ -74,7 +96,7 @@ self.addEventListener('activate', (event) => {
     const names = await caches.keys();
     await Promise.all(names
       .filter((name) => name.startsWith('ninaivu-')
-        && name !== SHELL_CACHE && name !== THUMB_CACHE)
+        && name !== SHELL_CACHE && name !== THUMB_CACHE && name !== OFFLINE_CACHE)
       .map((name) => caches.delete(name)));
     await self.clients.claim();
   })());
@@ -110,7 +132,93 @@ function thumbnail(request) {
       checked.delete(request.url);
     }
     return response;
+  }, async (error) => {
+    // No server: a thumbnail of an album kept for offline, if it is one.
+    const kept = await keptThumbnail(request.url);
+    if (kept) return kept;
+    throw error;
   });
+}
+
+/* --- albums kept for offline ----------------------------------------------- */
+
+async function offlineMeta(cache) {
+  const hit = await cache.match(OFFLINE_META);
+  if (!hit) return { user: null, albums: [] };
+  try {
+    const data = await hit.json();
+    return { user: data.user ?? null, albums: Array.isArray(data.albums) ? data.albums : [] };
+  } catch {
+    return { user: null, albums: [] };
+  }
+}
+
+function saveMeta(cache, meta) {
+  return cache.put(OFFLINE_META, new Response(JSON.stringify(meta),
+    { headers: { 'Content-Type': 'application/json' } }));
+}
+
+function wipeOffline() {
+  return caches.delete(OFFLINE_CACHE);
+}
+
+/** Kept albums still young enough, the most recently opened first. */
+function current(albums) {
+  const young = Date.now() - OFFLINE_DAYS * 86400000;
+  return albums.filter((a) => a && a.at > young)
+    .sort((x, y) => y.at - x.at).slice(0, OFFLINE_ALBUMS);
+}
+
+let keeping = Promise.resolve();
+
+/** Keep one album for *user*: its name, its order and each thumbnail, and
+ *  let go of what no kept album needs any more. One at a time. */
+function keepAlbum(data) {
+  keeping = keeping.then(() => keepAlbumNow(data)).catch(() => {});
+  return keeping;
+}
+
+async function keepAlbumNow({ user, album, items, size }) {
+  if (user == null || !album || !Array.isArray(items)) return;
+  let cache = await caches.open(OFFLINE_CACHE);
+  let meta = await offlineMeta(cache);
+  if (meta.user !== user) {
+    await wipeOffline();
+    cache = await caches.open(OFFLINE_CACHE);
+    meta = { user, albums: [] };
+  }
+  const kept = items.slice(0, OFFLINE_ITEMS).filter((i) => Number.isInteger(i.id))
+    .map((i) => ({ id: i.id, a: Number(i.a) || 100, url: `/api/thumb/${i.id}?s=${size}${i.v ? `&v=${i.v}` : ''}` }));
+  const others = meta.albums.filter((a) => a.id !== album.id);
+  meta.albums = current([{ id: album.id, name: String(album.name || ''), at: Date.now(), items: kept }, ...others]);
+  const wanted = new Set(meta.albums.flatMap((a) => a.items.map((i) => new URL(i.url, self.location.origin).href)));
+  for (const key of await cache.keys()) {
+    if (key.url.endsWith(OFFLINE_META)) continue;
+    if (!wanted.has(key.url)) await cache.delete(key);
+  }
+  await saveMeta(cache, meta);
+  for (const href of wanted) {
+    if (await cache.match(href)) continue;
+    const response = await fetch(href, { credentials: 'same-origin' }).catch(() => null);
+    if (!response) return;                   // the server went: the rest next time
+    if (response.status === 200 && response.type === 'basic') await cache.put(href, response);
+  }
+}
+
+async function keptThumbnail(url) {
+  const cache = await caches.open(OFFLINE_CACHE);
+  const hit = await cache.match(url);
+  if (hit) return hit;
+  // Asked at another size or version than was kept: the kept copy of that
+  // photograph is better than nothing.
+  const id = (new URL(url).pathname.match(/^\/api\/thumb\/(\d+)/) || [])[1];
+  if (!id) return null;
+  const meta = await offlineMeta(cache);
+  for (const album of meta.albums) {
+    const item = album.items.find((i) => String(i.id) === id);
+    if (item) return cache.match(item.url);
+  }
+  return null;
 }
 
 self.addEventListener('message', (event) => {
@@ -122,6 +230,28 @@ self.addEventListener('message', (event) => {
     event.waitUntil((check || Promise.resolve(false))
       .catch(() => false)
       .then((changed) => port && port.postMessage({ changed: Boolean(changed) })));
+    return;
+  }
+  if (data.type === 'ninaivu:offline-keep' && !CONSOLE) {
+    event.waitUntil(keepAlbum(data));
+    return;
+  }
+  if (data.type === 'ninaivu:offline-viewer' && !CONSOLE) {
+    // Somebody else, or nobody who may keep albums, is on this device now.
+    event.waitUntil((async () => {
+      const meta = await offlineMeta(await caches.open(OFFLINE_CACHE));
+      if (data.user == null || (meta.user != null && meta.user !== data.user)) await wipeOffline();
+    })());
+    return;
+  }
+  if (data.type === 'ninaivu:offline-list') {
+    const port = event.ports && event.ports[0];
+    event.waitUntil((async () => {
+      const cache = await caches.open(OFFLINE_CACHE);
+      const meta = await offlineMeta(cache);
+      const albums = current(meta.albums);
+      if (port) port.postMessage({ albums });
+    })().catch(() => port && port.postMessage({ albums: [] })));
     return;
   }
   if (data.type === 'ninaivu:warm' && Array.isArray(data.urls) && !CONSOLE) {

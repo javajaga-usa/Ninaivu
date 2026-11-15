@@ -1091,6 +1091,13 @@ class Config:
     #: side from the first to now. Nothing is sent anywhere. See
     #: ninaivu/features/festivals/media.py.
     festival_albums: bool = setting(True, env="NINAIVU_FESTIVAL_ALBUMS")
+    #: Albums for when there is no signal: the last six albums a family
+    #: member or administrator opened are kept on their phone or tablet (only
+    #: thumbnails, never hidden or explicit photographs, never an original),
+    #: for that person only, and shown when the server cannot be reached.
+    #: Wiped on sign-out and when somebody else signs in on the device. See
+    #: ninaivu/static/js/offline-albums.js and static/sw.js.
+    offline_albums: bool = setting(True, env="NINAIVU_OFFLINE_ALBUMS")
     #: Letters read aloud: an old letter, a recipe card or a note in a
     #: grandparent's hand, photographed, is given its words, written out
     #: under it (read by the text reader, or typed and corrected by the

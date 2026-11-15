@@ -57,6 +57,7 @@ them; *runtime* ones say how this start was made and are never saved.
 | `photo_frame` | `True` |  | expert | The living photo frame: a tablet or a TV's browser, signed in, opens Ninaivu at /#frame and drifts through the library full screen, this day in past years first, with when, where, who and the start of any story told about each photograph. See ninaivu/features/frame/media.py. |
 | `time_capsules` | `True` |  | expert | Time capsules: photographs and a letter sealed for somebody in the family until a date. Nobody sees inside before then, not even whoever sealed it. See ninaivu/features/capsules/storage.py. |
 | `ask_ninaivu` | `True` | `NINAIVU_ASK` | expert | Ask Ninaivu: questions about the family's photographs, in Tamil or English, answered on this computer from what the library already knows (people, places, dates, descriptions, words in photos and stories), with the photographs the answer comes from. Writes its answers with the on-device writing model when it is downloaded, and plainly without it. Nothing is sent anywhere. See ninaivu/ask. |
+| `offline_albums` | `True` | `NINAIVU_OFFLINE_ALBUMS` | expert | Albums for when there is no signal: the last six albums a family member or administrator opened are kept on their phone or tablet (only thumbnails, never hidden or explicit photographs, never an original), for that person only, and shown when the server cannot be reached. Wiped on sign-out and when somebody else signs in on the device. See ninaivu/static/js/offline-albums.js and static/sw.js. |
 
 ## Backup
 

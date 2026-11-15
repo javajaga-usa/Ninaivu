@@ -5643,5 +5643,8 @@
   "{name}: {free} free of {total}, {change} more than a week ago.": "{name}: {total} இல் {free} காலி, ஒரு வாரம் முன்பை விட {change} அதிகம்.",
   "{name}: {free} free of {total}.": "{name}: {total} இல் {free} காலி.",
   "{title}: {count}.": "{title}: {count}.",
-  "The weekly health digest is not running here.": "வாராந்திர நல அறிக்கை இங்கே இயங்கவில்லை."
+  "The weekly health digest is not running here.": "வாராந்திர நல அறிக்கை இங்கே இயங்கவில்லை.",
+  "No album is saved on this device yet. Albums you open while connected are kept here for when there is no signal.": "இந்தச் சாதனத்தில் இன்னும் எந்த ஆல்பமும் சேமிக்கப்படவில்லை. இணைப்பில் இருக்கும்போது நீங்கள் திறக்கும் ஆல்பங்கள், சிக்னல் இல்லாதபோது பார்க்க இங்கே வைக்கப்படும்.",
+  "No signal: these are the albums kept on this device. The rest of the library comes back when Ninaivu can be reached.": "சிக்னல் இல்லை: இவை இந்தச் சாதனத்தில் வைக்கப்பட்ட ஆல்பங்கள். நினைவுடன் இணைப்பு கிடைத்ததும் மீதி நூலகம் திரும்பும்.",
+  "Saved albums": "சேமித்த ஆல்பங்கள்"
 }
