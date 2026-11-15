@@ -1,6 +1,6 @@
 /**
  * The week's health (static/js/health-week.js): the console's Overview shows
- * the four parts of the last seven days under "Is everything safe?", and the
+ * the five parts of the last seven days under "Is everything safe?", and the
  * family app shows an administrator a card that can be put away until the
  * next week. A family member is shown nothing.
  */
@@ -16,8 +16,8 @@ await signInAtConsole(consolePage);
 await consolePage.goto(`${ADMIN}/#overview`, { waitUntil: 'networkidle' });
 await consolePage.locator('#hw-block:not([hidden]) #hw-parts li').first().waitFor({ timeout: 20000 });
 const parts = await consolePage.locator('#hw-parts .sf-title').allTextContents();
-ok('the Overview shows the four parts of the week',
-   JSON.stringify(parts) === JSON.stringify(['Damaged files', 'Free space', 'Failed jobs', 'Drives']),
+ok('the Overview shows the five parts of the week',
+   JSON.stringify(parts) === JSON.stringify(['Damaged files', 'Free space', 'Failed jobs', 'Drives', 'Backup drill']),
    JSON.stringify(parts));
 const head = await consolePage.locator('#hw-headline').textContent();
 ok('with a headline and the dates it covers', /week/i.test(head) && head.includes('–'), head);
@@ -30,7 +30,7 @@ await signInAtHome(home);
 await home.goto(HOME, { waitUntil: 'networkidle' });
 const card = home.locator('.week-card:not([hidden])');
 await card.waitFor({ timeout: 20000 });
-ok('the family app shows the administrator the week', await card.locator('.week-card-part').count() === 4);
+ok('the family app shows the administrator the week', await card.locator('.week-card-part').count() === 5);
 const link = await card.locator('a.btn').getAttribute('href');
 ok('with a way to the console', /^https?:\/\/[^/]+:\d+$/.test(link || ''), link);
 if (process.env.SHOT) await card.screenshot({ path: `${process.env.SHOT}-app.png` });
