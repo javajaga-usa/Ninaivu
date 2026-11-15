@@ -98,8 +98,11 @@ def copy_index(source: Path, work: Path) -> Path:
     return state
 
 
-def made_up_index(work: Path, size: int) -> Path:
-    """A library of *size* rows with faces, people and descriptions, no files."""
+def made_up_index(work: Path, size: int, extras: bool = True) -> Path:
+    """A library of *size* rows with faces, people and descriptions, no files.
+
+    *extras* False leaves out the faces and descriptions: the scroll bench
+    (tools/bench_scroll.py) only needs the rows and their thumbnails."""
     from PIL import Image
     from ninaivu.server.config import Config
     from ninaivu.server import auth
@@ -165,7 +168,7 @@ def made_up_index(work: Path, size: int) -> Path:
                          (p + 1, f"Person {p + 1}" if p < 18 else ""))
         ids = [r[0] for r in conn.execute("SELECT id FROM assets WHERE kind='picture'")]
         faces = []
-        for n, asset in enumerate(ids):
+        for n, asset in enumerate(ids if extras else ()):
             for _ in range(n % 3):
                 person = rng.randint(1, 24) if rng.random() < 0.6 else None
                 faces.append((asset, person, "auto" if person else "none",
@@ -177,7 +180,7 @@ def made_up_index(work: Path, size: int) -> Path:
                 "INSERT INTO descriptions(asset_id, text, model, version, made_at) "
                 "VALUES (?, ?, 'captions-large', 1, 0)",
                 [(a, f"A photograph of a {' and a '.join(rng.sample(words, 2))}.")
-                 for a in ids[: int(len(ids) * 0.85)]])
+                 for a in (ids[: int(len(ids) * 0.85)] if extras else ())])
         except sqlite3.OperationalError:
             pass
         conn.commit()

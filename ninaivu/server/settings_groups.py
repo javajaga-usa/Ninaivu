@@ -85,7 +85,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
     ),
     said("Advanced"): (
         "workers", "ai_runtime", "describe_photos", "memory_films", "our_year", "video_moments",
-        "then_and_now", "life_story", "festival_albums", "letters_aloud", "young_faces", "easy_view", "photo_talk", "find_print",
+        "then_and_now", "life_story", "festival_albums", "event_albums", "letters_aloud", "young_faces", "easy_view", "photo_talk", "find_print",
         "photo_stacks", "share_blur_strangers", "voice_search",
         "colour_photos", "thumb_sizes", "thumb_quality", "thumb_format", "video_thumbs",
         "video_thumb_offset", "perceptual_hash", "blur_threshold", "dark_threshold",
@@ -112,6 +112,9 @@ ALWAYS_ON: tuple[str, ...] = (
     "photo_frame", "time_capsules", "memory_films", "our_year", "then_and_now", "life_story",
     "festival_albums", "photo_stacks", "find_print", "content_fingerprints",
     "change_journal", "perceptual_hash", "video_thumbs", "quality_scan", "occasion_scan",
+    # Nothing reaches anybody but the administrator, or the person on their
+    # own device, until they choose it.
+    "event_albums",
 )
 #: On by default, and on in fact only once the model each needs is on this
 #: computer: the AI models page is the one place that is decided

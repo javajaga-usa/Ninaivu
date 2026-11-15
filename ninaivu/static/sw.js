@@ -124,6 +124,22 @@ self.addEventListener('message', (event) => {
       .then((changed) => port && port.postMessage({ changed: Boolean(changed) })));
     return;
   }
+  if (data.type === 'ninaivu:checked' && Array.isArray(data.urls)) {
+    // The gallery's previews (/api/placeholders) are answered by the same
+    // test a thumbnail is: the items they came back for are ones this viewer
+    // may see now, so their thumbnails count as just checked (see
+    // thumbnail()). Only this origin's own thumbnail URLs are taken.
+    const now = Date.now();
+    if (checked.size > MAX_CHECKED) checked.clear();
+    for (const url of data.urls.slice(0, 2048)) {
+      if (typeof url !== 'string') continue;
+      let parsed;
+      try { parsed = new URL(url); } catch { continue; }
+      if (parsed.origin !== self.location.origin || !parsed.pathname.startsWith('/api/thumb/')) continue;
+      checked.set(parsed.href, now);
+    }
+    return;
+  }
   if (data.type === 'ninaivu:warm' && Array.isArray(data.urls) && !CONSOLE) {
     event.waitUntil(warm(data.urls.slice(0, 400)).catch(() => {}));
     return;
