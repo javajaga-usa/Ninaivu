@@ -600,3 +600,13 @@ Open the address the administrator gives you while on the home Wi-Fi, then
 **Add to Home Screen**. It opens like an app and works offline for what it
 has already shown. Away from home, it works only if the household set up
 [remote access](remote-access.md).
+
+**Saved albums, for no signal.** The last six albums you opened while
+connected are kept on your phone, as pictures sized for the screen. When
+Ninaivu cannot be reached (on a train, at a temple with no signal) the
+offline bar offers **Saved albums**: open one, scroll it, and tap a
+photograph to see it full screen. Only you see what your phone kept. It never
+keeps hidden or explicit photographs, nor an original, and nothing is kept for
+a guest. Signing out, or somebody else signing in on the same phone, wipes it.
+An album kept for longer than thirty days is let go. Each time you open an
+album while connected, it is kept again from what you may see now.
