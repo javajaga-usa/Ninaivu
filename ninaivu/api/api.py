@@ -3880,6 +3880,8 @@ _feature("smart")
 from . import api_straighten                                         # noqa: E402,F401
 # The week's health, for administrators on either app (server/health_week.py).
 from . import api_health_week                                        # noqa: E402,F401
+# What each person sees, for administrators (server/privacy_view.py).
+from . import api_privacy                                            # noqa: E402,F401
 # "Who is this?" links and the family tree.
 _feature("ask_family")
 _feature("family_tree")

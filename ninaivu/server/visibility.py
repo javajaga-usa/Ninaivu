@@ -269,6 +269,19 @@ def build() -> Viewer:
                   policy=date_policy.current())
 
 
+def for_person(user: "auth.User", cfg: Any, conn: Any) -> Viewer:
+    """The Viewer *user* gets in the family app, built without them asking:
+    their folders and sub-folder, their role's ceiling and their role's date
+    limit, exactly as :func:`build` makes it when they are signed in. For the
+    console's "What each person sees" (server/privacy_view.py)."""
+    libraries = cfg.libraries or ([cfg.active_root] if cfg.active_root else [])
+    roots, sub = auth.resolve_library(user.assigned_library, libraries)
+    return Viewer(viewer_id=user.id, role=user.role,
+                  roots=roots if libraries else None,
+                  scope=sub or (user.effective_scope or None),
+                  policy=date_policy.for_role(conn, user.role))
+
+
 def current() -> Viewer:
     """The Viewer for this request, built the first time it is asked for.
 
@@ -283,4 +296,4 @@ def current() -> Viewer:
     return held[1]
 
 
-__all__ = ["MINE", "Viewer", "build", "current"]
+__all__ = ["MINE", "Viewer", "build", "current", "for_person"]
