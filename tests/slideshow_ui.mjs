@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import {launch} from './harness.mjs';
 const root=path.resolve('ninaivu/static');
 const template=await fs.readFile('ninaivu/templates/index.html','utf8');
-const markup=template.match(/<div class="viewer"[\s\S]*?<div class="filmstrip" id="filmstrip"><\/div>\s*<\/div>/)[0];
+const markup=template.match(/<div class="viewer"[\s\S]*?<div class="filmstrip" id="filmstrip"[^>]*><\/div>\s*<\/div>/)[0];
 const server=http.createServer(async(req,res)=>{
   if(req.url==='/'){
     res.setHeader('Content-Type','text/html');res.end(`<html data-theme="light"><link rel="stylesheet" href="/css/style.css">${markup}<script type="module" src="/boot.js"></script></html>`);return;

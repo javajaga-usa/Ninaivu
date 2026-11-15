@@ -32,9 +32,12 @@ SAMPLE = 20
 _EXPECTED = ("(SELECT f.algo || ':' || f.digest FROM content_fingerprints f "
              "WHERE f.asset_id = a.id AND f.size = a.size AND f.mtime = a.mtime)")
 
-#: A photograph whose place in the library is where its row says.
+#: A photograph whose place in the library is where its row says. The unary
+#: ``+`` keeps SQLite on the (asset_id, place) index: offered the paths, it
+#: probed the unique (root, rel_path) index with two long strings per row, and
+#: the health check took 0.52 s on 200,000 photographs instead of 0.13 s.
 _AT_ITS_PLACE = ("l.asset_id = a.id AND l.place = 'library' "
-                 "AND l.root = a.root AND l.rel_path = a.rel_path")
+                 "AND +l.root = a.root AND +l.rel_path = a.rel_path")
 
 
 def present(conn: sqlite3.Connection) -> bool:

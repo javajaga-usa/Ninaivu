@@ -402,13 +402,7 @@ class Controller:
         try:
             process = psutil.Process(int(record['pid']))
             command = process.cmdline()
-            is_ninaivu = False
-            if '-m' in command:
-                idx = command.index('-m')
-                is_ninaivu = idx + 1 < len(command) and command[idx+1] == 'ninaivu'
-            else:
-                is_ninaivu = any('ninaivu' in str(arg).lower() for arg in command)
-            if not is_ninaivu or not process.is_running(): return None
+            if not is_ninaivu_command(command) or not process.is_running(): return None
             if process.create_time() > float(record.get('started_at',0)) + 2: return None
             return record
         except (ValueError, IndexError, KeyError, TypeError, _PsutilError):
@@ -887,6 +881,29 @@ def _server_process(record):
         return None
 
 
+def is_ninaivu_command(command) -> bool:
+    """Whether a process's command line (a list) runs Ninaivu itself.
+
+    ``python -m ninaivu`` or one of its modules (``-m ninaivu.desktop.relaunch``),
+    the ``ninaivu`` command a package installs, or a ``Ninaivu`` program. Not
+    "ninaivu" anywhere in it: a portable copy's own Python lives in a folder
+    called Ninaivu, so every program it runs, and anything that names a file
+    under it, said Ninaivu. A process id another program took over after
+    Ninaivu ended could then be stopped as if it were Ninaivu.
+    """
+    args = [str(a) for a in (command or ())]
+    for index, arg in enumerate(args):
+        module = args[index + 1] if arg == '-m' and index + 1 < len(args) else (
+            arg[2:] if arg.startswith('-m') and len(arg) > 2 else None)
+        if module is not None:
+            return module == 'ninaivu' or module.startswith('ninaivu.')
+    for arg in args[:2]:
+        name = arg.replace('\\', '/').rsplit('/', 1)[-1].lower()
+        if name in ('ninaivu', 'ninaivu.exe', 'ninaivu-script.py'):
+            return True
+    return False
+
+
 def _end_ninaivu(pid, patience):
     """End process *pid* if it is a Ninaivu one.
 
@@ -898,10 +915,10 @@ def _end_ninaivu(pid, patience):
     """
     try:
         process = psutil.Process(int(pid))
-        command = ' '.join(process.cmdline()).lower()
+        command = process.cmdline()
     except (_PsutilError, ValueError, TypeError):
         return None
-    if 'ninaivu' not in command or process.pid == os.getpid():
+    if not is_ninaivu_command(command) or process.pid == os.getpid():
         return None
     try:
         process.terminate()
