@@ -22,6 +22,7 @@ import { hideScrollBarsUntilUsed } from './scrollbars.js';
 import { claimBanner } from './handover.js';
 import { weekCard } from './health-week.js';
 import { VideoMoments } from './video-moments.js';
+import { loadEventAlbums } from './event-albums.js';
 import { checkShell, warmShell } from './shell-cache.js';
 import { state, store } from './store.js';
 import { $, closeMenus, humanBytes, toast, wireMenu } from './ui.js';
@@ -1036,7 +1037,8 @@ async function refreshFacets() {
   // Not set up yet: there is nothing to list. Not known (the status question
   // itself failed): ask anyway, the server knows.
   if (state.status && !state.status.has_library) return;
-  await Promise.all([loadFacetLists(), loadPeople(), loadOccasions(), loadAlbums()]);
+  await Promise.all([loadFacetLists(), loadPeople(), loadOccasions(), loadAlbums(),
+    loadEventAlbums({ onAlbumMade: loadAlbums })]);
 }
 
 /** Who the sidebar is being drawn for. Moves at every sign-in and sign-out,

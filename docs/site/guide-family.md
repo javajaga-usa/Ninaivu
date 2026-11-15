@@ -271,6 +271,20 @@ Any family member can make an album and add to it. Albums hold references,
 not copies: deleting an album never touches a photograph. An album can be
 shared as a link, with an optional password.
 
+### Suggested albums
+
+An administrator signed in to the family app sees **Suggested albums** in
+the left column: trips and festivals Ninaivu found from dates and places,
+without looking at a single photograph's pixels. A trip is several days away
+from home, where home is the town most of the library was taken in, and
+photographs taken a night apart in Ooty and then Coonoor are one trip. A
+festival is a Deepavali, Pongal or other festival year with photographs, found
+the way the festival albums find them. **Make album** turns one into an
+ordinary album that everybody can open, and each person sees only the
+photographs in it they may see anywhere else. Photographs in the bin or marked
+explicit are never put in one. **No thanks** stops that suggestion from being
+offered again. Until an administrator chooses, nobody else sees the list.
+
 ### Festival albums
 
 When the administrator has switched it on, **Festival albums** in the
