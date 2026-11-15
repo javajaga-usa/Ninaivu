@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 4.3.1 — 14 November 2026
+
+- **Desktop startup and Linux integration.** Startup failures show a visible error dialog, right-clicking the Linux tray icon offers Quit, and all three desktop shortcuts launch the installed application directly. Fresh-install checks use an isolated user environment and validate the packaged behavior.
 
 - **A better-fitting Control Panel.** The window measures its content and returns the space used by startup progress when it finishes, while preserving a size you choose.
 - **Less background work and a responsive panel.** Hidden logs are not read until opened, background events yield to the interface in batches, and temporary power-sensor failures no longer stop future readings. The Linux installer checks the packaged sizing and event-handling behavior before release.
