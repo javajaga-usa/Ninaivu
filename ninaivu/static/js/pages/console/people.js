@@ -7,7 +7,7 @@
  */
 
 import { accountsApi, askSecret, avatarNode, roleBadge } from '../../accounts.js';
-import { admin } from '../../api.js';
+import { admin, thumbUrl } from '../../api.js';
 import * as i18n from '../../i18n.js';
 import { consoleState as state } from '../../store.js';
 import { $, $$, consoleToast as toast, el } from '../../ui.js';
@@ -481,8 +481,101 @@ function randomPassword() {
 }
 
 /** Bind the delete dialog: once, when the page is first loaded. */
+/* --- What each person sees (server/privacy_view.py) ------------------------- */
+
+/** Each reason something is kept from somebody, in the order it is asked. */
+const WITHHELD = {
+  folders: i18n.key('outside their folders'),
+  dates: i18n.key('outside their dates'),
+  private: i18n.key("someone else's Only to me"),
+  explicit: i18n.key('explicit'),
+  screens: i18n.key('screenshots and documents'),
+  hidden: i18n.key('hidden'),
+  recordings: i18n.key('recordings'),
+};
+
+function count(n) {
+  return (Number(n) || 0).toLocaleString(i18n.locale());
+}
+
+function seesRow(person, reasons) {
+  const row = el('div', 'pv-person');
+  const head = el('div', 'pv-head');
+  if (person.id) {
+    head.appendChild(avatarNode(person, 32));
+    head.appendChild(el('strong', null, person.name));
+    head.appendChild(roleBadge(person.role, i18n.role(person.role_label || person.role)));
+  } else {
+    head.appendChild(el('strong', null, i18n.t('Nobody signed in')));
+    head.appendChild(person.active ? el('span', 'off-tag', i18n.t('open browsing is on'))
+      : el('span', 'hint', i18n.t('open browsing is off')));
+  }
+  row.appendChild(head);
+  const total = Number(person.total) || 0;
+  const sees = Number(person.sees) || 0;
+  row.appendChild(el('p', 'pv-sees', person.admin
+    ? i18n.t('Sees everything: {count} items, hidden and explicit ones included.', { count: count(total) })
+    : i18n.t('Sees {sees} of {total} items.', { sees: count(sees), total: count(total) })));
+  const bar = el('div', 'pv-bar');
+  const fill = el('span');
+  fill.style.width = `${total ? Math.round((sees / total) * 100) : 0}%`;
+  bar.appendChild(fill);
+  row.appendChild(bar);
+  if (!person.admin) {
+    const chips = el('div', 'pv-reasons');
+    for (const reason of reasons) {
+      const n = Number(person.withheld?.[reason]) || 0;
+      if (!n || !WITHHELD[reason]) continue;
+      chips.appendChild(el('span', 'pv-chip', `${i18n.t(WITHHELD[reason])} · ${count(n)}`));
+    }
+    if (person.own_private) {
+      chips.appendChild(el('span', 'pv-chip own', `${i18n.t('their own Only to me')} · ${count(person.own_private)}`));
+    }
+    if (chips.childElementCount) row.appendChild(chips);
+  }
+  if (person.sub_folder) {
+    row.appendChild(el('p', 'hint', i18n.t('Kept to the folder {folder}', { folder: person.sub_folder })));
+  }
+  if (person.dates?.cutoff) {
+    row.appendChild(el('p', 'hint', i18n.t('Kept to dates by their role ({cutoff})', { cutoff: person.dates.cutoff })));
+  }
+  if (person.sample?.length) {
+    const strip = el('div', 'pv-sample');
+    for (const id of person.sample.slice(0, 8)) {
+      const img = el('img');
+      img.src = thumbUrl(id, 256);
+      img.alt = '';
+      img.loading = 'lazy';
+      strip.appendChild(img);
+    }
+    row.appendChild(strip);
+  }
+  return row;
+}
+
+/** Ask, on the administrator's word, what each profile sees. */
+export async function showPrivacyView() {
+  const box = $('#privacy-view-list');
+  const button = $('#privacy-view-btn');
+  if (!box) return;
+  if (button) button.disabled = true;
+  box.replaceChildren(el('p', 'hint', i18n.t('Counting…')));
+  try {
+    const found = await admin.getPrivacyPeople();
+    const reasons = found?.reasons || Object.keys(WITHHELD);
+    const rows = (found?.people || []).map((person) => seesRow(person, reasons));
+    if (found?.nobody) rows.push(seesRow(found.nobody, reasons));
+    box.replaceChildren(...rows);
+  } catch (exc) {
+    box.replaceChildren(el('p', 'hint', exc.message));
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
 export function wire(context) {
   shell = context;
+  $$('#privacy-view-btn').onclick = () => showPrivacyView();
   $$('#delete-cancel').onclick = () => closeDelete();
   $$('#delete-modal').addEventListener('click', (event) => {
     if (event.target === $('#delete-modal')) closeDelete();

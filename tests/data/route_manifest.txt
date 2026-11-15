@@ -639,6 +639,8 @@ admin | GET                  | /api/prints/jobs/<job_id>/result | family | reads
 home  | GET                  | /api/prints/jobs/<job_id>/result | family | reads | - | api.prints_job_result | scan_prints
 admin | POST                 | /api/prints/save | family | writes | same origin | api.prints_save | scan_prints
 home  | POST                 | /api/prints/save | family | writes | same origin | api.prints_save | scan_prints
+admin | GET                  | /api/privacy/people | admin | reads | - | api.privacy_people | -
+home  | GET                  | /api/privacy/people | admin | reads | - | api.privacy_people | -
 admin | POST                 | /api/private | family | writes | same origin | api.keep_private | -
 home  | POST                 | /api/private | family | writes | same origin | api.keep_private | -
 admin | GET                  | /api/proxy/<int:asset_id> | family | reads | - | api.video_proxy | -
