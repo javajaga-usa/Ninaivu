@@ -56,6 +56,7 @@ EVENTS: dict[str, str] = {
     "disk_low": said("The drive holding the archive is nearly full"),
     "disk_health": said("A drive Ninaivu uses is logging errors and may be failing"),
     "restore_test": said("A test restore from the cloud backup did not come back intact"),
+    "backup_drill": said("The weekly backup drill found a copy that did not bring its photographs back intact"),
     "cloud_approval": said("Large files are waiting for approval before the cloud backup"),
     "secondary_away": said("The always-on computer has not answered for a day"),
     "secondary_disk": said("The always-on computer's originals disk is failing or nearly full"),

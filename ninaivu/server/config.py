@@ -527,6 +527,10 @@ class Config:
     restore_test_files: int = 5
     #: The largest file the weekly restore test will bring back to check.
     restore_test_max_mb: int = 1024
+    #: Run the backup drill (ninaivu/copies/drill.py) by itself this often, in
+    #: days, when nobody is using the library. 0 is never; the button on the
+    #: Health page always works.
+    backup_drill_days: int = 7
     #: Send a copy of the index (faces, albums, visibility, full paths — no
     #: secrets) to Drive at most this often, in hours, when it has changed.
     #: 0 turns it off. See ninaivu/cloud/index_copy.py.

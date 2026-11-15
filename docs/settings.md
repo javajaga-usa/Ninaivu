@@ -80,6 +80,7 @@ them; *runtime* ones say how this start was made and are never saved.
 | `restore_test_days` | `7` |  | household | Restore a few random files from the backup this often, in days, and check them against the originals (ninaivu/cloud/restore_test.py). 0 is off. |
 | `restore_test_files` | `5` |  | household | How many files each test restores, and the largest it will pick. |
 | `restore_test_max_mb` | `1024` |  | household | The largest file the weekly restore test will bring back to check. |
+| `backup_drill_days` | `7` |  | household | Run the backup drill (ninaivu/copies/drill.py) by itself this often, in days, when nobody is using the library. 0 is never; the button on the Health page always works. |
 | `cloud_index_every_hours` | `24` |  | household | Send a copy of the index (faces, albums, visibility, full paths — no secrets) to Drive at most this often, in hours, when it has changed. 0 turns it off. See ninaivu/cloud/index_copy.py. |
 | `mirror_enabled` | `False` |  | household | Keep a second, plain copy of the library in a folder on another disk (ninaivu/storage/mirror.py). |
 | `mirror_dir` |  |  | household | The folder the second copy is kept in: on another disk, never inside the library or the state folder. |

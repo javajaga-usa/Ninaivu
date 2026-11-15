@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **The backup drill runs every week by itself.** *Verify my backup* on Admin → Health now also runs on its own once every seven days, when nobody is using the library (`backup_drill_days`, Advanced settings → Backup; 0 is never), and the Health page says when the next one is due. The week's health digest on the Overview gains a fifth line, **Backup drill**: passed, failed (something to act on), or no drill for more than nine days. A scheduled drill that fails is sent to the notification address as the copies' names and counts, never a path (new event `backup_drill`).
+
 ## 4.3.1 — 14 November 2026
 
 - **Desktop startup and Linux integration.** Startup failures show a visible error dialog, right-clicking the Linux tray icon offers Quit, and all three desktop shortcuts launch the installed application directly. Fresh-install checks use an isolated user environment and validate the packaged behavior.

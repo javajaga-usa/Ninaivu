@@ -1,6 +1,6 @@
 /**
  * The week's health (ninaivu/server/health_week.py): damaged files, free
- * space, failed jobs and drives over the last seven days, for administrators.
+ * space, failed jobs, drives and the backup drill over the last seven days, for administrators.
  *
  * Two places show it. The console's Overview has the whole of it, under "Is
  * everything safe?", with the weeks kept before it folded underneath. The
@@ -28,6 +28,11 @@ function sentence(line) {
   const params = { ...(line.params || {}) };
   for (const name of ['name', 'title']) {
     if (typeof params[name] === 'string') params[name] = i18n.t(params[name]);
+  }
+  // A day the server names by its time, in the reader's own calendar words.
+  if (typeof params.at === 'number') {
+    params.when = new Date(params.at * 1000).toLocaleDateString(i18n.language(),
+      { day: 'numeric', month: 'short' });
   }
   return i18n.t(line.key, params);
 }
