@@ -353,7 +353,8 @@ class Services:
         self.backup_drill = BackupDrill(
             cfg, connect_db=lambda: db.connect(cfg.db_path), mirror=self.mirror,
             offsite=self.offsite, cloud=self.cloud, courier=self.mugil_courier,
-            backups=self.backups, restore_tests=self.restore_tests)
+            backups=self.backups, restore_tests=self.restore_tests,
+            hold=lambda: self.workload.hold("upload"), notify=self._tell_somebody)
         # Damaged files put back from a copy that matches, and the storage
         # check on a schedule. See ninaivu/storage/repair.py.
         from .storage.repair import Repairer                    # noqa: PLC0415
@@ -450,7 +451,7 @@ class Services:
         from .server.supervisor import Supervisor                 # noqa: PLC0415
         self.supervisor = Supervisor(self.scanner)
         for keeper in (self.digest, self.library_drives, self.index_copy, self.restore_tests,
-                       self.health_week):
+                       self.health_week, self.backup_drill):
             keeper.supervisor = self.supervisor
         # The backups, the drive watch and the archive guardian.
         for keeper in (self.backups, self.disks, self.guardian):
@@ -765,6 +766,7 @@ class Services:
         self.health_week.start()
         self.library_drives.start()
         self.restore_tests.start()
+        self.backup_drill.keep()
         self.index_copy.start()
         self.mirror.keep()
         self.mugil_courier.keep()

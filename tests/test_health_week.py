@@ -36,7 +36,7 @@ def test_only_an_administrator_is_told(as_admin, as_family, as_guest, anon):
     answer = as_admin.get("/api/health/week?fresh=1")
     assert answer.status_code == 200
     body = answer.get_json()
-    assert [p["id"] for p in body["current"]["parts"]] == ["damaged", "space", "jobs", "drives"]
+    assert [p["id"] for p in body["current"]["parts"]] == ["damaged", "space", "jobs", "drives", "drill"]
     assert body["weeks"] == []
     for other in (as_family, as_guest, anon):
         assert other.get("/api/health/week").status_code in (401, 403)
@@ -182,6 +182,70 @@ def test_one_part_that_cannot_answer_leaves_the_rest(services, monkeypatch):
     report = fresh(services)
     assert [p["id"] for p in report["current"]["parts"]] == ["damaged", "broken", "drives"]
     assert report["current"]["parts"][1]["summary"] == "Could not tell."
+
+
+# -- the backup drill -----------------------------------------------------------------
+
+def _drilled(services, status, *, ago_days=1.0, checked=5, passed=5, scheduled=True):
+    ended = time.time() - ago_days * hw.DAY
+    services.backup_drill._keep({
+        "started_at": ended - 60, "ended_at": ended, "status": status, "sample": 5,
+        "scheduled": scheduled,
+        "copies": [{"name": "mirror", "status": status, "checked": checked, "passed": passed},
+                   {"name": "index", "status": "passed", "checked": 1, "passed": 1},
+                   {"name": "drive", "status": "off", "checked": 0, "passed": 0}]})
+
+
+def test_no_drill_yet_is_worth_a_look_and_says_it_is_scheduled(services):
+    services.cfg.backup_drill_days = 7
+    drill = part(fresh(services), "drill")
+    assert drill["status"] == hw.ATTENTION
+    assert drill["numbers"]["status"] == "none"
+    assert "once every 7 days" in drill["summary"]
+
+
+def test_a_drill_that_passed_this_week_is_fine(services):
+    _drilled(services, "passed")
+    drill = part(fresh(services), "drill")
+    assert drill["status"] == hw.OK
+    assert drill["numbers"]["checked"] == drill["numbers"]["passed"] == 5, "the index is not a photograph"
+    assert drill["numbers"]["scheduled"] is True
+    assert "5 of 5 photographs came back intact" in drill["summary"]
+    assert drill["lines"][0]["params"]["at"] == pytest.approx(time.time() - hw.DAY, abs=5)
+    assert [i["name"] for i in drill["items"]] == ["mirror", "index"], "a copy that is off is left out"
+
+
+def test_a_drill_that_failed_is_a_problem_for_the_week(services):
+    _drilled(services, "failed", passed=3)
+    report = fresh(services)
+    drill = part(report, "drill")
+    assert drill["status"] == hw.PROBLEM
+    assert drill["numbers"]["failed"] == 2
+    assert "2 of 5 photographs did not come back intact" in drill["summary"]
+    assert report["current"]["verdict"] == hw.PROBLEM
+
+
+def test_a_drill_long_overdue_is_worth_a_look_even_if_it_passed(services):
+    services.cfg.backup_drill_days = 7
+    _drilled(services, "passed", ago_days=12)
+    drill = part(fresh(services), "drill")
+    assert drill["status"] == hw.ATTENTION
+    assert "No drill for 12 days" in drill["summary"]
+
+
+def test_a_finished_week_shows_the_drill_it_had_then_and_sends_it_in_counts(services):
+    _drilled(services, "passed", ago_days=8)
+    _drilled(services, "failed", passed=4, ago_days=0)
+    sent = []
+    keeper = hw.HealthWeek(services, notify=lambda *a: sent.append(a))
+    kept = keeper.tick()
+    # The failed drill ran after that week ended: the week has the one before.
+    kept_drill = next(p for p in kept["parts"] if p["id"] == "drill")
+    assert kept_drill["numbers"]["status"] == "passed"
+    detail = sent[0][2]
+    assert "Backup drill: passed" in detail and "5 of 5 photographs" in detail
+    for root in services.cfg.library_roots:
+        assert root not in detail
 
 
 # -- the keeper ----------------------------------------------------------------------------

@@ -140,6 +140,23 @@ function drillCard(copy) {
   return card;
 }
 
+/** When the drill runs by itself (backup_drill_days, Advanced settings). */
+function showDrillSchedule(data) {
+  const note = $('#drill-schedule');
+  if (!note) return;
+  const days = Number(data.every_days) || 0;
+  note.hidden = false;
+  if (!days) {
+    note.textContent = i18n.t('It does not run by itself. Set how often under Advanced settings → Backup.');
+    return;
+  }
+  const due = Number(data.next_due) || 0;
+  note.textContent = due && due * 1000 > Date.now()
+    ? i18n.t('Runs by itself every {days} days when nobody is using the library. Next: {when}.',
+      { days, when: new Date(due * 1000).toLocaleDateString(i18n.language(), { day: 'numeric', month: 'short' }) })
+    : i18n.t('Runs by itself every {days} days when nobody is using the library. The next one is due now.', { days });
+}
+
 function showDrill(data) {
   const button = $('#drill-run');
   const head = $('#drill-headline');
@@ -148,6 +165,7 @@ function showDrill(data) {
   if (!button || !head) return;
   button.disabled = Boolean(data.running);
   head.classList.remove('good', 'bad');
+  showDrillSchedule(data);
   if (data.running) {
     const step = data.progress?.step;
     head.textContent = step

@@ -208,3 +208,84 @@ def test_google_drive_not_connected_is_off_and_a_lost_key_fails(drilled):
     drive = _copy(_drill(drilled, cloud=here).run(), "drive")
     assert drive["status"] == drill.FAILED
     assert drive["files"][0]["why"] == "the key is not on this computer"
+
+
+# -- the weekly schedule -------------------------------------------------------
+
+def _scheduled(lib, *, now, days=7, hold=None, sent=None, **engines):
+    lib.cfg.backup_drill_days = days
+    return drill.BackupDrill(lib.cfg, connect_db=lambda: db.connect(lib.cfg.db_path),
+                             pick=lambda pool, n: list(pool)[:n], clock=lambda: now[0],
+                             hold=hold, notify=(lambda *a: sent.append(a)) if sent is not None
+                             else None, **engines)
+
+
+def test_a_drill_is_owed_at_once_and_then_once_a_week(drilled):
+    now = [1_800_000_000.0]
+    keeper = _scheduled(drilled, now=now, mirror=drilled.mirror)
+    assert keeper.due(), "no drill yet: owed now"
+    keeper._look()
+    last = keeper.last()
+    assert last["scheduled"] is True and last["status"] == drill.PASSED
+    assert not keeper.due()
+    now[0] += 6 * 86400
+    assert not keeper.due()
+    now[0] += 86400 + 1
+    assert keeper.due()
+    assert keeper.status()["every_days"] == 7
+    assert keeper.status()["next_due"] == pytest.approx(last["started_at"] + 7 * 86400)
+
+
+def test_a_drill_waits_while_the_household_is_busy(drilled):
+    busy = ["somebody is browsing"]
+    keeper = _scheduled(drilled, now=[1_800_000_000.0], hold=lambda: busy[0],
+                        mirror=drilled.mirror)
+    assert not keeper.due()
+    keeper._look()
+    assert keeper.last() is None
+    busy[0] = None
+    assert keeper.due()
+
+
+def test_zero_days_is_never(drilled):
+    keeper = _scheduled(drilled, now=[1_800_000_000.0], days=0, mirror=drilled.mirror)
+    assert not keeper.due() and keeper.next_due() is None
+    assert keeper.status()["every_days"] == 0
+
+
+def test_a_button_drill_is_not_marked_scheduled(drilled):
+    result = _drill(drilled, mirror=drilled.mirror).run()
+    assert result["scheduled"] is False
+
+
+def test_a_failed_scheduled_drill_is_sent_without_a_path(drilled):
+    row = drilled.rows[0]
+    drilled.disk.joinpath(*row["rel_path"].split("/")).write_bytes(b"not the photograph")
+    sent: list = []
+    keeper = _scheduled(drilled, now=[1_800_000_000.0], sent=sent, mirror=drilled.mirror)
+    keeper._look()
+    assert keeper.last()["status"] == drill.FAILED
+    assert len(sent) == 1
+    event, summary, detail = sent[0]
+    assert event == drill.EVENT == "backup_drill"
+    assert "mirror" in detail and "Files that failed: 1" in detail
+    for r in drilled.rows:
+        assert r["rel_path"] not in detail and r["root"] not in detail
+
+
+def test_a_passed_scheduled_drill_is_not_sent(drilled):
+    sent: list = []
+    _scheduled(drilled, now=[1_800_000_000.0], sent=sent, mirror=drilled.mirror)._look()
+    assert sent == []
+
+
+def test_the_schedule_is_on_the_supervisor_and_claims_only_the_network(drilled):
+    from ninaivu.server import supervisor as sup
+    keeper = _scheduled(drilled, now=[1_800_000_000.0], mirror=drilled.mirror)
+    added = []
+    keeper.supervisor = type("S", (), {"add": lambda self, job: added.append(job),
+                                       "stop_job": lambda self, name, t: None})()
+    keeper.keep()
+    assert [j.name for j in added] == [drill.BackupDrill.JOB]
+    assert added[0].claims == frozenset({sup.NETWORK})
+    keeper.stop()
