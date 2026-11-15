@@ -10,6 +10,10 @@
  *    three at a time (more over HTTP/2) and only while on-screen tiles have
  *    their pictures.
  *  - Sharpening after a stop starts with the tiles in the middle of the screen.
+ *  - Every tile has a blurred preview of its photograph before the photograph
+ *    itself (placeholder.js), asked for a few hundred at a time and further
+ *    ahead the faster the scroll: on a slow link a fling outruns the pictures,
+ *    but never the previews, so no tile goes by empty.
  */
 
 import {
@@ -23,11 +27,24 @@ import {
   predictionMs,
   FLING_PX_MS,
 } from './preload-policy.js';
+import { visibleRange } from './layout.js';
+import { Placeholders } from './placeholder.js';
 
 const WARM_EVERY_MS = 160;
 // A turn-round counts once it is this fast (px/ms) or has lasted two frames;
 // one frame of trackpad wobble no longer throws away pictures on their way.
 const REVERSE_PX_MS = 0.5;
+/** How often, at most, the previews wanted are worked out again. */
+const PREVIEW_EVERY_MS = 100;
+/** Previews are asked for this far ahead, in time: two round trips on a slow
+ *  link and the drawing, so a fling meets them already here… */
+const PREVIEW_AHEAD_MS = 2500;
+/** …and at least this many screens ahead, and never more than this. */
+const PREVIEW_MIN_SCREENS = 4;
+const PREVIEW_MAX_SCREENS = 40;
+/** Once a scroll stops: this many screens on, and this many back. */
+const PREVIEW_REST_AHEAD = 12;
+const PREVIEW_REST_BEHIND = 6;
 
 function now() {
   return performance.now();
@@ -42,6 +59,12 @@ export class Grid extends BaseGrid {
     this.prefetcher = new AdaptivePreloader({
       idle: () => !this.tilesLoading(),
       profile: () => connectionProfile(),
+    });
+    this.previewAt = 0;
+    this.previewCells = new Map();      // id -> cell, for the ids asked about
+    this.previews = new Placeholders({
+      onReady: (ids) => this.showPreviews(ids),
+      onConfirmed: (ids) => this.confirmThumbs(ids),
     });
   }
 
@@ -165,13 +188,18 @@ export class Grid extends BaseGrid {
       idleOnly: !profile.lean,
       priority: 'speculative',
     });
+    this.wantPreviews({ resting: true });
   }
 
   prefetchAround(y) {
     const profile = this.profile();
-    if (this.scrolling || profile.lean) return;
+    if (this.scrolling) return;
     const view = this.scroller.clientHeight;
     const top = Math.max(0, Math.min(y, Math.max(0, (this.layout.height || 0) - view)));
+    // The previews first, even on a lean link: a few kilobytes, and the jump
+    // then lands on the photographs' shapes rather than on bare colour.
+    this.wantPreviews({ resting: true, at: top });
+    if (profile.lean) return;
     // The date rail under the mouse, a month in Jump to: the same 300 each way.
     this.prefetcher.want(this.readyAround(top, top + view, true, profile), {
       cancel: true,
@@ -184,7 +212,115 @@ export class Grid extends BaseGrid {
     const full = this.cellThumbUrl(cell);
     const small = this.cellThumbUrl(cell, true);
     this.prefetcher.markVisible([full, small]);
-    return super.paintCell(node, cell);
+    const painted = super.paintCell(node, cell);
+    this.applyPreview(node, cell);
+    return painted;
+  }
+
+  render() {
+    super.render();
+    this.wantPreviews();
+  }
+
+  /**
+   * The tile's blurred preview behind its <img>, until the picture covers it
+   * (the picture fades in over it). None for a tile already holding its
+   * picture, nor for one with no thumbnail, which shows its sign instead.
+   */
+  applyPreview(node, cell) {
+    const img = node.firstElementChild;
+    const url = (cell.flags & 2) !== 0 && img && !img.hidden && !img.classList.contains('ready')
+      ? this.previews.get(cell.id) : '';
+    const shows = url ? cell.id : null;
+    if (node.previewOf === shows) return;
+    node.previewOf = shows;
+    node.style.backgroundImage = url ? `url("${url}")` : '';
+  }
+
+  /** Previews that have just arrived, onto the tiles already made for them. */
+  showPreviews(ids) {
+    const arrived = new Set(ids);
+    const cells = this.layout.cells;
+    for (const [n, node] of this.mounted) {
+      const cell = cells[n];
+      if (cell && arrived.has(cell.id) && node.dataset.id === String(cell.id)) this.applyPreview(node, cell);
+    }
+  }
+
+  /**
+   * The previews to have ready: the screen, then the stretch the scroll is
+   * heading into, as far as two round trips at its speed reach (at least a
+   * few screens), and a little behind. Once it has stopped, further both ways.
+   * A preview is a couple of dozen bytes, so a fling, which fetches no
+   * pictures ahead at all, still has them asked for well before it arrives.
+   */
+  wantPreviews({ resting = false, at: place = null } = {}) {
+    const at = now();
+    if (!resting && at - this.previewAt < PREVIEW_EVERY_MS) return;
+    this.previewAt = at;
+    const shown = this.shownView.height ? this.shownView : this.viewport();
+    const view = shown.height;
+    const top = place ?? shown.top;
+    if (!view || !this.layout.cells.length) return;
+    const profile = this.profile();
+    let ahead;
+    let behind;
+    if (this.scrubbing) {
+      // The date rail held: the screen under it and one either side.
+      ahead = view;
+      behind = view;
+    } else if (resting) {
+      ahead = view * (profile.lean ? 3 : PREVIEW_REST_AHEAD);
+      behind = view * (profile.lean ? 1 : PREVIEW_REST_BEHIND);
+    } else {
+      ahead = Math.min(view * PREVIEW_MAX_SCREENS,
+        Math.max(view * PREVIEW_MIN_SCREENS, Math.abs(this.velocity) * PREVIEW_AHEAD_MS));
+      behind = view * 2;
+    }
+    const down = this.direction >= 0;
+    const from = down ? top - behind : top - ahead;
+    const to = down ? top + view + ahead : top + view + behind;
+    const bottom = top + view;
+    // Nearest first, the way it is going before the way it came.
+    const distance = (cell) => {
+      if (cell.y + cell.h > top && cell.y < bottom) return -1;
+      const gap = cell.y >= bottom ? cell.y - bottom : top - (cell.y + cell.h);
+      const behindIt = down ? cell.y < top : cell.y >= bottom;
+      return behindIt ? gap * 3 : gap;
+    };
+    const cells = visibleRange(this.layout, from, to).cells
+      .filter((cell) => (cell.flags & 2) !== 0 && this.previews.get(cell.id) === undefined)
+      .map((cell) => [distance(cell), cell])
+      .sort((a, b) => a[0] - b[0]);
+    if (this.previewCells.size > 20000) this.previewCells.clear();
+    const ids = [];
+    for (const [, cell] of cells) {
+      ids.push(cell.id);
+      this.previewCells.set(cell.id, cell);
+    }
+    this.previews.want(ids);
+  }
+
+  /**
+   * The server has just said, in answering for these previews, that this
+   * viewer may see these items: the service worker can show their thumbnails
+   * from the browser's own copy without asking the server about each one
+   * again (static/sw.js), which on a slow link was a round trip per tile even
+   * for pictures it already had.
+   */
+  confirmThumbs(ids) {
+    const worker = navigator.serviceWorker?.controller;
+    if (!worker) return;
+    const urls = [];
+    for (const id of ids) {
+      const cell = this.previewCells.get(id);
+      if (!cell) continue;
+      const full = this.cellThumbUrl(cell);
+      const small = this.cellThumbUrl(cell, true);
+      if (full) urls.push(new URL(full, location.href).href);
+      if (small && small !== full) urls.push(new URL(small, location.href).href);
+    }
+    if (urls.length) worker.postMessage({ type: 'ninaivu:checked', urls });
   }
 
   swapIn(node, cell, url) {
@@ -243,6 +379,7 @@ export class Grid extends BaseGrid {
     if (this.sharpenFrame != null) cancelAnimationFrame(this.sharpenFrame);
     this.sharpenQueue.clear();
     this.prefetcher.destroy();
+    this.previews.destroy();
     // Base destroy calls prefetcher.want(); keep a harmless compatible object
     // for that final cleanup path after the adaptive controller is gone.
     this.prefetcher = { want() {}, pump() {} };

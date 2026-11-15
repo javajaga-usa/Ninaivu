@@ -980,6 +980,9 @@ button.job-row:focus-visible { outline: 2px solid var(--accent); outline-offset:
   background: var(--surface-2);
   cursor: pointer; contain: strict;
 }
+/* A tile's blurred preview (grid.js, placeholder.js) is drawn a few pixels
+   across and stretched over it: the stretch is the blur. */
+.cell { background-size: cover; background-position: center; background-repeat: no-repeat; }
 .cell img {
   width: 100%; height: 100%; object-fit: cover; display: block;
   opacity: 0; transition: opacity .22s var(--ease);

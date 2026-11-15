@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **No empty tiles, however fast you scroll.** Every tile now shows a blurred preview of its own photograph, its shapes and colours, before the photograph itself arrives, and the photograph fades in over it. The previews are a couple of dozen bytes each and come a few hundred to a request, asked for further ahead the faster the scroll goes, so a fling on a phone far from home no longer runs past bare coloured squares. Over a 300 ms, 2 Mbit link a phone showed an empty tile for 87 to 97% of a scroll before and none after. The previews are made from the smallest thumbnails, the first time a part of the library is opened and then quietly for the rest in the background, and kept in `placeholders.db` beside the thumbnails (made again from them at any time; not in the index or its backup). Who sees a preview follows the same rule as the thumbnail: admins see everything, a family member nothing hidden or explicit. Thumbnails the previews have just been allowed for are shown from the phone's own copy without asking the server about each again. `python tools/bench_scroll.py` measures a scroll through 200,000 items on a desktop and on a slow phone.
+
 ## 4.3.1 — 14 November 2026
 
 - **Desktop startup and Linux integration.** Startup failures show a visible error dialog, right-clicking the Linux tray icon offers Quit, and all three desktop shortcuts launch the installed application directly. Fresh-install checks use an isolated user environment and validate the packaged behavior.
