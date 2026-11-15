@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Hairstyles that keep the face.** Sudar's Magic tools gain a **Hairstyles** card: short crop, bob, long straight, long wavy, curly, braid, two plaits, jasmine plait, bun, fringe, oiled side parting and a neat beard. Choosing one finds the faces the way the retouch studio does, marks that person's hair and the room the style needs (past the shoulders for long hair, above the head for a bun, the jaw for a beard) in pink, and their face, every bindi or sindoor and everybody else in green. With more than one person, *Whose hair* picks who. Only the pink goes to the AI server's *Paint and ask* workflow, and after every drawing the green is put back from the photograph byte for byte, so the face cannot drift however the model behaves. The marked area can be painted larger or smaller before drawing, and **Draw it** again gives another try. Without a face model it says so and the hair is painted by hand. The card is always there; until the Creative Studio extension has a Paint and ask workflow it says what is needed. The hairstyle ideas under the prompt and typed requests such as "give her a bob" take the same path when that workflow exists. Every style name is in Tamil. No new model is downloaded.
+
 ## 4.3.1 — 14 November 2026
 
 - **Desktop startup and Linux integration.** Startup failures show a visible error dialog, right-clicking the Linux tray icon offers Quit, and all three desktop shortcuts launch the installed application directly. Fresh-install checks use an isolated user environment and validate the packaged behavior.

@@ -907,13 +907,15 @@
 }
 
 /* Prompt Idea Chips */
-.ap-prompt-ideas {
+.ap-prompt-ideas,
+.ap-hairstyle-ideas {
   display: flex;
   flex-wrap: wrap;
   gap: 5px;
 }
 
-.ap-prompt-ideas .btn {
+.ap-prompt-ideas .btn,
+.ap-hairstyle-ideas .btn {
   font-size: 11px;
   padding: 4px 9px;
   border-radius: 16px;
@@ -922,10 +924,16 @@
   color: var(--ap-muted);
 }
 
-.ap-prompt-ideas .btn:hover:enabled {
+.ap-prompt-ideas .btn:hover:enabled,
+.ap-hairstyle-ideas .btn:hover:enabled {
   color: var(--ap-text);
   background: var(--ap-btn-hover);
   border-color: var(--ap-btn-hover-border);
+}
+
+.ap-hairstyle-people .btn[aria-checked="true"] {
+  outline: 2px solid var(--ap-accent);
+  outline-offset: 1px;
 }
 
 /* Plan & Result Panels */
