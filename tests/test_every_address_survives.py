@@ -30,6 +30,10 @@ SKIP = ("/events", "shutdown", "restart", "stream", "/dav")
 EXPECTED = {
     # Reading a phone straight from the shell is Windows' alone.
     "/api/devices/browse": 501,
+    # A video ffmpeg could not convert (it is noise): the viewer shows the
+    # answer's message, "Could not prepare this video". Seen where ffmpeg is
+    # installed and the conversion has already failed by the time it is asked.
+    "/api/proxy/<int:asset_id>": 503,
 }
 
 
