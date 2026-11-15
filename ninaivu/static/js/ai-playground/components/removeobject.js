@@ -1,9 +1,17 @@
 import {describeServerJob} from '../services/AIPhotoService.mjs';
 import * as i18n from '../../i18n.js';
 import {errorText} from '../utils/messages.mjs';
+import {blendWeights, blendOnto, keepAt} from '../../studio/hairstyle-mask.mjs';
 /**
  * Paint an area and have it removed — or, with `ask`, redrawn to a request on the
  * AI server: `ask` is `{title, lede, prompt, done}`, and Sudar's Add hair is one.
+ *
+ * Sudar's hairstyles add to `ask`:
+ *   `people`   `[{id, label, thumb}]`: whose hair, when there is more than one person
+ *   `masks(id, w, h)`  `{change, keep}` for that person at `w × h` (one byte a pixel):
+ *              `change` is painted in to start with; `keep` cannot be painted, is not
+ *              sent, and is put back from the photograph after every drawing
+ *   `file`     the download's file name
  */
 export function openRemoveObject(source, service, {provider = 'local', onApply = null, ask = null} = {}) {
   const dialog=document.createElement('dialog');
@@ -32,6 +40,7 @@ export function openRemoveObject(source, service, {provider = 'local', onApply =
         <input data-mask type="checkbox" checked> ${i18n.t('Show selection')}
       </label>
     </div>
+    ${ask&&ask.people&&ask.people.length>1?`<div class="ap-hairstyle-people" role="radiogroup" aria-label="${i18n.t('Whose hair')}" style="display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin:0 0 8px;"><span style="font-size:11.5px; color:var(--ap-muted);">${i18n.t('Whose hair')}</span></div>`:''}
     <canvas aria-label="${ask?i18n.t('Paint the area to redraw'):i18n.t('Paint the area to remove')}" tabindex="0"></canvas>
     ${ask?`<label style="display:flex; flex-direction:column; gap:4px; font-size:11.5px; color:var(--ap-muted); margin:8px 0 0;">${i18n.t('What should be drawn there')}
       <textarea data-ask rows="2" maxlength="2000" style="font:inherit; font-size:12px; background:var(--ap-card); color:var(--ap-text); border:1px solid var(--ap-line); border-radius:6px; padding:6px 8px;">${ask.prompt.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}</textarea></label>`:''}
@@ -51,6 +60,28 @@ export function openRemoveObject(source, service, {provider = 'local', onApply =
   const context=canvas.getContext('2d'), mask=document.createElement('canvas');mask.width=canvas.width;mask.height=canvas.height;
   const brush=mask.getContext('2d');context.drawImage(source,0,0,canvas.width,canvas.height);
   let original=context.getImageData(0,0,canvas.width,canvas.height);
+  // Pixels that are put back from the photograph after every drawing: a face.
+  let keep=null, keepTint=null, keepFull=null;
+  function choose(id){
+    if(!ask||!ask.masks)return;
+    const {change,keep:kept}=ask.masks(id,mask.width,mask.height);
+    keep=kept;keepFull=null;
+    const paint=new ImageData(mask.width,mask.height),tint=new ImageData(mask.width,mask.height);
+    for(let i=0,k=0;i<change.length;i++,k+=4){
+      if(change[i]){paint.data[k]=255;paint.data[k+1]=64;paint.data[k+2]=129;paint.data[k+3]=255;}
+      if(keep[i]){tint.data[k]=40;tint.data[k+1]=205;tint.data[k+2]=178;tint.data[k+3]=255;}
+    }
+    brush.clearRect(0,0,mask.width,mask.height);brush.putImageData(paint,0,0);
+    keepTint=document.createElement('canvas');keepTint.width=mask.width;keepTint.height=mask.height;keepTint.getContext('2d').putImageData(tint,0,0);
+    selected=change.some(v=>v);
+    for(const b of dialog.querySelectorAll('[data-person]'))b.setAttribute('aria-checked',String(Number(b.dataset.person)===id));
+  }
+  /** What is painted, less what is kept: one byte a pixel at the mask's size. */
+  function paintedBytes(){
+    const rgba=brush.getImageData(0,0,mask.width,mask.height).data,out=new Uint8Array(mask.width*mask.height);
+    for(let i=0;i<out.length;i++)out[i]=keep&&keep[i]?0:rgba[i*4+3];
+    return out;
+  }
   let current=source, selected=false, painting=false, last=null, keyboard={x:canvas.width/2,y:canvas.height/2}, held=false, busy=false, closed=false, resultBlob=null, controller=null;
 
   function render(){
@@ -62,6 +93,7 @@ export function openRemoveObject(source, service, {provider = 'local', onApply =
       context.fillStyle='#ff4081';
       context.globalCompositeOperation='source-over';
       context.drawImage(mask,0,0);
+      if(keepTint){context.globalAlpha=.35;context.drawImage(keepTint,0,0);}
       context.restore();
     }
     $('[data-apply]').disabled=!selected||busy;
@@ -80,7 +112,7 @@ export function openRemoveObject(source, service, {provider = 'local', onApply =
     brush.arc(point.x,point.y,brush.lineWidth/2,0,Math.PI*2);
     brush.fill();
     last=point;
-    selected=brush.getImageData(0,0,mask.width,mask.height).data.some((v,i)=>i%4===3&&v>0);
+    selected=keep?paintedBytes().some(v=>v>0):brush.getImageData(0,0,mask.width,mask.height).data.some((v,i)=>i%4===3&&v>0);
     render();
   }
 
@@ -118,30 +150,56 @@ export function openRemoveObject(source, service, {provider = 'local', onApply =
     controller=new AbortController();
     try {
       const fullMask=document.createElement('canvas');fullMask.width=current.width;fullMask.height=current.height;
-      fullMask.getContext('2d').drawImage(mask,0,0,fullMask.width,fullMask.height);
+      let sent=mask;
+      if(keep){
+        // The kept face is not sent to be redrawn at all.
+        const bytes=paintedBytes(),image=new ImageData(mask.width,mask.height);
+        for(let i=0;i<bytes.length;i++){image.data[i*4]=image.data[i*4+1]=image.data[i*4+2]=255;image.data[i*4+3]=bytes[i];}
+        sent=document.createElement('canvas');sent.width=mask.width;sent.height=mask.height;sent.getContext('2d').putImageData(image,0,0);
+      }
+      fullMask.getContext('2d').drawImage(sent,0,0,fullMask.width,fullMask.height);
       const maskBlob=await new Promise((resolve,reject)=>fullMask.toBlob(b=>b?resolve(b):reject(new Error(i18n.t('Export failed.'))),'image/png'));
       if(closed)return;
       const blob=ask
         ?await service.inpaint(current,maskBlob,$('[data-ask]').value,controller.signal,{onStatus:state=>{$('[role=status]').textContent=describeServerJob(state);}})
         :await service.removeObject(current,maskBlob,controller.signal,{serverJob:provider==='ai-server',onStatus:state=>{$('[role=status]').textContent=describeServerJob(state);}});
       if(closed)return;
-      const resultBitmap=await createImageBitmap(blob);
+      let drawnBlob=blob;
+      if(keep)drawnBlob=await keptOnto(blob,paintedBytes());
+      if(closed)return;
+      const resultBitmap=await createImageBitmap(drawnBlob);
       if(closed){resultBitmap.close();return;}
-      resultBlob=blob;
+      resultBlob=drawnBlob;
       if(current!==source)current.close();
       current=resultBitmap;
       context.clearRect(0,0,canvas.width,canvas.height);context.drawImage(current,0,0,canvas.width,canvas.height);
       original=context.getImageData(0,0,canvas.width,canvas.height);
-      brush.clearRect(0,0,mask.width,mask.height);selected=false;
+      // A hairstyle keeps its area, so drawing again is one press; anything else starts clean.
+      if(!keep){brush.clearRect(0,0,mask.width,mask.height);selected=false;}
       $('[data-download]').disabled=false;$('[data-apply-photo]').disabled=false;
       $('[role=status]').textContent=ask?ask.done:onApply?i18n.t('Done. Apply it to the photo, download it, or paint another area and apply again.'):i18n.t('Done. Download the result, or paint another area and apply again.');
     } catch(error) {if(!closed&&error.name!=='AbortError')$('[role=status]').textContent=errorText(error,i18n.t);}
     finally {busy=false;render();}
   };
 
+  /** The drawing laid onto the picture through what was painted, the kept face put back byte for byte. */
+  async function keptOnto(blob,painted){
+    const W=current.width,H=current.height;
+    const read=image=>{const c=document.createElement('canvas');c.width=W;c.height=H;const x=c.getContext('2d',{willReadFrequently:true});x.drawImage(image,0,0,W,H);return x.getImageData(0,0,W,H);};
+    const drawn=await createImageBitmap(blob);
+    try{
+      const base=read(current),made=read(drawn);
+      keepFull||=keepAt(keep,mask.width,mask.height,W,H);
+      const weights=blendWeights(painted,keep,mask.width,mask.height,3);
+      const out=new ImageData(blendOnto(base.data,made.data,W,H,weights,mask.width,mask.height,keepFull),W,H);
+      const c=document.createElement('canvas');c.width=W;c.height=H;c.getContext('2d').putImageData(out,0,0);
+      return await new Promise((resolve,reject)=>c.toBlob(b=>b?resolve(b):reject(new Error(i18n.t('Export failed.'))),'image/png'));
+    }finally{drawn.close();}
+  }
+
   $('[data-download]').onclick=()=>{
     if(!resultBlob)return;
-    const url=URL.createObjectURL(resultBlob),a=document.createElement('a');a.href=url;a.download='ninaivu-object-removed.png';a.click();setTimeout(()=>URL.revokeObjectURL(url),30000);
+    const url=URL.createObjectURL(resultBlob),a=document.createElement('a');a.href=url;a.download=ask&&ask.file||'ninaivu-object-removed.png';a.click();setTimeout(()=>URL.revokeObjectURL(url),30000);
   };
   $('[data-apply-photo]').onclick=async()=>{
     if(!resultBlob||busy||!onApply)return;
@@ -152,6 +210,17 @@ export function openRemoveObject(source, service, {provider = 'local', onApply =
     }catch(error){$('[role=status]').textContent=errorText(error,i18n.t);}
   };
 
+  if(ask&&ask.masks){
+    const row=$('.ap-hairstyle-people');
+    for(const person of row?ask.people:[]){
+      const b=document.createElement('button');b.type='button';b.className='btn';b.dataset.person=person.id;b.setAttribute('role','radio');
+      b.setAttribute('aria-label',person.label);b.title=person.label;b.style.cssText='padding:2px; border-radius:50%; width:40px; height:40px; overflow:hidden;';
+      if(person.thumb){person.thumb.style.cssText='width:100%; height:100%; border-radius:50%; display:block;';b.append(person.thumb);}else b.textContent=person.label;
+      b.onclick=()=>{if(!busy){choose(person.id);render();}};row.append(b);
+    }
+    choose(ask.people&&ask.people.length?ask.people[0].id:0);render();
+    $('[role=status]').textContent=i18n.t('Check the marked hair, then draw it.');
+  }
   $('[data-close-remove]').onclick=()=>dialog.close();
   dialog.onclose=()=>{closed=true;controller?.abort();current.close();if(current!==source)source.close();dialog.remove();};
   dialog.showModal();

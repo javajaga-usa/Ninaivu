@@ -85,6 +85,12 @@ from **AI models** (about 94 MB), finds skin and hair where colour alone cannot
 — dark hair against a dark wall, a face half in shadow; without it the tools
 work exactly as described here. See [the family guide](guide-family.md#skin-and-hair).
 
+Its **Hairstyles** card draws a new hairstyle on one person with the AI
+server's *Paint and ask* workflow (the Creative Studio extension). The same
+face analysis marks the person's hair and the room the style needs; only that
+is sent, and the face, marks such as a bindi, and everyone else are put back
+from the photograph afterwards, pixel for pixel. No model is downloaded for it.
+
 Its **Enhance tools** each need a model, and the card says which:
 
 - **Upscale** — *Upscale ×4 (Real-ESRGAN)*, from **AI models**.
