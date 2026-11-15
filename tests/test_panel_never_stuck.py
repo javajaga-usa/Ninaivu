@@ -78,9 +78,21 @@ def test_a_start_stopped_by_the_person_is_not_a_failed_start(tmp_path, monkeypat
 # -- stopping a start ------------------------------------------------------------------
 
 def _process(tmp_path, name):
-    script = tmp_path / name
-    script.write_text("import time\nwhile True:\n    time.sleep(0.1)\n")
-    process = subprocess.Popen([sys.executable, str(script)])
+    """A process that idles. *name* ``ninaivu`` is a stand-in package run as
+    ``python -m ninaivu``, the way the panel starts the server; any other name
+    is a script of that name, somebody else's program."""
+    loop = "import time\nwhile True:\n    time.sleep(0.1)\n"
+    if name == "ninaivu":
+        package = tmp_path / "standin" / "ninaivu"
+        package.mkdir(parents=True)
+        (package / "__init__.py").write_text("")
+        (package / "__main__.py").write_text(loop)
+        process = subprocess.Popen([sys.executable, "-m", "ninaivu"], cwd=package.parent)
+        name = "-m ninaivu"
+    else:
+        script = tmp_path / name
+        script.write_text(loop)
+        process = subprocess.Popen([sys.executable, str(script)])
     # Until the child has become the script it still carries this test run's
     # own command line, and stop_start, which asks what a process is before
     # ending it, took it for not Ninaivu: one run in many on a busy machine.
@@ -101,7 +113,7 @@ def _process(tmp_path, name):
 
 def test_stop_this_start_ends_the_starting_ninaivu(tmp_path):
     pytest.importorskip("psutil")
-    server = _process(tmp_path, "ninaivu_server_standin.py")
+    server = _process(tmp_path, "ninaivu")
     try:
         note = {"pid": server.pid, "step": "checking the index: index.db", "since": time.time(),
                 "at": time.time()}
@@ -125,6 +137,25 @@ def test_a_process_that_is_not_ninaivu_is_never_ended(tmp_path):
         assert other.poll() is None
     finally:
         other.kill()
+
+
+@pytest.mark.parametrize("command, ours", [
+    (["/opt/ninaivu/python/bin/python3", "-m", "ninaivu", "--port", "80"], True),
+    (["python", "-m", "ninaivu.desktop.relaunch", "--stopping"], True),
+    (["python", "-mninaivu"], True),
+    (["/usr/bin/python3", "/home/me/.local/bin/ninaivu", "serve"], True),
+    (["C:\\Ninaivu\\Ninaivu.exe"], True),
+    (["/Applications/Ninaivu.app/Contents/MacOS/Ninaivu"], True),
+    # A portable copy's own Python runs other things too, and any program can
+    # name a file in a folder called Ninaivu: neither is Ninaivu.
+    (["/Users/me/Ninaivu/python/bin/python3", "/tmp/somebody_elses_program.py"], False),
+    (["/Users/me/Ninaivu/ffmpeg/ffmpeg", "-i", "/Volumes/Ninaivu Archive/a.mov"], False),
+    (["vim", "/Users/me/Ninaivu/notes.txt"], False),
+    (["python", "-m", "ninaivu_tools"], False),
+    ([], False),
+])
+def test_only_ninaivu_itself_is_taken_for_ninaivu(command, ours):
+    assert control.is_ninaivu_command(command) is ours
 
 
 def test_a_start_waiting_on_a_dead_disk_is_said_so(tmp_path, monkeypatch):
