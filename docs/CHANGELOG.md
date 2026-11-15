@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 4.4.0 — 15 November 2026
 
 - **Signing out wipes what the phone kept, over plain HTTP too.** The family app's *Log off*, the console's *Sign out* and a session ended from the console (a profile disabled or signed out elsewhere) now each tell the device to drop its kept thumbnails and its Saved albums. Before, only the gallery's own switch button did; the others relied on the server's `Clear-Site-Data`, which browsers honour over HTTPS only, so on a home network over HTTP the next person on a shared tablet could open the last person's Saved albums with no signal.
 - **A phone backup's last step is not abandoned.** For an administrator or a trusted family member the home computer files the batch while answering *finish*, which takes minutes for hundreds of photographs on a slow drive. The phone gave it the same half minute as a small answer, then sent it again and again while the first was still filing; it now waits up to fifteen minutes.
