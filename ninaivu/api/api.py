@@ -835,6 +835,9 @@ def status():
             # A calmer, larger app for a grandparent, each photograph told
             # aloud (features/easy_view).
             "easy_view": bool(getattr(cfg, "easy_view", False)),
+            # Trips and festivals offered to an administrator as albums
+            # (features/event_albums).
+            "event_albums": bool(getattr(cfg, "event_albums", False)),
         },
         "capabilities": {
             "ffmpeg": components.ffmpeg_available(),
@@ -3857,6 +3860,8 @@ from . import api_webdav                                            # noqa: E402
 from . import api_private                                           # noqa: E402,F401
 # The duplicates review, side by side: look, then keep one and hide or merge.
 from . import api_duplicates                                        # noqa: E402,F401
+# Blurred previews for the gallery's tiles, a few hundred at a time.
+from . import api_placeholders                                      # noqa: E402,F401
 # Sent for screening: family members flag items, an administrator decides.
 _feature("screening")
 
@@ -3911,3 +3916,6 @@ _feature("then_and_now")
 
 # Easy view: a calmer, larger app for a grandparent, each photograph told aloud.
 _feature("easy_view")
+
+# Event albums: trips and festivals offered to an administrator as albums.
+_feature("event_albums")

@@ -390,6 +390,14 @@ admin | GET                  | /api/easy-view/people | admin | reads | - | api.e
 home  | GET                  | /api/easy-view/people | admin | reads | - | api.easy_view_people | easy_view
 admin | PUT                  | /api/easy-view/people/<int:user_id> | admin | writes | same origin | api.easy_view_set_person | easy_view
 home  | PUT                  | /api/easy-view/people/<int:user_id> | admin | writes | same origin | api.easy_view_set_person | easy_view
+admin | GET                  | /api/event-albums | admin | reads | - | api.event_albums_list | event_albums
+home  | GET                  | /api/event-albums | admin | reads | - | api.event_albums_list | event_albums
+admin | POST                 | /api/event-albums/<key>/again | admin | writes | same origin | api.event_albums_again | event_albums
+home  | POST                 | /api/event-albums/<key>/again | admin | writes | same origin | api.event_albums_again | event_albums
+admin | POST                 | /api/event-albums/<key>/approve | admin | writes | same origin | api.event_albums_approve | event_albums
+home  | POST                 | /api/event-albums/<key>/approve | admin | writes | same origin | api.event_albums_approve | event_albums
+admin | POST                 | /api/event-albums/<key>/decline | admin | writes | same origin | api.event_albums_decline | event_albums
+home  | POST                 | /api/event-albums/<key>/decline | admin | writes | same origin | api.event_albums_decline | event_albums
 admin | GET                  | /api/events | admin | reads | - | api_admin.events | -
 admin | GET                  | /api/faces/asset/<int:asset_id> | family | reads | - | api.face_boxes | -
 home  | GET                  | /api/faces/asset/<int:asset_id> | family | reads | - | api.face_boxes | -
@@ -613,6 +621,8 @@ admin | POST                 | /api/phone-keys | family | writes | same origin |
 home  | POST                 | /api/phone-keys | family | writes | same origin | api.phone_keys_make | -
 admin | DELETE               | /api/phone-keys/<int:key_id> | family | writes | same origin | api.phone_keys_revoke | -
 home  | DELETE               | /api/phone-keys/<int:key_id> | family | writes | same origin | api.phone_keys_revoke | -
+admin | GET                  | /api/placeholders | guest | reads | - | api.placeholders_for | -
+home  | GET                  | /api/placeholders | guest | reads | - | api.placeholders_for | -
 admin | POST                 | /api/portrait/analyse | family | writes | same origin | api.portrait_analyse | -
 home  | POST                 | /api/portrait/analyse | family | writes | same origin | api.portrait_analyse | -
 admin | GET                  | /api/preview/<int:asset_id> | guest | reads | - | api.still_preview | -
