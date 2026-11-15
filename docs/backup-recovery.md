@@ -160,6 +160,14 @@ Nothing in the library or in a copy is changed. The temporary folder is
 removed afterwards, and the last ten results are kept in
 `backup-drill.json` in the state folder.
 
+The drill also runs by itself every `backup_drill_days` days (7 by default,
+0 is never; Advanced settings → Backup), when nobody is using the library and
+no drill has run for that long. It looks once an hour, so a computer that was
+off on the day catches up when it is next on and quiet. The latest result is
+the **Backup drill** line of the week's health digest on the Overview, and a
+scheduled drill that fails is sent to the notification address (event
+`backup_drill`) with the copies' names and counts only, never a path.
+
 ## Restore procedure
 
 1. Stop Ninaivu and disable automatic restarts for the duration of the restore.

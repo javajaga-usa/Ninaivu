@@ -180,6 +180,8 @@ def test_only_events_a_person_would_act_on_exist():
         "archive_waiting", "scan_errors", "disk_low",
         # A drive that is failing, and a backup that did not restore.
         "disk_health", "restore_test",
+        # The weekly backup drill bringing a copy's photographs back wrong.
+        "backup_drill",
         # Large files held back from the cloud until somebody says yes:
         # until somebody acts, they have no copy outside the house.
         "cloud_approval",
