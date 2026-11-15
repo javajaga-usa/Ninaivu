@@ -779,6 +779,20 @@ button.job-row:focus-visible { outline: 2px solid var(--accent); outline-offset:
 }
 .trip-text .n { font-size: 11px; color: var(--text-3); }
 
+.event-album-hint { font-size: 11.5px; margin: 0 0 6px; }
+.event-album-list { display: flex; flex-direction: column; gap: 6px; max-height: 320px; overflow-y: auto; }
+.event-album {
+  display: grid; grid-template-columns: auto 1fr; gap: 4px 9px; align-items: center;
+  padding: 6px; border-radius: var(--r-sm); background: var(--surface-2);
+}
+.event-album-covers { display: flex; }
+.event-album-covers img {
+  width: 30px; height: 36px; object-fit: cover; border-radius: var(--r-sm);
+  background: var(--surface-3, var(--surface-2)); margin-right: -10px;
+  box-shadow: 0 0 0 2px var(--surface-2);
+}
+.event-album-covers img:last-child { margin-right: 0; }
+.event-album-actions { grid-column: 1 / -1; display: flex; gap: 6px; justify-content: flex-end; }
 .album-list { display: flex; flex-direction: column; gap: 3px; max-height: 260px; overflow-y: auto; }
 .album-card {
   display: flex; gap: 9px; align-items: center;
@@ -980,6 +994,9 @@ button.job-row:focus-visible { outline: 2px solid var(--accent); outline-offset:
   background: var(--surface-2);
   cursor: pointer; contain: strict;
 }
+/* A tile's blurred preview (grid.js, placeholder.js) is drawn a few pixels
+   across and stretched over it: the stretch is the blur. */
+.cell { background-size: cover; background-position: center; background-repeat: no-repeat; }
 .cell img {
   width: 100%; height: 100%; object-fit: cover; display: block;
   opacity: 0; transition: opacity .22s var(--ease);
