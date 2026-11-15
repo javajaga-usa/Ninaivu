@@ -2451,7 +2451,9 @@ def enhance_suggestion(asset_id: int):
     try:
         with Image.open(_asset_file(asset)) as img:
             settings = enhance.suggest(img)
-    except (OSError, ValueError):
+    except (OSError, ValueError, Image.DecompressionBombError):
+        # Damaged, not a picture after all, or a header claiming more pixels
+        # than any camera makes: there is nothing to suggest for it.
         abort(404)
     return jsonify({"settings": settings, "summary": enhance.describe(settings)})
 
