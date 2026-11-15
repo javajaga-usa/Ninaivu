@@ -835,6 +835,9 @@ def status():
             # A calmer, larger app for a grandparent, each photograph told
             # aloud (features/easy_view).
             "easy_view": bool(getattr(cfg, "easy_view", False)),
+            # Trips and festivals offered to an administrator as albums
+            # (features/event_albums).
+            "event_albums": bool(getattr(cfg, "event_albums", False)),
         },
         "capabilities": {
             "ffmpeg": components.ffmpeg_available(),
@@ -3907,3 +3910,6 @@ _feature("then_and_now")
 
 # Easy view: a calmer, larger app for a grandparent, each photograph told aloud.
 _feature("easy_view")
+
+# Event albums: trips and festivals offered to an administrator as albums.
+_feature("event_albums")
