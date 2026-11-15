@@ -30,8 +30,8 @@ run one:
 * **Linux**: the X11 tray (XEmbed, pystray's ``xorg`` backend), on a thread
   of its own with its own connection to the display. The AppIndicator and
   GTK backends need a GLib loop, which Tk does not run, and the portable
-  build's Python has no GTK bindings anyway. That backend has no menu: a
-  click shows the window, where everything is. A desktop with no XEmbed tray
+  build's Python has no GTK bindings anyway. A left click shows the window; a right click opens a Tk menu
+  with the same actions, including Quit. A desktop with no XEmbed tray
   (GNOME without an extension) shows no icon; :attr:`TrayIcon.shown` is then
   False and closing the window closes it, as before, with Ninaivu still
   running, and opening Ninaivu again brings it back.
@@ -195,7 +195,16 @@ def attach(host: Any, platform: str | None = None) -> TrayIcon | None:
         return None
     menu = PanelTray(host)
     try:
-        icon = pystray.Icon("ninaivu", Image.open(ICON), "Ninaivu",
+        icon_type = pystray.Icon
+        if platform.startswith("linux") and not getattr(icon_type, "HAS_MENU", True):
+            class MenuIcon(icon_type):
+                def _on_button_press(self, event):
+                    if event.detail == 3:
+                        host.post(lambda: linux_popup(host, menu, event.root_x, event.root_y))
+                    else:
+                        super()._on_button_press(event)
+            icon_type = MenuIcon
+        icon = icon_type("ninaivu", Image.open(ICON), "Ninaivu",
                             menu=pystray.Menu(lambda: pystray_items(pystray, menu)))
         if platform == "darwin":
             # Joins the NSApplication Tk's loop already runs. The setup does
@@ -215,6 +224,23 @@ def attach(host: Any, platform: str | None = None) -> TrayIcon | None:
         log.warning("could not put Ninaivu in the tray", exc_info=True)
         return None
     return TrayIcon(icon, menu, shown=shown, platform=platform)
+
+
+def linux_popup(host: Any, menu: PanelTray, x: int, y: int) -> None:
+    """XEmbed has no native menu; show its actions on Tk's own thread."""
+    import tkinter as tk
+    popup = tk.Menu(host.root, tearoff=False)
+    for item in menu.menu():
+        if item['label'] == '-':
+            popup.add_separator()
+        else:
+            popup.add_command(label=item['label'], command=item['action'],
+                              state='normal' if item.get('enabled', True) else 'disabled')
+    try:
+        popup.tk_popup(x, y)
+    finally:
+        popup.grab_release()
+        popup.destroy()
 
 
 def x_tray_present(icon: Any) -> bool:

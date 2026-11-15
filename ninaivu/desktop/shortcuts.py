@@ -106,6 +106,8 @@ def program(environ=None, platform: str | None = None, root: Path | None = None)
     if root is None:
         from .control import ninaivu_root
         root = ninaivu_root()
+    if system == "linux" and environ.get("NINAIVU_PACKAGE") == "deb":
+        return Program(("/usr/bin/ninaivu",), Path(environ.get("HOME", str(Path.home()))))
     launcher = environ.get("NINAIVU_LAUNCHER", "").strip()
     python = environ.get("NINAIVU_PYTHON", "").strip() or sys.executable
     if system == "darwin":

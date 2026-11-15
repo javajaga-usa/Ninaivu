@@ -2097,7 +2097,7 @@ def windows_dpi_aware(windll=None):
     return False
 
 
-def main(argv=None):
+def _main(argv=None):
     """The one desktop program: ``Ninaivu.exe``, ``Ninaivu.app`` and the
     Linux folder's ``ninaivu`` open this, and so does
     ``python -m ninaivu.desktop.app``.
@@ -2124,6 +2124,18 @@ def main(argv=None):
     finally:
         if instance is not None:
             instance.close()
+
+
+def main(argv=None):
+    """Report failures even before the main window can be created."""
+    try:
+        return _main(argv)
+    except Exception as exc:  # noqa: BLE001 — desktop entry points must explain failure
+        log.exception('could not open Ninaivu')
+        from .errors import tell
+        tell(f'Could not open Ninaivu: {exc}\n\n'
+             'Check the saved library location and reconnect any missing drive, then try again.')
+        return 1
 
 
 #: :func:`claim_the_desktop`'s answer when another Ninaivu is open and showing itself.

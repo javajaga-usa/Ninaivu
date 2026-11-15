@@ -38,7 +38,9 @@ def test_deb_contains_the_runtime_menu_and_root_owned_metadata(tmp_path, monkeyp
         assert not (stage / "opt/ninaivu/logs").exists()
         assert (stage / "usr/bin/ninaivu").readlink() == Path("/opt/ninaivu/ninaivu")
         assert "Exec=/usr/bin/ninaivu" in (stage / "usr/share/applications/ninaivu.desktop").read_text(encoding="utf-8")
-        assert "NINAIVU_PACKAGE=deb" in (stage / "opt/ninaivu/app/ninaivu.sh").read_text(encoding="utf-8")
+        launcher = (stage / "opt/ninaivu/app/ninaivu.sh").read_text(encoding="utf-8")
+        assert "NINAIVU_PACKAGE=deb" in launcher
+        assert '-m ninaivu.desktop.launch "$@"' in launcher
 
     monkeypatch.setattr(module.subprocess, "run", dpkg)
     assert module.build(archive).name == f"{name}.deb"

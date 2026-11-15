@@ -250,3 +250,27 @@ def test_the_option_and_what_it_tells_the_one_already_open(monkeypatch):
     app.claim_the_desktop(say="console")
     app.claim_the_desktop()
     assert told == [b"console", instance.SHOW]
+
+
+def test_debian_shortcuts_execute_native_launcher_directly():
+    from pathlib import Path
+    from ninaivu.desktop.shortcuts import program, describe, FACES
+    prog = program({'NINAIVU_PACKAGE': 'deb', 'HOME': '/home/family',
+                    'NINAIVU_LAUNCHER': '/usr/bin/ninaivu'}, 'linux', Path('/state/control'))
+    assert describe(FACES[0], prog, 'linux') == {
+        'argv': ['/usr/bin/ninaivu', '--open', 'family'], 'workdir': '/home/family'}
+
+
+def test_fresh_debian_first_launch_creates_all_three_icons(tmp_path):
+    from ninaivu.desktop import shortcuts
+    desktop = tmp_path / 'Desktop'
+    desktop.mkdir()
+    control = tmp_path / 'control'
+    env = {'NINAIVU_PACKAGE': 'deb', 'HOME': str(tmp_path)}
+    assert len(shortcuts.settle(control, environ=env, platform='linux', desktop=desktop)) == 3
+    for entry in desktop.glob('*.desktop'):
+        text = entry.read_text()
+        assert '/usr/bin/ninaivu' in text
+        assert 'sh /usr/bin/ninaivu' not in text
+        assert entry.stat().st_mode & 0o111
+    assert shortcuts.settle(control, environ=env, platform='linux', desktop=desktop) == []

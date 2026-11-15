@@ -29,4 +29,4 @@ case "${1:-}" in
     --autostart) shift; exec "$python" -m ninaivu.desktop.autostart --start "$@" ;;
     --server) shift; exec "$python" -m ninaivu "$@" ;;
 esac
-exec "$python" -m ninaivu.desktop.app "$@"
+exec "$python" -m ninaivu.desktop.launch "$@"

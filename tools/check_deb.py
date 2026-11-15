@@ -26,8 +26,9 @@ def check(package: Path) -> None:
 
             def run(*args: str) -> str:
                 return subprocess.check_output(
-                    ["runuser", "-u", account, "--", "env", f"HOME={home}",
-                     "NINAIVU_NO_DIALOG=1", *args], text=True)
+                    ["runuser", "-u", account, "--", "env", "-i", f"HOME={home}",
+                     "PATH=/usr/local/bin:/usr/bin:/bin", "LANG=C.UTF-8",
+                     "NINAIVU_NO_DIALOG=1", *args], text=True, cwd=home, timeout=120)
 
             values = dict(line.split("=", 1) for line in run("/usr/bin/ninaivu", "--where").splitlines())
             state = home / ".ninaivu"
@@ -40,6 +41,32 @@ def check(package: Path) -> None:
                 "pathlib.Path(sysconfig.get_path('purelib'), 'extras-write-check').touch()")
             run("xvfb-run", "-a", python, "-c",
                 "import tkinter; root = tkinter.Tk(); root.update(); root.destroy()")
+            # Exercise a fresh user's desktop integration from the installed package,
+            # not the checkout or an existing portable copy.
+            (home / "Desktop").mkdir()
+            os.chown(home / "Desktop", user.pw_uid, user.pw_gid)
+            run(python, "-c",
+                "import os; from pathlib import Path; from ninaivu.desktop import shortcuts; "
+                "os.environ['NINAIVU_PACKAGE']='deb'; "
+                "home=Path.home(); "
+                "made=shortcuts.settle(home/'.ninaivu/control', desktop=home/'Desktop'); "
+                "assert len(made)==3; "
+                "assert all('/usr/bin/ninaivu' in p.read_text() and "
+                "'sh /usr/bin/ninaivu' not in p.read_text() "
+                "for p in (home/'Desktop').glob('*.desktop'))")
+            run(python, "-c",
+                "import sys; from ninaivu.desktop import launch, errors; "
+                "sys.modules['ninaivu.desktop.app']=None; "
+                "messages=[]; errors.tell=messages.append; "
+                "assert launch.main([])==1 and messages")
+            run(python, "-c",
+                "from types import SimpleNamespace; from ninaivu.desktop.tray import PanelTray; "
+                "calls=[]; host=SimpleNamespace(post=lambda f:f(), show_window=lambda:None, "
+                "open_family=lambda:None, start=lambda:None, stop=lambda:None, "
+                "quit=lambda:calls.append('quit')); "
+                "menu=PanelTray(host); "
+                "next(item for item in menu.menu() if item['label']=='Quit')['action'](); "
+                "assert calls==['quit']")
             run("/usr/bin/ninaivu", "--server", "--help")
             assert Path("/usr/share/applications/ninaivu.desktop").is_file()
             marker = state / "keep-my-library.txt"
