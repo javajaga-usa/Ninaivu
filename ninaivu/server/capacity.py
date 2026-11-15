@@ -29,6 +29,7 @@ import platform
 import plistlib
 import subprocess
 import sys
+import threading
 import time
 from typing import Any, Callable
 
@@ -359,6 +360,31 @@ def reading(read: Callable[[], Any], default: Any = None) -> Any:
         return default
 
 
+#: The machine's CPU times at the last report: (monotonic time, total, busy).
+_last_cpu: tuple[float, float, float] | None = None
+_cpu_lock = threading.Lock()
+
+
+def _machine_cpu() -> float:
+    """How busy every core has been, in percent.
+
+    Since the last report when that was between a quarter of a second and
+    two minutes ago; otherwise measured over 0.3 s, which holds the request
+    that long. Every opening and every Refresh of the Performance page waited
+    the 0.3 s before. Not ``psutil.cpu_percent(interval=None)``: psutil keeps
+    its "since the last call" per thread, and each request has its own.
+    """
+    global _last_cpu
+    now = time.monotonic()
+    times = psutil.cpu_times()
+    total, busy = sum(times), sum(times) - times.idle
+    with _cpu_lock:
+        previous, _last_cpu = _last_cpu, (now, total, busy)
+    if previous is not None and 0.25 <= now - previous[0] <= 120 and total > previous[1]:
+        return max(0.0, min(100.0, (busy - previous[2]) * 100 / (total - previous[1])))
+    return psutil.cpu_percent(interval=0.3)
+
+
 def load() -> dict[str, Any]:
     """How busy the computer is right now. A reading the system will not give
     is None; the rest of the report still comes back."""
@@ -380,7 +406,7 @@ def load() -> dict[str, Any]:
     except _UNREADABLE:
         ninaivu = None
     return {
-        "cpu_percent": reading(lambda: psutil.cpu_percent(interval=0.3)),
+        "cpu_percent": reading(_machine_cpu),
         "memory_percent": memory.percent if memory is not None else None,
         "memory_available_bytes": memory.available if memory is not None else None,
         "swap_used_bytes": swap.used if swap is not None else None,
