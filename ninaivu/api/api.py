@@ -867,6 +867,9 @@ def status():
             # A calmer, larger app for a grandparent, each photograph told
             # aloud (features/easy_view).
             "easy_view": bool(getattr(cfg, "easy_view", False)),
+            # Albums kept on a phone for when there is no signal
+            # (static/js/offline-albums.js).
+            "offline_albums": bool(getattr(cfg, "offline_albums", True)),
             # Trips and festivals offered to an administrator as albums
             # (features/event_albums).
             "event_albums": bool(getattr(cfg, "event_albums", False)),
