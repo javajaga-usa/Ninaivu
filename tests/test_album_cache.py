@@ -50,5 +50,5 @@ def test_two_albums_never_share_a_tag(app, people):
 
 def test_the_album_query_starts_from_the_album():
     from pathlib import Path
-    source = (Path(__file__).resolve().parents[1] / "ninaivu/storage/db.py").read_text(encoding="utf-8")
+    source = (Path(__file__).resolve().parents[1] / "ninaivu/storage/db_query.py").read_text(encoding="utf-8")
     assert "a.id IN (SELECT asset_id FROM album_items WHERE album_id = ?)" in source
