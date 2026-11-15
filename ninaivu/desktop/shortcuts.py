@@ -41,7 +41,7 @@ import shlex
 import subprocess
 import sys
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Callable
 
 #: In the run-time folder: what was placed, where, and what it opened.
@@ -107,7 +107,10 @@ def program(environ=None, platform: str | None = None, root: Path | None = None)
         from .control import ninaivu_root
         root = ninaivu_root()
     if system == "linux" and environ.get("NINAIVU_PACKAGE") == "deb":
-        return Program(("/usr/bin/ninaivu",), Path(environ.get("HOME", str(Path.home()))))
+        # A Debian package is Linux's alone: its folder is a POSIX path
+        # whatever computer writes the shortcut (and the tests run on Windows).
+        return Program(("/usr/bin/ninaivu",),
+                       PurePosixPath(environ.get("HOME", str(Path.home()))))
     launcher = environ.get("NINAIVU_LAUNCHER", "").strip()
     python = environ.get("NINAIVU_PYTHON", "").strip() or sys.executable
     if system == "darwin":

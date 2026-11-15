@@ -5301,5 +5301,10 @@
   "keep is the id of the photograph to keep": "keep is the id of the photograph to keep",
   "kind is exact, near or all": "kind is exact, near or all",
   "nothing to decide": "nothing to decide",
-  "others lists the copies to decide about": "others lists the copies to decide about"
+  "others lists the copies to decide about": "others lists the copies to decide about",
+  "Client ID": "Client ID",
+  "Drive folder name": "Drive folder name",
+  "Hour": "Hour",
+  "AI server address": "AI server address",
+  "Workflow JSON": "Workflow JSON"
 }
