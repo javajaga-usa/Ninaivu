@@ -2,7 +2,7 @@
 <html lang="en" data-theme="system" data-host="{{ host_os }}">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="format-detection" content="telephone=no">
 
 <link rel="manifest" href="/manifest.webmanifest">
@@ -745,7 +745,7 @@
     <div class="block">
       <div class="block-head">
         <div>
-          <h2><span class="step">1</span> <span data-i18n="Source drives and folders">Source drives and folders</span></h2>
+          <h2><span class="step">1</span> <span id="ar-source-title" data-i18n="Source drives and folders">Source drives and folders</span></h2>
           <p class="hint" data-i18n="Every subfolder is scanned, however deep. Each folder gets its own Photos / Video / Audio switches.">Every subfolder is scanned, however deep. Each folder gets its
             own Photos / Video / Audio switches.</p>
         </div>
@@ -760,7 +760,7 @@
       <div id="ar-devices" class="ar-devices" hidden></div>
 
       <div class="ar-add">
-        <input type="text" id="ar-source-input" class="input"
+        <input type="text" id="ar-source-input" aria-labelledby="ar-source-title" class="input"
                placeholder="e.g. D:\OldPhotos  or  /Volumes/Backup" autocomplete="off" data-i18n-placeholder="e.g. D:\OldPhotos or /Volumes/Backup">
         <button class="btn ghost" id="ar-browse-source" data-i18n="Browse…">Browse…</button>
         <button class="btn primary" id="ar-add-source" data-i18n="Add source">Add source</button>
@@ -777,11 +777,11 @@
 
     <!-- 2 · destination -->
     <div class="block">
-      <h2><span class="step">2</span> <span data-i18n="Archive destination">Archive destination</span></h2>
+      <h2><span class="step">2</span> <span id="ar-dest-title" data-i18n="Archive destination">Archive destination</span></h2>
       <p class="hint" data-i18n="Where the consolidated archive is built. Pick the archive's own root — choose a folder inside one and Ninaivu uses the root instead, and says so.">Where the consolidated archive is built. Pick the archive's own
         root — choose a folder inside one and Ninaivu uses the root instead, and says so.</p>
       <div class="ar-add">
-        <input type="text" id="ar-dest-input" class="input"
+        <input type="text" id="ar-dest-input" aria-labelledby="ar-dest-title" class="input"
                placeholder="e.g. D:\Photo Archive" autocomplete="off" data-i18n-placeholder="e.g. D:\Photo Archive">
         <button class="btn ghost" id="ar-browse-dest" data-i18n="Browse…">Browse…</button>
       </div>
@@ -1284,10 +1284,10 @@
       </div>
 
       <div class="ar-add">
-        <input type="text" class="input" id="cl-client-id"
+        <input type="text" class="input" id="cl-client-id" aria-label="Client ID" data-i18n-label="Client ID"
                placeholder="Client ID (…apps.googleusercontent.com)"
                autocomplete="off" spellcheck="false">
-        <input type="password" class="input" id="cl-client-secret"
+        <input type="password" class="input" id="cl-client-secret" aria-label="Client secret" data-i18n-label="Client secret"
                placeholder="Client secret" autocomplete="new-password" data-i18n-placeholder="Client secret">
         <button class="btn" id="cl-save-client" data-i18n="Save">Save</button>
       </div>
@@ -1318,7 +1318,7 @@
         below, says they may go. Photos still waiting to be checked for
         screenshots and documents go up once they have been.</p>
       <div class="ar-add">
-        <input type="text" class="input" id="cl-folder" placeholder="Ninaivu">
+        <input type="text" class="input" id="cl-folder" aria-label="Drive folder name" data-i18n-label="Drive folder name" placeholder="Ninaivu">
         <button class="btn ghost" id="cl-save-folder" data-i18n="Rename Drive folder">Rename Drive folder</button>
       </div>
       <p class="hint subtle" data-i18n="Renaming makes a new folder. Anything already uploaded stays where it is — Ninaivu does not move things around in somebody's Drive.">Renaming makes a new folder. Anything already
@@ -1356,9 +1356,9 @@
           </ul>
         </div>
         <div class="ar-add">
-          <input type="password" class="input" id="cl-enc-pass" autocomplete="new-password"
+          <input type="password" class="input" id="cl-enc-pass" aria-label="Passphrase (at least 12 characters)" data-i18n-label="Passphrase (at least 12 characters)" autocomplete="new-password"
                  placeholder="Passphrase (at least 12 characters)" data-i18n-placeholder="Passphrase (at least 12 characters)">
-          <input type="password" class="input" id="cl-enc-confirm" autocomplete="new-password"
+          <input type="password" class="input" id="cl-enc-confirm" aria-label="The same passphrase again" data-i18n-label="The same passphrase again" autocomplete="new-password"
                  placeholder="The same passphrase again" data-i18n-placeholder="The same passphrase again">
           <button class="btn primary" id="cl-enc-create" data-i18n="Make encryption key">Make encryption key</button>
         </div>
@@ -1389,7 +1389,7 @@
       </div>
 
       <div class="ar-add">
-        <input type="number" class="input" id="cl-rate" min="0" step="64"
+        <input type="number" class="input" id="cl-rate" aria-label="Set speed limit (KB/s)" data-i18n-label="Set speed limit (KB/s)" min="0" step="64"
                placeholder="0" autocomplete="off">
         <button class="btn ghost" id="cl-save-rate" data-i18n="Set speed limit (KB/s)">Set speed limit (KB/s)</button>
       </div>
@@ -1609,7 +1609,7 @@
           </label>
         </div>
         <div class="ar-add" id="rs-folder-row" hidden>
-          <input type="text" class="input" id="rs-folder" spellcheck="false"
+          <input type="text" class="input" id="rs-folder" aria-label="A folder inside the library, like 2019/07 or Holidays/Goa" data-i18n-label="A folder inside the library, like 2019/07 or Holidays/Goa" spellcheck="false"
                  placeholder="A folder inside the library, like 2019/07 or Holidays/Goa" data-i18n-placeholder="A folder inside the library, like 2019/07 or Holidays/Goa">
         </div>
         <label class="choice">
@@ -1635,7 +1635,7 @@
           </label>
         </div>
         <div class="ar-add" id="rs-dest-row" hidden>
-          <input type="text" class="input" id="rs-dest" spellcheck="false"
+          <input type="text" class="input" id="rs-dest" aria-label="A folder on this computer, like E:\Restored" data-i18n-label="A folder on this computer, like E:\Restored" spellcheck="false"
                  placeholder="A folder on this computer, like E:\Restored" data-i18n-placeholder="A folder on this computer, like E:\Restored">
         </div>
 
@@ -1648,7 +1648,7 @@
             <span class="rs-file-name" id="rs-recovery-name"></span>
           </div>
           <div class="ar-add">
-            <input type="password" class="input" id="rs-passphrase"
+            <input type="password" class="input" id="rs-passphrase" aria-label="…or the passphrase the key was made with" data-i18n-label="…or the passphrase the key was made with"
                    autocomplete="off" placeholder="…or the passphrase the key was made with" data-i18n-placeholder="…or the passphrase the key was made with">
           </div>
         </div>
@@ -1897,11 +1897,11 @@
                  style="max-width:6rem" aria-label="Port" data-i18n-label="Port">
         </div>
         <div class="row">
-          <input class="input" id="notify-smtp-user" placeholder="username" data-i18n-placeholder="username">
-          <input class="input" id="notify-smtp-password" type="password"
+          <input class="input" id="notify-smtp-user" aria-label="Username" data-i18n-label="Username" placeholder="username" data-i18n-placeholder="username">
+          <input class="input" id="notify-smtp-password" aria-label="Password" data-i18n-label="Password" type="password"
                  placeholder="password" autocomplete="new-password" data-i18n-placeholder="password">
         </div>
-        <input class="input" id="notify-smtp-to" placeholder="where to send it" data-i18n-placeholder="where to send it">
+        <input class="input" id="notify-smtp-to" aria-label="where to send it" data-i18n-label="where to send it" placeholder="where to send it" data-i18n-placeholder="where to send it">
       </div>
       <div class="setting-field">
         <label data-i18n="Tell me about">Tell me about</label>
@@ -1945,7 +1945,7 @@
                placeholder="one address, or several separated by commas" data-i18n-placeholder="one address, or several separated by commas">
       </div>
       <div class="setting-field">
-        <label data-i18n="Day">Day</label>
+        <label for="digest-weekday" data-i18n="Day">Day</label>
         <div class="row">
           <select class="input" id="digest-weekday">
             <option value="0" data-i18n="Monday">Monday</option>
@@ -1956,7 +1956,7 @@
             <option value="5" data-i18n="Saturday">Saturday</option>
             <option value="6" selected data-i18n="Sunday">Sunday</option>
           </select>
-          <select class="input" id="digest-hour"></select>
+          <select class="input" id="digest-hour" aria-label="Hour" data-i18n-label="Hour"></select>
         </div>
       </div>
       <div class="setting-field">
@@ -2248,7 +2248,7 @@
         <span class="ar-indexer" id="ai-network"></span>
       </div>
       <div class="ar-add">
-        <input type="text" class="input" id="ai-url"
+        <input type="text" class="input" id="ai-url" aria-label="AI server address" data-i18n-label="AI server address"
                placeholder="http://192.168.1.50:8188" autocomplete="off" spellcheck="false">
         <button class="btn" id="ai-test" data-i18n="Test connection">Test connection</button>
         <button class="btn primary" id="ai-save-url" data-i18n="Save">Save</button>
@@ -2314,11 +2314,11 @@
           <li data-i18n="Paste it below, or choose the file.">Paste it below, or choose the file.</li>
         </ol>{% endraw %}
         <div class="ai-workflow-form">
-          <input type="text" class="input" id="ai-workflow-name" maxlength="80" placeholder="Name, e.g. Qwen image edit" data-i18n-placeholder="Name, e.g. Qwen image edit">
+          <input type="text" class="input" id="ai-workflow-name" aria-label="Name" data-i18n-label="Name" maxlength="80" placeholder="Name, e.g. Qwen image edit" data-i18n-placeholder="Name, e.g. Qwen image edit">
           <select id="ai-workflow-purpose" class="select" aria-label="What it is for" data-i18n-label="What it is for"></select>
           <input type="file" id="ai-workflow-file" accept=".json,application/json" aria-label="Workflow file" data-i18n-label="Workflow file">
         </div>
-        <textarea class="input ai-workflow-json" id="ai-workflow-json" rows="10" spellcheck="false"
+        <textarea class="input ai-workflow-json" id="ai-workflow-json" aria-label="Workflow JSON" data-i18n-label="Workflow JSON" rows="10" spellcheck="false"
                   placeholder='{"3": {"class_type": "KSampler", "inputs": {…}}, …}'></textarea>
         <div class="ar-actions">
           <button class="btn primary" id="ai-workflow-save" data-i18n="Save workflow">Save workflow</button>
@@ -2548,7 +2548,7 @@
         </div>
       </div>
       <div class="sv-log-find">
-        <input type="search" class="input" id="sv-log-find" placeholder="Find in log" autocomplete="off" spellcheck="false" data-i18n-placeholder="Find in log">
+        <input type="search" class="input" id="sv-log-find" aria-label="Find in log" data-i18n-label="Find in log" placeholder="Find in log" autocomplete="off" spellcheck="false" data-i18n-placeholder="Find in log">
         <span class="sv-meta" id="sv-log-matches"></span>
       </div>
       <pre class="sv-log" id="sv-log" tabindex="0" aria-live="off"></pre>
@@ -2835,7 +2835,7 @@
     <div class="crumb" id="fm-path"></div>
     <div class="dir-list" id="fm-dirs"></div>
     <div class="modal-foot">
-      <input type="text" id="fm-manual" class="input"
+      <input type="text" id="fm-manual" aria-label="Folder path" data-i18n-label="Folder path" class="input"
              placeholder="…or type a path, e.g. C:\Users\you\Pictures" data-i18n-placeholder="…or type a path, e.g. C:\Users\you\Pictures">
       <div class="spacer"></div>
       <button class="btn ghost" id="fm-cancel" data-i18n="Cancel">Cancel</button>
