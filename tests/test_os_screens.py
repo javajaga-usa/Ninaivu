@@ -247,7 +247,7 @@ def test_a_line_that_comes_later_is_not_cut_off_the_bottom(tmp_path, monkeypatch
         dashboard.notice.set("A notice long enough to wrap. " * 40)
         root.update_idletasks()
         upper = dashboard.upper_pane
-        assert dashboard._wanted_height() >= root.winfo_reqheight()
+        assert dashboard._wanted_height() >= upper.winfo_reqheight()
         dashboard._grow_to_fit()
         root.update()
         # Only where the window may grow that tall: it keeps to the room the

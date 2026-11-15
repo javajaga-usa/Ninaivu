@@ -482,3 +482,15 @@ def test_linux_headings_have_no_letters_its_font_may_lack():
     assert app.small_caps('This computer', 'darwin') == '\u200a'.join('THIS COMPUTER')
     assert app.restart_label('linux') == 'Restart'
     assert '↻' in app.restart_label('win32')
+
+
+def test_content_height_does_not_include_unused_pane_space():
+    dashboard = object.__new__(app.Dashboard)
+    dashboard.command_area = SimpleNamespace(winfo_reqheight=lambda: 120)
+    dashboard.upper_pane = SimpleNamespace(winfo_reqheight=lambda: 430)
+    dashboard.split = SimpleNamespace(cget=lambda name: {'borderwidth': 0, 'sashwidth': 6, 'sashpad': 0}[name])
+    dashboard.logs_visible = False
+    assert dashboard._wanted_height() == 550
+    dashboard.logs_visible = True
+    dashboard.log_panel = SimpleNamespace(winfo_height=lambda: 260, winfo_reqheight=lambda: 200)
+    assert dashboard._wanted_height() == 816

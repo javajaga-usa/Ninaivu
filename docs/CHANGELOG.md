@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- **A better-fitting Control Panel.** The window measures its content and returns the space used by startup progress when it finishes, while preserving a size you choose.
+- **Less background work and a responsive panel.** Hidden logs are not read until opened, background events yield to the interface in batches, and temporary power-sensor failures no longer stop future readings. The Linux installer checks the packaged sizing and event-handling behavior before release.
+
 ## 4.3.0 — 14 November 2026
 
 - **Straighten also turns a Live Photo's moving preview.** The gallery reads the still's saved correction for its companion clip, including after Undo. Both original files stay unchanged.

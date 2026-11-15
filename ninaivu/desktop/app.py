@@ -351,6 +351,7 @@ if tk is not None:
             self.shown, self.step, self.target, self.value = None, None, None, 0.0
             self.stop_asked = False
             self.moved = (None, 0.0)
+            self.dashboard._grow_to_fit()
 
         def tick(self):
             if self.shown is None:
@@ -484,6 +485,7 @@ class Dashboard:
 
         command = self.paint(tk.Frame(root, padx=20, pady=10), bg='bg')
         command.pack(fill='x')
+        self.command_area = command
 
         # The dashboard above, the log pane below it when shown; the divider
         # between them can be dragged.
@@ -880,20 +882,15 @@ class Dashboard:
         return int(root.winfo_screenwidth() * 0.95), int(root.winfo_screenheight() * 0.88)
 
     def _wanted_height(self):
-        """The height the window's contents ask for. The divided pane keeps
-        asking for the height its upper pane had when it was laid out, so a
-        line that came later (a notice wrapped onto two, the update advice)
-        never reached the window's own request, and the bottom of the
-        dashboard stayed cut off however long the panel was open."""
-        root = self.root
-        wanted = root.winfo_reqheight()
-        upper = getattr(self, 'upper_pane', None)
-        if upper is not None:
-            try:
-                wanted += max(0, upper.winfo_reqheight() - upper.winfo_height())
-            except tk.TclError:
-                pass
-        return wanted
+        """Content height, independent of the pane's previous allocation."""
+        # Measure the content, not the space the expanding pane currently
+        # occupies. Its previous allocation includes surplus window height.
+        height = self.command_area.winfo_reqheight() + self.upper_pane.winfo_reqheight()
+        height += 2 * int(self.split.cget('borderwidth'))
+        if self.logs_visible:
+            height += max(180, self.log_panel.winfo_height(), self.log_panel.winfo_reqheight())
+            height += int(self.split.cget('sashwidth')) + 2 * int(self.split.cget('sashpad'))
+        return height
 
     def _fit_window(self):
         """Open at the size the panel's contents ask for.
@@ -916,7 +913,7 @@ class Dashboard:
         self._grown_for_readings = False
 
     def _grow_to_fit(self, force=False):
-        """Make the window taller (never smaller) when its contents grew: the
+        """Fit an automatically sized window when its contents change: the
         first readings and a running server's addresses take more lines than
         the placeholders it was measured with, and the log pane adds its own
         height. Without this the bottom row - the buttons and the notice - was
@@ -933,7 +930,10 @@ class Dashboard:
             return
         room_w, room_h = self._room()
         width = max(current[0], min(root.winfo_reqwidth(), room_w, self._scaled(1300)))
-        height = max(current[1], min(self._wanted_height(), room_h))
+        wanted = min(self._wanted_height(), room_h)
+        # Once a temporary progress card disappears, return its space too.
+        # A manually resized window was already excluded above.
+        height = max(current[1], wanted) if self.logs_visible else max(root.minsize()[1], wanted)
         if (width, height) != current:
             x = min(max(0, root.winfo_x()), max(0, root.winfo_screenwidth() - width))
             y = min(max(0, root.winfo_y()), max(0, root.winfo_screenheight() - height - 48))
@@ -1189,7 +1189,7 @@ class Dashboard:
         known by its generation, and what was read from the old one dropped."""
         while not self.finished.is_set():
             tail, generation = self.log_tail, self.log_generation
-            if not self.logs_paused:
+            if self.logs_visible and not self.logs_paused:
                 try:
                     text = tail.read()
                     self.events.put(('log', (generation, text, bool(text) or tail.path.exists(), None)))
@@ -1343,7 +1343,12 @@ class Dashboard:
 
     def power_loop(self):
         while not self.finished.is_set():
-            self.events.put(('power', read_power()))
+            try:
+                value = read_power()
+            except Exception:  # noqa: BLE001 — a sensor failure must not stop future readings
+                log.debug('power reading unavailable', exc_info=True)
+                value = None
+            self.events.put(('power', value))
             self.finished.wait(15)
 
     def pump(self):
@@ -1370,7 +1375,9 @@ class Dashboard:
                     pass                                       # the window was destroyed
 
     def _pump_events(self):
-        while True:
+        # Yield to Tk even when workers keep producing events. Remaining
+        # work stays in order for the next scheduled pass.
+        for _ in range(100):
             try:
                 kind, value = self.events.get_nowait()
             except queue.Empty:

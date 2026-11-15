@@ -67,6 +67,21 @@ def check(package: Path) -> None:
                 "menu=PanelTray(host); "
                 "next(item for item in menu.menu() if item['label']=='Quit')['action'](); "
                 "assert calls==['quit']")
+            # These must run against the installed bytecode as well: a stale
+            # runtime in the release archive must fail the installer gate.
+            run(python, "-c",
+                "import queue; from types import SimpleNamespace; "
+                "from ninaivu.desktop.app import Dashboard; "
+                "events=queue.Queue(); seen=[]; "
+                "[events.put(('call', lambda i=i:seen.append(i))) for i in range(101)]; "
+                "Dashboard._pump_events(SimpleNamespace(events=events)); "
+                "assert seen==list(range(100)) and events.qsize()==1")
+            run(python, "-c",
+                "from types import SimpleNamespace; from ninaivu.desktop.app import Dashboard; "
+                "panel=SimpleNamespace(command_area=SimpleNamespace(winfo_reqheight=lambda:120), "
+                "upper_pane=SimpleNamespace(winfo_reqheight=lambda:430), logs_visible=False, "
+                "split=SimpleNamespace(cget=lambda name:0)); "
+                "assert Dashboard._wanted_height(panel)==550")
             run("/usr/bin/ninaivu", "--server", "--help")
             assert Path("/usr/share/applications/ninaivu.desktop").is_file()
             marker = state / "keep-my-library.txt"
