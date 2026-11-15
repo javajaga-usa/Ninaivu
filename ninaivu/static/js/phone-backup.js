@@ -39,6 +39,8 @@ const NOT_NOW = new Set([408, 429, 502, 503, 504]);
 const STOP_ALL = new Set([401, 403, 507]);
 /** How many files one check asks about. The server takes up to 5,000. */
 const CHECK_BATCH = 2000;
+/** How long the end of a batch may take: the server files it then. */
+export const FINISH_MS = 15 * 60000;
 const DEVICE_KEY = 'ninaivu.backup.device';
 const NAME_KEY = 'ninaivu.backup.name';
 const UNFINISHED_KEY = 'ninaivu.backup.unfinished';
@@ -417,8 +419,12 @@ export class PhoneBackup {
       }
       const wasStopped = this.stopping;
       this.stopping = false;            // the finish is sent even after Stop
+      // Filing the batch happens in this answer for an administrator or a
+      // trusted family member, and moving hundreds of photographs onto a slow
+      // drive takes minutes: given the half minute a small answer gets, it
+      // was abandoned and sent again and again while the first still ran.
       const finished = await this.patiently((signal) => post('/api/phone-backup/finish',
-        { device_id: this.device }, signal));
+        { device_id: this.device }, signal), FINISH_MS);
       this.stopping = wasStopped;
       if (!finished) return;
       this.showSummary(finished.summary);
@@ -574,11 +580,11 @@ export class PhoneBackup {
    * Try again after a dropped connection, for as long as the page is open
    * and nobody pressed Stop. A refusal from the server is not retried.
    */
-  async patiently(attempt) {
+  async patiently(attempt, ms = 0) {
     for (;;) {
       if (this.stopping) return null;
       try {
-        const answer = await this.timed(pieceTimeout(0, 0, this.drops), attempt);
+        const answer = await this.timed(Math.max(ms, pieceTimeout(0, 0, this.drops)), attempt);
         this.wait = 1000;
         return answer;
       } catch (err) {

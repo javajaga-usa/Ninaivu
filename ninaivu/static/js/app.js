@@ -239,6 +239,9 @@ async function init() {
   // wall keeps showing a gallery it can no longer load. Send it back to the
   // picker rather than leaving somebody tapping a dead screen.
   onUnauthorized(async () => {
+    // Signed out from elsewhere (or disabled): what this device kept for
+    // them, the albums kept for offline included, goes with the session.
+    forgetCachedShell();
     let authState = {};
     try {
       authState = await accountsApi.state();
@@ -924,13 +927,14 @@ async function refreshStatus(asked = null) {
     return;
   }
   showAwayLibraries(state.status);
-  // Whose albums this device may keep for offline, if the household allows it.
-  tellViewer(state.user, state.status?.moments?.offline_albums !== false);
   const { stats, ai, user } = state.status;
   if (user) {
     state.user = user;
     renderIdentity();
   }
+  // Whose albums this device may keep for offline, if the household allows
+  // it: told after the status's own answer of who is signed in.
+  tellViewer(state.user, state.status?.moments?.offline_albums !== false);
 
   renderLibraryName();
   renderCounts(stats);

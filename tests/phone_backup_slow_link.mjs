@@ -24,7 +24,7 @@ globalThis.document = {
   visibilityState: 'visible',
 };
 
-const { PhoneBackup, nextPiece, pieceTimeout, dropped, PIECE_MIN, PIECE_MAX } = await import(
+const { PhoneBackup, nextPiece, pieceTimeout, dropped, PIECE_MIN, PIECE_MAX, FINISH_MS } = await import(
   new URL('../ninaivu/static/js/phone-backup.js', import.meta.url));
 
 // -- the sizes ------------------------------------------------------------------
@@ -124,3 +124,14 @@ assert.deepEqual(JSON.parse(kept.get('ninaivu.backup.unfinished')).names, ['c.jp
 backup.showUnfinished();
 assert.match(nodes.get('#backup-status').textContent, /One file did not finish last time/);
 console.log('PASS: Stop leaves the unfinished file named for next time');
+
+// The end of a batch is where the server files it, which can take minutes:
+// it gets far longer than a small answer before it is given up on.
+const slow = new PhoneBackup({ toast: () => {} });
+const waits = [];
+slow.timed = (ms, attempt) => { waits.push([ms, attempt.toString()]); return PhoneBackup.prototype.timed.call(slow, 200, attempt); };
+await slow.run([file('d.jpg', 1000)]);
+const finish = waits.find(([, text]) => text.includes('/finish'));
+assert.ok(finish && finish[0] >= FINISH_MS, 'the finish is given minutes, not half a minute');
+assert.ok(waits.filter(([, text]) => text.includes('/check')).every(([ms]) => ms < FINISH_MS));
+console.log('PASS: filing the batch is not abandoned after half a minute');
