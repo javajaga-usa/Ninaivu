@@ -447,11 +447,22 @@ With both of the last two, **Revive old photo** restores the faces and then
 colourises an old print in one tap.
 
 With the Creative Studio extension on ([AI](ai.md)), Sudar also does
-generative edits — including a new **hairstyle**, which is drawn rather than
-adjusted, from ten ideas under the prompt, and **Add hair**, which paints
-where hair should be and has the AI server draw it — object removal and
-upscaling, on this computer or on an AI server at home. Nothing leaves the
-house.
+generative edits — including **Add hair**, which paints where hair should be
+and has the AI server draw it — object removal and upscaling, on this
+computer or on an AI server at home. Nothing leaves the house.
+
+**Hairstyles**, on the Magic tools, tries a new hairstyle on one person:
+short crop, bob, long straight or wavy, curly, a braid, two plaits, a jasmine
+plait, a bun, a fringe, an oiled side parting or a neat beard. Choose one and
+Ninaivu marks that person's hair, and the room the style needs, in pink, and
+their face, any bindi or sindoor, and everybody else in green. With more than
+one person in the photograph, **Whose hair** picks who. Paint more or less of
+the pink if you like, then **Draw it**: only the pink is sent to the AI server
+at home, and when the drawing comes back the green is put back exactly as it
+was in the photograph, so the face cannot change. **Draw it** again for another
+try, then **Apply to photo** and save a copy as with any edit. It needs the
+Creative Studio extension with a *Paint and ask* workflow on the AI server; until
+then the card says so.
 
 **The Creative Studio** (not the extension of that name) makes things from
 photographs, in the browser. It opens from **Create → Creative Studio** in the
