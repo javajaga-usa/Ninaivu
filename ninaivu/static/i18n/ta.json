@@ -5619,5 +5619,10 @@
   "{name}: {free} free of {total}, {change} more than a week ago.": "{name}: {total} இல் {free} காலி, ஒரு வாரம் முன்பை விட {change} அதிகம்.",
   "{name}: {free} free of {total}.": "{name}: {total} இல் {free} காலி.",
   "{title}: {count}.": "{title}: {count}.",
-  "The weekly health digest is not running here.": "வாராந்திர நல அறிக்கை இங்கே இயங்கவில்லை."
+  "The weekly health digest is not running here.": "வாராந்திர நல அறிக்கை இங்கே இயங்கவில்லை.",
+  "Client ID": "கிளையண்ட் ஐடி",
+  "Drive folder name": "Drive கோப்புறையின் பெயர்",
+  "Hour": "மணி",
+  "AI server address": "AI சேவையக முகவரி",
+  "Workflow JSON": "பணிப்பாய்வு JSON"
 }

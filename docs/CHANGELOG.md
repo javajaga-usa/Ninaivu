@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- **Screen readers name every field.** An axe-core check of the family app and fifteen console pages found the gallery's Sort menu with no name, the search box not saying it opens a list of suggestions, the viewer's filmstrip reachable only with a mouse, and twenty console fields (Google client ID and secret, passphrases, mail settings, the AI server's address, folder paths and more) named only by a placeholder that goes silent once something is typed. Each now has a name in English and Tamil. The console no longer stops a phone from zooming, and its fields are 16px on a touch screen so Safari does not jump in when one is tapped. `tests/test_accessible_names.py` fails on a new field added without a name.
+- **A sweep for hidden and explicit items.** A new test asks every family-app address that takes an item number for a photograph an administrator hid or marked explicit, as a family member, and fails if any answers. All 38 refused; the one address allowed to answer (whether you sent an item for screening) says only that.
+
 ## 4.3.1 — 14 November 2026
 
 - **Desktop startup and Linux integration.** Startup failures show a visible error dialog, right-clicking the Linux tray icon offers Quit, and all three desktop shortcuts launch the installed application directly. Fresh-install checks use an isolated user environment and validate the packaged behavior.
