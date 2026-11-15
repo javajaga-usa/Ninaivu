@@ -1098,6 +1098,13 @@ class Config:
     #: Wiped on sign-out and when somebody else signs in on the device. See
     #: ninaivu/static/js/offline-albums.js and static/sw.js.
     offline_albums: bool = setting(True, env="NINAIVU_OFFLINE_ALBUMS")
+    #: Event albums: trips (several days away from home, from the occasions'
+    #: places) and festival years (as the festival albums find them) offered
+    #: to an administrator in the family app's sidebar, who makes each one an
+    #: album or turns it down. Nothing is shown to anybody else until it is
+    #: made an album. Dates and places only; nothing is sent anywhere. See
+    #: ninaivu/features/event_albums/media.py.
+    event_albums: bool = setting(True, env="NINAIVU_EVENT_ALBUMS")
     #: Letters read aloud: an old letter, a recipe card or a note in a
     #: grandparent's hand, photographed, is given its words, written out
     #: under it (read by the text reader, or typed and corrected by the
