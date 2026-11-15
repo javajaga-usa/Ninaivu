@@ -36,6 +36,13 @@ yet is treated the same way.
 Nothing in the library or at any destination is written, moved or removed.
 The result is kept in ``backup-drill.json`` in the state folder, the last
 :data:`KEEP` of them, and shown on the Health page.
+
+It also runs by itself, once every ``backup_drill_days`` (seven by default;
+0 is never), when nobody is using the library and no drill has run for that
+long: a backup proved once, the day it was set up, says little about it a
+year later. The latest result is in the week's health digest
+(server/health_week.py), and a scheduled drill that fails is sent to the
+household's notification address, in counts and copy names only.
 """
 
 from __future__ import annotations
@@ -81,6 +88,12 @@ ORDER = ("mirror", "offsite", "drive", "secondary", "index")
 #: A modified time this close is the same modified time (FAT and exFAT keep
 #: two seconds).
 SAME_TIME = 2.0
+
+#: Seconds between two looks at whether a scheduled drill is owed.
+LOOK_EVERY = 3600.0
+
+#: The notification event a failed scheduled drill is sent as (utils/notify.py).
+EVENT = "backup_drill"
 
 
 def fingerprint_of(conn: sqlite3.Connection, root: str, rel: str) -> dict[str, Any] | None:
@@ -173,13 +186,19 @@ def overall(copies: list[dict[str, Any]]) -> str:
 
 
 class BackupDrill:
-    """One drill at a time, on a thread of its own, started from the console."""
+    """One drill at a time, on a thread of its own, started from the console
+    or, once a week, by the schedule."""
+
+    #: The supervisor job that looks for a scheduled drill.
+    JOB = "ninaivu-backup-drill-weekly"
 
     def __init__(self, cfg, *, connect_db: Callable[[], sqlite3.Connection],
                  mirror=None, offsite=None, cloud=None, courier=None, backups=None,
                  restore_tests=None, sample: int = SAMPLE,
                  pick: Callable[[list, int], list] | None = None,
-                 clock: Callable[[], float] = time.time) -> None:
+                 clock: Callable[[], float] = time.time,
+                 hold: Callable[[], str | None] | None = None,
+                 notify: Callable[[str, str, str], None] | None = None) -> None:
         self.cfg = cfg
         self._connect = connect_db
         self.mirror = mirror
@@ -196,6 +215,10 @@ class BackupDrill:
         self._stop = threading.Event()
         self._job = None
         self._progress: dict[str, Any] = {}
+        self._hold = hold
+        self._notify = notify
+        #: The supervisor its schedule runs on; Ninaivu gives it its own.
+        self.supervisor = None
 
     # -- where things go ------------------------------------------------------
 
@@ -224,22 +247,92 @@ class BackupDrill:
         return True
 
     def stop(self, timeout: float = 5.0) -> None:
-        self._stop.set()
-        job = self._job
-        if job is not None:
-            job.stop()
+        self._interrupt()
+        if self.supervisor is not None:
+            from ..server.supervisor import supervisor_of          # noqa: PLC0415
+            supervisor_of(self).stop_job(self.JOB, timeout)
         worker = self._worker
         if worker is not None and worker.is_alive():
             worker.join(timeout)
 
+    def _interrupt(self) -> None:
+        self._stop.set()
+        job = self._job
+        if job is not None:
+            job.stop()
+
+    # -- the schedule -----------------------------------------------------------
+
+    @property
+    def every_days(self) -> int:
+        """Days between scheduled drills; 0 is never."""
+        try:
+            return max(0, int(getattr(self.cfg, "backup_drill_days", 7) or 0))
+        except (TypeError, ValueError):
+            return 0
+
+    def keep(self) -> None:
+        """Look once an hour for a scheduled drill, on the supervisor
+        (server/supervisor.py). It only reads, from the copies and over the
+        network, so it claims the network and nothing the scan stands down for."""
+        from ..server.supervisor import NETWORK, Job, every, supervisor_of  # noqa: PLC0415
+        supervisor_of(self).add(Job(
+            self.JOB, self._look, every(lambda: LOOK_EVERY, first=600.0), claims={NETWORK},
+            log=log, failure="the scheduled backup drill failed to run",
+            interrupt=self._interrupt, progress=lambda: {"drilling": self.running}))
+
+    def next_due(self) -> float | None:
+        """When the next scheduled drill is owed, or None when it is off."""
+        days = self.every_days
+        if not days:
+            return None
+        last = self.last()
+        if not last:
+            return self._clock()
+        return float(last.get("started_at") or 0) + days * 86400
+
+    def due(self) -> bool:
+        """Is a scheduled drill owed, and is now a fair time for it?"""
+        if self.running:
+            return False
+        when = self.next_due()
+        if when is None or self._clock() < when:
+            return False
+        if self._hold is not None and self._hold():
+            return False                  # the household comes first
+        return True
+
+    def _look(self) -> None:
+        if not self.due():
+            return
+        self._stop.clear()
+        result = self.run(scheduled=True)
+        self._tell(result)
+
+    def _tell(self, result: dict[str, Any]) -> None:
+        """A scheduled drill that failed, to the notification address: the
+        copies' names and the counts, never a path (utils/notify.py)."""
+        if result.get("status") != FAILED or self._notify is None:
+            return
+        bad = [c for c in result.get("copies", []) if c.get("status") == FAILED]
+        files = sum(int(c.get("checked", 0)) - int(c.get("passed", 0)) for c in bad)
+        detail = (f"Copies that did not bring their photographs back intact: "
+                  f"{', '.join(c['name'] for c in bad)}. Files that failed: {files}. "
+                  "The console's Health page says which.")
+        try:
+            self._notify(EVENT, "The weekly backup drill failed", detail)
+        except Exception:                                           # noqa: BLE001
+            log.debug("could not report the failed backup drill", exc_info=True)
+
     # -- the drill ------------------------------------------------------------
 
-    def run(self) -> dict[str, Any]:
+    def run(self, *, scheduled: bool = False) -> dict[str, Any]:
         if not self._running.acquire(blocking=False):
             return {"status": NOTHING, "copies": [], "busy": True}
         started = self._clock()
         try:
             result = self._run(started)
+            result["scheduled"] = bool(scheduled)
             # Kept before the lock is let go, so whoever sees the drill
             # finished also sees what it came to.
             self._keep(result)
@@ -450,4 +543,5 @@ class BackupDrill:
 
     def status(self) -> dict[str, Any]:
         return {"running": self.running, "progress": dict(self._progress) if self.running else None,
-                "sample": self.sample, "last": self.last(), "history": self.history()[1:]}
+                "sample": self.sample, "last": self.last(), "history": self.history()[1:],
+                "every_days": self.every_days, "next_due": self.next_due()}

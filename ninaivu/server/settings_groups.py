@@ -53,7 +53,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "cloud_window_start", "cloud_window_end", "cloud_parallel", "cloud_full_speed",
         "cloud_encrypt", "cloud_hidden", "cloud_kinds", "cloud_max_mb", "cloud_approval_mb",
         "cloud_skip_folders", "cloud_skip_words", "restore_test_days", "restore_test_files",
-        "restore_test_max_mb", "cloud_index_every_hours",
+        "restore_test_max_mb", "backup_drill_days", "cloud_index_every_hours",
         "mirror_enabled", "mirror_dir", "mirror_every_hours", "mirror_verify_days",
         "offsite_enabled", "offsite_kind", "offsite_folder", "offsite_endpoint",
         "offsite_region", "offsite_bucket", "offsite_prefix", "offsite_access_key",
@@ -219,6 +219,7 @@ RANGES: dict[str, tuple[float | None, float | None]] = {
     "notify_smtp_port": (1, 65535), "digest_weekday": (0, 6), "digest_hour": (0, 23),
     "ocr_max_chars": (0, 100000), "duplicate_distance": (0, 64),
     "occasion_min_items": (1, 1000), "restore_test_files": (0, 1000),
+    "backup_drill_days": (0, 90),
     # The bound Mugil's own page keeps (cloud_api.py); unbounded here, 500
     # meant 500 upload threads.
     "cloud_parallel": (1, 6),

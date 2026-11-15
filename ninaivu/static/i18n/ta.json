@@ -5657,5 +5657,17 @@
   "None of those photographs are in the library any more.": "அந்தப் புகைப்படங்கள் எதுவும் இப்போது நூலகத்தில் இல்லை.",
   "Only administrators see these until one is made an album.": "ஒன்று ஆல்பமாக்கப்படும் வரை இவற்றை நிர்வாகிகள் மட்டுமே பார்ப்பார்கள்.",
   "Suggested albums": "பரிந்துரைக்கப்பட்ட ஆல்பங்கள்",
-  "That suggestion has already been answered.": "அந்தப் பரிந்துரைக்கு ஏற்கனவே பதில் அளிக்கப்பட்டுவிட்டது."
+  "That suggestion has already been answered.": "அந்தப் பரிந்துரைக்கு ஏற்கனவே பதில் அளிக்கப்பட்டுவிட்டது.",
+  "No backup drill has run yet. It runs by itself once every {days} days, or from the Health page.": "இதுவரை காப்புப்பிரதிப் பயிற்சி எதுவும் நடக்கவில்லை. இது {days} நாட்களுக்கு ஒருமுறை தானாக நடக்கும், அல்லது நலம் பக்கத்திலிருந்து தொடங்கலாம்.",
+  "No backup drill has run yet, and it is not scheduled.": "இதுவரை காப்புப்பிரதிப் பயிற்சி எதுவும் நடக்கவில்லை, அது திட்டமிடப்படவும் இல்லை.",
+  "The backup drill on {when} failed: {failed} of {checked} photographs did not come back intact.": "{when} அன்று நடந்த காப்புப்பிரதிப் பயிற்சி தோல்வியடைந்தது: {checked} புகைப்படங்களில் {failed} முழுமையாகத் திரும்பவில்லை.",
+  "The backup drill on {when} passed: {passed} of {checked} photographs came back intact.": "{when} அன்று நடந்த காப்புப்பிரதிப் பயிற்சி வெற்றி: {checked} புகைப்படங்களில் {passed} முழுமையாகத் திரும்பின.",
+  "The backup drill on {when} passed.": "{when} அன்று நடந்த காப்புப்பிரதிப் பயிற்சி வெற்றி.",
+  "The backup drill on {when} had nothing to check: no copy is set up yet.": "{when} அன்று நடந்த காப்புப்பிரதிப் பயிற்சிக்குச் சோதிக்க எதுவும் இல்லை: இன்னும் எந்த நகலும் அமைக்கப்படவில்லை.",
+  "The backup drill on {when} could not check every copy. Nothing was found damaged.": "{when} அன்று நடந்த காப்புப்பிரதிப் பயிற்சியால் எல்லா நகல்களையும் சோதிக்க முடியவில்லை. சேதமடைந்தது எதுவும் கண்டுபிடிக்கப்படவில்லை.",
+  "No drill for {days} days: the computer may have been off or busy.": "{days} நாட்களாகப் பயிற்சி இல்லை: கணினி அணைக்கப்பட்டிருக்கலாம் அல்லது வேலையில் இருந்திருக்கலாம்.",
+  "The weekly backup drill found a copy that did not bring its photographs back intact": "வாராந்திரக் காப்புப்பிரதிப் பயிற்சி, தன் புகைப்படங்களை முழுமையாகத் திருப்பித் தராத ஒரு நகலைக் கண்டது",
+  "It does not run by itself. Set how often under Advanced settings → Backup.": "இது தானாக நடக்காது. எவ்வளவு அடிக்கடி என்பதை மேம்பட்ட அமைப்புகள் → காப்புப்பிரதி என்பதில் அமைக்கவும்.",
+  "Runs by itself every {days} days when nobody is using the library. Next: {when}.": "யாரும் நூலகத்தைப் பயன்படுத்தாதபோது {days} நாட்களுக்கு ஒருமுறை தானாக நடக்கும். அடுத்தது: {when}.",
+  "Runs by itself every {days} days when nobody is using the library. The next one is due now.": "யாரும் நூலகத்தைப் பயன்படுத்தாதபோது {days} நாட்களுக்கு ஒருமுறை தானாக நடக்கும். அடுத்தது இப்போது நடக்க வேண்டியது."
 }
