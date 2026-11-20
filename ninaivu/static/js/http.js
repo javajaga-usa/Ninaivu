@@ -50,6 +50,14 @@ export function setAnonymousViewer(isAnonymous) {
   viewerIsAnonymous = !!isAnonymous;
 }
 
+const unreachableHandlers = new Set();
+
+/** Called when a console request gets no answer from the server at all. */
+export function onUnreachable(handler) {
+  unreachableHandlers.add(handler);
+  return () => unreachableHandlers.delete(handler);
+}
+
 export function onUnauthorized(handler) {
   unauthorizedHandlers.add(handler);
   return () => unauthorizedHandlers.delete(handler);
@@ -171,14 +179,24 @@ export function homeSend(method, url, { body, signal } = {}) {
  * exactly what the console has always sent.
  */
 export async function consoleJson(url, options = {}) {
-  const response = await fetch(url, {
-    headers: {
-      Accept: 'application/json',
-      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
-    },
-    ...options,
-    body: options.body ? JSON.stringify(options.body) : undefined,
-  });
+  let response;
+  try {
+    response = await fetch(url, {
+      headers: {
+        Accept: 'application/json',
+        ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+      },
+      ...options,
+      body: options.body ? JSON.stringify(options.body) : undefined,
+    });
+  } catch (error) {
+    // No answer at all: the server is stopped or unreachable. Said to the
+    // console (admin.js), which shows its offline notice and waits for it.
+    for (const handler of unreachableHandlers) {
+      try { handler(); } catch { /* a broken listener must not hide this error */ }
+    }
+    throw error;
+  }
   const text = await response.text();
   const data = text ? JSON.parse(text) : null;
   if (!response.ok) {

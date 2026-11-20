@@ -1816,6 +1816,14 @@ button.job-row:focus-visible { outline: 2px solid var(--accent); outline-offset:
   box-shadow: 0 0 0 3px var(--accent-weak);
 }
 .gate-submit { height: 40px; margin-top: 4px; }
+/* Offline line on the console sign-in card (admin.js showConsoleOfflineNotice). */
+.gate-offline {
+  font-size: 13px; color: var(--muted, #5b6470); margin: 4px 0 12px;
+  display: flex; align-items: center; gap: 8px;
+}
+.gate-offline::before {
+  content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--danger); flex: none;
+}
 .gate-error {
   font-size: 12.5px; color: var(--danger);
   background: color-mix(in srgb, var(--danger) 10%, transparent);
@@ -3794,3 +3802,11 @@ input[type=range], input[type=checkbox], input[type=radio] { accent-color: var(-
 .offline-photo-prev { left: 8px; }
 .offline-photo-next { right: 8px; }
 .offline-photo-close { position: absolute; top: max(12px, env(safe-area-inset-top)); right: 12px; color: #fff; }
+
+/* While the server is away, nothing but the offline message is shown: the
+   family app holds no data it can act on (app.js setServerOffline). */
+body.is-offline .topbar,
+body.is-offline .sidebar,
+body.is-offline .content > :not(#offline-banner):not(#empty) {
+  display: none !important;
+}

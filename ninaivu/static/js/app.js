@@ -519,11 +519,13 @@ function setServerOffline() {
   // thing they need to read.
   bootDone();
   serverIsOffline = true;
+  // Only the offline message is shown while the server is away (style.css).
+  document.body.classList.add('is-offline');
 
   const banner = $('#offline-banner');
   if (banner) banner.hidden = false;
   const bannerText = $('#offline-banner-text');
-  if (bannerText) bannerText.textContent = i18n.t('Can’t reach Ninaivu at {host}. Reconnecting automatically…', { host: location.host });
+  if (bannerText) bannerText.textContent = i18n.t('Ninaivu is offline at {host}. Reconnecting automatically…', { host: location.host });
 
   if (!grid?.layout?.cells?.length) {
     const empty = $('#empty');
@@ -537,7 +539,7 @@ function setServerOffline() {
     // Worded as what is known, not as a diagnosis: a stopped server and a
     // certificate this browser does not trust fail identically from here, and
     // the offline copy of this page hides the browser's own certificate warning.
-    if (title) title.textContent = i18n.t('Can’t reach Ninaivu');
+    if (title) title.textContent = i18n.t('Ninaivu is offline');
     const text = $('#empty-text');
     // On the tailnet address the likeliest cause is neither: Tailscale is off on
     // this device, and a certificate is not the answer there (it is a public one).
@@ -608,6 +610,7 @@ async function checkConnection(manual = false) {
       reconnectTimer = null;
     }
     serverIsOffline = false;
+    document.body.classList.remove('is-offline');
     closeSavedAlbums();
 
     const banner = $('#offline-banner');

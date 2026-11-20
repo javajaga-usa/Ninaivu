@@ -13,6 +13,7 @@ import {
   admin, consoleJson as json, onUnauthorized, sessionRestored, subscribeProgress, thumbUrl,
   SCAN_COUNTS, timeLeft,
 } from './api.js';
+import { onUnreachable } from './http.js';
 import { renderActivity, subscribeActivity } from './activity.js';
 import { ArchivePanel } from './archive.js';
 import { enterPressesTheButton } from './enter-key.js';
@@ -138,6 +139,32 @@ function dropStaleWorkers() {
     .catch(() => {});
 }
 
+/* The server did not answer. The sign-in card is shown in place of the page,
+   so nothing stale stays on screen, with an offline line on it. A poll then
+   waits for the server and reloads the console once it answers, which starts
+   again cleanly. Only one poll runs, however many requests fail at once. */
+let consoleOfflinePoll = null;
+function onConsoleUnreachable() {
+  if (consoleOfflinePoll || !gate) return;
+  gate.show({ face: 'admin' }, 'login');
+  const card = $('#gate .gate-card');
+  if (card) {
+    const note = document.createElement('p');
+    note.className = 'gate-offline';
+    note.setAttribute('role', 'status');
+    note.textContent = i18n.t('Ninaivu is offline. Reconnecting automatically…');
+    card.insertBefore(note, card.querySelector('.gate-languages'));
+  }
+  consoleOfflinePoll = setInterval(async () => {
+    try {
+      await accountsApi.state();
+      clearInterval(consoleOfflinePoll);
+      consoleOfflinePoll = null;
+      location.reload();
+    } catch { /* still away; keep waiting */ }
+  }, 3000);
+}
+
 function setupAdminIOSInstallPrompt() {
   const isIPad = /iPad/.test(navigator.userAgent) ||
     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -201,6 +228,7 @@ async function init() {
     toast,
     onSignedIn: (user) => { sessionRestored(); start(user); },
   });
+  onUnreachable(onConsoleUnreachable);
   // Covers the console after fifteen minutes with nobody there; nothing
   // running stops. See static/js/lock.js.
   screenLock = new ScreenLock({ onUnlocked: () => refresh() });
@@ -243,19 +271,7 @@ async function init() {
     state.auth = auth;
     renderAppLinks(auth);
   } catch {
-    toast(i18n.t('Cannot reach the server. Retrying automatically…'), true);
-    const retryInterval = setInterval(async () => {
-      try {
-        const a = await accountsApi.state();
-        clearInterval(retryInterval);
-        state.auth = a;
-        renderAppLinks(a);
-        toast(i18n.t('Connected to Ninaivu server.'));
-        if (a.setup_required) return gate.show(a, 'setup');
-        if (!a.signed_in || a.user.role !== 'admin') return gate.show(a, 'login');
-        start(a.user);
-      } catch { /* keep retrying */ }
-    }, 3000);
+    onConsoleUnreachable();
     return;
   }
 

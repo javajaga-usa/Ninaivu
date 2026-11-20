@@ -324,7 +324,6 @@
   "Awaiting admin approval": "Awaiting admin approval",
   "Best matches": "Best matches",
   "Cannot reach the server.": "Cannot reach the server.",
-  "Can’t reach Ninaivu": "Can’t reach Ninaivu",
   "Check what the browser sees: a security warning means the certificate needs installing on this device; a “can’t reach this page” error means the server needs starting.": "Check what the browser sees: a security warning means the certificate needs installing on this device; a “can’t reach this page” error means the server needs starting.",
   "Checking who you are": "Checking who you are",
   "Checking…": "Checking…",
@@ -1089,7 +1088,6 @@
   "Install Ninaivu Admin on your iPhone": "Install Ninaivu Admin on your iPhone",
   "Tap {share} Share below, then select <strong>Add to Home Screen</strong> [+]": "Tap {share} Share below, then select <strong>Add to Home Screen</strong> [+]",
   "Your session has ended. Please sign in again.": "Your session has ended. Please sign in again.",
-  "Cannot reach the server. Retrying automatically…": "Cannot reach the server. Retrying automatically…",
   "Copying…": "Copying…",
   "A copy of the index has been kept.": "A copy of the index has been kept.",
   "The newest backup restores cleanly.": "The newest backup restores cleanly.",
@@ -3413,7 +3411,7 @@
   "Check that the Ninaivu computer is on and Ninaivu is running, and that this device is on the same Wi-Fi.": "Check that the Ninaivu computer is on and Ninaivu is running, and that this device is on the same Wi-Fi.",
   "Jump to": "Jump to",
   "Jump to a month": "Jump to a month",
-  "Can’t reach Ninaivu at {host}. Reconnecting automatically…": "Can’t reach Ninaivu at {host}. Reconnecting automatically…",
+  "Ninaivu is offline at {host}. Reconnecting automatically…": "Ninaivu is offline at {host}. Reconnecting automatically…",
   "Theme: {theme}": "Theme: {theme}",
   "Dark": "Dark",
   "{items} → {who}.": "{items} → {who}.",
@@ -5378,5 +5376,7 @@
   "Started.": "Started.",
   "Using the archive root “{destination}”. {started}": "Using the archive root “{destination}”. {started}",
   "“{name}” was added to your library. Ninaivu is indexing it now.": "“{name}” was added to your library. Ninaivu is indexing it now.",
-  "{count} failed files requeued. Press Start to retry them.": "{count} failed files requeued. Press Start to retry them."
+  "{count} failed files requeued. Press Start to retry them.": "{count} failed files requeued. Press Start to retry them.",
+  "Ninaivu is offline. Reconnecting automatically…": "Ninaivu is offline. Reconnecting automatically…",
+  "Ninaivu is offline": "Ninaivu is offline"
 }
