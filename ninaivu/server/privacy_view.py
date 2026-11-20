@@ -59,16 +59,13 @@ def _folders_sql(viewer: visibility.Viewer) -> tuple[str, list[Any]]:
     return " AND ".join(parts), params
 
 
-def report(conn: sqlite3.Connection, viewer: visibility.Viewer,
-           user: auth.User | None = None) -> dict[str, Any]:
-    """One person's counts (see the module's note) and a sample of what they see."""
+def _count(conn: sqlite3.Connection, viewer: visibility.Viewer, seen_sql: str,
+           seen_params: list[Any], mine_sql: str, mine_params: list[Any]) -> dict[str, Any]:
     from ..storage import db                                    # noqa: PLC0415
     base = "a.trashed = 0 AND a.live_clip = 0 AND a.raw_twin = 0"
     total = int(conn.execute(f"SELECT COUNT(*) FROM assets a WHERE {base}").fetchone()[0])
-    seen_sql, seen_params = viewer.sql("a")
     sees = int(conn.execute(f"SELECT COUNT(*) FROM assets a WHERE {base} AND {seen_sql}",
                             seen_params).fetchone()[0])
-    mine_sql, mine_params = viewer.sql("a", mine="only")
     own = int(conn.execute(f"SELECT COUNT(*) FROM assets a WHERE {base} AND {mine_sql}",
                            mine_params).fetchone()[0]) if viewer.viewer_id else 0
 
@@ -102,6 +99,36 @@ def report(conn: sqlite3.Connection, viewer: visibility.Viewer,
         f"SELECT a.id FROM assets a WHERE {base} AND {seen_sql} AND a.thumb IS NOT NULL "
         f"ORDER BY COALESCE(a.captured_at, a.mtime) DESC LIMIT {SAMPLE}", seen_params)]
 
+
+    hidden = explicit = 0
+    if viewer.is_admin:
+        hidden, explicit = conn.execute(
+            f"SELECT SUM(CASE WHEN a.visibility >= 2 THEN 1 ELSE 0 END), "
+            f"SUM(CASE WHEN a.nsfw = 1 THEN 1 ELSE 0 END) FROM assets a WHERE {base}").fetchone()
+    return {"total": total, "sees": sees, "own": own, "withheld": withheld, "sample": sample,
+            "hidden": int(hidden or 0), "explicit": int(explicit or 0)}
+
+
+def report(conn: sqlite3.Connection, viewer: visibility.Viewer,
+           user: auth.User | None = None) -> dict[str, Any]:
+    """One person's counts (see the module's note) and a sample of what they see."""
+    from ..storage import db                                    # noqa: PLC0415
+    seen_sql, seen_params = viewer.sql("a")
+    mine_sql, mine_params = viewer.sql("a", mine="only")
+    # Counted over the whole library (several full passes: 0.6 s a person at
+    # 200,000 items), so kept until the library changes. What the answer
+    # depends on besides the rows is in the key: the gate's own SQL and
+    # parameters, which carry the folders, the date limit and the ceiling.
+    key = ("privacy_report", seen_sql, tuple(seen_params), mine_sql, tuple(mine_params),
+           viewer.viewer_id, bool(viewer.is_admin), tuple(map(str, viewer.roots)),
+           viewer.scope, _dates_sql(viewer), tuple(viewer.admin_only_kinds),
+           viewer.max_visibility)
+    counted = db.cached_aggregate(
+        conn, key, lambda: _count(conn, viewer, seen_sql, seen_params, mine_sql, mine_params),
+        max_age=300.0)
+    total, sees, own = counted["total"], counted["sees"], counted["own"]
+    withheld, sample = counted["withheld"], counted["sample"]
+
     policy = viewer.policy
     out: dict[str, Any] = {
         "role": viewer.role, "admin": viewer.is_admin,
@@ -113,11 +140,8 @@ def report(conn: sqlite3.Connection, viewer: visibility.Viewer,
         "sample": sample,
     }
     if viewer.is_admin:
-        hidden, explicit = conn.execute(
-            f"SELECT SUM(CASE WHEN a.visibility >= 2 THEN 1 ELSE 0 END), "
-            f"SUM(CASE WHEN a.nsfw = 1 THEN 1 ELSE 0 END) FROM assets a WHERE {base}").fetchone()
-        out["admin_sees_hidden"] = int(hidden or 0)
-        out["admin_sees_explicit"] = int(explicit or 0)
+        out["admin_sees_hidden"] = counted["hidden"]
+        out["admin_sees_explicit"] = counted["explicit"]
     if user is not None:
         public = user.public()
         out.update({k: public[k] for k in ("id", "name", "active", "avatar", "color",

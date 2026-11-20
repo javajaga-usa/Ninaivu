@@ -190,3 +190,20 @@ def test_a_new_name_is_used_and_an_existing_album_is_never_filled(home):
 def test_switched_off_it_is_not_there(home):
     home["cfg"].event_albums = False
     assert home["admin"].get("/api/event-albums").status_code == 404
+
+
+def test_a_festival_year_with_no_cover_photographs_still_lists(tmp_path):
+    """A festival year whose answer named no cover photographs took the whole
+    list down with a KeyError (a 500 on /api/event-albums)."""
+    import sqlite3
+    from ninaivu.features.event_albums import routes
+
+    conn = sqlite3.connect(":memory:")
+    conn.execute("CREATE TABLE assets (id INTEGER PRIMARY KEY, thumb TEXT, trashed INT, "
+                 "nsfw INT, sharpness REAL, occasion_id INT)")
+    conn.executemany("INSERT INTO assets VALUES (?, ?, 0, ?, ?, NULL)",
+                     [(1, "a", 0, 5.0), (2, "b", 0, 9.0), (3, "c", 1, 99.0),
+                      (4, None, 0, 99.0), (5, "e", 0, 1.0)])
+    festival = {"kind": "festival", "ids": [1, 2, 3, 4, 5], "cover_ids": []}
+    assert routes._covers(conn, festival) == [2, 1, 5]          # not the bin, not thumbless
+    assert routes._covers(conn, {"kind": "festival", "ids": []}) == []
