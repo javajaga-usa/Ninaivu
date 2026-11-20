@@ -1324,7 +1324,11 @@ export class ArchivePanel {
       : i18n.t('Storage unavailable');
     $('#ar-health-last').textContent = health.checked_at
       ? new Date(health.checked_at * 1000).toLocaleString(i18n.locale()) : i18n.t('Never');
-    $('#ar-health-message').textContent = health.message ||
+    // The server's sentence, in this language: with a number in it, it comes
+    // as its template and values too (archive/guardian.py).
+    const message = health.message_said ? i18n.fromServer(health.message_said)
+      : (health.message ? i18n.t(health.message) : '');
+    $('#ar-health-message').textContent = message ||
       i18n.t('A rotating daily sample catches missing, changed, or unreadable archive files.');
     $('#ar-health-run').disabled = Boolean(health.running || archiveRunning);
 
@@ -1333,12 +1337,12 @@ export class ArchivePanel {
       this.healthChangeId = change;
     } else if (change !== this.healthChangeId) {
       this.healthChangeId = change;
-      this.toast(i18n.t('Archive health changed: {message}', { message: health.message || words[state] || state }),
+      this.toast(i18n.t('Archive health changed: {message}', { message: message || words[state] || state }),
         state === 'critical');
       if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
         try {
           new Notification(i18n.t('Ninaivu — archive health changed'), {
-            body: health.message || words[state] || state,
+            body: message || words[state] || state,
             tag: 'ninaivu-archive-health',
           });
         } catch { /* advisory only */ }

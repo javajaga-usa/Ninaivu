@@ -63,6 +63,7 @@ from typing import Any, Callable
 
 from ..copies import ledger
 from ..utils.files import same_bytes, sha256_file, stays_inside
+from ..words import said
 from .tempfiles import create_new
 
 log = logging.getLogger(__name__)
@@ -255,7 +256,7 @@ class S3Target:
     def ready(self) -> str | None:
         if not (self.client.endpoint and self.client.bucket and self.client.access_key
                 and self.client.secret_key):
-            return "Fill in the service's address, the bucket and the key."
+            return said("Fill in the service's address, the bucket and the key.")
         return None
 
     def _key(self, name: str) -> str:
@@ -422,18 +423,17 @@ class Offsite:
     def problem(self) -> str | None:
         from . import keyring                               # noqa: PLC0415
         if keyring.load(self.cfg.state_dir) is None:
-            return ("Make the backup key first (Mugil: encrypt backups). The off-site copy "
-                    "is always encrypted, with that key.")
+            return said("Make the backup key first (Mugil: encrypt backups). The off-site copy is always encrypted, with that key.")
         target = self.target()
         if target is None:
-            return "Choose where the off-site copy goes."
+            return said("Choose where the off-site copy goes.")
         if isinstance(target, FolderTarget):
             chosen = Path(target.base).parent.resolve()
             for root in self.roots:
                 if chosen.is_relative_to(Path(root).resolve()):
-                    return "The off-site folder cannot be inside the library."
+                    return said("The off-site folder cannot be inside the library.")
             if chosen.is_relative_to(Path(self.cfg.state_dir).resolve()):
-                return "The off-site folder cannot be inside Ninaivu's own folder."
+                return said("The off-site folder cannot be inside Ninaivu's own folder.")
         problem = target.ready()
         if problem is None and isinstance(target, FolderTarget) and not target.base.is_dir():
             # A disk that is not mounted usually leaves its mount point behind,

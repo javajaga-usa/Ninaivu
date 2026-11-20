@@ -532,7 +532,11 @@ export function openAlbumModal(ids = []) {
   list.innerHTML = '';
   const albums = state.albums || [];
   if (albums.length === 0) {
-    list.innerHTML = '<div class="hint" style="padding:8px;">No existing albums yet.</div>';
+    const none = document.createElement('div');
+    none.className = 'hint';
+    none.style.padding = '8px';
+    none.textContent = i18n.t('No existing albums yet.');
+    list.replaceChildren(none);
   } else {
     for (const album of albums) {
       const row = document.createElement('button');

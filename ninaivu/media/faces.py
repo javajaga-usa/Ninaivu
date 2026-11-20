@@ -47,6 +47,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
 
+from ..words import Said, said
+
 log = logging.getLogger("ninaivu.faces")
 
 try:
@@ -338,7 +340,7 @@ class FaceEngine:
             self.unavailable_reason = support["reason"]
             return
         if np is None:
-            self.unavailable_reason = "numpy is not installed"
+            self.unavailable_reason = said("numpy is not installed")
             return
         if self.model == "arcface":
             self._load_arcface()
@@ -349,8 +351,8 @@ class FaceEngine:
         missing = [p.name for p in (detector_path, recognizer_path)
                    if not p.exists()]
         if missing:
-            self.unavailable_reason = (
-                "model files not downloaded yet: " + ", ".join(missing))
+            self.unavailable_reason = Said("The face model files are not downloaded yet: {files}",
+                                           files=", ".join(missing))
             self._waiting_for_files = True
             return
         self._waiting_for_files = False
@@ -371,8 +373,7 @@ class FaceEngine:
         import importlib.util                                 # noqa: PLC0415
 
         if importlib.util.find_spec("onnxruntime") is None:
-            self.unavailable_reason = ("ONNX Runtime is not installed (the console's Extras "
-                                       "page, or requirements/requirements-ai-local.txt)")
+            self.unavailable_reason = said("ONNX Runtime is not installed (the console's Extras page, or requirements/requirements-ai-local.txt)")
             return
         from . import faces_arcface                              # noqa: PLC0415
 
@@ -381,8 +382,9 @@ class FaceEngine:
         missing = [Path(spec["file"]).name for spec in files.values()
                    if not (directory / spec["file"]).exists()]
         if missing:
-            self.unavailable_reason = ("the ArcFace face models are not downloaded yet "
-                                       "(AI models page): " + ", ".join(missing))
+            self.unavailable_reason = Said(
+                "The ArcFace face models are not downloaded yet (AI models page): {files}",
+                files=", ".join(missing))
             self._waiting_for_files = True
             return
         self._waiting_for_files = False
@@ -422,6 +424,9 @@ class FaceEngine:
             "model": self.model_id,
             "choice": self.model,
             "reason": self.unavailable_reason,
+            # The same, as its template and values, for the console to translate.
+            "reason_said": (self.unavailable_reason.as_json()
+                            if isinstance(self.unavailable_reason, Said) else None),
             "opencv": _opencv_support(),
         }
 

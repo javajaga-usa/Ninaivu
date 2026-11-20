@@ -29,10 +29,10 @@ const asText = (value) => String(value ?? '');
 
 /** Plain English for where a rotation came from. */
 const ROTATION_WHY = {
-  exif: 'from the camera',
-  faces: 'worked out from the people in it',
-  ai: 'worked out from the picture',
-  manual: 'you set this',
+  exif: i18n.key('from the camera'),
+  faces: i18n.key('worked out from the people in it'),
+  ai: i18n.key('worked out from the picture'),
+  manual: i18n.key('you set this'),
 };
 
 function formatClock(seconds) {
@@ -41,6 +41,13 @@ function formatClock(seconds) {
   const m = Math.floor(s / 60);
   return `${m}:${String(s % 60).padStart(2, '0')}`;
 }
+
+/** What kind of file it is, in words (the index says picture/video/audio). */
+const KIND_WORDS = {
+  picture: i18n.key('Photo'),
+  video: i18n.key('Video'),
+  audio: i18n.key('Audio'),
+};
 
 /**
  * How much to trust the date beside a photograph.
@@ -1092,7 +1099,7 @@ export class Viewer extends EventTarget {
       // What the on-device AI engine sees in it (storage/descriptions.py),
       // in its own words: the sentence a search for it is matched against.
       item.description ? [i18n.t('Description'), item.description] : null,
-      [i18n.t('Type'), `${item.kind} · ${item.ext.toUpperCase()}`],
+      [i18n.t('Type'), `${i18n.t(KIND_WORDS[item.kind] || item.kind)} · ${item.ext.toUpperCase()}`],
       [i18n.t('Size'), item.size_h],
       item.raw ? ['RAW', `${item.raw.ext} · ${item.raw.size_h} · ${i18n.t('kept with this photo')}`] : null,
       item.live_src ? [i18n.t('Live Photo'), i18n.t('Hold the photo to play it')] : null,
@@ -1104,14 +1111,14 @@ export class Viewer extends EventTarget {
       item.exposure ? [i18n.t('Shutter'), item.exposure] : null,
       item.iso ? ['ISO', item.iso] : null,
       item.focal_length ? [i18n.t('Focal length'), `${item.focal_length} mm`] : null,
-      item.gps ? ['Location', `${item.gps[0].toFixed(4)}, ${item.gps[1].toFixed(4)}`] : null,
+      item.gps ? [i18n.t('Location'), `${item.gps[0].toFixed(4)}, ${item.gps[1].toFixed(4)}`] : null,
       item.duplicate ? [i18n.t('Duplicate'), i18n.t('Has near-identical copies')] : null,
       // Only when Ninaivu turned it, and only saying *who* decided. A
       // photograph the camera tagged correctly needs no explanation; one that
       // came out sideways needs somebody to be able to tell a bad guess from a
       // bad tag, which is the difference between correcting the photograph and
       // correcting Ninaivu.
-      item.rotation ? [i18n.t('Turned'), `${item.rotation}° · ${ROTATION_WHY[item.rotation_source]
+      item.rotation ? [i18n.t('Turned'), `${item.rotation}° · ${i18n.t(ROTATION_WHY[item.rotation_source] || '')
         || item.rotation_source}`] : null,
     ].filter(Boolean);
 
@@ -1125,7 +1132,7 @@ export class Viewer extends EventTarget {
       // enough to do it. So the link exists only where the household has
       // already accepted that trade by turning tiles on; otherwise the
       // location is what it says it is, and stays here.
-      if (label === 'Location' && document.body.dataset.mapTiles === '1') {
+      if (label === i18n.t('Location') && item.gps && document.body.dataset.mapTiles === '1') {
         const link = document.createElement('a');
         link.href = `https://www.openstreetmap.org/?mlat=${item.gps[0]}&mlon=${item.gps[1]}#map=15/${item.gps[0]}/${item.gps[1]}`;
         link.target = '_blank';
@@ -1155,7 +1162,11 @@ export class Viewer extends EventTarget {
     if (!this.item) return;
     this.similarStrip.hidden = false;
     this.toggleInfo(true);
-    this.similarRow.innerHTML = '<span style="color:var(--text-3);font-size:12px">Searching…</span>';
+    this.similarRow.innerHTML = '';
+    const searching = document.createElement('span');
+    searching.style.cssText = 'color:var(--text-3);font-size:12px';
+    searching.textContent = i18n.t('Searching…');
+    this.similarRow.appendChild(searching);
     try {
       const { items, reason } = await api.similar(this.item.id);
       this.similarRow.innerHTML = '';
@@ -1200,7 +1211,7 @@ export class Viewer extends EventTarget {
     } catch (error) {
       item.favorite = previous;
       if (this.item === item) this.root.querySelector('#v-fav').classList.toggle('on', !!previous);
-      this.toast?.(`Could not update favorite: ${error.message}`, true);
+      this.toast?.(i18n.t('Could not update favorite: {reason}', { reason: error.message }), true);
     } finally {
       this.favoritePending = false;
     }

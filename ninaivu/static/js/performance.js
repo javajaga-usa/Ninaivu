@@ -157,8 +157,10 @@ export class PerformancePanel {
       head.append(el('span', `pf-level ${item.level}`, word(LEVEL_WORDS, item.level)),
         el('strong', 'pf-title', i18n.t(item.title)));
       // The server marks its advice with said(); one with numbers in it comes
-      // as a template and its values, to be translated before filling in.
-      const detail = item.detail_key ? i18n.t(item.detail_key, item.detail_params) : i18n.t(item.detail);
+      // as a template and its values (a value may be a phrase of its own),
+      // to be translated before filling in.
+      const detail = item.detail_key
+        ? i18n.fromServer({ said: item.detail_key, params: item.detail_params }) : i18n.t(item.detail);
       row.append(head, el('p', 'pf-detail', detail));
       if (item.action) row.append(this.actionButton(item.action));
       list.append(row);
