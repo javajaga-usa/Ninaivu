@@ -115,3 +115,25 @@ def test_the_report_matches_the_gate_one_by_one(conn, people, app):
             "SELECT * FROM assets WHERE trashed = 0 AND live_clip = 0 AND raw_twin = 0")]
         allowed = sum(1 for r in rows if viewer.may_see(r, own=False))
         assert privacy_view.report(conn, viewer, user)["sees"] == allowed, user.role
+
+
+def test_a_kept_count_follows_every_change_the_household_makes(as_admin, conn):
+    """The counts are kept between asks (0.6 s a person on 200,000 items); a
+    hide, an explicit mark and a bin must still show on the very next ask."""
+    every = ids(conn)
+    first = as_admin.get("/api/privacy/people").get_json()
+    assert as_admin.get("/api/privacy/people").get_json() == first      # kept
+    maya = report_for(first, "Maya")["sees"]
+    conn.execute("UPDATE assets SET visibility = 2, vis_source = 'item' WHERE id = ?", (every[0],))
+    conn.commit()
+    after = as_admin.get("/api/privacy/people").get_json()
+    assert report_for(after, "Maya")["sees"] == maya - 1
+    assert report_for(after, "Dad")["admin_sees_hidden"] == report_for(first, "Dad")["admin_sees_hidden"] + 1
+    conn.execute("UPDATE assets SET nsfw = 1 WHERE id = ?", (every[1],))
+    conn.commit()
+    again = as_admin.get("/api/privacy/people").get_json()
+    assert report_for(again, "Maya")["withheld"]["explicit"] == 1
+    conn.execute("UPDATE assets SET trashed = 1 WHERE id = ?", (every[2],))
+    conn.commit()
+    last = as_admin.get("/api/privacy/people").get_json()
+    assert report_for(last, "Dad")["total"] == report_for(again, "Dad")["total"] - 1

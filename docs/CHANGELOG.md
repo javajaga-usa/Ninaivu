@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- **Suggested albums no longer fail on a festival with no cover photographs.** *GET /api/event-albums* answered with a server error when a festival year held enough photographs but its answer named none to show on its tile; the whole list was lost with it. Such a year now takes its covers from its own photographs (never the bin or an explicit one).
+- **The People page counts once, not on every opening.** *What each person sees* counted the whole library several times for every profile (0.6 s on 200,000 items, on every opening of Admin → People). The counts are now kept until the library changes (or five minutes), keyed on the family app's own visibility gate, so a hide, an explicit mark or a bin shows on the very next opening. Measured with `tools/bench_app.py`.
+
 ## 4.4.0 — 15 November 2026
 
 - **Signing out wipes what the phone kept, over plain HTTP too.** The family app's *Log off*, the console's *Sign out* and a session ended from the console (a profile disabled or signed out elsewhere) now each tell the device to drop its kept thumbnails and its Saved albums. Before, only the gallery's own switch button did; the others relied on the server's `Clear-Site-Data`, which browsers honour over HTTPS only, so on a home network over HTTP the next person on a shared tablet could open the last person's Saved albums with no signal.

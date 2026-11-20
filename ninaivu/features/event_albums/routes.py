@@ -117,6 +117,17 @@ def _members(conn, candidate: dict[str, Any]) -> list[int]:  # noqa: ANN001
 def _covers(conn, candidate: dict[str, Any]) -> list[int]:  # noqa: ANN001
     if candidate.get("cover_ids"):
         return candidate["cover_ids"]
+    if candidate["kind"] == "festival":
+        # A festival year carries its photographs' ids, not occasions; one
+        # whose answer named no cover photographs took the whole list with a
+        # KeyError (a 500 on /api/event-albums).
+        ids = [int(i) for i in candidate.get("ids", [])][:200]
+        if not ids:
+            return []
+        marks = ",".join("?" * len(ids))
+        return [int(r[0]) for r in conn.execute(
+            f"SELECT id FROM assets WHERE id IN ({marks}) AND thumb IS NOT NULL "
+            f"AND trashed=0 AND nsfw=0 ORDER BY sharpness DESC LIMIT 4", ids)]
     marks = ",".join("?" * len(candidate["occasions"]))
     return [int(r[0]) for r in conn.execute(
         f"SELECT id FROM assets WHERE occasion_id IN ({marks}) AND thumb IS NOT NULL "
