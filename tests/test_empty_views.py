@@ -41,3 +41,12 @@ def test_the_weeks_card_steps_aside_while_anything_narrows_the_gallery():
     assert "classList.toggle('aside', anyFilter() || state.view !== 'all')" in APP
     css = (STATIC / "css" / "style.css").read_text(encoding="utf-8")
     assert ".week-card.aside { display: none; }" in css
+
+
+def test_an_empty_library_says_so_rather_than_offering_a_filter_to_clear():
+    # Every photograph, no filter, and nothing at all: there was no filter to
+    # clear, and Clear filters reloaded the same empty page.
+    assert "!data.total && !anyFilter() && state.view === 'all'" in APP
+    assert "showEmpty(i18n.t('No photographs yet'), i18n.t('Nothing here yet.')," in APP
+    # An administrator is offered the console, where the library is set up.
+    assert "} else if (needsFolder || toConsole) {" in APP

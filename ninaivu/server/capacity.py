@@ -33,7 +33,7 @@ import threading
 import time
 from typing import Any, Callable
 
-from ..words import filled, said
+from ..words import Said, filled, said
 
 try:
     import psutil
@@ -478,16 +478,35 @@ def _advice(key: str, level: str, title: str, detail: str,
     ``detail_params`` for the console to translate before filling in."""
     item = {"id": key, "level": level, "title": title, "detail": detail, "action": action}
     if params is not None:
-        item.update(detail=filled(detail, params), detail_key=detail, detail_params=params)
+        # A value that is a sentence of its own ("an external spinning drive")
+        # goes as its template too, so the console says it in Tamil as well.
+        item.update(detail=filled(detail, params), detail_key=detail,
+                    detail_params={name: value.as_json() if isinstance(value, Said) else value
+                                   for name, value in params.items()})
     return item
 
 
-def _connection(drive: dict[str, Any]) -> str:
+#: How a drive is connected, with its article, whole so each is translated
+#: as one phrase: (where, kind) -> phrase. ``{bus}`` is the macOS bus name.
+_CONNECTIONS = {
+    ("internal", "solid-state"): said("an internal solid-state drive"),
+    ("internal", "spinning"): said("an internal spinning drive"),
+    ("internal", ""): said("an internal drive"),
+    ("external", "solid-state"): said("an external solid-state drive"),
+    ("external", "spinning"): said("an external spinning drive"),
+    ("external", ""): said("an external drive"),
+    ("bus", "solid-state"): said("a {bus} solid-state drive"),
+    ("bus", "spinning"): said("a {bus} spinning drive"),
+    ("bus", ""): said("a {bus} drive"),
+}
+
+
+def _connection(drive: dict[str, Any]) -> Said:
     """"an internal solid-state drive", "a USB drive" — with its article."""
     kind = {True: "solid-state", False: "spinning"}.get(drive.get("solid_state"), "")
-    where = "internal" if drive.get("internal") else (drive.get("bus") or "external")
-    words = " ".join(x for x in (where, kind, "drive") if x)
-    return ("an " if words[0].lower() in "aeio" else "a ") + words
+    bus = drive.get("bus") or ""
+    where = "internal" if drive.get("internal") else ("bus" if bus else "external")
+    return Said(_CONNECTIONS[(where, kind)], **({"bus": bus} if where == "bus" else {}))
 
 
 def recommend(facts: dict[str, Any]) -> list[dict[str, Any]]:
@@ -571,9 +590,8 @@ def recommend(facts: dict[str, Any]) -> list[dict[str, Any]]:
             if drive.get("internal") is False or drive.get("solid_state") is False:
                 out.append(_advice(
                     "index-drive", "consider", said("Keep Ninaivu's index on the internal drive"),
-                    f"The index and thumbnails are on {_connection(drive)}. Every page of "
-                    "the gallery reads them, and an internal solid-state drive answers "
-                    "those reads many times faster."))
+                    said("The index and thumbnails are on {drive}. Every page of the gallery reads them, and an internal solid-state drive answers those reads many times faster."),
+                    params={"drive": _connection(drive)}))
             elif drive.get("internal") and drive.get("solid_state"):
                 out.append(_advice(
                     "index-drive", "good", said("The index is on the internal solid-state drive"),
@@ -593,12 +611,12 @@ def recommend(facts: dict[str, Any]) -> list[dict[str, Any]]:
         rate = scan.get("files_per_second")
         out.append(_advice(
             f"scan:{root}", "consider", said("Scans spend minutes reading the library drive"),
-            f"A scan that found nothing new took {_duration(scan['seconds'])} to look at "
-            f"{scan['files']:,} files ({rate:,} a second), on {_connection(drive)}"
-            + (f" formatted {drive['filesystem'].upper()}" if drive.get("filesystem") else "")
-            + ". That time is the drive, not the processor. Connecting it straight to the "
-            "computer rather than through a hub helps; a solid-state drive would be many "
-            "times faster."))
+            said("A scan that found nothing new took {duration} to look at {files} files ({rate} a second), on {drive} formatted {filesystem}. That time is the drive, not the processor. Connecting it straight to the computer rather than through a hub helps; a solid-state drive would be many times faster.")
+            if drive.get("filesystem") else
+            said("A scan that found nothing new took {duration} to look at {files} files ({rate} a second), on {drive}. That time is the drive, not the processor. Connecting it straight to the computer rather than through a hub helps; a solid-state drive would be many times faster."),
+            params={"duration": _duration(scan["seconds"]), "files": f"{scan['files']:,}",
+                    "rate": f"{rate:,}", "drive": _connection(drive),
+                    **({"filesystem": drive["filesystem"].upper()} if drive.get("filesystem") else {})}))
 
     # -- memory, battery and the resource mode ---------------------------------
     memory_percent = load_now.get("memory_percent")

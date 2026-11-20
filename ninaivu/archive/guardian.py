@@ -15,6 +15,7 @@ from typing import Callable
 from . import database as db
 from .safety import long_path
 from .scanner import hash_file
+from ..words import Said, said
 
 log = logging.getLogger(__name__)
 
@@ -136,8 +137,8 @@ class ArchiveGuardian:
             if not destination or not os.path.isdir(long_path(destination)):
                 state['status'] = 'critical' if destination else 'no-archive'
                 state['retry_soon'] = bool(destination)
-                state['message'] = ('Archive destination is unavailable.' if destination
-                                    else 'No archive has been created yet.')
+                state['message'] = (said('Archive destination is unavailable.') if destination
+                                    else said('No archive has been created yet.'))
             else:
                 usage = shutil.disk_usage(long_path(destination))
                 state.update(free_bytes=usage.free, total_bytes=usage.total,
@@ -176,18 +177,21 @@ class ArchiveGuardian:
                 bad = state['missing'] + state['mismatched'] + state['unreadable']
                 if bad:
                     state['status'] = 'critical'
-                    state['message'] = f'{bad} sampled archive file(s) need attention.'
+                    state['message'] = Said('{count} sampled archive file(s) need attention.', count=bad)
                 elif state['free_percent'] < 10:
                     state['status'] = 'warning'
-                    state['message'] = 'Archive storage has less than 10% free space.'
+                    state['message'] = said('Archive storage has less than 10% free space.')
                 elif not (rows if sample else state['checked']):
                     state['status'] = 'no-archive'
-                    state['message'] = 'No verified archive files to sample yet.'
+                    state['message'] = said('No verified archive files to sample yet.')
                 else:
                     state['status'] = 'healthy'
-                    state['message'] = f'{state["matched"]} sampled files matched.'
+                    state['message'] = Said('{count} sampled files matched.', count=state['matched'])
 
             state['problems'] = state['problems'][:20]
+            if isinstance(state.get('message'), Said):
+                # The sentence with its number, for the console to translate.
+                state['message_said'] = state['message'].as_json()
             fingerprint = self._fingerprint(state)
             if fingerprint != previous.get('fingerprint'):
                 state['change_id'] += 1
@@ -202,7 +206,9 @@ class ArchiveGuardian:
             with self._lock:
                 self._state = {**self._state, 'status': 'warning',
                                'checked_at': time.time(), 'retry_soon': True,
-                               'message': f'Archive health check could not complete: {exc}'}
+                               'message': Said('Archive health check could not complete: {reason}',
+                                               reason=exc)}
+                self._state['message_said'] = self._state['message'].as_json()
                 return dict(self._state)
         finally:
             db.close_db()

@@ -1191,6 +1191,12 @@ async function reload({ resetScroll = false } = {}) {
       // photograph. "This filter has no items yet" with Clear filters sent
       // them looking for a filter, and the button reloaded the same empty view.
       showEmpty(i18n.t(EMPTY_VIEW[state.view]), i18n.t('Nothing here yet.'), { scene: 'filter', showAll: true });
+    } else if (!data.total && !anyFilter() && state.view === 'all') {
+      // Every photograph, and none at all: nothing in the library this person
+      // can see yet. There was no filter to clear, and Clear filters reloaded
+      // the same empty page; an administrator is sent to the console instead.
+      showEmpty(i18n.t('No photographs yet'), i18n.t('Nothing here yet.'),
+        { scene: 'filter', toConsole: true });
     } else if (!data.total) {
       showEmpty(
         state.filters.q ? i18n.t('No matches') : i18n.t('Nothing to show'),
@@ -1346,7 +1352,7 @@ function showEverything() {
   clearFilters();
 }
 
-function showEmpty(title, text, { signIn = false, scene = 'filter', showAll = false } = {}) {
+function showEmpty(title, text, { signIn = false, scene = 'filter', showAll = false, toConsole = false } = {}) {
   const empty = $('#empty');
   empty.classList.remove('offline');
   // Which badge the picture wears: search, folder, guest or filter.
@@ -1361,7 +1367,7 @@ function showEmpty(title, text, { signIn = false, scene = 'filter', showAll = fa
     action.hidden = false;
     action.textContent = i18n.t('Sign in');
     action.onclick = () => $('#signin-btn').click();
-  } else if (needsFolder) {
+  } else if (needsFolder || toConsole) {
     // Setting the library up happens on the console — send them there.
     action.hidden = !canFix;
     action.textContent = i18n.t('Open the admin console');
