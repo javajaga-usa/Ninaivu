@@ -874,7 +874,8 @@ def folder_detail():
     # way to see every hidden or explicit file in a year at once.
     deep = request.args.get("deep") in ("1", "true", "yes")
     try:
-        offset = max(0, int(request.args.get("offset") or 0))
+        # At most SQLite's largest integer: a longer number was a 500.
+        offset = max(0, min(2 ** 63 - 1, int(request.args.get("offset") or 0)))
     except ValueError:
         offset = 0
 
@@ -1410,6 +1411,8 @@ def large_files():
         floor = 0
     if floor <= 0:
         floor = DEFAULT_LARGE_FILE_FLOOR
+    # SQLite's integers are 64-bit; a floor past that was a 500, not "nothing".
+    floor = min(floor, 2 ** 63 - 1)
     limit = max(1, min(500, request.args.get("limit", 200, type=int) or 200))
 
     rows, total = db.query_assets(

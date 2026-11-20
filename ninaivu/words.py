@@ -55,7 +55,16 @@ class Said(str):
         made = super().__new__(cls, filled(template, params))
         made.template = template
         made.params = {name: str(value) for name, value in params.items()}
+        made.raw = dict(params)
         return made
+
+    def as_json(self) -> dict:
+        """``{"said": template, "params": …}`` for a page to translate, with a
+        value that is itself a :class:`Said` ("3 days ago") sent the same way,
+        so it is translated too rather than left in English inside the Tamil."""
+        return {"said": self.template,
+                "params": {name: value.as_json() if isinstance(value, Said) else str(value)
+                           for name, value in self.raw.items()}}
 
 
 def refusal(text: str, **params) -> dict:

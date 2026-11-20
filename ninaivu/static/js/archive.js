@@ -42,6 +42,16 @@ async function json(url, options = {}) {
   return data;
 }
 
+/**
+ * What the server said a step did ("Started.", "12 failed files requeued…"),
+ * in this page's language. Shown as sent, the Import page's toasts stayed in
+ * English in Tamil though every one of them is in the locale.
+ */
+function spoken(result) {
+  if (!result?.message) return '';
+  return result.said ? i18n.fromServer(result) : i18n.t(result.message);
+}
+
 export const archiveApi = {
   status: () => json('/api/archive/status'),
   version: () => json('/api/archive/version'),
@@ -965,7 +975,7 @@ export class ArchivePanel {
       const result = await archiveApi.start({ ...this.job(mode), ...extra });
       this.showNotes({ problems: [], notices: [], resolution: result.resolution });
       if (result.destination) $('#ar-dest-input').value = result.destination;
-      this.toast(result.message);
+      this.toast(spoken(result));
       this.loadRecent();
       // Now is the moment to ask: they have just started something that will
       // run for hours, so being told when it ends is obviously the point.
@@ -992,7 +1002,7 @@ export class ArchivePanel {
     try {
       this.toast(busy);
       const result = await archiveApi[action]();
-      if (result?.message) this.toast(result.message);
+      if (result?.message) this.toast(spoken(result));
     } catch (exc) {
       this.toast(exc.message, true);
     }
@@ -1002,7 +1012,7 @@ export class ArchivePanel {
   async simple(action) {
     try {
       const result = await archiveApi[action]();
-      this.toast(result.message);
+      this.toast(spoken(result));
       this.loadRecent();
       this.loadYears();
       this.tick();
@@ -1018,7 +1028,7 @@ export class ArchivePanel {
     button.textContent = i18n.t('Adding…');
     try {
       const result = await archiveApi.adopt(this.last?.handoff?.destination || '');
-      this.toast(result.message);
+      this.toast(spoken(result));
       await this.onLibraryChanged();
       this.tick();
     } catch (exc) {

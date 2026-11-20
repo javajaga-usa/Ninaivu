@@ -109,7 +109,11 @@ export function translateNames(names) {
 export function fromServer(data, fallback = '') {
   if (typeof data === 'string') return data ? t(data) : fallback;
   if (data && typeof data.said === 'string') {
-    const params = data.params && typeof data.params === 'object' ? data.params : {};
+    const given = data.params && typeof data.params === 'object' ? data.params : {};
+    // A value can be a sentence of its own ("3 days ago"), sent the same way:
+    // it is said in this language too, before it is put in its place.
+    const params = Object.fromEntries(Object.entries(given).map(([name, value]) => [name,
+      value && typeof value === 'object' && typeof value.said === 'string' ? fromServer(value) : value]));
     return t(data.said, params);
   }
   const error = data && typeof data.error === 'string' ? data.error : '';

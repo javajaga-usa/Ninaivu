@@ -3845,6 +3845,24 @@ def json_errors(error):  # noqa: ANN001
     return error
 
 
+@bp.app_errorhandler(OverflowError)
+def number_too_large(error: OverflowError):
+    """A number in a request too large for the database: a 400, not a 500.
+
+    SQLite holds 64-bit integers, and binding a larger one raises
+    OverflowError wherever an id from a request reaches a query: undo a
+    batch, confirm a face, put duplicates back. Most routes check their own
+    numbers; this is the answer for any that a route did not, so a typed or
+    tampered number is told so rather than logged as a fault. Any other
+    OverflowError is a fault, and is answered as one.
+    """
+    if request.path.startswith("/api/") and "SQLite INTEGER" in str(error):
+        return jsonify({**body_for(said("That number is too large.")), "status": 400}), 400
+    from werkzeug.exceptions import InternalServerError                      # noqa: PLC0415
+    current_app.logger.error("Unhandled OverflowError on %s", request.path, exc_info=error)
+    return json_errors(InternalServerError(original_exception=error))
+
+
 #: What an error with nothing more particular to say tells a person.
 PLAIN_ERRORS = {
     400: said("That request could not be understood."),

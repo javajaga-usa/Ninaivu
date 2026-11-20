@@ -231,3 +231,49 @@ def test_phones_off_without_keys_then_a_quiet_phone_is_named(services, people):
     # A revoked key is no longer looked for.
     phone_keys.revoke(conn, row["id"])
     assert check(services, "phones")[0]["status"] == safety.OFF
+
+
+# -- in the reader's language -------------------------------------------------------
+
+def test_a_line_with_a_count_or_a_date_is_sent_as_its_template_too(services, people):
+    """The Overview filled "{n} files are in two places…" in English inside a
+    Tamil page: a line with a number, a name or a date is now sent with its
+    template, and a date inside it ("17 days ago") as a template of its own."""
+    from ninaivu.media import phone_keys
+
+    connect(services, done_share=0.5)
+    found, _ = check(services, "cloud")
+    said = found["summary_said"]
+    assert found["summary"].startswith(said["params"]["first"]["params"]["done"])
+    assert said["said"] == "{first} {second}"
+    assert said["params"]["first"]["said"] == "{done} of {eligible} files are in Google Drive ({share})."
+    copies, _ = check(services, "copies")
+    assert copies["summary_said"]["said"].startswith("{more} files are in two places")
+    assert copies["detail_said"]["said"] == "Mostly: {reasons}."
+
+    conn = db.connect(services.cfg.db_path)
+    phone_keys.init_schema(conn)
+    family_id = conn.execute("SELECT id FROM users WHERE role='family' LIMIT 1").fetchone()[0]
+    row, _key = phone_keys.make(conn, family_id, "Amma's iPhone")
+    long_ago = time.time() - (safety.PHONE_QUIET_DAYS + 3) * safety.DAY
+    conn.execute("UPDATE phone_keys SET created_at=?, last_used_at=? WHERE id=?",
+                 (long_ago, long_ago, row["id"]))
+    conn.commit()
+    quiet, _ = check(services, "phones")
+    named = quiet["summary_said"]["params"]["names"]
+    assert named["said"] == "{name} ({person}): last heard from {when}"
+    assert named["params"]["when"] == {"said": "{count} days ago", "params": {"count": "17"}}
+
+
+def test_every_template_the_overview_can_send_is_in_tamil():
+    import json
+    import re
+    from pathlib import Path
+
+    source = Path(safety.__file__).read_text(encoding="utf-8")
+    templates = set(re.findall(r'Said\("((?:[^"\\]|\\.)+)"', source))
+    assert len(templates) > 30
+    tamil = json.loads((Path(safety.__file__).parents[1] / "static" / "i18n" / "ta.json")
+                       .read_text(encoding="utf-8"))
+    missing = sorted(t for t in templates if t not in tamil)
+    assert not missing, missing

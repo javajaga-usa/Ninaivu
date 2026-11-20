@@ -22,7 +22,7 @@ collides with the library's own ``/api/scan``, ``/api/settings`` or ``/api/stats
 """
 
 from __future__ import annotations
-from ..words import refusal
+from ..words import Said, refusal, said
 
 import csv
 import io
@@ -33,7 +33,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from flask import Blueprint, Response, current_app, jsonify, request
+from flask import Blueprint, Response, abort, current_app, jsonify, request
 
 from .. import archive
 from ..server import auth
@@ -795,10 +795,10 @@ def stream():
 @require_admin
 def validate():
     data = json_object()
-    sources = data.get("source_dirs") or []
+    sources = _listed(data, "source_dirs")
     # Correct a destination chosen from inside an existing archive *before*
     # validating, so the user sees the real target while still editing.
-    resolution = resolve_archive_destination(data.get("destination_dir") or "")
+    resolution = resolve_archive_destination(_destination_text(data))
     cfg = _cfg()
     problems = validate_job(sources, resolution["destination"],
                             protected=[cfg.state_dir])
@@ -809,6 +809,33 @@ def validate():
                     "notice_keys": translatable(notices), "resolution": resolution})
 
 
+def _spoken(message: Said) -> dict[str, Any]:
+    """A step's message, filled in, and its template for the page to say in
+    the reader's language."""
+    return {"message": str(message), **message.as_json()}
+
+
+def _listed(data: dict, key: str) -> list:
+    """The list a request sent under *key* (the source folders, the kinds of
+    file), or a 400. A number there was a TypeError, answered as a 500."""
+    value = data.get(key) or []
+    if not isinstance(value, (list, tuple)):
+        abort(400, description="Send the folders and kinds of file as lists.")
+    return list(value)
+
+
+def _destination_text(data: dict) -> str:
+    """The destination folder a request named, as text, or a 400.
+
+    A number or a list there was an AttributeError on ``.strip()``, answered
+    as a 500 with nothing to say what was wrong.
+    """
+    value = data.get("destination_dir") or ""
+    if not isinstance(value, str):
+        abort(400, description="The destination must be a folder path.")
+    return value
+
+
 @archive_bp.post("/api/archive/capacity")
 @require_admin
 def capacity():
@@ -817,11 +844,11 @@ def capacity():
     Cheap by design: file stats only, no hashing.
     """
     data = json_object()
-    sources = data.get("source_dirs") or []
+    sources = _listed(data, "source_dirs")
     token = str(data.get("progress_token") or "")[:64]
-    resolution = resolve_archive_destination(data.get("destination_dir") or "")
+    resolution = resolve_archive_destination(_destination_text(data))
     destination = resolution["destination"]
-    requested = data["media_types"] if "media_types" in data else VALID_MEDIA_TYPES
+    requested = _listed(data, "media_types") if "media_types" in data else VALID_MEDIA_TYPES
     types = set(requested or ()) & VALID_MEDIA_TYPES
 
     problems = validate_job(sources, destination, protected=[_cfg().state_dir])
@@ -1241,8 +1268,8 @@ def capacity_cancel():
 @require_admin
 def start():
     data = json_object()
-    sources = data.get("source_dirs") or []
-    destination = (data.get("destination_dir") or "").strip()
+    sources = _listed(data, "source_dirs")
+    destination = _destination_text(data).strip()
     mode = data.get("mode") or MODE_COPY
 
     guardian = _guardian()
@@ -1253,7 +1280,7 @@ def start():
     # nothing, which must be refused rather than silently widened to
     # "everything". This is only the fallback for sources given as bare paths —
     # a source sent in the per-folder form carries its own selection.
-    requested = data["media_types"] if "media_types" in data else VALID_MEDIA_TYPES
+    requested = _listed(data, "media_types") if "media_types" in data else VALID_MEDIA_TYPES
     types = set(requested or ()) & VALID_MEDIA_TYPES
     if not types and not any(isinstance(s, dict) and s.get("types") for s in sources):
         message = "Select at least one kind of file to archive."
@@ -1305,18 +1332,21 @@ def start():
                     _power())
 
     messages = {
-        MODE_COPY: "Started. Start also resumes an interrupted run.",
-        MODE_DRY_RUN: "Dry run started. Nothing will be written.",
-        MODE_VERIFY: "Audit started. Re-reading every archived file.",
+        MODE_COPY: said("Started. Start also resumes an interrupted run."),
+        MODE_DRY_RUN: said("Dry run started. Nothing will be written."),
+        MODE_VERIFY: said("Audit started. Re-reading every archived file."),
     }
-    message = messages.get(mode, "Started.")
+    message = messages.get(mode, said("Started."))
+    spoken: dict[str, Any] = {}
     if resolution["corrected"]:
-        message = f'Using the archive root "{destination}". ' + message
+        said_it = Said("Using the archive root “{destination}”. {started}",
+                       destination=destination, started=Said(message))
+        message, spoken = str(said_it), said_it.as_json()
 
     auth.audit(_conn(), current_user().id,
                f"archive_{mode.replace('-', '_')}",
                f"{len(sources)} source(s) → {destination}")
-    return jsonify({"message": message, "resolution": resolution,
+    return jsonify({"message": message, **spoken, "resolution": resolution,
                     "destination": destination})
 
 
@@ -1426,8 +1456,8 @@ def adopt():
     return jsonify({
         "ok": True, "already": False, "path": resolved,
         "libraries": cfg.libraries,
-        "message": f"“{path.name or resolved}” was added to your library. "
-                   f"Ninaivu is indexing it now.",
+        **_spoken(Said("“{name}” was added to your library. Ninaivu is indexing it now.",
+                       name=path.name or resolved)),
     })
 
 
@@ -1561,7 +1591,7 @@ def retry_errors():
     if is_scanning():
         return jsonify({"error": "Stop the current run first."}), 409
     n = adb.reset_errors()
-    return jsonify({"message": f"{n} failed files requeued. Press Start to retry them.",
+    return jsonify({**_spoken(Said("{count} failed files requeued. Press Start to retry them.", count=n)),
                     "requeued": n})
 
 

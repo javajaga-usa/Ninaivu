@@ -19,7 +19,7 @@ from ._body import json_object
 # are registered on the same two blueprints they always were, so every
 # path and every endpoint name is unchanged.
 from ..server import visibility
-from .api import (admin_only, bp, _cfg, _conn, _gate, _int_arg, _root, _roots,
+from .api import (admin_only, bp, _as_id, _cfg, _conn, _gate, _int_arg, _root, _roots,
                   _scanner)
 
 
@@ -331,12 +331,20 @@ def faces_reject():
 @require_admin
 def faces_create_person():
     data = json_object()
-    name = str(data.get("name", "")).strip()
+    raw = data.get("name", "")
+    name = raw.strip() if isinstance(raw, str) else ""
     if not name:
         abort(400, description="A name is required.")
     conn = _conn()
-    return jsonify({"person": db.create_or_update_person_cluster(
-        conn, name, data.get("avatar_asset_id"))})
+    # The photograph to show for them, if one was named: one that is still in
+    # the library. A photograph removed while the dialog was open failed the
+    # database's own check and came back as a 500.
+    avatar = data.get("avatar_asset_id")
+    if avatar is not None:
+        avatar = _as_id(avatar)
+        if avatar is None or not db.get_asset(conn, avatar):
+            abort(400, description="That photograph is no longer in the library.")
+    return jsonify({"person": db.create_or_update_person_cluster(conn, name, avatar)})
 
 
 @admin_only.post("/api/faces/person/<int:person_id>/rename")

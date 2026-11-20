@@ -200,6 +200,10 @@ def browse():
     """Server-side directory picker, so nobody has to type an absolute path."""
     cfg = _cfg()
     raw = request.args.get("path", "").strip()
+    # A NUL byte cannot be in any path; os.stat raised ValueError on it,
+    # which nothing below expected, and the picker got a 500.
+    if "\x00" in raw:
+        abort(400, description="That is not a folder on this computer.")
     if raw:
         target = Path(raw).expanduser()
     elif cfg.active_root:
