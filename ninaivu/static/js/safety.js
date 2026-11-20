@@ -83,10 +83,14 @@ export class SafetyPanel {
   row(check) {
     const row = el('li', 'sf-check');
     const text = el('div', 'sf-text');
-    // Fixed sentences are in the locales; one with a date or a count in it is
-    // not, and i18n.t() hands that back as the server wrote it.
-    text.append(el('span', 'sf-title', i18n.t(check.title)), el('span', 'sf-summary', i18n.t(check.summary)));
-    if (check.detail && check.status !== 'ok') text.append(el('span', 'sf-detail', i18n.t(check.detail)));
+    // Fixed sentences are in the locales; one with a date or a count in it
+    // comes with its template (summary_said), filled in here in this language.
+    const summary = check.summary_said ? i18n.fromServer(check.summary_said) : i18n.t(check.summary);
+    text.append(el('span', 'sf-title', i18n.t(check.title)), el('span', 'sf-summary', summary));
+    if (check.detail && check.status !== 'ok') {
+      const detail = check.detail_said ? i18n.fromServer(check.detail_said) : i18n.t(check.detail);
+      text.append(el('span', 'sf-detail', detail));
+    }
     const dot = el('span', `sf-dot sf-${check.status}`);
     dot.title = check.status;
     row.append(dot, text);

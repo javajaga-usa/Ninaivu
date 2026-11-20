@@ -1182,6 +1182,12 @@ async function reload({ resetScroll = false } = {}) {
       // "This filter has no items yet" sent them looking for one.
       showEmpty(i18n.t('Nothing shared with guests yet'),
         i18n.t('Sign in to see the family’s photographs.'), { signIn: true, scene: 'guest' });
+    } else if (!data.total && !anyFilter() && EMPTY_VIEW[state.view]) {
+      // A view from the sidebar with nothing in it, and no filter of the
+      // person's own: say what is missing, and offer the way back to every
+      // photograph. "This filter has no items yet" with Clear filters sent
+      // them looking for a filter, and the button reloaded the same empty view.
+      showEmpty(i18n.t(EMPTY_VIEW[state.view]), i18n.t('Nothing here yet.'), { scene: 'filter', showAll: true });
     } else if (!data.total) {
       showEmpty(
         state.filters.q ? i18n.t('No matches') : i18n.t('Nothing to show'),
@@ -1205,6 +1211,7 @@ async function reload({ resetScroll = false } = {}) {
     setLoading(false);
   }
   renderFilterBar();
+  document.querySelector('.week-card')?.classList.toggle('aside', anyFilter() || state.view !== 'all');
   showMemoriesBanner();
   loadDuplicatesIfNeeded();
   loadMoreIfNear();
@@ -1316,7 +1323,27 @@ function anyFilter() {
     || f.occasion || f.album || f.near || f.favorites || f.duplicates || f.kinds?.length);
 }
 
-function showEmpty(title, text, { signIn = false, scene = 'filter' } = {}) {
+/** What an empty sidebar view is missing, by view (its English key). */
+const EMPTY_VIEW = {
+  pictures: i18n.key('No photographs yet'),
+  videos: i18n.key('No videos yet'),
+  audio: i18n.key('No sound recordings yet'),
+  favorites: i18n.key('No favourites yet'),
+  live: i18n.key('No Live Photos yet'),
+  hidden: i18n.key('Nothing is hidden'),
+  public: i18n.key('Nothing shared with guests yet'),
+};
+
+/** Back to every photograph from a sidebar view, as the H key does. */
+function showEverything() {
+  state.view = 'all';
+  document.querySelectorAll('[data-view]').forEach(
+    (b) => b.classList.toggle('active', b.dataset.view === 'all'));
+  syncPrivateControls();
+  clearFilters();
+}
+
+function showEmpty(title, text, { signIn = false, scene = 'filter', showAll = false } = {}) {
   const empty = $('#empty');
   empty.classList.remove('offline');
   // Which badge the picture wears: search, folder, guest or filter.
@@ -1339,6 +1366,10 @@ function showEmpty(title, text, { signIn = false, scene = 'filter' } = {}) {
       const port = state.status?.admin_port || 3000;
       window.open(`${window.location.protocol}//${window.location.hostname}:${port}`, '_blank');
     };
+  } else if (showAll) {
+    action.hidden = false;
+    action.textContent = i18n.t('Show everything');
+    action.onclick = showEverything;
   } else {
     action.hidden = false;
     action.textContent = i18n.t('Clear filters');
@@ -2490,11 +2521,7 @@ function wireKeyboard() {
     if (key === '[') { $('#sidebar-toggle')?.click(); return; }
     if (key === 'h') {
       // Back to every photograph, from a view, a person, a trip or a search.
-      state.view = 'all';
-      document.querySelectorAll('[data-view]').forEach(
-        (b) => b.classList.toggle('active', b.dataset.view === 'all'));
-      syncPrivateControls();
-      clearFilters();
+      showEverything();
       return;
     }
     const moves = {

@@ -26,7 +26,7 @@ import threading
 import time
 from typing import Any, Callable
 
-from ..words import filled, said
+from ..words import Said, filled, said
 
 log = logging.getLogger(__name__)
 
@@ -39,20 +39,42 @@ KEEP = 60.0
 DAY = 86400.0
 
 
-def _age(seconds: float) -> str:
+def _age(seconds: float) -> Said:
     if seconds < 3600:
-        return "less than an hour ago"
+        return Said("less than an hour ago")
     if seconds < DAY:
         hours = int(seconds // 3600)
-        return f"{hours} hour{'s' if hours != 1 else ''} ago"
+        return Said("1 hour ago") if hours == 1 else Said("{count} hours ago", count=hours)
     days = int(seconds // DAY)
-    return f"{days} day{'s' if days != 1 else ''} ago"
+    return Said("1 day ago") if days == 1 else Said("{count} days ago", count=days)
+
+
+def _both(first: Said, second: Said) -> Said:
+    """Two sentences, one after the other, each translated on its own."""
+    return Said("{first} {second}", first=first, second=second)
+
+
+def _listed(parts: list[Said]) -> Said:
+    """Up to three phrases joined by commas, each translated on its own."""
+    if len(parts) == 1:
+        return parts[0]
+    if len(parts) == 2:
+        return Said("{first}, {second}", first=parts[0], second=parts[1])
+    return Said("{first}, {second}, {third}", first=parts[0], second=parts[1], third=parts[2])
 
 
 def _check(check_id: str, title: str, status: str, summary: str, page: str,
            detail: str = "") -> dict[str, Any]:
-    return {"id": check_id, "title": title, "status": status, "summary": summary,
-            "detail": detail, "page": page}
+    found = {"id": check_id, "title": title, "status": status, "summary": str(summary),
+             "detail": str(detail), "page": page}
+    # A line with a count, a name or a date in it is sent as its template too,
+    # so the Overview says it in Tamil with the numbers in place; sent only
+    # filled in, it stayed in English inside a Tamil page.
+    if isinstance(summary, Said):
+        found["summary_said"] = summary.as_json()
+    if isinstance(detail, Said):
+        found["detail_said"] = detail.as_json()
+    return found
 
 
 # ---------------------------------------------------------------------------
@@ -87,19 +109,20 @@ def cloud_copy(services, now: float) -> dict[str, Any]:
                             "visibility < 2").fetchone()[0]
     done = int(summary.get("done", 0))
     share = done / eligible if eligible else 1.0
-    line = f"{done:,} of {eligible:,} files are in Google Drive ({share:.0%})."
+    line = Said("{done} of {eligible} files are in Google Drive ({share}).",
+                done=f"{done:,}", eligible=f"{eligible:,}", share=f"{share:.0%}")
     failed = int(summary.get("failed", 0))
     if failed:
-        line += f" {failed:,} gave up after five tries."
+        line = _both(line, Said("{failed} gave up after five tries.", failed=f"{failed:,}"))
     away = state.get("offline_roots") or []
     if away:
         return _check("cloud", title, ATTENTION, line, page,
-                      f"{', '.join(away)} is not connected, so its files cannot go up.")
+                      Said("{drives} is not connected, so its files cannot go up.", drives=", ".join(away)))
     if share >= 0.99 and not failed:
         return _check("cloud", title, OK, line, page)
-    moving = " It is uploading now." if engine is not None and engine.running else \
-        " It is not uploading right now."
-    return _check("cloud", title, ATTENTION, line + moving, page)
+    moving = Said("It is uploading now.") if engine is not None and engine.running else \
+        Said("It is not uploading right now.")
+    return _check("cloud", title, ATTENTION, _both(line, moving), page)
 
 
 def restore_tests(services, now: float) -> dict[str, Any]:
@@ -115,16 +138,16 @@ def restore_tests(services, now: float) -> dict[str, Any]:
     when = _age(now - float(last["started_at"]))
     if last["status"] == "failed":
         return _check("restore_test", title, PROBLEM,
-                      f"The last test restore failed ({when}).", page, last["summary"])
+                      Said("The last test restore failed ({when}).", when=when), page, last["summary"])
     if last["status"] != "passed":
         return _check("restore_test", title, ATTENTION,
-                      f"The last test did not run ({when}).", page, last["summary"])
+                      Said("The last test did not run ({when}).", when=when), page, last["summary"])
     every = tester.every_days or 7
     if now - float(last["started_at"]) > 2 * every * DAY:
         return _check("restore_test", title, ATTENTION,
-                      f"The last test passed, but that was {when}.", page,
+                      Said("The last test passed, but that was {when}.", when=when), page,
                       said("Tests are overdue — they wait for the household and for the Google account, so check both."))
-    return _check("restore_test", title, OK, f"A test restore passed {when}.", page,
+    return _check("restore_test", title, OK, Said("A test restore passed {when}.", when=when), page,
                   last["summary"])
 
 
@@ -147,7 +170,8 @@ def index_in_drive(services, now: float) -> dict[str, Any]:
                       said("No copy of the index has been sent yet."), page,
                       said("Send one from the Cloud page."))
     age = now - float(last["at"])
-    line = f"Sent {_age(age)}{', encrypted' if last.get('encrypted') else ''}."
+    line = (Said("Sent {when}, encrypted.", when=_age(age)) if last.get("encrypted")
+            else Said("Sent {when}.", when=_age(age)))
     if age > 3 * DAY:
         return _check("index_copy", title, ATTENTION, line, page,
                       said("Copies go once a day when something has changed, within the upload hours."))
@@ -164,10 +188,10 @@ def local_backups(services, now: float) -> dict[str, Any]:
         return _check("backups", title, PROBLEM,
                       said("There is no backup of the index on this computer."), page,
                       said("Make one from the Health page."))
-    line = f"The latest was made {_age(now - float(newest['at']))}."
+    line = Said("The latest was made {when}.", when=_age(now - float(newest["at"])))
     checked = keeper.last_verification()
     if checked and not checked.get("ok"):
-        return _check("backups", title, PROBLEM, line + " Its restore check failed.",
+        return _check("backups", title, PROBLEM, _both(line, Said("Its restore check failed.")),
                       page, str(checked.get("error") or ""))
     shared = keeper.shares_a_drive_with() if hasattr(keeper, "shares_a_drive_with") else []
     if now - float(newest["at"]) > 3 * DAY:
@@ -179,9 +203,7 @@ def local_backups(services, now: float) -> dict[str, Any]:
         # One drive holding the index and its only copies is one failure from
         # losing both. A recent copy in Drive is the second place.
         return _check("backups", title, ATTENTION, line, page,
-                      f"They are on the same drive as {', '.join(shared)}, and there is "
-                      "no recent copy of the index in Drive, so one failing drive "
-                      "would take both.")
+                      Said("They are on the same drive as {drives}, and there is no recent copy of the index in Drive, so one failing drive would take both.", drives=", ".join(shared)))
     return _check("backups", title, OK, line, page)
 
 
@@ -201,15 +223,16 @@ def drives(services, now: float) -> dict[str, Any]:
         used = [d for d in failing if d["used_for"]]
         names = ", ".join(d["name"] for d in (used or failing)[:3])
         return _check("drives", title, PROBLEM,
-                      f"{len(failing)} drive{'s' if len(failing) != 1 else ''} may be "
-                      f"failing: {names}.", page,
+                      Said("1 drive may be failing: {names}.", names=names) if len(failing) == 1
+                      else Said("{count} drives may be failing: {names}.", count=len(failing), names=names),
+                      page,
                       failing[0]["problems"][0].get("advice", "") if failing[0]["problems"] else "")
     if watching:
         return _check("drives", title, ATTENTION,
-                      f"{', '.join(d['name'] for d in watching[:3])} logged errors "
-                      "worth watching this week.", page)
-    return _check("drives", title, OK, f"{len(report['drives'])} drives, nothing "
-                  "logged this week.", page)
+                      Said("{names} logged errors worth watching this week.",
+                           names=", ".join(d["name"] for d in watching[:3])), page)
+    return _check("drives", title, OK, Said("{count} drives, nothing logged this week.",
+                                            count=len(report["drives"])), page)
 
 
 def archive(services, now: float) -> dict[str, Any]:
@@ -226,13 +249,14 @@ def archive(services, now: float) -> dict[str, Any]:
         return _check("archive", title, OK, said("A run is going now."), page)
     if message.startswith("INCOMPLETE"):
         return _check("archive", title, PROBLEM,
-                      f"The last run ({when}) could not read part of its source, and "
-                      "did not archive what was inside it.", page,
+                      Said("The last run ({when}) could not read part of its source, and did not archive what was inside it.", when=when), page,
                       said("Run it again: it steps over what is done. Check the Errors tab, and the drive's cable and port."))
     if state in ("failed", "interrupted", "stopped"):
-        return _check("archive", title, ATTENTION, f"The last run {state} ({when}).",
-                      page, message[:200])
-    return _check("archive", title, OK, f"The last run finished {when}.", page)
+        line = {"failed": Said("The last run failed ({when}).", when=when),
+                "interrupted": Said("The last run was interrupted ({when}).", when=when),
+                "stopped": Said("The last run was stopped ({when}).", when=when)}[state]
+        return _check("archive", title, ATTENTION, line, page, message[:200])
+    return _check("archive", title, OK, Said("The last run finished {when}.", when=when), page)
 
 
 def storage_check(services, now: float) -> dict[str, Any]:
@@ -250,15 +274,18 @@ def storage_check(services, now: float) -> dict[str, Any]:
     unreadable = int(summary.get("unreadable", 0))
     if corrupt or unreadable:
         return _check("storage", title, PROBLEM,
-                      f"{corrupt + unreadable:,} file{'s' if corrupt + unreadable != 1 else ''} "
-                      f"changed or could not be read at the last check ({when}).", page,
+                      Said("1 file changed or could not be read at the last check ({when}).", when=when)
+                      if corrupt + unreadable == 1 else
+                      Said("{count} files changed or could not be read at the last check ({when}).",
+                           count=f"{corrupt + unreadable:,}", when=when), page,
                       said("Restore those from the cloud backup; the Health page lists them."))
     if missing:
         return _check("storage", title, ATTENTION,
-                      f"{missing:,} files were missing at the last check ({when}).", page)
+                      Said("{count} files were missing at the last check ({when}).",
+                           count=f"{missing:,}", when=when), page)
     if now - float(summary.get("last_checked_at") or 0) > 45 * DAY:
-        return _check("storage", title, ATTENTION, f"The last check was {when}.", page)
-    return _check("storage", title, OK, f"Every file checked read back intact ({when}).",
+        return _check("storage", title, ATTENTION, Said("The last check was {when}.", when=when), page)
+    return _check("storage", title, OK, Said("Every file checked read back intact ({when}).", when=when),
                   page)
 
 
@@ -276,12 +303,14 @@ def copies(services, now: float) -> dict[str, Any]:
         return _check("copies", title, OFF, said("The library is empty."), page)
     one = report["copies"]["1"]["files"]
     more = report["files"] - one
-    line = f"{more:,} files are in two places or more, and {one:,} only in the library."
+    line = Said("{more} files are in two places or more, and {one} only in the library.",
+                more=f"{more:,}", one=f"{one:,}")
     if one == 0:
         return _check("copies", title, OK, line, page)
     share = one / report["files"]
     reasons = sorted(report["single_reasons"].values(), key=lambda r: -r["files"])
-    detail = "Mostly: " + ", ".join(f"{r['files']:,} {r['label']}" for r in reasons[:3]) + "."
+    detail = Said("Mostly: {reasons}.", reasons=_listed([
+        Said("{count} {reason}", count=f"{r['files']:,}", reason=Said(r["label"])) for r in reasons[:3]]))
     return _check("copies", title, PROBLEM if share > 0.5 else ATTENTION, line, page, detail)
 
 
@@ -302,7 +331,7 @@ def room_to_grow(services, now: float) -> dict[str, Any]:
     if soonest is None:
         return _check("room", title, OK, said("The library is not growing."), page)
     months = soonest["months_left"]
-    line = (f"At this rate the library's disk is full in about {months:.0f} months."
+    line = (Said("At this rate the library's disk is full in about {months} months.", months=f"{months:.0f}")
             if months <= 120 else said("At this rate there is room for more than ten years."))
     detail = said("The Space report (ninaivu space) lists the steps that would free room.")
     if months < 1:
@@ -323,7 +352,7 @@ def two_computers(services, now: float) -> dict[str, Any]:
         return _check("two_computers", title, OFF, said("One computer: everything stays on it."), page)
     answer = checklist.checklist(cfg, db.connect(cfg.db_path), services, now=now)
     statuses = [i["status"] for i in answer["items"]]
-    line = f"{answer['done']} of {answer['of']} on the Mugil checklist are in place."
+    line = Said("{done} of {of} on the Mugil checklist are in place.", done=answer["done"], of=answer["of"])
     if checklist.PROBLEM in statuses:
         return _check("two_computers", title, PROBLEM, line, page,
                       said("Open the Mugil checklist to see what stopped working."))
@@ -365,14 +394,19 @@ def phones(services, now: float) -> dict[str, Any]:
             quiet.append((key, heard))
     if not quiet:
         return _check("phones", title, OK,
-                      f"All {len(keys)} phone{'s' if len(keys) != 1 else ''} with a key "
-                      f"sent or checked in within {PHONE_QUIET_DAYS} days.", page)
-    names = ", ".join(
-        f"{k['name']} ({k['person']}): " + (f"last heard from {_age(now - heard)}" if heard
-                                            else "never sent anything")
-        for k, heard in quiet[:4])
+                      Said("The phone with a key sent or checked in within {days} days.", days=PHONE_QUIET_DAYS)
+                      if len(keys) == 1 else
+                      Said("All {count} phones with a key sent or checked in within {days} days.",
+                           count=len(keys), days=PHONE_QUIET_DAYS), page)
+    named = [Said("{name} ({person}): last heard from {when}", name=k["name"], person=k["person"],
+                  when=_age(now - heard)) if heard
+             else Said("{name} ({person}): never sent anything", name=k["name"], person=k["person"])
+             for k, heard in quiet[:4]]
+    while len(named) > 1:                      # four at most: joined two at a time
+        named = [Said("{first}, {second}", first=named[0], second=named[1]), *named[2:]]
     return _check("phones", title, ATTENTION,
-                  f"{len(quiet)} of {len(keys)} phones with a key have gone quiet. {names}.",
+                  Said("{quiet} of {count} phones with a key have gone quiet. {names}.",
+                       quiet=len(quiet), count=len(keys), names=named[0]),
                   page, said("On that phone, check that Tailscale is connected and the sync app's automatic transfer is still on. Revoke the key of a phone no longer used."))
 
 

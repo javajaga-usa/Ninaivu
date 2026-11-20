@@ -3724,6 +3724,9 @@ input[type=range], input[type=checkbox], input[type=radio] { accent-color: var(-
   font-size: 13px;
 }
 .week-card[hidden] { display: none !important; }
+/* Out of the way while a search, a filter or a view is showing: on a phone it
+   took half the screen above the results. Back on the plain gallery. */
+.week-card.aside { display: none; }
 .week-card[data-verdict="problem"] {
   border-color: color-mix(in srgb, var(--danger, #ef4444) 40%, transparent);
 }

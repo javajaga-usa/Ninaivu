@@ -28,19 +28,20 @@ from __future__ import annotations
 from typing import Any, Sequence
 
 from . import db
+from ..words import said
 
 __all__ = ["summary", "single", "REASONS"]
 
 #: Why a file has no copy beyond the library, in words.
 REASONS = {
-    "waiting": "waiting to be uploaded",
-    "failed": "the upload failed",
-    "rule": "left out by a backup rule",
-    "approval": "large: waiting for an administrator's approval",
-    "declined": "large: declined for the cloud by an administrator",
-    "kept": "kept back (hidden, or waiting to be checked)",
-    "missing": "recorded as uploaded, but missing from Google Drive",
-    "unqueued": "not yet offered to the cloud backup",
+    "waiting": said("waiting to be uploaded"),
+    "failed": said("the upload failed"),
+    "rule": said("left out by a backup rule"),
+    "approval": said("large: waiting for an administrator's approval"),
+    "declined": said("large: declined for the cloud by an administrator"),
+    "kept": said("kept back (hidden, or waiting to be checked)"),
+    "missing": said("recorded as uploaded, but missing from Google Drive"),
+    "unqueued": said("not yet offered to the cloud backup"),
 }
 
 
