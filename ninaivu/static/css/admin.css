@@ -1148,6 +1148,18 @@ body.admin .ios-install-banner {
   border: 1px solid var(--border-soft); white-space: nowrap;
 }
 
+/* "Download all needed models": above the list, with what it adds up to. */
+.am-needed {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px 16px;
+  flex-wrap: wrap; margin: 14px 0 0; padding: 12px 14px;
+  background: var(--surface-2); border: 1px solid var(--border-soft);
+  border-radius: var(--r-sm, 8px);
+}
+.am-needed[hidden] { display: none; }
+.am-needed-copy { min-width: 0; flex: 1 1 260px; }
+.am-needed-copy .hint.subtle { margin: 3px 0 0; padding: 0; background: none; }
+.am-status .am-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+
 /* ── AI server ─────────────────────────────────────────────────────────── */
 .ai-warning {
   margin: 12px 0 4px; padding: 10px 14px;

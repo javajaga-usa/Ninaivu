@@ -35,7 +35,8 @@ the upstream models.
 
 2. **Download the models**, either:
 
-   - in the admin console: **Admin → AI models → Download** on each model, or
+   - in the admin console: **Admin → AI models → Download all** for every
+     model the features that are on need, or **Download** on each model, or
    - from a terminal:
 
      ```bash
@@ -48,6 +49,14 @@ the upstream models.
    project folder (ignored by git); an installed copy keeps them in a folder of
    the user's own that upgrades leave alone (the technical administrator guide
    lists it); `NINAIVU_AI_MODELS_DIR` or the `ai_models_dir` setting moves them.
+
+   A model no longer wanted goes with **Delete** on its row. Nothing else
+   depends on it: browsing, importing, the viewer, backups and search by
+   names, tags and words keep working, and the tool it served says it is not
+   installed. A file another installed model also uses (the speech detector
+   both Whisper sizes share) is kept. A model is pinned to its checksum, so
+   a newer version arrives with a Ninaivu update, and its row then offers
+   **Update**.
 
 3. **Restart Ninaivu** if you downloaded SigLIP 2. The tools pick up their models
    at once; search loads its model when Ninaivu starts.

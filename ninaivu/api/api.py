@@ -564,7 +564,14 @@ def _semantic_ids(text: str, roots, conn) -> tuple[list[int] | None, dict[int, f
     # The picture model reads "temple" far better than "கோவில்": a Tamil
     # word for what a photograph shows goes to it in English, and stays as
     # typed for the voice stories and descriptions below.
-    vector = _text_vector(engine, tamil_words.for_pictures(text))
+    try:
+        vector = _text_vector(engine, tamil_words.for_pictures(text))
+    except Exception:                            # noqa: BLE001 - the model went (AI models page)
+        # Its model deleted, or its host stopped, while the engine was being
+        # loaded again: the search by tags, names and words still answers.
+        logging.getLogger(__name__).warning("the picture search could not read the words; "
+                                            "searching without it", exc_info=True)
+        return None, {}
     if vector is None:
         return None, {}
     ids, buffer, dim, index = db.embedding_store(conn)

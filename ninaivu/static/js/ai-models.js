@@ -89,6 +89,82 @@ export class AIModelsPanel {
     }
   }
 
+  // Everything the features that are on need, one download after another.
+  async downloadNeeded() {
+    const needed = this.data?.needed;
+    if (!needed?.ids.length) return;
+    const names = needed.ids.map((id) => {
+      const model = this.data.models.find((m) => m.id === id);
+      return `• ${i18n.t(model ? model.label : id)}`;
+    }).join('\n');
+    const asking = `${i18n.t('Download {count} models ({size}), one after another?', {
+      count: needed.ids.length, size: megabytes(needed.bytes) })}\n\n${names}`;
+    if (!window.confirm(asking)) return;
+    try {
+      this.render(await json('/api/admin/ai-models/download-needed', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      }));
+      this.toast(i18n.t('Downloading the needed models, one after another…'));
+    } catch (error) {
+      this.toast(error.message, true);
+    }
+  }
+
+  // Deleting a model leaves everything else as it was: the feature it served
+  // says it is not installed until it is downloaded again.
+  async remove(model, { waiting = false } = {}) {
+    const asking = `${i18n.t('Delete {name} from this computer ({size})?', {
+      name: i18n.t(model.label), size: megabytes(model.on_disk_bytes || model.bytes) })}\n\n${
+      model.essential
+        ? i18n.t('The gallery keeps working; this one feature stops until the model is downloaded again.')
+        : i18n.t('Everything else keeps working; this feature stops until the model is downloaded again.')}`;
+    // Taking a model out of the queue deletes nothing worth asking about.
+    if (!waiting && !window.confirm(asking)) return;
+    try {
+      this.render(await json(`/api/admin/ai-models/${encodeURIComponent(model.id)}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+      }));
+      this.toast(waiting
+        ? i18n.t('{name} will not be downloaded.', { name: i18n.t(model.label) })
+        : i18n.t('{name} was deleted.', { name: i18n.t(model.label) }));
+    } catch (error) {
+      this.toast(error.message, true);
+      this.refresh();
+    }
+  }
+
+  renderNeeded(data) {
+    const box = $('#am-needed');
+    if (!box) return;
+    const needed = data.needed || { ids: [], bytes: 0, skipped: [] };
+    const waiting = (data.queued || []).length
+      + data.models.filter((m) => (m.download || {}).status === 'downloading').length;
+    const button = $('#am-needed-go');
+    const hint = $('#am-needed-hint');
+    const pending = needed.ids.filter((id) => !(data.queued || []).includes(id)
+      && (data.models.find((m) => m.id === id)?.download || {}).status !== 'downloading');
+    box.hidden = !needed.ids.length && !waiting && !needed.skipped.length;
+    button.hidden = !pending.length;
+    button.onclick = () => this.downloadNeeded();
+    const lines = [];
+    if (pending.length) {
+      lines.push(i18n.t('{count} models for the features that are on ({size}), downloaded one after another.', {
+        count: pending.length, size: megabytes(needed.bytes) }));
+    } else if (waiting) {
+      lines.push(i18n.t('Downloading, one after another: {count} to go.', { count: waiting }));
+    } else {
+      lines.push(i18n.t('Every model the features that are on need is here.'));
+    }
+    if (needed.skipped.length) {
+      lines.push(i18n.t('Not included, because Python packages are missing: {names}.', {
+        names: needed.skipped.map((s) => i18n.t(s.label)).join(', ') }));
+    }
+    hint.textContent = lines.join(' ');
+  }
+
   render(data) {
     this.data = data;
     const list = $('#am-models');
@@ -119,28 +195,47 @@ export class AIModelsPanel {
       }
       what.append(name, el('div', 'hint subtle', i18n.t(model.used_for)));
       const side = el('div', 'am-status');
+      const queued = state.status === 'queued';
+      const deleteButton = () => {
+        const button = el('button', 'btn small ghost danger', i18n.t('Delete'));
+        button.onclick = () => this.remove(model);
+        return button;
+      };
       if (model.update_available && !busy) {
+        const actions = el('div', 'am-actions');
         const button = el('button', 'btn small primary',
           i18n.t('Update to version {version}', { version: model.version }));
         button.onclick = () => this.download(model);
-        side.append(button);
+        actions.append(button, deleteButton());
+        side.append(actions);
       } else if (model.installed && !busy) {
         side.classList.add('good');
         side.append(el('div', null, i18n.t('Installed')));
         // Quiet, because it is rarely the answer — but it is the only way out
         // of a model whose file is the right length and the wrong bytes.
+        const actions = el('div', 'am-actions');
         const again = el('button', 'btn small ghost', i18n.t('Download again'));
         again.onclick = () => this.download(model, { force: true });
-        side.append(again);
+        actions.append(again, deleteButton());
+        side.append(actions);
+      } else if (queued) {
+        side.append(el('div', null, i18n.t('Waiting to download')));
+        const cancel = el('button', 'btn small ghost', i18n.t('Cancel'));
+        cancel.onclick = () => this.remove(model, { waiting: true });
+        side.append(cancel);
       } else if (busy) {
         const bar = el('progress');
         bar.max = state.total_bytes || model.bytes;
         bar.value = state.done_bytes || 0;
         side.append(bar, el('div', null, i18n.t('{done} of {total}', { done: megabytes(state.done_bytes || 0), total: megabytes(bar.max) })));
       } else {
+        const actions = el('div', 'am-actions');
         const button = el('button', 'btn small', i18n.t('Download · {size}', { size: megabytes(model.bytes) }));
         button.onclick = () => this.download(model);
-        side.append(button);
+        actions.append(button);
+        // Part of it on disk (a download stopped half way): that can go too.
+        if (model.on_disk_bytes > 0) actions.append(deleteButton());
+        side.append(actions);
       }
       row.append(what, side);
       const meta = i18n.t('Licence: {licence}. Source: {source}. Runs on: {runs_on}.', {
@@ -168,6 +263,7 @@ export class AIModelsPanel {
     $('#am-summary').textContent = summary.join(' · ');
     $('#am-folder').textContent = i18n.t('Models are kept in {folder}.', { folder: data.folder });
     $('#am-restart').hidden = !data.restart_for_search;
-    if (downloading && this.visible) this.timer = setTimeout(() => this.refresh(), 1500);
+    this.renderNeeded(data);
+    if ((downloading || (data.queued || []).length) && this.visible) this.timer = setTimeout(() => this.refresh(), 1500);
   }
 }

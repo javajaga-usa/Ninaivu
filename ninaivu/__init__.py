@@ -1109,12 +1109,18 @@ class Services:
         from .media import model_catalog                         # noqa: PLC0415
         from .storage import resume                              # noqa: PLC0415
 
+        queued: list[str] = []
         for name, args in wanted.items():
             if not name.startswith(ai_models_api.MODEL_RESUME_PREFIX):
                 continue
             model_id = str(args.get("model_id") or name.split(":", 1)[1])
             if model_id not in model_catalog.MODELS or model_catalog.installed(model_id):
                 resume.done(conn, name)
+                continue
+            if args.get("queued") and not args.get("force"):
+                # Part of "Download all needed models": one after another
+                # again, as they were asked for, not all at once.
+                queued.append(model_id)
                 continue
             # Whether it was a plain download or a "download again": a
             # forced fetch interrupted half way must carry on being forced,
@@ -1123,6 +1129,9 @@ class Services:
             attempt(f"the {model_id} model download",
                     lambda m=model_id, f=again: ai_models_api.start_model_download(
                         self.cfg.db_path, m, force=f))
+        if queued:
+            attempt("the needed model downloads",
+                    lambda: ai_models_api.queue_model_downloads(self.cfg.db_path, queued))
 
     #: How long start-up keeps trying to pick up an interrupted archive job
     #: whose folders are not there yet — a network share still reconnecting, a
