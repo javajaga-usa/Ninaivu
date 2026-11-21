@@ -216,7 +216,13 @@ sheet says where each key is kept without ever holding a password itself.
 What the scan does with AI — naming places, reading text, finding faces,
 describing videos by several moments — each switch saying which model it
 needs and whether that model is here, then the models themselves with their
-downloads. Everything on this page runs on this machine.
+downloads. **Download all** fetches every model the features that are on
+need, one after another (one size of each: Florence-2 large and Whisper
+large-v3 on a computer with 24 GB of memory or more); each model has
+**Delete**, and **Update** when a newer version comes with Ninaivu.
+Deleting a model leaves the rest of Ninaivu working: the feature it served
+says it is not installed until it is downloaded again. Everything on this
+page runs on this machine.
 
 ### AI — AI server
 

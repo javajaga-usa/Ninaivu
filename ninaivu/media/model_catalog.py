@@ -1046,6 +1046,12 @@ class Downloads:
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self._state: dict[str, dict[str, Any]] = {}
+        #: Models waiting their turn after "Download all needed models", one
+        #: at a time so the first is usable soon rather than all at the end.
+        self._queue: list[str] = []
+        self._queue_worker: threading.Thread | None = None
+        #: Told whenever a download ends, so the queue moves on at once.
+        self._ended = threading.Condition(self._lock)
 
     def state(self, model_id: str) -> dict[str, Any]:
         with self._lock:
@@ -1077,7 +1083,11 @@ class Downloads:
         with self._lock:
             if self._state.get(model_id, {}).get("status") == "downloading":
                 return False
+            if model_id in self._queue:
+                self._queue.remove(model_id)            # asked for on its own: now
             if installed(model_id) and not force:
+                if self._state.get(model_id, {}).get("status") == "queued":
+                    self._state.pop(model_id, None)
                 return False
             self._state[model_id] = {"status": "downloading", "done_bytes": 0,
                                      "total_bytes": total_bytes(model_id), "error": "",
@@ -1104,6 +1114,7 @@ class Downloads:
                 outcome = {"status": "failed", "error": str(error)[:300]}
             with self._lock:
                 self._state[model_id].update(outcome, finished_at=time.time())
+                self._ended.notify_all()
             if on_end:
                 try:
                     on_end(model_id)
@@ -1114,7 +1125,205 @@ class Downloads:
         return True
 
 
+    def queued(self) -> list[str]:
+        with self._lock:
+            return list(self._queue)
+
+    def enqueue(self, model_ids: list[str], start: Callable[[str], Any]) -> list[str]:
+        """Download *model_ids* one after another, in the background.
+
+        *start* begins one download (``ai_models_api.start_model_download``,
+        which also remembers it across a restart). Models already installed,
+        downloading or waiting are stepped over. Returns the ones added.
+        """
+        added = []
+        with self._lock:
+            for model_id in model_ids:
+                if model_id not in MODELS or model_id in self._queue:
+                    continue
+                if self._state.get(model_id, {}).get("status") == "downloading":
+                    continue
+                if installed(model_id):
+                    continue
+                self._queue.append(model_id)
+                self._state[model_id] = {"status": "queued", "done_bytes": 0,
+                                         "total_bytes": total_bytes(model_id), "error": ""}
+                added.append(model_id)
+            if self._queue and not (self._queue_worker and self._queue_worker.is_alive()):
+                self._queue_worker = threading.Thread(
+                    target=self._work_through, args=(start,), name="model-download-queue",
+                    daemon=True)
+                self._queue_worker.start()
+        return added
+
+    def _work_through(self, start: Callable[[str], Any]) -> None:
+        while True:
+            with self._lock:
+                if not self._queue:
+                    self._queue_worker = None
+                    return
+                model_id = self._queue.pop(0)
+                if self._state.get(model_id, {}).get("status") != "queued":
+                    continue                             # removed, or started on its own
+            try:
+                start(model_id)
+            except Exception as error:                   # noqa: BLE001 - reported to the console
+                log.warning("could not start the download of %s: %s", model_id, error)
+                with self._lock:
+                    self._state[model_id] = {"status": "failed", "error": str(error)[:300]}
+                continue
+            with self._lock:
+                if self._state.get(model_id, {}).get("status") == "queued":
+                    self._state.pop(model_id, None)      # nothing was owed after all
+                while self._state.get(model_id, {}).get("status") == "downloading":
+                    self._ended.wait(5.0)
+
+    def cancel(self, model_id: str) -> bool:
+        """Take a waiting model out of the queue, and forget how its last
+        download went. False while it is downloading: that cannot be stopped
+        half way without leaving a partial file to clear up."""
+        with self._lock:
+            if self._state.get(model_id, {}).get("status") == "downloading":
+                return False
+            if model_id in self._queue:
+                self._queue.remove(model_id)
+            self._state.pop(model_id, None)
+            return True
+
+
 downloads = Downloads()
+
+
+# ---------------------------------------------------------------------------
+# Removing
+#
+# Every model is optional, so removing one must leave Ninaivu as it was
+# before it was downloaded: browsing, importing, the viewer, backups and the
+# light search all work without any of them. What removing has to be careful
+# about is the files models share (the speech detector both Whisper sizes
+# use) and the settings that point the editing code at a file.
+# ---------------------------------------------------------------------------
+
+class ModelBusy(RuntimeError):
+    """The model is downloading; it can be removed once that has ended."""
+
+
+def _all_paths(model_id: str) -> list[Path]:
+    """Every file this model can leave on disk: what it keeps, any archive it
+    was unpacked from, and the previous version's files."""
+    paths: list[Path] = []
+    for entry in MODELS[model_id]["files"]:
+        paths += [path for path, _ in kept_files(entry)]
+        if "take" in entry:
+            paths.append(file_path(entry))
+    paths += superseded(model_id)
+    return paths
+
+
+def _kept_by_others(model_id: str) -> set[Path]:
+    """Files of *model_id* that another installed or downloading model needs."""
+    busy = {m for m, state in downloads.active().items()}
+    mine = set(_all_paths(model_id))
+    others: set[Path] = set()
+    for other in MODELS:
+        if other == model_id or not (other in busy or installed(other)):
+            continue
+        others |= mine & {path for entry in MODELS[other]["files"]
+                          for path, _ in kept_files(entry)}
+    return others
+
+
+def removable_bytes(model_id: str) -> int:
+    """How much removing *model_id* would free, now."""
+    shared = _kept_by_others(model_id)
+    total = 0
+    for path in set(_all_paths(model_id)) - shared:
+        try:
+            total += path.stat().st_size if path.is_file() else 0
+        except OSError:
+            continue
+    return total
+
+
+def remove(model_id: str) -> dict[str, Any]:
+    """Delete *model_id*'s files from this computer.
+
+    Files another installed model also uses stay. The settings that pointed
+    the editing code at the model are taken out, so its tool says it is not
+    installed rather than failing on a missing file. Empty folders it leaves
+    are removed; the models folder itself is not. Raises :class:`ModelBusy`
+    while it downloads. Files that will not go (in use on Windows) are named
+    under ``"failed"`` and the rest are still removed.
+    """
+    if model_id not in MODELS:
+        raise KeyError(model_id)
+    if not downloads.cancel(model_id):
+        raise ModelBusy(model_id)
+    root = models_root().resolve()
+    shared = _kept_by_others(model_id)
+    removed: list[str] = []
+    failed: list[str] = []
+    freed = 0
+    folders: set[Path] = set()
+    for path in dict.fromkeys(_all_paths(model_id)):
+        folders.add(path.parent)
+        if path in shared or not path.is_file():
+            continue
+        try:
+            size = path.stat().st_size
+            path.unlink()
+            removed.append(path.name)
+            freed += size
+        except OSError as exc:
+            log.warning("could not remove %s: %s", path, exc)
+            failed.append(path.name)
+    # A download stopped half way leaves partial files beside the model's.
+    for entry in MODELS[model_id]["files"]:
+        folder = file_path(entry).parent
+        if folder.is_dir() and not any(path in shared for path, _ in kept_files(entry)):
+            _clear_partials(folder, Path(entry["name"]).name, now=float("inf"))
+    _forget_settings(model_id)
+    # The model's own folders, deepest first, while they are empty.
+    for folder in sorted(folders, key=lambda f: len(f.parts), reverse=True):
+        current = folder
+        while True:
+            try:
+                resolved = current.resolve()
+            except OSError:
+                break
+            if resolved == root or root not in resolved.parents:
+                break
+            try:
+                current.rmdir()
+            except OSError:
+                break                                    # not empty, or not there
+            current = current.parent
+    if removed:
+        log.info("removed the %s model: %s", model_id, ", ".join(removed))
+    return {"removed": removed, "failed": failed, "kept_shared": sorted(p.name for p in shared),
+            "freed_bytes": freed}
+
+
+def _forget_settings(model_id: str) -> None:
+    """Take out of settings.json what pointed at *model_id*'s files."""
+    wanted = MODELS[model_id].get("settings")
+    target = settings_path()
+    if not wanted or not target.is_file():
+        return
+    try:
+        current = json.loads(target.read_text())
+    except (OSError, ValueError):
+        return
+    if not isinstance(current, dict):
+        return
+    changed = False
+    for name, relative in wanted.items():
+        stored = current.get(name)
+        if stored and (Path(stored) == models_root() / relative or not Path(stored).exists()):
+            current.pop(name)
+            changed = True
+    if changed:
+        write_settings(target, current)
 
 
 # ---------------------------------------------------------------------------
@@ -1185,4 +1394,8 @@ def describe(model_id: str) -> dict[str, Any]:
         # installed model is at the catalogue's version by definition.
         "installed_version": version_of(model_id) if installed(model_id) else 0,
         "update_available": update_available(model_id),
+        # What "Delete" would free: also a model only partly downloaded, or
+        # an older version's files, which are on disk without it being
+        # installed.
+        "on_disk_bytes": removable_bytes(model_id),
     }

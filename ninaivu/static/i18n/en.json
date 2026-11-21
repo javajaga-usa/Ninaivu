@@ -5416,5 +5416,21 @@
   "from the camera": "from the camera",
   "worked out from the people in it": "worked out from the people in it",
   "worked out from the picture": "worked out from the picture",
-  "you set this": "you set this"
+  "you set this": "you set this",
+  "Download all needed models": "Download all needed models",
+  "Download all": "Download all",
+  "Download {count} models ({size}), one after another?": "Download {count} models ({size}), one after another?",
+  "Downloading the needed models, one after another…": "Downloading the needed models, one after another…",
+  "Delete {name} from this computer ({size})?": "Delete {name} from this computer ({size})?",
+  "The gallery keeps working; this one feature stops until the model is downloaded again.": "The gallery keeps working; this one feature stops until the model is downloaded again.",
+  "Everything else keeps working; this feature stops until the model is downloaded again.": "Everything else keeps working; this feature stops until the model is downloaded again.",
+  "{name} will not be downloaded.": "{name} will not be downloaded.",
+  "{name} was deleted.": "{name} was deleted.",
+  "{count} models for the features that are on ({size}), downloaded one after another.": "{count} models for the features that are on ({size}), downloaded one after another.",
+  "Downloading, one after another: {count} to go.": "Downloading, one after another: {count} to go.",
+  "Every model the features that are on need is here.": "Every model the features that are on need is here.",
+  "Not included, because Python packages are missing: {names}.": "Not included, because Python packages are missing: {names}.",
+  "Waiting to download": "Waiting to download",
+  "This model is downloading. Delete it once the download has finished.": "This model is downloading. Delete it once the download has finished.",
+  "Some of the files of this model are in use and were not removed: {files}. Stop Ninaivu and delete it again.": "Some of the files of this model are in use and were not removed: {files}. Stop Ninaivu and delete it again."
 }

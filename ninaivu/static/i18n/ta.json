@@ -5802,5 +5802,21 @@
   "from the camera": "கேமராவிலிருந்து",
   "worked out from the people in it": "அதிலுள்ள மனிதர்களைக் கொண்டு கணிக்கப்பட்டது",
   "worked out from the picture": "படத்தைக் கொண்டு கணிக்கப்பட்டது",
-  "you set this": "நீங்கள் அமைத்தது"
+  "you set this": "நீங்கள் அமைத்தது",
+  "Download all needed models": "தேவையான எல்லா மாதிரிகளையும் பதிவிறக்கு",
+  "Download all": "அனைத்தையும் பதிவிறக்கு",
+  "Download {count} models ({size}), one after another?": "{count} மாதிரிகளை ({size}) ஒன்றன்பின் ஒன்றாகப் பதிவிறக்கவா?",
+  "Downloading the needed models, one after another…": "தேவையான மாதிரிகள் ஒன்றன்பின் ஒன்றாகப் பதிவிறக்கப்படுகின்றன…",
+  "Delete {name} from this computer ({size})?": "{name}-ஐ இந்தக் கணினியிலிருந்து நீக்கவா ({size})?",
+  "The gallery keeps working; this one feature stops until the model is downloaded again.": "தொகுப்பு தொடர்ந்து இயங்கும்; மாதிரி மீண்டும் பதிவிறக்கப்படும் வரை இந்த ஒரு வசதி மட்டும் நிற்கும்.",
+  "Everything else keeps working; this feature stops until the model is downloaded again.": "மற்ற அனைத்தும் தொடர்ந்து இயங்கும்; மாதிரி மீண்டும் பதிவிறக்கப்படும் வரை இந்த வசதி நிற்கும்.",
+  "{name} will not be downloaded.": "{name} பதிவிறக்கப்படாது.",
+  "{name} was deleted.": "{name} நீக்கப்பட்டது.",
+  "{count} models for the features that are on ({size}), downloaded one after another.": "இயக்கத்திலுள்ள வசதிகளுக்கு {count} மாதிரிகள் ({size}), ஒன்றன்பின் ஒன்றாகப் பதிவிறக்கப்படும்.",
+  "Downloading, one after another: {count} to go.": "ஒன்றன்பின் ஒன்றாகப் பதிவிறக்கப்படுகிறது: இன்னும் {count}.",
+  "Every model the features that are on need is here.": "இயக்கத்திலுள்ள வசதிகளுக்குத் தேவையான எல்லா மாதிரிகளும் இங்கே உள்ளன.",
+  "Not included, because Python packages are missing: {names}.": "Python தொகுப்புகள் இல்லாததால் சேர்க்கப்படவில்லை: {names}.",
+  "Waiting to download": "பதிவிறக்கக் காத்திருக்கிறது",
+  "This model is downloading. Delete it once the download has finished.": "இந்த மாதிரி பதிவிறக்கப்படுகிறது. பதிவிறக்கம் முடிந்ததும் நீக்குங்கள்.",
+  "Some of the files of this model are in use and were not removed: {files}. Stop Ninaivu and delete it again.": "இந்த மாதிரியின் சில கோப்புகள் பயன்பாட்டில் உள்ளதால் நீக்கப்படவில்லை: {files}. நினைவை நிறுத்திவிட்டு மீண்டும் நீக்குங்கள்."
 }
