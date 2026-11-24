@@ -282,6 +282,7 @@ export const admin = (() => {
     deleteSmartAlbumsByAlbumId: (albumId, options) => send('DELETE', `/api/smart-albums/${seg(albumId)}`, options),
     deleteStoriesByStoryId: (storyId, options) => send('DELETE', `/api/stories/${seg(storyId)}`, options),
     deleteVisibilityFolder: (options) => send('DELETE', '/api/visibility/folder', options),
+    getAdminAbout: (options) => send('GET', '/api/admin/about', options),
     getAdminAiModels: (options) => send('GET', '/api/admin/ai-models', options),
     getAdminAssignable: (options) => send('GET', '/api/admin/assignable', options),
     getAdminAttention: (options) => send('GET', '/api/admin/attention', options),

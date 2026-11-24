@@ -67,6 +67,40 @@ def _scanner():
     return current_app.config["MV_SCANNER"]
 
 
+@admin_bp.get("/api/admin/about")
+@require_admin
+def about_this_copy():
+    """What the About box of the console says: which version this is, where it
+    runs and where its folders are, and which AI models are on this computer.
+
+    Everything is read from what Ninaivu already knows; nothing is looked up
+    or sent anywhere.
+    """
+    import platform
+
+    from ..media import model_catalog
+
+    cfg = _cfg()
+    models = []
+    for model_id, entry in model_catalog.MODELS.items():
+        try:
+            if not model_catalog.installed(model_id):
+                continue
+        except Exception:                           # a model must never break this page
+            continue
+        models.append({"id": model_id, "label": entry.get("label"),
+                       "licence": entry.get("licence", "")})
+    return jsonify({
+        "name": "Ninaivu", "version": __version__, "copyright": COPYRIGHT, "licence": LICENCE,
+        "python": platform.python_version(),
+        "system": f"{platform.system()} {platform.release()} ({platform.machine()})",
+        "state_dir": str(cfg.state_dir),
+        "libraries": [str(p) for p in cfg.libraries],
+        "models": models,
+        "notices": "docs/THIRD_PARTY_NOTICES.md",
+    })
+
+
 @admin_bp.get("/api/admin/date-policy")
 @require_admin
 def date_policy_get():

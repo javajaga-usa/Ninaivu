@@ -5432,5 +5432,9 @@
   "Not included, because Python packages are missing: {names}.": "Not included, because Python packages are missing: {names}.",
   "Waiting to download": "Waiting to download",
   "This model is downloading. Delete it once the download has finished.": "This model is downloading. Delete it once the download has finished.",
-  "Some of the files of this model are in use and were not removed: {files}. Stop Ninaivu and delete it again.": "Some of the files of this model are in use and were not removed: {files}. Stop Ninaivu and delete it again."
+  "Some of the files of this model are in use and were not removed: {files}. Stop Ninaivu and delete it again.": "Some of the files of this model are in use and were not removed: {files}. Stop Ninaivu and delete it again.",
+  "Runs on": "Runs on",
+  "Settings and index are kept in": "Settings and index are kept in",
+  "AI models on this computer": "AI models on this computer",
+  "Third-party notices": "Third-party notices"
 }

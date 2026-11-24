@@ -2,6 +2,7 @@
 # face | methods | rule | access | writes | cross-origin | endpoint | feature
 admin | GET                  | / | anyone | reads | - | api.index | -
 home  | GET                  | / | anyone | reads | - | api.index | -
+admin | GET                  | /api/admin/about | admin | reads | - | admin.about_this_copy | -
 admin | GET                  | /api/admin/ai-models | admin | reads | - | ai_models.ai_models | -
 admin | DELETE               | /api/admin/ai-models/<model_id> | admin | writes | same origin | ai_models.delete_model | -
 admin | POST                 | /api/admin/ai-models/<model_id>/download | admin | writes | same origin | ai_models.download_model | -
