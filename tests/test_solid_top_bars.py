@@ -26,8 +26,8 @@ BARS = [
     (STATIC / "premium.css", ".admin-bar"),
     (STATIC / "editor.css", ".photo-editor header"),
     (STATIC / "ai-playground.css", ".ap-header"),
-    (TEMPLATES / "share.html", "header"),
-    (TEMPLATES / "ask.html", "header"),
+    (STATIC / "share.css", "header"),
+    (STATIC / "ask.css", "header"),
 ]
 
 
