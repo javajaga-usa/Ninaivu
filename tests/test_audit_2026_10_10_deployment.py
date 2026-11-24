@@ -227,10 +227,7 @@ def test_the_docker_image_is_attested_by_the_digest_it_was_pushed_as():
     assert step["with"]["push-to-registry"] is True
     names = [s.get("name") or s.get("uses") for s in job["steps"]]
     assert names.index("Build and push the image") < names.index("Build provenance")
-    # A called workflow holds no more than its caller grants.
-    release = _yaml(ROOT / ".github" / "workflows" / "release.yml")
-    caller = release["jobs"]["docker"]["permissions"]
-    assert caller["id-token"] == "write" and caller["attestations"] == "write"
+    # The release no longer calls it (5.0: Docker is not needed).
 
 
 # --- the Mac build is a zip of the portable folder, notarised when it can be ---------------

@@ -16,10 +16,11 @@ Those changes are written here, as numbered steps per database:
   copies and the duplicates review as steps 2, 3 and 4. 5.0 folded them into
   one baseline: a new index gets everything in a single step, and an index
   that records 4 or more is up to date. The archive's list still starts at 1.
-* **An index from before 4.3 is not opened.** It records less than 4, so
-  :func:`refuse_older` stops the start and says to open it once in 4.4.0
-  (storage/upgrade.py says it before the copy is made). Going through 4.4 is
-  what carried those steps' filled tables, which a new baseline does not.
+* **An index from any earlier version is brought up to date.** One that
+  records less than 4 (a 3.x index records 0) runs the baseline, which makes
+  what is missing and fills the places of the photographs it already holds,
+  the one table 4.0 to 4.3 filled from older data. The state folder is copied
+  first (storage/upgrade.py), as for every update.
 * **Each later step runs once**, inside one transaction with the record of
   it, so a step is either wholly done and recorded or not done at all. A step
   that fails rolls back, is logged, and stops the start: the steps after it
@@ -180,14 +181,20 @@ END""",
 def _baseline(conn: sqlite3.Connection) -> None:
     """Migration 4: what 4.4 has. The tables the numbered steps of 4.0 to 4.3 added.
 
-    A 4.x index records 4 and never runs this: it was made by 4.3 or 4.4,
-    which had those steps. It is for a new index. Nothing is filled: a new
-    index has no photographs yet, so no place, ledger row or decision to
-    carry over (4.0 to 4.3 filled them from what an older index held, and
-    Ninaivu 5 no longer opens one).
+    A 4.3 or 4.4 index records 4 and never runs this. A new index runs it
+    over nothing; an older one (3.x records 0) runs it over its photographs,
+    so every statement makes only what is missing, and the place of each
+    photograph that has none is filled from its row.
     """
     for statement in LOCATIONS:
         conn.execute(statement)
+    conn.execute(
+        "INSERT OR IGNORE INTO locations(asset_id, fingerprint, root, rel_path, place, seen_at) "
+        "SELECT a.id, (SELECT f.algo || ':' || f.digest FROM content_fingerprints f "
+        "WHERE f.asset_id = a.id AND f.size = a.size AND f.mtime = a.mtime), "
+        f"a.root, a.rel_path, 'library', COALESCE(a.added_at, NULLIF(a.indexed_at, 0), {_NOW}) "
+        "FROM assets a WHERE NOT EXISTS (SELECT 1 FROM locations l "
+        "WHERE l.asset_id = a.id AND l.place = 'library')")
     conn.execute(
         "CREATE TABLE IF NOT EXISTS copies ("
         " fingerprint TEXT NOT NULL,"
@@ -203,9 +210,9 @@ def _baseline(conn: sqlite3.Connection) -> None:
     duplicate_review.create(conn)
 
 
-#: The index (``index.db``). It starts at 4, the last step 4.4 recorded: an
-#: index that records less than that is from before 4.3 and is not opened
-#: (see :func:`refuse_older`), so the steps before it are gone.
+#: The index (``index.db``). It starts at 4, the last step 4.4 recorded; an
+#: index that records less runs the baseline, which is safe to run over any
+#: older index.
 INDEX: tuple[Migration, ...] = (
     Migration(4, "what 4.4 has", _baseline),
 )
@@ -232,38 +239,6 @@ def check(steps: Sequence[Migration]) -> None:
     first = numbers[0] if numbers else 1
     if numbers != list(range(first, first + len(numbers))):
         raise ValueError(f"migrations must be numbered in order without a gap: {numbers}")
-
-
-class IndexTooOld(RuntimeError):
-    """The index was last used by a Ninaivu older than the first step kept."""
-
-
-#: What an older index is told. The version is that of the last release
-#: that still opens it and brings it forward.
-TOO_OLD = (
-    "{path} was last used by a Ninaivu older than 4.3 (it records step {have}; this "
-    "version needs {first}). Nothing was changed. Start Ninaivu 4.4.0 on it once, let "
-    "it finish starting, stop it, and then start this version. The photographs are "
-    "not affected.")
-
-
-def refuse_older(conn: sqlite3.Connection, steps: Sequence[Migration], *,
-                 path: object = "The index") -> None:
-    """Raise :class:`IndexTooOld` for a database that holds an older Ninaivu's data.
-
-    A database with no photograph table is new and passes. One with the table
-    must record at least the first step kept; anything below it is from
-    before the steps were folded into one baseline, and would otherwise be
-    treated as a new database and left without what those steps did.
-    """
-    have = recorded(conn)
-    first = steps[0].number if steps else 1
-    if have >= first:
-        return
-    row = conn.execute(
-        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='assets'").fetchone()
-    if row:
-        raise IndexTooOld(TOO_OLD.format(path=path, have=have, first=first))
 
 
 def recorded(conn: sqlite3.Connection) -> int:

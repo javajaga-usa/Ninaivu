@@ -191,23 +191,19 @@ def test_console_overview_loads_after_upgrading(cfg, library):
     assert assigned.get_json()["person"]["library"] == str(library / "shared")
 
 
-def test_init_db_refuses_a_legacy_index_instead_of_patching_it(tmp_path):
-    """An index made before 4.3 is not patched column by column any more
-    (5.0): it is refused untouched, and the message says to open it in 4.4."""
-    from ninaivu.storage import migrations
+def test_init_db_upgrades_a_legacy_index(tmp_path):
+    """An index made before 4.3 is upgraded to the latest, keeping its rows."""
     path = tmp_path / "legacy_v5.db"
     raw = sqlite3.connect(path)
     raw.execute("CREATE TABLE assets (id INTEGER PRIMARY KEY, root TEXT NOT NULL, "
                 "rel_path TEXT NOT NULL, filename TEXT NOT NULL, kind TEXT NOT NULL)")
+    raw.execute("INSERT INTO assets VALUES(1, 'r', 'a.jpg', 'a.jpg', 'photo')")
     raw.commit()
     raw.close()
     db.close_all()
-    with pytest.raises(migrations.IndexTooOld, match="Ninaivu 4.4.0"):
-        db.init_db(path)
-    raw = sqlite3.connect(path)
+    conn = db.init_db(path)
     try:
-        assert [r[0] for r in raw.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'")] == ["assets"]
+        assert conn.execute("SELECT count(*) FROM assets").fetchone()[0] == 1
+        assert conn.execute("SELECT count(*) FROM locations").fetchone()[0] == 1
     finally:
-        raw.close()
-
+        db.close(path)

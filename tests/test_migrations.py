@@ -42,18 +42,23 @@ def test_a_new_index_records_the_last_step(index):
     assert migrations.recorded(conn) == migrations.latest(migrations.INDEX)
 
 
-def test_an_index_from_before_4_3_is_refused_untouched(tmp_path):
-    """No user_version and a photograph table: a 3.x or early 4.x index."""
+def test_an_index_from_before_4_3_is_brought_up_to_date(tmp_path):
+    """A 3.x index records 0: it is upgraded, keeps its rows and gets its places."""
     path = tmp_path / "index.db"
     conn = db.init_db(path)
-    conn.execute("PRAGMA user_version = 3")           # as 4.0 to 4.2 left it
+    conn.execute("INSERT INTO assets(root, rel_path, filename, kind) "
+                 "VALUES('r', 'a.jpg', 'a.jpg', 'photo')")
+    conn.execute("DELETE FROM locations")
+    conn.execute("PRAGMA user_version = 0")
     conn.commit()
     db.close(path)
     db._READY.discard(str(path))                    # noqa: SLF001
-    before = path.read_bytes()
-    with pytest.raises(migrations.IndexTooOld, match="Ninaivu 4.4.0"):
-        db.init_db(path)
-    assert path.read_bytes() == before
+    conn = db.init_db(path)
+    try:
+        assert migrations.recorded(conn) == migrations.latest(migrations.INDEX)
+        assert conn.execute("SELECT rel_path FROM locations").fetchall()[0][0] == "a.jpg"
+    finally:
+        db.close(path)
 
 
 def test_a_new_index_is_not_refused(tmp_path):
@@ -162,14 +167,16 @@ def _a_37_home(tmp_path):
     return state
 
 
-def test_a_37_index_is_refused_before_any_copy_is_made(tmp_path):
+def test_a_37_index_is_copied_and_upgraded(tmp_path):
     from ninaivu.storage import upgrade
     state = _a_37_home(tmp_path)
-    before = (state / "index.db").read_bytes()
-    with pytest.raises(upgrade.OlderDataError, match="Ninaivu 4.4.0"):
-        upgrade.prepare(state, version="5.0.0")
-    assert (state / "index.db").read_bytes() == before
-    assert not (state / upgrade.BEFORE_UPDATE).exists()
+    upgrade.prepare(state, version="5.0.0")
+    assert (state / upgrade.BEFORE_UPDATE).exists()
+    conn = db.init_db(state / "index.db")
+    try:
+        assert migrations.recorded(conn) == migrations.latest(migrations.INDEX)
+    finally:
+        db.close(state / "index.db")
 
 
 def test_the_old_module_paths_are_gone():
