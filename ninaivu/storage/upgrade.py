@@ -155,7 +155,7 @@ def index_shape() -> str:
         features.shape(),
         migrations.shape(),
     ]
-    for code in (db.init_db, db._migrate, db.heal_schema, archive_db.init_db):  # noqa: SLF001
+    for code in (db.init_db, db.heal_schema, archive_db.init_db):  # noqa: SLF001
         try:
             parts.append(inspect.getsource(code).replace("\r\n", "\n"))
         except (OSError, TypeError):
