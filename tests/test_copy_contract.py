@@ -41,6 +41,10 @@ def recorded(scanned):
         "SELECT a.id, a.root, a.rel_path, a.size, a.mtime, f.digest, f.algo, "
         "f.algo || ':' || f.digest AS fp FROM assets a "
         "JOIN content_fingerprints f ON f.asset_id = a.id WHERE a.trashed = 0 ORDER BY a.id")]
+    # The library holds copied shots, and the order files are found in differs
+    # between machines: keep one row per content so each stands for one file.
+    assets = list({row["fp"]: row for row in reversed(assets)}.values())[::-1]
+    assets.sort(key=lambda row: row["id"])
     assert len(assets) >= 6
     a, b, c, d, e, stale = assets[:6]
     now = time.time()
