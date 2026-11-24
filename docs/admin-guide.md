@@ -76,7 +76,7 @@ had not stopped by then.
 
 ## Docker
 
-For a NAS or a Linux box:
+For a NAS or a Linux box (built from the checkout; 5.0 publishes no Docker image):
 
 ```bash
 git clone https://github.com/javajaga-usa/Ninaivu.git
@@ -1132,7 +1132,7 @@ the `pull` and `up -d` below do it.
 | macOS | unzip the newer one beside the old folder, open its `Ninaivu.app` and bring the library across | `Ninaivu.app` | `data` (index, settings, people, models, the Control Panel's settings), the library |
 | Linux | stop Ninaivu, install the newer `.deb` with `sudo apt install ./Ninaivu-<version>-linux-x64.deb`, then restart | `/opt/ninaivu`, launcher and menu entry | `~/.ninaivu` (or `NINAIVU_STATE_DIR`), original photographs |
 | An installed Ninaivu from 1.10 or earlier | **Mac:** drag the new `Ninaivu.app` on its own over the old one in Applications: on its own it keeps to `~/.ninaivu` as before. **Windows, Linux:** the installed copy keeps working; to move to the portable folder, stop it and copy its state folder (`%USERPROFILE%\.ninaivu`, `~/.ninaivu` or `~/.local/state/ninaivu`) into the new folder as `data` | the program | the old state folder, until it is removed by hand |
-| Docker | `docker compose pull` (or `build`), then `up -d` | the image | the `ninaivu_state` volume and `MEDIA_DIR` |
+| Docker | `git pull`, then `docker compose -f installers/docker/docker-compose.yml build` and `up -d` (5.0 publishes no image; it is built from the checkout) | the image | the `ninaivu_state` volume and `MEDIA_DIR` |
 | A checkout | `git pull`, then start it again | the source | the state folder, `.ai-models`, the library |
 
 In Docker, never add `-v` to `docker compose down`: that deletes the state

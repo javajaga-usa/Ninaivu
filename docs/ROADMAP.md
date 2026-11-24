@@ -9,7 +9,7 @@ by release, is the [changelog](CHANGELOG.md).
 
 - One server with two faces: the family app and the administrator's console.
 - Portable downloads for Windows (x64), Apple-silicon Macs and Linux (x64),
-  each carrying its own Python, and a Docker image. One Python, 3.14.
+  each carrying its own Python (a Docker setup is built from the checkout, with no published image). One Python, 3.14.
 - Two computers ([Primary and Secondary](two-computers.md)): the Secondary
   keeps a checked copy of every original and can serve the family when the
   Primary is asleep.
