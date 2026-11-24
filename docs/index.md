@@ -35,7 +35,7 @@ English, and reads your photo folders without changing the originals.
 
 Lite has no model-backed AI, cloud backup or phone backup. It runs on Windows 10+,
 macOS, Linux and Raspberry Pi 4/5 with a 64-bit OS. Installers carry their own
-Python; a portable Windows zip and Docker setup are available too.
+Python; a portable Windows zip, and a Docker setup built from the checkout, are available too.
 
 - **[Download Lite](https://github.com/javajaga-usa/Ninaivu-lite/releases/latest)**
   — choose the installer for your computer. Releases are currently unsigned;
