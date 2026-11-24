@@ -133,7 +133,7 @@ export class PhotoEditor {
   slider(key, label, min, max, swatch = '') {
     const range = RANGES[key] || [min ?? -100, max ?? 100, 0];
     const lo = min ?? range[0], hi = max ?? range[1], value = range[2];
-    const dot = swatch ? `<i class="pe-swatch" style="background:${swatch}"></i>` : '';
+    const dot = swatch ? `<i class="pe-swatch" data-swatch="${swatch}"></i>` : '';
     return `<label class="pe-slider"><span>${dot}${i18n.t(label)}</span><output data-value="${key}">${this.shown(key, value)}</output>`
       + `<input type="range" data-setting="${key}" min="${lo}" max="${hi}" value="${value}"></label>`;
   }
@@ -354,6 +354,8 @@ export class PhotoEditor {
     this.dialog.className = 'photo-editor';
     this.dialog.setAttribute('aria-labelledby', 'pe-title');
     this.dialog.innerHTML = this.markup();
+    // A style attribute is not allowed by the page's policy; the style object is.
+    this.dialog.querySelectorAll('[data-swatch]').forEach((dot) => { dot.style.background = dot.dataset.swatch; });
     document.body.append(this.dialog);
     this.dialogController = registerDialog(this.dialog, { escape: true, backdrop: false,
       initialFocus: false, onDismiss: () => this.close() });

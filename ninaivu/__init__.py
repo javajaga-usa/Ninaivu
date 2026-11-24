@@ -2218,11 +2218,12 @@ def _base_app(services: Services, face: str, template: str) -> Flask:
         # The page's import map, by hash: the one inline script allowed
         # (server/modules.py).
         from .server.modules import csp_hashes as _csp_hashes  # noqa: PLC0415
+        from .server.csp import style_src as _csp_style_src  # noqa: PLC0415
         importmap = _csp_hashes()
         response.headers.setdefault(
             "Content-Security-Policy",
             f"default-src 'self'; img-src 'self' data: blob:{tiles}; "
-            "media-src 'self' blob:; style-src 'self' 'unsafe-inline'; "
+            f"media-src 'self' blob:; {_csp_style_src()}"
             f"script-src 'self'{importmap}; connect-src 'self'{tiles}; font-src 'self' data:; "
             "frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
         )
@@ -2283,11 +2284,12 @@ def _maintenance_gate(cfg, user, path: str):  # noqa: ANN001
         response = jsonify({"error": message, "maintenance": True, "status": 503})
     else:
         from html import escape                                 # noqa: PLC0415
+        from .server.csp import style_attr                      # noqa: PLC0415
         response = Response(
             "<!doctype html><meta charset=utf-8><meta name=viewport "
             "content='width=device-width,initial-scale=1'><title>Ninaivu</title>"
-            "<body style='font:16px system-ui;display:grid;place-items:center;"
-            "min-height:90vh;margin:0 16px;text-align:center'><div><h1>"
+            f"<style{style_attr()}>body{{font:16px system-ui;display:grid;place-items:center;"
+            "min-height:90vh;margin:0 16px;text-align:center}</style><body><div><h1>"
             "Down for maintenance</h1><p>" + escape(message) + "</p></div>",
             mimetype="text/html")
     response.status_code = 503

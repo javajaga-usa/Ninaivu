@@ -31,14 +31,14 @@ export function openPortraitStudio(source, onApply = null) {
 
   dialog.innerHTML = `
     <header class="ap-portrait-header">
-      <div style="display:flex; align-items:center; gap:10px;">
-        <span class="ap-brand-mark" style="width:28px; height:28px; font-size:15px;" aria-hidden="true">✦</span>
+      <div class="u-b87ca3">
+        <span class="ap-brand-mark u-25f681"  aria-hidden="true">✦</span>
         <div>
-          <h2 style="margin:0; font-size:14.5px; font-weight:650; letter-spacing:-0.2px;">${i18n.t('Skin and hair')}</h2>
-          <span style="font-size:10.5px; color:var(--ap-muted);">${i18n.t('Each person in the photograph, on this computer')}</span>
+          <h2 class="u-08df1a">${i18n.t('Skin and hair')}</h2>
+          <span class="u-c7bb46">${i18n.t('Each person in the photograph, on this computer')}</span>
         </div>
       </div>
-      <button type="button" class="btn" data-close-portrait aria-label="${i18n.t('Close portrait studio')}" style="width:28px; height:28px; padding:0; border-radius:50%; display:grid; place-items:center;">✕</button>
+      <button type="button" class="btn u-e065b4" data-close-portrait aria-label="${i18n.t('Close portrait studio')}" >✕</button>
     </header>
 
     <div class="ap-portrait-tabs" role="tablist">
@@ -49,13 +49,13 @@ export function openPortraitStudio(source, onApply = null) {
     <div class="ap-portrait-grid">
       <div class="ap-portrait-preview">
         <canvas id="ap-portrait-canvas" aria-label="${i18n.t('Portrait preview')}"></canvas>
-        <canvas class="ap-portrait-overlay" aria-hidden="true" style="position:absolute; inset:0; width:100%; height:100%; object-fit:contain; pointer-events:none;"></canvas>
+        <canvas class="ap-portrait-overlay u-2224c6" aria-hidden="true" ></canvas>
         <span class="ap-before ap-portrait-before">${i18n.t('Original')}</span>
         <span class="ap-after ap-portrait-after">${i18n.t('Retouched')}</span>
 
-        <label class="ap-floating-compare" style="position:absolute; left:50%; bottom:14px; transform:translateX(-50%); display:flex; align-items:center; gap:10px; font-size:10.5px; padding:6px 16px; background:var(--ap-overlay-bg); color:var(--ap-overlay-text); border:1px solid var(--ap-line); border-radius:20px; backdrop-filter:blur(12px); z-index:10; white-space:nowrap;">
+        <label class="ap-floating-compare u-d151ba" >
           ${i18n.t('Before')}
-          <input data-compare type="range" min="0" max="100" value="50" style="width:140px; margin:0; accent-color:var(--ap-accent);" aria-label="${i18n.t('Before and after split slider')}">
+          <input data-compare type="range" min="0" max="100" value="50" class="u-c7a108" aria-label="${i18n.t('Before and after split slider')}">
           ${i18n.t('After')}
         </label>
       </div>
@@ -64,12 +64,12 @@ export function openPortraitStudio(source, onApply = null) {
         <div data-panel-host="skin"></div>
         <div data-panel-host="hair" hidden></div>
 
-        <div style="margin-top:auto; padding-top:14px; border-top:1px solid var(--ap-line); display:flex; flex-direction:column; gap:8px;">
-          <div style="display:flex; gap:8px;">
-            <button class="btn primary" data-apply-portrait style="flex:1;">${i18n.t('Apply to photo')}</button>
+        <div class="u-e792b5">
+          <div class="u-a76d59">
+            <button class="btn primary u-97445a" data-apply-portrait >${i18n.t('Apply to photo')}</button>
             <button class="btn" data-download-portrait>${i18n.t('Download PNG')}</button>
           </div>
-          <p role="status" class="ap-portrait-status" style="margin:0; font-size:10.5px; color:var(--ap-dim); text-align:center;">${i18n.t('Choose a person, or everyone, and adjust what they need.')}</p>
+          <p role="status" class="ap-portrait-status u-7aa8f8" >${i18n.t('Choose a person, or everyone, and adjust what they need.')}</p>
         </div>
       </div>
     </div>
