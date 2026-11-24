@@ -943,6 +943,12 @@ def _root_label(cfg: Config, user) -> str:
 
 #: How often a running scan's counters are looked at for the progress stream.
 PROGRESS_TICK = 2.0
+#: How often a quiet stream writes a keep-alive. A page that has gone is only
+#: noticed by a write to it failing, and until then it holds one of the few
+#: streams the console allows (api/_streams.py): at 20 s, a refresh or a quick
+#: move between screens often found none free and the browser logged a 429.
+#: The Archive stream's answer is the same (archive_api.KEEPALIVE_SECONDS).
+IDLE_KEEPALIVE = 3.0
 
 
 def _moved(now: dict[str, Any], before: dict[str, Any]) -> bool:
@@ -1055,8 +1061,8 @@ def events():
                 # the counters itself every couple of seconds and sends them
                 # if they moved. It reads a snapshot and nothing else: the
                 # scan thread does no extra work, however many consoles are
-                # open, and an idle library still costs one line in 20s.
-                wait = PROGRESS_TICK if last.get("running") else 20
+                # open, and an idle library still costs one line every few seconds.
+                wait = PROGRESS_TICK if last.get("running") else IDLE_KEEPALIVE
                 try:
                     payload = stream.get(timeout=wait)
                 except queue.Empty:
