@@ -906,7 +906,7 @@
   "Webhook address": "Webhook முகவரி",
   "Works with ntfy, Gotify, Discord, Slack and Home Assistant.": "ntfy, Gotify, Discord, Slack, Home Assistant ஆகியவற்றுடன் வேலை செய்யும்.",
   "Email (optional)": "மின்னஞ்சல் (விருப்பம்)",
-  "Port": "Port",
+  "Port": "போர்ட்",
   "username": "பயனர்பெயர்",
   "password": "கடவுச்சொல்",
   "where to send it": "எங்கே அனுப்புவது",
@@ -970,7 +970,7 @@
   "Manage the AI service connection, review jobs, and explore available workflows.": "AI சேவை இணைப்பை நிர்வகியுங்கள், வேலைகளைப் பாருங்கள், கிடைக்கும் workflows-ஐப் பாருங்கள்.",
   "Connection": "இணைப்பு",
   "Jobs": "வேலைகள்",
-  "Workflows": "Workflows",
+  "Workflows": "பணிப்பாய்வுகள்",
   "Off": "அணைக்கப்பட்டது",
   "Run the Playground's heavy image edits on a ComfyUI server elsewhere in the house — a PC with a graphics card — instead of on this machine.": "Playground-இன் கனமான படத் திருத்தங்களை இந்தக் கணினியில் அல்லாமல், வீட்டில் வேறு இடத்தில் உள்ள ஒரு ComfyUI சேவையகத்தில் — graphics card உள்ள ஒரு PC-யில் — இயக்குங்கள்.",
   "Nothing is sent until the server is switched on and a workflow is assigned to the job. Everything else stays on this machine.": "சேவையகம் இயக்கப்பட்டு, அந்த வேலைக்கு ஒரு workflow ஒதுக்கப்படும்வரை எதுவும் அனுப்பப்படாது. மற்ற எல்லாமே இந்தக் கணினியிலேயே இருக்கும்.",
@@ -978,7 +978,7 @@
   "ComfyUI has no sign-in. Keep it on your home network, and allow only this machine through that PC's firewall.": "ComfyUI-க்கு உள்நுழைவு இல்லை. அதை உங்கள் வீட்டு network-இலேயே வைத்திருங்கள்; அந்த PC-யின் firewall வழியாக இந்தக் கணினியை மட்டுமே அனுமதியுங்கள்.",
   "Test connection": "இணைப்பைச் சோதி",
   "This address is not on a home network. Photos would leave your house to reach it. Use the server's local address instead.": "இந்த முகவரி வீட்டு network-இல் இல்லை. அதை அடையப் புகைப்படங்கள் உங்கள் வீட்டை விட்டு வெளியே போகும். பதிலாகச் சேவையகத்தின் உள்ளூர் முகவரியைப் பயன்படுத்துங்கள்.",
-  "Graphics card": "Graphics card",
+  "Graphics card": "வரைகலை அட்டை",
   "Use the AI server for assigned jobs": "ஒதுக்கிய வேலைகளுக்கு AI சேவையகத்தைப் பயன்படுத்து",
   "A job without a workflow keeps using this machine, as before.": "workflow இல்லாத வேலை, முன்புபோலவே இந்தக் கணினியையே பயன்படுத்தும்.",
   "Preview size sent": "அனுப்பும் முன்னோட்டத்தின் அளவு",
@@ -1037,7 +1037,7 @@
   "Download certificate (ninaivu-ca.crt)": "சான்றிதழைப் பதிவிறக்கு (ninaivu-ca.crt)",
   "Know what your computer can do.": "உங்கள் கணினியால் என்ன முடியும் என்று தெரிந்துகொள்ளுங்கள்.",
   "Understand your hardware, how Ninaivu uses it, and which improvements could help.": "உங்கள் hardware-ஐயும், நினைவு அதை எப்படிப் பயன்படுத்துகிறது என்பதையும், எந்த மேம்பாடுகள் உதவும் என்பதையும் புரிந்துகொள்ளுங்கள்.",
-  "Hardware": "Hardware",
+  "Hardware": "வன்பொருள்",
   "Resource use": "வளப் பயன்பாடு",
   "Drive speed": "டிரைவ் வேகம்",
   "What would help": "எது உதவும்",
@@ -5822,5 +5822,6 @@
   "Runs on": "இயங்கும் இடம்",
   "Settings and index are kept in": "அமைப்புகளும் அட்டவணையும் இங்கே உள்ளன",
   "AI models on this computer": "இந்தக் கணினியில் உள்ள AI மாதிரிகள்",
-  "Third-party notices": "மூன்றாம் தரப்பு அறிவிப்புகள்"
+  "Third-party notices": "மூன்றாம் தரப்பு அறிவிப்புகள்",
+  "Problem": "சிக்கல்"
 }

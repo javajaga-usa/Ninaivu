@@ -75,10 +75,18 @@ def test_a_labelledby_points_at_something_on_the_page(template):
             assert ref in page.ids, f"{template}:{line} names itself after missing #{ref}"
 
 
-def test_the_console_lets_a_phone_zoom():
-    head = (TEMPLATES / "admin.html").read_text(encoding="utf-8").split("</head>", 1)[0]
+@pytest.mark.parametrize("template", ["admin.html", "index.html", "share.html", "ask.html"])
+def test_no_page_stops_a_phone_zooming(template):
+    """The viewer does its own pinch on a stage that takes no browser gestures
+    (touch-action: none), so the page does not need zoom taken away."""
+    head = (TEMPLATES / template).read_text(encoding="utf-8").split("</head>", 1)[0]
     assert "user-scalable=no" not in head
     assert "maximum-scale=1" not in head
+
+
+def test_the_family_app_has_a_top_level_heading():
+    html = (TEMPLATES / "index.html").read_text(encoding="utf-8")
+    assert 'role="heading" aria-level="1"' in html
 
 
 def test_a_console_field_on_a_phone_is_big_enough_that_safari_does_not_zoom():
