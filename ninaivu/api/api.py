@@ -316,7 +316,7 @@ def _dates_from_phrase(text: str) -> tuple[str, str, str]:
     g.date_hint = None
     explicit = request.args.get("from", "") or request.args.get("to", "")
     cfg = _cfg()
-    if explicit or not text or not getattr(cfg, "date_phrase_search", True):
+    if explicit or not text:
         return text, request.args.get("from", ""), request.args.get("to", "")
 
     # Tamil months, "last year" and a year with its ending glued on
@@ -400,8 +400,7 @@ def _understand(text: str, kinds: list[str], person: int | None,
     """Read people, a place, a kind and favourites out of the phrase
     (ninaivu/utils/phrase.py). ``?plain=1`` searches the words as typed."""
     g.understood = None
-    if (not text or request.args.get("plain") == "1"
-            or not getattr(_cfg(), "phrase_search", True)):
+    if not text or request.args.get("plain") == "1":
         return text, None
     people, places = _phrase_vocabulary()
     # "Amma", "அம்மா" and "Mom" are one person when the family named one

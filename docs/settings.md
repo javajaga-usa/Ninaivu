@@ -24,17 +24,12 @@ them; *runtime* ones say how this start was made and are never saved.
 | `import_copy_workers` | `0` |  | household | Files an import copies at once. 0 leaves it to the engine: half the cores, between two and four. 1 copies one file at a time, as before 2.1. More than a few only queue up on a slow source drive. |
 | `ignore_dirs` | `['$RECYCLE.BIN', '.Trash', '.cache', '.git', '.mediavault', '.ninaivu', '.svn', '@eaDir', 'System Volume Information', '__pycache__', '_deleted', 'node_modules']` |  | household | Directory names skipped during a scan. |
 | `watch` | `True` | `NINAIVU_WATCH` | expert | Watch the library for changes and index incrementally. |
-| `rescan_on_change` | `True` |  | expert | Re-check files whose size or mtime changed. |
 | `boot_scan_after` | `900.0` |  | household | Seconds. If the watcher is on and a scan finished this recently, start-up does not walk the library again — that gap is a restart, not a day away. Zero always scans. |
 | `watch_debounce` | `2.0` |  | household | Seconds a folder must stay quiet after a change before it is re-read. |
 | `bin_erase_after_days` | `0.0` |  | household | Days after which a file in the recycle bin is erased for good. Zero — the default — keeps everything until somebody says otherwise, which is what a bin is for. |
 | `hide_screens` | `True` | `NINAIVU_HIDE_SCREENS` | household | Hide screenshots, documents and photographs of screens from everyone but administrators (media/screens.py). By name on every install; by picture once the search model has looked at it. |
 | `duplicate_distance` | `6` |  | household | Hamming distance under which two pHashes count as near-duplicates. |
-| `quality_scan` | `True` |  | expert | Measure focus and exposure while scanning. Cheap: one 256px greyscale pass over a thumbnail Ninaivu has already decoded. |
-| `occasion_scan` | `True` |  | expert | Group the library into occasions after each scan. Metadata only — no pixels are read and no model is loaded, so this runs in every AI tier. |
 | `southern_hemisphere` | `False` |  | expert | Which half of the world the seasons in those phrases belong to. June is summer in Atlanta and winter in Adelaide, and a search engine that assumes one of them is wrong for half its households. |
-| `date_phrase_search` | `True` |  | expert | Read a date range out of what somebody typed — "last summer", "may 2019", "last week" — and narrow the search with it. |
-| `phrase_search` | `True` |  | expert | Read people, places, "videos" and "favourites" out of it too — "Maya and Arjun at Ooty videos" (ninaivu/utils/phrase.py). Only names and places the person searching can already see are ever matched. |
 | `xmp_sidecars` | `False` |  | household | Write what the household told Ninaivu — people, albums, favourites, stars, corrected dates, places — beside each photograph as an XMP sidecar (IMG_1.jpg.xmp) other photo programs read (ninaivu/storage/xmp.py). Off: it puts files in the library folders. |
 | `house_name` |  | `NINAIVU_HOUSE_NAME` | household | What the household calls this library. The admin sets it once and it is what everyone sees; each family member may then keep their own name for it instead. Empty means "Ninaivu". |
 
@@ -217,7 +212,6 @@ them; *runtime* ones say how this start was made and are never saved.
 | `thumb_format` | `'WEBP'` |  | expert | Thumbnail file format: WEBP or JPEG. |
 | `video_thumbs` | `True` |  | expert | Extract video poster frames (needs ffmpeg or opencv). |
 | `video_thumb_offset` | `1.0` |  | expert | Seconds into a video to grab the poster frame. |
-| `perceptual_hash` | `True` |  | expert | Compute perceptual hashes for duplicate detection. |
 | `blur_threshold` | `45.0` |  | expert | Laplacian variance below which a photograph reads as soft. Measured at a fixed size (see media.QUALITY_EDGE) so one number holds across cameras. Deliberately low — a wrongly flagged keeper is worse than a soft frame that slips through. |
 | `dark_threshold` | `0.16` |  | expert | Mean luma, 0-1. Below the first is underexposed, above the second is washed out. |
 | `bright_threshold` | `0.86` |  | expert | Mean brightness above which a photograph counts as blown out (0–1). |

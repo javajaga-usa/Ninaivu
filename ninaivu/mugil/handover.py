@@ -80,7 +80,7 @@ SETTINGS = (
     "lock_after_minutes", "thumb_sizes", "thumb_format", "thumb_quality",
     "video_thumbs", "page_size", "max_page_size", "nsfw_filter", "hide_screens",
     "strip_location", "home_lat", "home_lon", "home_radius_m", "index_hidden",
-    "southern_hemisphere", "date_phrase_search", "phrase_search", "map_tiles",
+    "southern_hemisphere", "map_tiles",
     "place_names", "faces_enabled", "ocr_enabled", "min_media_bytes",
     "ignore_dirs", "follow_symlinks",
 )

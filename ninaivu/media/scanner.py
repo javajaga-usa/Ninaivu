@@ -794,10 +794,10 @@ def build_record(root: Path, rel_path: str, st: os.stat_result, cfg: Config,
             grey = None
             # Not for sound files: their tiles are drawn, and an album's tracks
             # look alike by design — they would be offered as duplicates.
-            if cfg.perceptual_hash and kind != "audio":
+            if kind != "audio":
                 grey = source.convert("L")
                 record["phash"] = media.perceptual_hash(grey)
-            if cfg.quality_scan and kind == "picture":
+            if kind == "picture":
                 stats = media.quality_stats(grey if grey is not None else source)
                 record["sharpness"] = stats.get("sharpness")
                 record["brightness"] = stats.get("brightness")
@@ -1938,12 +1938,6 @@ class Scanner:
 
                     sig = known.get(rel)
                     if sig is not None:
-                        # A file already in the index is left alone when re-checking
-                        # is off — that setting exists to do *less* work, and taking
-                        # it the other way round meant switching it off re-indexed
-                        # every file in the library on every scan.
-                        if not cfg.rescan_on_change:
-                            continue
                         if abs(sig[0] - st.st_mtime) < 1e-6 and sig[1] == st.st_size:
                             continue
                     found.append((rel, FileSignature(st)))
@@ -2856,8 +2850,6 @@ class Scanner:
         one read, and on a rescan that finds what the last scan found, no writes
         at all.
         """
-        if not self.cfg.perceptual_hash:
-            return
         started = time.time()
         rows = conn.execute(
             "SELECT id, phash, dup_group, live_clip, raw_twin FROM assets "
@@ -3199,8 +3191,6 @@ class Scanner:
         the resolution independence the measure already relies on — and it
         costs one small decode instead of re-reading forty megapixels.
         """
-        if not getattr(self.cfg, "quality_scan", True):
-            return
         rows = conn.execute(
             "SELECT id, thumb, width, height FROM assets "
             "WHERE root=? AND kind='picture' AND trashed=0 "
@@ -3269,8 +3259,6 @@ class Scanner:
         not a missing photograph, and a scan that indexed the whole library
         must not report failure over it.
         """
-        if not getattr(self.cfg, "occasion_scan", True):
-            return
         try:
             settings = dict(
                 gap_seconds=float(self.cfg.occasion_gap_hours) * 3600.0,

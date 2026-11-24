@@ -752,8 +752,6 @@ class Config:
     #: frame at the one-second mark describes none of them. Zero or one keeps
     #: the old single-frame behaviour.
     video_keyframes: int = 5
-    #: Compute perceptual hashes for duplicate detection.
-    perceptual_hash: bool = True
     #: Keep a fingerprint of every file's contents (BLAKE3), so a photograph
     #: moved or renamed in Finder or Explorer keeps its faces, stories, albums
     #: and edits, and exact copies are found across every library folder.
@@ -768,8 +766,6 @@ class Config:
     #: Mac, start-up reads only the folders the drive says changed while
     #: Ninaivu was not running. Kept a year. Off: nothing is written down.
     change_journal: bool = setting(True, env="NINAIVU_CHANGE_JOURNAL")
-    #: Re-check files whose size or mtime changed.
-    rescan_on_change: bool = True
     #: Watch the library for changes and index incrementally.
     watch: bool = setting(True, env="NINAIVU_WATCH")
     #: Seconds. If the watcher is on and a scan finished this recently, start-up
@@ -889,9 +885,6 @@ class Config:
     duplicate_distance: int = 6
 
     # --- Picture quality --------------------------------------------------
-    #: Measure focus and exposure while scanning. Cheap: one 256px greyscale
-    #: pass over a thumbnail Ninaivu has already decoded.
-    quality_scan: bool = True
     #: Laplacian variance below which a photograph reads as soft. Measured at
     #: a fixed size (see media.QUALITY_EDGE) so one number holds across
     #: cameras. Deliberately low — a wrongly flagged keeper is worse than a
@@ -909,9 +902,6 @@ class Config:
     low_res_pixels: int = 640 * 480
 
     # --- Occasions (auto-albums) ------------------------------------------
-    #: Group the library into occasions after each scan. Metadata only — no
-    #: pixels are read and no model is loaded, so this runs in every AI tier.
-    occasion_scan: bool = True
     #: A silence longer than this ends one occasion and starts the next. Six
     #: hours keeps a day out and the evening that followed it together, and
     #: still separates two consecutive days.
@@ -923,13 +913,6 @@ class Config:
     occasion_min_items: int = 4
 
     # --- Search -----------------------------------------------------------
-    #: Read a date range out of what somebody typed — "last summer", "may
-    #: 2019", "last week" — and narrow the search with it.
-    date_phrase_search: bool = True
-    #: Read people, places, "videos" and "favourites" out of it too — "Maya
-    #: and Arjun at Ooty videos" (ninaivu/utils/phrase.py). Only names and
-    #: places the person searching can already see are ever matched.
-    phrase_search: bool = True
     #: Which half of the world the seasons in those phrases belong to. June
     #: is summer in Atlanta and winter in Adelaide, and a search engine that
     #: assumes one of them is wrong for half its households.

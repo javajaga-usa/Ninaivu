@@ -154,7 +154,6 @@ def test_a_raw_the_viewer_may_not_have_is_not_offered(client, people, index):
 
 def test_a_raw_and_its_jpeg_are_not_duplicates(index):
     cfg, conn, root = index
-    cfg.perceptual_hash = True
     add(conn, root, "a/IMG_1.JPG", "picture", phash="ffffffffffffffff", sharpness=10.0, size=5)
     add(conn, root, "a/IMG_1.CR2", "picture", phash="ffffffffffffffff", sharpness=12.0, size=25)
     scanner = Scanner(cfg)

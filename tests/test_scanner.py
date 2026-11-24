@@ -127,37 +127,6 @@ def test_each_scan_asks_the_filesystem_again_whether_a_folder_is_hidden(scanned)
     assert scanner_mod._dir_is_hidden.cache_info().currsize < 200
 
 
-def test_not_re_checking_changed_files_leaves_indexed_ones_alone(scanned):
-    """``rescan_on_change`` off means *less* work, not a full re-index.
-
-    Read the other way round, switching it off made every scan rebuild every
-    thumbnail in the library — the opposite of what somebody turning it off is
-    asking for.
-    """
-    cfg, conn, _ = scanned
-    rows, _ = db.query_assets(conn, cfg.active_root, limit=100)
-    existing = next(r for r in rows if r["filename"] == "shot1.jpg")
-    Image.new("RGB", (900, 300), (255, 0, 0)).save(
-        Path(cfg.active_root) / existing["rel_path"], "JPEG")
-
-    cfg.rescan_on_change = False
-    scanner = Scanner(cfg)
-    scanner._run(Path(cfg.active_root), full=False)
-
-    assert scanner.progress.processed == 0
-    rows, _ = db.query_assets(conn, cfg.active_root, limit=100)
-    after = next(r for r in rows if r["filename"] == "shot1.jpg")
-    assert after["width"] == existing["width"]
-
-
-def test_a_full_scan_still_re_reads_everything_with_re_checking_off(scanned):
-    cfg, _, _ = scanned
-    cfg.rescan_on_change = False
-    scanner = Scanner(cfg)
-    scanner._run(Path(cfg.active_root), full=True)
-    assert scanner.progress.processed == 15
-
-
 def test_the_bar_follows_the_items_once_the_walk_is_done():
     """Tagging, naming, reading and faces all measure themselves in items.
 

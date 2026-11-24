@@ -80,9 +80,7 @@ def test_the_setting_that_started_this_survives(saved):
 
 @pytest.mark.parametrize("name,value", [
     ("ocr_enabled", True),
-    ("perceptual_hash", False),
     ("detect_orientation", False),
-    ("rescan_on_change", False),
     ("thumb_quality", 95),
     ("nsfw_threshold", 0.8),
     ("max_tags", 3),

@@ -852,7 +852,7 @@ or **Show separately** (and **Stack again**); guests only look. Each choice is
 kept by the stack and outlives every rescan.
 
 A stack is the near-identical photographs the scan already groups for the
-duplicates page (`perceptual_hash`, `duplicate_distance`) that were taken on
+duplicates page (`duplicate_distance`) that were taken on
 the same day, sit in the same folder, and are seen alike by everybody: the
 same visibility, the same explicit flag and the same "Only to me" owner. So a
 hidden or explicit frame is never stacked under a family photograph, and
