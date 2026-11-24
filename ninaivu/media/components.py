@@ -233,7 +233,7 @@ CATALOGUE: dict[str, dict[str, Any]] = {
         # and then reads nothing. A test holds this list against the metadata
         # of whatever rapidocr is installed.
         "no_deps": True,
-        "also": ["pyclipper>=1.4.0", "numpy>=2.5.4,<3", "six>=1.17.0",
+        "also": ["pyclipper>=1.4.0", "numpy>=2.5.5,<3", "six>=1.17.0",
                  "Shapely!=2.0.4,>=2.2.0", "PyYAML", "Pillow", "tqdm",
                  "omegaconf!=2.2.1", "requests", "colorlog",
                  "onnxruntime>=1.24,<2"],
