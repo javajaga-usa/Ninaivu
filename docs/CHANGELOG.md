@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **The core is checked to need no model package (P16, first step).** `tests/test_core_without_models.py` fails a change that imports `torch`, `onnxruntime`, `open_clip` or any other model package at the top of a module, and starts both the family app and the console with every such package made unimportable. The rules are written down in `docs/development/model-plugins.md`. Moving faces and search into packages of their own comes after this, one at a time.
 - **Dead upgrade code removed (P5).** `db._migrate`, the step-by-step repair of a 3.x index (visibility levels, per-user favourites, live photos, place names), could no longer run once an index older than 4.3 is refused, and is gone, with the places that read its source for the index's shape.
 - **Speed budgets in the tests (P18).** `tests/test_page_budgets.py` runs `tools/bench_app.py` on 20,000 made-up rows and fails a pull request when any page of the family app or the console takes over 3.5 s the first time or 400 ms when asked again, or answers with a server error. The budgets are about five times today's slowest and will be tightened as pages get faster.
 - **An About box in the console (P17).** The console has an **About Ninaivu** button beside Sign out, as the family app already had. It shows the version, the computer and Python it runs on, where the settings and index are kept, the library folders and the AI models installed here with their licences. It reads only what Ninaivu already knows (`/api/admin/about`, administrator only) and sends nothing.
