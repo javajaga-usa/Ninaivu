@@ -230,13 +230,13 @@ def prepare(state_dir: Path | str, *, version: str = __version__,
     ``from`` None on a first start and ``backup`` None when no copy was
     needed.
     """
-    environ = os.environ if environ is None else environ
+    env: Any = os.environ if environ is None else environ
     state = Path(state_dir)
     result: dict[str, Any] = {"from": None, "to": version, "backup": None}
     if not state.is_dir():
         return result
     has_data = (state / "index.db").is_file() or (state / "archive.db").is_file()
-    before = recorded(state)
+    before = recorded(state) or {}
     old = str(before["version"]) if before else None
     result["from"] = old
 
@@ -273,7 +273,7 @@ def prepare(state_dir: Path | str, *, version: str = __version__,
     # An update (or a step back to an older version with the same schema):
     # the state folder is copied before this version touches it.
     if (state / "index.db").is_file():
-        if str(environ.get(SKIP_ENV, "")).strip().lower() in {"1", "true", "yes", "on"}:
+        if str(env.get(SKIP_ENV, "")).strip().lower() in {"1", "true", "yes", "on"}:
             log.warning("%s is set: starting Ninaivu %s without a copy of %s first",
                         SKIP_ENV, version, state)
         else:

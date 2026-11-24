@@ -132,7 +132,7 @@ jobs:
       - name: Install linting tools
         run: |
           python -m pip install --upgrade pip
-          pip install -c requirements/constraints-tested.txt ruff "build>=1,<2"
+          pip install -c requirements/constraints-tested.txt ruff "build>=1,<2" "mypy==2.4.1"
 
       # Ruff reads its rules from pyproject.toml: pyflakes and pycodestyle,
       # which catch mistakes. Black and isort are deliberately not run here.
@@ -143,6 +143,13 @@ jobs:
       # obedience rather than quality.
       - name: Lint with Ruff
         run: ruff check ninaivu tests tools launcher extensions
+
+      # The types of the core's two most careful modules: how an index is
+      # opened, numbered and updated. Only these are checked, and the list
+      # grows as modules are cleaned up (the rest of the code has several
+      # hundred findings, which a gate cannot take on at once).
+      - name: Type-check the core's upgrade path
+        run: mypy --follow-imports=silent ninaivu/storage/migrations.py ninaivu/storage/upgrade.py
 
       # ESLint's recommended rules over the front end and the browser tests:
       # a name that does not exist, a variable nothing reads. The rules and the
