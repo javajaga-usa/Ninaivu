@@ -2055,6 +2055,7 @@ body.admin {
 
 /* Formerly inline style attributes, one class each, so the page can
    run under a Content-Security-Policy without 'unsafe-inline' styles.
-   !important keeps them winning over the rules they used to beat. */
-.u-08e13a{max-width:6rem !important}
-.u-d6f2af{margin-top:14px !important}
+   The class is written three times so each wins over the rules it used to beat
+   (an inline style outranked them), yet a script's own style object still wins. */
+.u-08e13a.u-08e13a.u-08e13a{max-width:6rem}
+.u-d6f2af.u-d6f2af.u-d6f2af{margin-top:14px}

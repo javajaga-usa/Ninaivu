@@ -3813,15 +3813,16 @@ body.is-offline .content > :not(#offline-banner):not(#empty) {
 
 /* Formerly inline style attributes, one class each, so the page can
    run under a Content-Security-Policy without 'unsafe-inline' styles.
-   !important keeps them winning over the rules they used to beat. */
-.u-02617c{display:flex !important;justify-content:space-between !important;align-items:center !important;margin-bottom:6px !important}
-.u-116966{margin:0 !important}
-.u-13313b{display:flex !important;justify-content:space-between !important;align-items:center !important}
-.u-1b657e{display:flex !important;gap:2px !important}
-.u-6d0006{margin-left:auto !important}
-.u-710877{stop-color:color-mix(in srgb, var(--gold) 34%, var(--surface)) !important}
-.u-a06775{stop-color:color-mix(in srgb, var(--accent) 16%, var(--surface)) !important}
-.u-cfa5ed{margin:14px 0 8px !important;font-weight:600 !important;text-transform:uppercase !important;font-size:0.75rem !important;letter-spacing:0.05em !important}
-.u-d0a510{width:13px !important;height:13px !important;margin-right:4px !important;vertical-align:-2px !important}
-.u-d73265{width:34px !important;height:34px !important}
-.u-f480a3{display:flex !important;justify-content:space-between !important;align-items:center !important;gap:4px !important}
+   The class is written three times so each wins over the rules it used to beat
+   (an inline style outranked them), yet a script's own style object still wins. */
+.u-02617c.u-02617c.u-02617c{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.u-116966.u-116966.u-116966{margin:0}
+.u-13313b.u-13313b.u-13313b{display:flex;justify-content:space-between;align-items:center}
+.u-1b657e.u-1b657e.u-1b657e{display:flex;gap:2px}
+.u-6d0006.u-6d0006.u-6d0006{margin-left:auto}
+.u-710877.u-710877.u-710877{stop-color:color-mix(in srgb, var(--gold) 34%, var(--surface))}
+.u-a06775.u-a06775.u-a06775{stop-color:color-mix(in srgb, var(--accent) 16%, var(--surface))}
+.u-cfa5ed.u-cfa5ed.u-cfa5ed{margin:14px 0 8px;font-weight:600;text-transform:uppercase;font-size:0.75rem;letter-spacing:0.05em}
+.u-d0a510.u-d0a510.u-d0a510{width:13px;height:13px;margin-right:4px;vertical-align:-2px}
+.u-d73265.u-d73265.u-d73265{width:34px;height:34px}
+.u-f480a3.u-f480a3.u-f480a3{display:flex;justify-content:space-between;align-items:center;gap:4px}

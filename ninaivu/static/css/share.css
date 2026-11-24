@@ -148,5 +148,6 @@
 
 /* Formerly inline style attributes, one class each, so the page can
    run under a Content-Security-Policy without 'unsafe-inline' styles.
-   !important keeps them winning over the rules they used to beat. */
-.u-6d0006{margin-left:auto !important}
+   The class is written three times so each wins over the rules it used to beat
+   (an inline style outranked them), yet a script's own style object still wins. */
+.u-6d0006.u-6d0006.u-6d0006{margin-left:auto}
