@@ -262,6 +262,7 @@ export const admin = (() => {
   const send = (method, url, options = {}) => consoleJson(withQuery(url, options.query),
     { method, body: options.body, signal: options.signal });
   return {
+    deleteAdminAiModelsByModelId: (modelId, options) => send('DELETE', `/api/admin/ai-models/${seg(modelId)}`, options),
     deleteAdminLibraries: (options) => send('DELETE', '/api/admin/libraries', options),
     deleteAdminPhoneKeysByKeyId: (keyId, options) => send('DELETE', `/api/admin/phone-keys/${seg(keyId)}`, options),
     deleteAlbumsByAlbumId: (albumId, options) => send('DELETE', `/api/albums/${seg(albumId)}`, options),
@@ -281,6 +282,7 @@ export const admin = (() => {
     deleteSmartAlbumsByAlbumId: (albumId, options) => send('DELETE', `/api/smart-albums/${seg(albumId)}`, options),
     deleteStoriesByStoryId: (storyId, options) => send('DELETE', `/api/stories/${seg(storyId)}`, options),
     deleteVisibilityFolder: (options) => send('DELETE', '/api/visibility/folder', options),
+    getAdminAbout: (options) => send('GET', '/api/admin/about', options),
     getAdminAiModels: (options) => send('GET', '/api/admin/ai-models', options),
     getAdminAssignable: (options) => send('GET', '/api/admin/assignable', options),
     getAdminAttention: (options) => send('GET', '/api/admin/attention', options),
@@ -515,6 +517,7 @@ export const admin = (() => {
     patchAlbumsByAlbumId: (albumId, options) => send('PATCH', `/api/albums/${seg(albumId)}`, options),
     patchSmartAlbumsByAlbumId: (albumId, options) => send('PATCH', `/api/smart-albums/${seg(albumId)}`, options),
     postAdminAiModelsByModelIdDownload: (modelId, options) => send('POST', `/api/admin/ai-models/${seg(modelId)}/download`, options),
+    postAdminAiModelsDownloadNeeded: (options) => send('POST', '/api/admin/ai-models/download-needed', options),
     postAdminBackupDrill: (options) => send('POST', '/api/admin/backup-drill', options),
     postAdminBackupsNow: (options) => send('POST', '/api/admin/backups/now', options),
     postAdminBackupsVerify: (options) => send('POST', '/api/admin/backups/verify', options),

@@ -36,7 +36,6 @@ def config(base):
     cfg.active_root = str(base / "library")
     cfg.roots = [cfg.active_root]
     cfg.ai_enabled = cfg.watch = cfg.detect_orientation = False
-    cfg.quality_scan = False
     cfg.min_media_bytes = 0
     Path(cfg.active_root).mkdir()
     cfg.ensure_dirs()

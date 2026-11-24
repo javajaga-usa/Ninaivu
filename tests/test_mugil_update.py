@@ -62,6 +62,7 @@ def _index(path: Path, words: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with closing(sqlite3.connect(path)) as conn:
         conn.execute("CREATE TABLE IF NOT EXISTS assets (id INTEGER PRIMARY KEY, words TEXT)")
+        conn.execute("PRAGMA user_version = 4")      # an index 4.3 or later has opened
         conn.execute("INSERT INTO assets(words) VALUES (?)", (words,))
         conn.commit()
 

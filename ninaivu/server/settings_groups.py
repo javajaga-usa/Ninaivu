@@ -36,10 +36,10 @@ GROUPS: dict[str, tuple[str, ...]] = {
     said("Library"): (
         "roots", "active_root", "new_files_folder", "follow_symlinks",
         "index_hidden", "min_media_bytes", "import_voice_audio_only", "import_copy_workers", "ignore_dirs", "watch",
-        "rescan_on_change", "boot_scan_after", "watch_debounce",
+        "boot_scan_after", "watch_debounce",
         "bin_erase_after_days", "hide_screens", "duplicate_distance",
-        "quality_scan", "occasion_scan", "southern_hemisphere",
-        "date_phrase_search", "phrase_search", "xmp_sidecars", "house_name",
+        "southern_hemisphere",
+        "xmp_sidecars", "house_name",
     ),
     said("People"): (
         "open_browsing", "lock_after_minutes", "nsfw_filter",
@@ -88,7 +88,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "then_and_now", "life_story", "festival_albums", "event_albums", "letters_aloud", "young_faces", "easy_view", "photo_talk", "find_print",
         "photo_stacks", "share_blur_strangers", "voice_search",
         "colour_photos", "thumb_sizes", "thumb_quality", "thumb_format", "video_thumbs",
-        "video_thumb_offset", "perceptual_hash", "blur_threshold", "dark_threshold",
+        "video_thumb_offset", "blur_threshold", "dark_threshold",
         "bright_threshold", "highlight_clip_threshold", "low_res_pixels",
         "occasion_gap_hours", "occasion_radius_km", "occasion_min_items",
         "content_fingerprints", "change_journal", "proxy_cache_mb", "workload_mode", "maintenance_before", "workload_night_start",
@@ -111,8 +111,7 @@ ALWAYS_ON: tuple[str, ...] = (
     # is used, or is cheap and long proven.
     "photo_frame", "time_capsules", "memory_films", "our_year", "then_and_now", "life_story",
     "festival_albums", "photo_stacks", "find_print", "content_fingerprints",
-    "change_journal", "perceptual_hash", "video_thumbs", "quality_scan", "occasion_scan",
-    # Nothing reaches anybody but the administrator, or the person on their
+    "change_journal", "video_thumbs", # Nothing reaches anybody but the administrator, or the person on their
     # own device, until they choose it.
     "offline_albums",
     "event_albums",
@@ -127,8 +126,7 @@ FOLLOW_THEIR_MODEL: tuple[str, ...] = (
 TUNING_ONLY: tuple[str, ...] = (
     "lock_roots", "follow_symlinks", "import_voice_audio_only", "straighten_requires_face",
     "straighten_auto", "straighten_auto_apply", "detect_orientation", "orientation_ai",
-    "rescan_on_change", "watch", "date_phrase_search", "phrase_search",
-    "southern_hemisphere", "letters_aloud", "video_moments", "debug",
+    "watch", "southern_hemisphere", "letters_aloud", "video_moments", "debug",
 )
 #: Not shown on the Advanced page at all.
 OFF_THE_PAGE: frozenset[str] = frozenset(

@@ -11,9 +11,15 @@ run from the hundredth.
 
 Those changes are written here, as numbered steps per database:
 
-* **Migration 1 is "what 3.7 has".** It changes nothing: the schema script
-  has already run when it is applied, so a 3.7 index is up to date the moment
-  this version opens it.
+* **The index starts at step 4, "what 4.4 has".** Until 5.0 the steps began
+  at 1 ("what 3.7 has"), and 4.0 to 4.3 added the places, the ledger of
+  copies and the duplicates review as steps 2, 3 and 4. 5.0 folded them into
+  one baseline: a new index gets everything in a single step, and an index
+  that records 4 or more is up to date. The archive's list still starts at 1.
+* **An index from before 4.3 is not opened.** It records less than 4, so
+  :func:`refuse_older` stops the start and says to open it once in 4.4.0
+  (storage/upgrade.py says it before the copy is made). Going through 4.4 is
+  what carried those steps' filled tables, which a new baseline does not.
 * **Each later step runs once**, inside one transaction with the record of
   it, so a step is either wholly done and recorded or not done at all. A step
   that fails rolls back, is logged, and stops the start: the steps after it
@@ -25,19 +31,6 @@ Those changes are written here, as numbered steps per database:
   version does not know. Nothing is applied and nothing is changed: the newer
   steps only add, and *Go back* restores the copy made before the update when
   an older version must have the database as it was.
-
-What is kept with 3.x (decided 9 November 2026):
-
-* **A 3.x index always upgrades.** Migration 1 stays "what 3.7 has", and
-  every later version opens a 3.x index and steps it forward.
-* **A 3.x Ninaivu does not open an index 4.0 has opened.** 4.0 records
-  schema 7 (:data:`db.SCHEMA_VERSION`), which 3.x does not know, so 3.x
-  stops before touching it and says how to restore the copy taken before
-  the update. That restore is what going back is. So a step here may change
-  or remove what 3.x had, not only add, as long as a 3.x index still upgrades.
-* **The old module paths go in 4.1** (``ninaivu.features.films.routes`` and the
-  other names kept for code that moved into ``ninaivu/features``):
-  tests/test_migrations.py fails once the version says 4.1 and one is left.
 
 A step is a function of the connection. It may call ``executescript`` only
 with statements that do not commit (no ``BEGIN``/``COMMIT``/``VACUUM``):
@@ -184,43 +177,17 @@ BEGIN
 END""",
 )
 
-#: Every photograph already in the index, at its place, with the fingerprint
-#: it has if that still describes the file.
-_FILL_LOCATIONS = (
-    "INSERT INTO locations(asset_id, fingerprint, root, rel_path, place, seen_at) "
-    "SELECT a.id, CASE WHEN f.asset_id IS NULL THEN NULL "
-    "ELSE f.algo || ':' || f.digest END, a.root, a.rel_path, 'library', "
-    "COALESCE(a.added_at, NULLIF(a.indexed_at, 0), 0) "
-    "FROM assets a LEFT JOIN content_fingerprints f "
-    "ON f.asset_id = a.id AND f.size = a.size AND f.mtime = a.mtime "
-    "ORDER BY a.id")
+def _baseline(conn: sqlite3.Connection) -> None:
+    """Migration 4: what 4.4 has. The tables the numbered steps of 4.0 to 4.3 added.
 
-
-def _locations(conn: sqlite3.Connection) -> None:
-    """Migration 2: the ``locations`` table, filled, and the triggers that keep it.
-
-    Only adds: no table 3.7 reads is changed, and no photograph's id. Files
-    without a fingerprint yet get one from the fingerprint pass of the next
-    scan, and the triggers carry it here.
+    A 4.x index records 4 and never runs this: it was made by 4.3 or 4.4,
+    which had those steps. It is for a new index. Nothing is filled: a new
+    index has no photographs yet, so no place, ledger row or decision to
+    carry over (4.0 to 4.3 filled them from what an older index held, and
+    Ninaivu 5 no longer opens one).
     """
     for statement in LOCATIONS:
         conn.execute(statement)
-    # Empty unless the record of this step was lost (a copy of the index
-    # with user_version cleared): filled afresh rather than twice.
-    conn.execute("DELETE FROM locations WHERE place = 'library'")
-    filled = conn.execute(_FILL_LOCATIONS).rowcount
-    log.info("index: %s photographs given their place in locations", f"{filled:,}")
-
-
-def _copies_ledger(conn: sqlite3.Connection) -> None:
-    """Migration 3: the ledger of which photograph is kept where (ninaivu/copies/).
-
-    A new table only: nothing 3.7 reads is changed, so *Go back* finds the
-    index as it left it, with one table it does not know. Filled from what the
-    copies already record (the second disk, the off-site copy, Google Drive,
-    the Secondary), read only: nothing is sent again and no engine is told
-    anything.
-    """
     conn.execute(
         "CREATE TABLE IF NOT EXISTS copies ("
         " fingerprint TEXT NOT NULL,"
@@ -232,23 +199,15 @@ def _copies_ledger(conn: sqlite3.Connection) -> None:
         ") WITHOUT ROWID")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_copies_destination "
                  "ON copies(destination, state)")
-    from ..copies import ledger                            # noqa: PLC0415
-    ledger.fill(conn)
-
-
-def _duplicate_review(conn: sqlite3.Connection) -> None:
-    """Migration 4: what the household decided on the duplicates review
-    (storage/duplicate_review.py). New tables only; no file is touched."""
     from . import duplicate_review                         # noqa: PLC0415
     duplicate_review.create(conn)
 
 
-#: The index (``index.db``).
+#: The index (``index.db``). It starts at 4, the last step 4.4 recorded: an
+#: index that records less than that is from before 4.3 and is not opened
+#: (see :func:`refuse_older`), so the steps before it are gone.
 INDEX: tuple[Migration, ...] = (
-    Migration(1, "what 3.7 has", _nothing),
-    Migration(2, "where each photograph is", _locations),
-    Migration(3, "the copies ledger", _copies_ledger),
-    Migration(4, "duplicate review decisions", _duplicate_review),
+    Migration(4, "what 4.4 has", _baseline),
 )
 
 #: The archive's record of every file it copied (``archive.db``).
@@ -264,14 +223,47 @@ DATABASES: dict[str, tuple[Migration, ...]] = {
 
 
 def check(steps: Sequence[Migration]) -> None:
-    """Refuse a list whose numbers do not run 1, 2, 3 … without a gap.
+    """Refuse a list whose numbers do not run on from its first without a gap.
 
     A gap or a repeat is a mistake made while writing a step, and it would
     otherwise show itself only on a household's computer.
     """
     numbers = [m.number for m in steps]
-    if numbers != list(range(1, len(numbers) + 1)):
-        raise ValueError(f"migrations must be numbered 1 to {len(numbers)} in order: {numbers}")
+    first = numbers[0] if numbers else 1
+    if numbers != list(range(first, first + len(numbers))):
+        raise ValueError(f"migrations must be numbered in order without a gap: {numbers}")
+
+
+class IndexTooOld(RuntimeError):
+    """The index was last used by a Ninaivu older than the first step kept."""
+
+
+#: What an older index is told. The version is that of the last release
+#: that still opens it and brings it forward.
+TOO_OLD = (
+    "{path} was last used by a Ninaivu older than 4.3 (it records step {have}; this "
+    "version needs {first}). Nothing was changed. Start Ninaivu 4.4.0 on it once, let "
+    "it finish starting, stop it, and then start this version. The photographs are "
+    "not affected.")
+
+
+def refuse_older(conn: sqlite3.Connection, steps: Sequence[Migration], *,
+                 path: object = "The index") -> None:
+    """Raise :class:`IndexTooOld` for a database that holds an older Ninaivu's data.
+
+    A database with no photograph table is new and passes. One with the table
+    must record at least the first step kept; anything below it is from
+    before the steps were folded into one baseline, and would otherwise be
+    treated as a new database and left without what those steps did.
+    """
+    have = recorded(conn)
+    first = steps[0].number if steps else 1
+    if have >= first:
+        return
+    row = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='assets'").fetchone()
+    if row:
+        raise IndexTooOld(TOO_OLD.format(path=path, have=have, first=first))
 
 
 def recorded(conn: sqlite3.Connection) -> int:

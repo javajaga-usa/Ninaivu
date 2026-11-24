@@ -5818,5 +5818,9 @@
   "Not included, because Python packages are missing: {names}.": "Python தொகுப்புகள் இல்லாததால் சேர்க்கப்படவில்லை: {names}.",
   "Waiting to download": "பதிவிறக்கக் காத்திருக்கிறது",
   "This model is downloading. Delete it once the download has finished.": "இந்த மாதிரி பதிவிறக்கப்படுகிறது. பதிவிறக்கம் முடிந்ததும் நீக்குங்கள்.",
-  "Some of the files of this model are in use and were not removed: {files}. Stop Ninaivu and delete it again.": "இந்த மாதிரியின் சில கோப்புகள் பயன்பாட்டில் உள்ளதால் நீக்கப்படவில்லை: {files}. நினைவை நிறுத்திவிட்டு மீண்டும் நீக்குங்கள்."
+  "Some of the files of this model are in use and were not removed: {files}. Stop Ninaivu and delete it again.": "இந்த மாதிரியின் சில கோப்புகள் பயன்பாட்டில் உள்ளதால் நீக்கப்படவில்லை: {files}. நினைவை நிறுத்திவிட்டு மீண்டும் நீக்குங்கள்.",
+  "Runs on": "இயங்கும் இடம்",
+  "Settings and index are kept in": "அமைப்புகளும் அட்டவணையும் இங்கே உள்ளன",
+  "AI models on this computer": "இந்தக் கணினியில் உள்ள AI மாதிரிகள்",
+  "Third-party notices": "மூன்றாம் தரப்பு அறிவிப்புகள்"
 }

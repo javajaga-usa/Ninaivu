@@ -69,6 +69,10 @@ class NewerDataError(UpdateError):
     """The index was written by a newer Ninaivu than this one."""
 
 
+class OlderDataError(UpdateError):
+    """The index is from a Ninaivu older than the first migration step kept."""
+
+
 class UpdateBackupError(UpdateError):
     """The copy before the update could not be made."""
 
@@ -109,6 +113,25 @@ def _stored_schema(path: Path, query: str) -> int:
         return 0
 
 
+def _stored_user_version(path: Path) -> int | None:
+    """The migration number an index records, None when it cannot be read."""
+    try:
+        with closing(sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=30.0)) as conn:
+            return int(conn.execute("PRAGMA user_version").fetchone()[0])
+    except (sqlite3.Error, TypeError, ValueError):
+        return None
+
+
+def _has_photographs_table(path: Path) -> bool:
+    try:
+        with closing(sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=30.0)) as conn:
+            return conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='assets'"
+            ).fetchone() is not None
+    except sqlite3.Error:
+        return False
+
+
 def index_shape() -> str:
     """A fingerprint of what this copy of Ninaivu does to the index on start:
     the schema numbers, the tables, columns and indexes it makes, and the
@@ -132,7 +155,7 @@ def index_shape() -> str:
         features.shape(),
         migrations.shape(),
     ]
-    for code in (db.init_db, db._migrate, db.heal_schema, archive_db.init_db):  # noqa: SLF001
+    for code in (db.init_db, db.heal_schema, archive_db.init_db):  # noqa: SLF001
         try:
             parts.append(inspect.getsource(code).replace("\r\n", "\n"))
         except (OSError, TypeError):
@@ -207,13 +230,13 @@ def prepare(state_dir: Path | str, *, version: str = __version__,
     ``from`` None on a first start and ``backup`` None when no copy was
     needed.
     """
-    environ = os.environ if environ is None else environ
+    env: Any = os.environ if environ is None else environ
     state = Path(state_dir)
     result: dict[str, Any] = {"from": None, "to": version, "backup": None}
     if not state.is_dir():
         return result
     has_data = (state / "index.db").is_file() or (state / "archive.db").is_file()
-    before = recorded(state)
+    before = recorded(state) or {}
     old = str(before["version"]) if before else None
     result["from"] = old
 
@@ -230,6 +253,15 @@ def prepare(state_dir: Path | str, *, version: str = __version__,
                     f"then `ninaivu restore <that file>`. The photographs are not affected "
                     f"either way.")
 
+    if (state / "index.db").is_file():
+        from . import migrations                         # noqa: PLC0415
+
+        have = _stored_user_version(state / "index.db")
+        first = migrations.INDEX[0].number
+        if have is not None and have < first and _has_photographs_table(state / "index.db"):
+            raise OlderDataError(migrations.TOO_OLD.format(
+                path=state / "index.db", have=have, first=first))
+
     shape = index_shape()
     if old == version and before.get("shape") == shape:
         return result
@@ -241,7 +273,7 @@ def prepare(state_dir: Path | str, *, version: str = __version__,
     # An update (or a step back to an older version with the same schema):
     # the state folder is copied before this version touches it.
     if (state / "index.db").is_file():
-        if str(environ.get(SKIP_ENV, "")).strip().lower() in {"1", "true", "yes", "on"}:
+        if str(env.get(SKIP_ENV, "")).strip().lower() in {"1", "true", "yes", "on"}:
             log.warning("%s is set: starting Ninaivu %s without a copy of %s first",
                         SKIP_ENV, version, state)
         else:

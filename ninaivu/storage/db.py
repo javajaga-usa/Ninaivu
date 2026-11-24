@@ -1219,70 +1219,6 @@ def _restore_user_assets_cascade(conn: sqlite3.Connection) -> bool:
     return True
 
 
-def _migrate(conn: sqlite3.Connection) -> None:
-    """Bring an older database up to :data:`SCHEMA_VERSION` in place."""
-    have = columns(conn, "assets")
-    if not have:
-        return
-
-    # v3 → v4: visibility levels, and per-user favourites/ratings.
-    if "visibility" not in have:
-        conn.execute("ALTER TABLE assets ADD COLUMN visibility INTEGER NOT NULL DEFAULT 1")
-        conn.execute("ALTER TABLE assets ADD COLUMN vis_source TEXT NOT NULL DEFAULT 'default'")
-
-    if "library" not in columns(conn, "users") and "users" in _tables(conn):
-        conn.execute("ALTER TABLE users ADD COLUMN library TEXT")
-
-    # v5 -> v6: live photos, location tags
-    if "is_live" not in have:
-        conn.execute("ALTER TABLE assets ADD COLUMN live_video_path TEXT")
-        conn.execute("ALTER TABLE assets ADD COLUMN is_live INTEGER NOT NULL DEFAULT 0")
-        conn.execute("ALTER TABLE assets ADD COLUMN country TEXT")
-        conn.execute("ALTER TABLE assets ADD COLUMN city TEXT")
-
-    # `live_clip` is not here: it arrived after v6 shipped, so it belongs in
-    # LATE_COLUMNS, which runs on every start rather than only on a version
-    # bump. Adding it here as well would do nothing for the databases that
-    # need it — theirs already say version 6, so this function never runs.
-
-    if "favorite" in have or "rating" in have:
-        # Carry existing stars over to the first admin, then retire the
-        # asset-level columns so a per-user join can own those names.
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS user_assets (
-                user_id  INTEGER NOT NULL,
-                asset_id INTEGER NOT NULL,
-                favorite INTEGER NOT NULL DEFAULT 0,
-                rating   INTEGER NOT NULL DEFAULT 0,
-                seen_at  REAL,
-                PRIMARY KEY (user_id, asset_id)
-            )""")
-        owner = conn.execute(
-            "SELECT id FROM users WHERE role='admin' AND active=1 ORDER BY id LIMIT 1"
-        ).fetchone() if "users" in _tables(conn) else None
-        if owner:
-            conn.execute(
-                "INSERT OR IGNORE INTO user_assets(user_id, asset_id, favorite, rating) "
-                "SELECT ?, id, favorite, rating FROM assets "
-                "WHERE favorite = 1 OR rating > 0",
-                (int(owner["id"]),),
-            )
-            # Only retire the old columns once their contents are somewhere
-            # else. With no admin to own them the copy above does not run, so
-            # dropping here would destroy every favourite and star in the
-            # library. Leaving the columns in place means this branch — which
-            # is guarded on their presence, not on schema_version — runs again
-            # on the next start, by which time an admin exists.
-            for column in ("favorite", "rating"):
-                if column in have:
-                    try:
-                        conn.execute(f"ALTER TABLE assets DROP COLUMN {column}")
-                    except sqlite3.OperationalError:
-                        # SQLite < 3.35 cannot drop columns; leave them unused.
-                        pass
-    conn.commit()
-
-
 #: The ``meta`` key set while the full-text index is dropped but not refilled.
 FTS_REBUILD_KEY = "fts_rebuild_pending"
 
@@ -1732,6 +1668,15 @@ def init_db(db_path: Path | str) -> sqlite3.Connection:
     conn = connect(db_path)
     key = str(db_path)
     with _write_lock:
+        # An index from before the first step kept is not opened: it is told
+        # to go through 4.4 first (storage/migrations.py), before this
+        # function changes a thing in it.
+        from . import migrations as _migrations           # noqa: PLC0415
+        try:
+            _migrations.refuse_older(conn, _migrations.INDEX, path=db_path)
+        except _migrations.IndexTooOld:
+            conn.close()
+            raise
         # Read the stored version *before* the schema script runs — on a brand
         # new file the meta table does not exist yet, which means version 0.
         try:
@@ -1739,8 +1684,6 @@ def init_db(db_path: Path | str) -> sqlite3.Connection:
         except sqlite3.OperationalError:
             existing = 0
         conn.executescript(_SCHEMA)
-        if existing and existing < SCHEMA_VERSION:
-            _migrate(conn)
         # Version-independent: repairs a database whose recorded version is
         # already current but which predates a column added since.
         heal_schema(conn)

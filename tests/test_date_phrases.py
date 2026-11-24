@@ -142,10 +142,3 @@ def test_an_explicit_range_wins_over_the_sentence(as_family):
     assert body["dates"] is None
 
 
-def test_the_feature_can_be_turned_off(app, as_family):
-    app.config["MV_CONFIG"].date_phrase_search = False
-    try:
-        body = as_family.get("/api/assets?q=last%20week&limit=5").get_json()
-        assert body["dates"] is None
-    finally:
-        app.config["MV_CONFIG"].date_phrase_search = True

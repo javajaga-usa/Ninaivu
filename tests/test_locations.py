@@ -13,7 +13,7 @@ from PIL import Image
 from ninaivu.media import scanner as scanner_mod
 from ninaivu.media.scanner import Scanner
 from ninaivu.server import auth
-from ninaivu.storage import db, fingerprints, locations, migrations
+from ninaivu.storage import db, fingerprints, locations
 
 
 # -- helpers -----------------------------------------------------------------
@@ -89,55 +89,6 @@ def _rescan(cfg) -> Scanner:
 
 
 # -- the migration -----------------------------------------------------------
-
-def test_a_37_index_migrates_with_locations_filled_and_ids_unchanged(tmp_path):
-    path = tmp_path / "index.db"
-    conn = db.init_db(path)
-    ids = [db.upsert_asset(conn, _record(f"2024/0{n}/photo{n}.jpg")) for n in range(1, 5)]
-    _fingerprint(conn, ids[0], "aa" * 32)
-    _fingerprint(conn, ids[1], "bb" * 32)
-    with db._write_lock:                                  # noqa: SLF001
-        # Edited since its fingerprint was taken: that one describes nothing now.
-        conn.execute("UPDATE assets SET size=101 WHERE id=?", (ids[1],))
-        conn.commit()
-    _as_37(conn)
-    before = {r[0]: (r[1], r[2]) for r in conn.execute("SELECT id, root, rel_path FROM assets")}
-
-    conn = _reopen(path)
-    try:
-        assert migrations.recorded(conn) == migrations.latest(migrations.INDEX)
-        after = {r[0]: (r[1], r[2]) for r in conn.execute("SELECT id, root, rel_path FROM assets")}
-        assert after == before
-        have = _in_step(conn)
-        assert set(have) == set(ids)
-        assert have[ids[0]][2] == f"{fingerprints.ALGO}:{'aa' * 32}"
-        assert have[ids[1]][2] is None and have[ids[2]][2] is None
-        assert {r[0] for r in conn.execute("SELECT place FROM locations")} == {"library"}
-    finally:
-        db.close(path)
-
-
-def test_the_migration_only_adds(tmp_path):
-    path = tmp_path / "index.db"
-    conn = db.init_db(path)
-    db.upsert_asset(conn, _record("a/one.jpg"))
-    _as_37(conn)
-    before = _schema(conn)
-    assert not [key for key in before if "locations" in key[1]]
-
-    conn = _reopen(path)
-    try:
-        after = _schema(conn)
-        assert {key: after.get(key) for key in before} == before
-        added = {key: value for key, value in after.items() if key not in before}
-        assert added and all(value[0] == "locations" or key[1].startswith("locations_")
-                             for key, value in added.items())
-        # The triggers watch the tables 3.7 has, and write only the new one.
-        assert {value[0] for key, value in added.items() if key[0] == "trigger"} == {
-            "assets", "content_fingerprints"}
-    finally:
-        db.close(path)
-
 
 def test_the_triggers_outlive_every_start(tmp_path):
     path = tmp_path / "index.db"
@@ -273,33 +224,6 @@ def test_with_fingerprints_off_none_are_taken_at_index_time(cfg):
     _rescan(cfg)
     assert conn.execute("SELECT COUNT(*) FROM content_fingerprints").fetchone()[0] == 0
     assert all(fp is None for _, _, fp in _in_step(conn).values())
-
-
-def test_a_3x_index_is_backfilled_by_the_fingerprint_pass(cfg):
-    """An index made before 4.0: migrated with its places and no fingerprints;
-    the last pass of the next scan takes them, and the triggers carry them."""
-    conn = _open(cfg)
-    _rescan(cfg)                                          # fingerprints off, as many 3.x were
-    _as_37(conn)
-    ids = {r[0]: r[1] for r in conn.execute("SELECT id, rel_path FROM assets")}
-    conn = _reopen(cfg.db_path)
-    assert migrations.recorded(conn) == migrations.latest(migrations.INDEX)
-    assert all(fp is None for _, _, fp in _in_step(conn).values())
-
-    cfg.content_fingerprints = True
-    read: list[str] = []
-    real = fingerprints.at_index
-    fingerprints.at_index = lambda path, st: read.append(str(path)) or real(path, st)
-    try:
-        _rescan(cfg)
-    finally:
-        fingerprints.at_index = real
-    assert read == []                                     # nothing new to index
-    assert {r[0]: r[1] for r in conn.execute("SELECT id, rel_path FROM assets")} == ids
-    have = _in_step(conn)
-    assert set(have) == set(ids)
-    assert all(fp and fp.startswith(f"{fingerprints.ALGO}:") for _, _, fp in have.values())
-    assert scanner_mod.owed(conn, cfg.active_root, "fingerprints").startswith("0:")
 
 
 def test_a_moved_photograph_keeps_its_id_and_its_place_follows(cfg):

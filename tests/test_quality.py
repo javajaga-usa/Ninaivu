@@ -7,7 +7,6 @@ than left to the eye.
 """
 
 import json
-import sqlite3
 from pathlib import Path
 
 import pytest
@@ -110,45 +109,9 @@ def test_the_scan_records_focus_and_exposure(scanned):
     assert isinstance(json.loads(row["quality"]), list)
 
 
-def test_quality_scan_can_be_turned_off(cfg):
-    from ninaivu.media.scanner import Scanner
-    from ninaivu.server import auth
-
-    cfg.quality_scan = False
-    conn = db.init_db(cfg.db_path)
-    auth.init_auth_schema(conn)
-    Scanner(cfg)._run(Path(cfg.active_root), full=True)
-    rows = conn.execute(
-        "SELECT sharpness FROM assets WHERE kind='picture'").fetchall()
-    assert rows and all(r["sharpness"] is None for r in rows)
-
-
 # ---------------------------------------------------------------------------
 # The schema, for a library that was indexed before any of this existed
 # ---------------------------------------------------------------------------
-
-def test_an_older_database_gains_the_columns_without_a_rescan(tmp_path):
-    """The columns arrive through heal_schema, not a version bump.
-
-    A household upgrading Ninaivu should not have to re-index a library of
-    forty thousand photographs to open the app again.
-    """
-    path = tmp_path / "old.db"
-    conn = sqlite3.connect(path)
-    conn.execute("""CREATE TABLE assets (
-        id INTEGER PRIMARY KEY, root TEXT NOT NULL, rel_path TEXT NOT NULL,
-        filename TEXT NOT NULL, kind TEXT NOT NULL, UNIQUE(root, rel_path))""")
-    conn.execute("INSERT INTO assets(root, rel_path, filename, kind) "
-                 "VALUES ('r', 'a.jpg', 'a.jpg', 'image')")
-    conn.commit()
-    conn.close()
-
-    healed = db.init_db(path)
-    have = db.columns(healed, "assets")
-    assert {"sharpness", "brightness", "quality"} <= set(have)
-    row = healed.execute("SELECT quality FROM assets").fetchone()
-    assert row["quality"] == "[]"
-
 
 # ---------------------------------------------------------------------------
 # Picking the keeper out of a near-identical group
@@ -277,14 +240,3 @@ def test_re_scoring_leaves_current_photographs_alone(scanned):
     assert untouched > 0, "already at the current version: nothing to redo"
 
 
-def test_re_scoring_is_skipped_when_the_measurement_is_off(scanned):
-    from ninaivu.media.scanner import Scanner
-
-    cfg, conn, _ = scanned
-    cfg.quality_scan = False
-    conn.execute("UPDATE assets SET quality_version=0, sharpness=-1")
-    conn.commit()
-    Scanner(cfg)._rescore_quality(conn, cfg.active_root)
-    still = conn.execute(
-        "SELECT COUNT(*) n FROM assets WHERE sharpness=-1").fetchone()["n"]
-    assert still > 0
