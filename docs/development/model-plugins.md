@@ -42,9 +42,11 @@ without touching the core (`DELETE /api/admin/ai-models/<id>`).
 ## Where the line is today, and what is left
 
 The catalogue (`media/model_catalog.py`) lists each model with its files,
-checksums, licence and the packages it needs. What is not yet done: faces and
-picture search still live under `ninaivu/media` beside core code, and the
-catalogue is a list rather than one manifest per plugin. Moving each feature
+checksums, licence and the packages it needs, and `tests/test_model_manifests.py`
+checks that every entry is a complete manifest (what it is for, source, licence,
+what runs it, and every file pinned to its bytes and a SHA-256, or the git blob id of a pinned revision). What is not yet
+done: faces and picture search still live under `ninaivu/media` beside core
+code. Moving each feature
 into its own package with its own manifest (the way `ninaivu/features` and
 `extensions/` already work) is done one feature at a time, least connected
 first (colour, the Playground's tools), faces last. Each step keeps the rules
