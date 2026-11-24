@@ -58,6 +58,16 @@ def _schema(conn) -> dict[tuple[str, str], tuple]:
         "SELECT type, name, tbl_name, sql FROM sqlite_master")}
 
 
+def _as_37(conn) -> None:
+    """Make an index made by this version into one as 3.7 leaves it."""
+    for (name,) in conn.execute("SELECT name FROM sqlite_master WHERE type='trigger' "
+                                "AND name LIKE 'locations_%'").fetchall():
+        conn.execute(f"DROP TRIGGER {name}")
+    conn.execute("DROP TABLE locations")
+    conn.execute("PRAGMA user_version = 1")
+    conn.commit()
+
+
 def _reopen(path) -> object:
     db.close(path)
     db._READY.discard(str(path))                          # noqa: SLF001
