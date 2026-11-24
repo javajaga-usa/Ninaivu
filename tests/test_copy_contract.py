@@ -72,29 +72,12 @@ def recorded(scanned):
                            files=len(assets))
 
 
-def _reopen_as_37(cfg, conn):
-    """The index as 3.7 left it: no ledger, no migration recorded. Then opened."""
-    conn.execute("DROP TABLE IF EXISTS copies")
-    conn.commit()
-    conn.execute("PRAGMA user_version = 0")
-    conn.commit()
-    db.close(cfg.db_path)
-    db._READY.discard(str(cfg.db_path))                          # noqa: SLF001
-    return db.init_db(cfg.db_path)
-
-
 def _ledger(conn) -> dict[tuple[str, str], str]:
     return {(r[0], r[1]): r[2] for r in conn.execute(
         "SELECT fingerprint, destination, state FROM copies")}
 
 
 # -- the migrations --------------------------------------------------------------
-
-def test_two_is_the_locations_table_and_three_is_the_ledger():
-    names = [m.name for m in migrations.INDEX]
-    assert names[1] == "where each photograph is"
-    assert names[2] == "the copies ledger" and migrations.latest(migrations.INDEX) >= 3
-
 
 def test_a_new_index_has_the_ledger(tmp_path):
     conn = db.init_db(tmp_path / "index.db")
@@ -107,54 +90,6 @@ def test_a_new_index_has_the_ledger(tmp_path):
     finally:
         db.close(tmp_path / "index.db")
 
-
-def test_a_37_index_is_filled_from_what_the_engines_recorded(recorded):
-    cfg, conn = recorded.cfg, recorded.conn
-    before = _engine_tables(conn)
-    with courier.sent_record(cfg.state_dir) as sent:
-        sent_before = [tuple(r) for r in sent.execute("SELECT * FROM sent ORDER BY 1, 2")]
-    conn = _reopen_as_37(cfg, conn)
-    assert migrations.recorded(conn) == migrations.latest(migrations.INDEX)
-    got = _ledger(conn)
-    r = recorded
-    assert got == {
-        (r.a["fp"], "mirror"): "kept", (r.b["fp"], "mirror"): "kept",
-        (r.b["fp"], "offsite"): "kept", (r.c["fp"], "drive"): "kept",
-        (r.d["fp"], "secondary"): "kept",
-    }
-    # Nothing is re-sent and no engine is told anything: their records are
-    # exactly as they were, the Secondary's too.
-    assert _engine_tables(conn) == before
-    with courier.sent_record(cfg.state_dir) as sent:
-        assert [tuple(r) for r in sent.execute("SELECT * FROM sent ORDER BY 1, 2")] == sent_before
-    size, when = conn.execute("SELECT size, verified_at FROM copies WHERE destination='drive'"
-                              ).fetchone()
-    assert size == r.c["size"] and when > 0
-
-
-def test_opening_again_changes_nothing(recorded):
-    conn = _reopen_as_37(recorded.cfg, recorded.conn)
-    first = conn.execute("SELECT * FROM copies ORDER BY 1, 2").fetchall()
-    db.close(recorded.cfg.db_path)
-    db._READY.discard(str(recorded.cfg.db_path))                 # noqa: SLF001
-    conn = db.init_db(recorded.cfg.db_path)
-    assert [tuple(r) for r in conn.execute("SELECT * FROM copies ORDER BY 1, 2")] == [
-        tuple(r) for r in first]
-
-
-def test_the_migration_only_adds(recorded):
-    """Go back to 3.7: everything 3.7 had is there as it was; only new tables."""
-    conn = recorded.conn
-    conn.execute("DROP TABLE IF EXISTS copies")
-    conn.commit()
-    before = {tuple(r) for r in conn.execute("SELECT type, name, sql FROM sqlite_master")}
-    conn = _reopen_as_37(recorded.cfg, conn)
-    after = {tuple(r) for r in conn.execute("SELECT type, name, sql FROM sqlite_master")}
-    assert before <= after
-    assert {name for _type, name, _sql in after - before} == {"copies", "idx_copies_destination"}
-
-
-# -- filling it again ------------------------------------------------------------
 
 def test_a_copy_whose_record_went_is_unconfirmed_not_forgotten(recorded):
     cfg, conn = recorded.cfg, recorded.conn

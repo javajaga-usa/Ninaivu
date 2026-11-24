@@ -23,10 +23,11 @@ def _make_table(name):
     return step
 
 
-def test_every_list_is_numbered_from_one_without_a_gap():
+def test_every_list_is_numbered_without_a_gap():
     for steps in migrations.DATABASES.values():
         migrations.check(steps)
-        assert steps[0].name == "what 3.7 has"
+    assert migrations.INDEX[0].number == 4 and migrations.INDEX[0].name == "what 4.4 has"
+    assert migrations.ARCHIVE[0].number == 1
 
 
 def test_a_gap_or_a_repeat_is_refused():
@@ -41,31 +42,26 @@ def test_a_new_index_records_the_last_step(index):
     assert migrations.recorded(conn) == migrations.latest(migrations.INDEX)
 
 
-def test_a_37_index_is_up_to_date_and_unchanged(tmp_path):
-    """An index from 3.7 (no user_version) opens with nothing but the record."""
+def test_an_index_from_before_4_3_is_refused_untouched(tmp_path):
+    """No user_version and a photograph table: a 3.x or early 4.x index."""
     path = tmp_path / "index.db"
     conn = db.init_db(path)
-    conn.execute("INSERT INTO meta(key, value) VALUES('marker', 'kept')")
+    conn.execute("PRAGMA user_version = 3")           # as 4.0 to 4.2 left it
     conn.commit()
-    conn.execute("PRAGMA user_version = 0")       # as every 3.x left it
-    conn.commit()
-    before = conn.execute(
-        "SELECT type, name, sql FROM sqlite_master ORDER BY type, name").fetchall()
     db.close(path)
     db._READY.discard(str(path))                    # noqa: SLF001
+    before = path.read_bytes()
+    with pytest.raises(migrations.IndexTooOld, match="Ninaivu 4.4.0"):
+        db.init_db(path)
+    assert path.read_bytes() == before
 
-    conn = db.init_db(path)
+
+def test_a_new_index_is_not_refused(tmp_path):
+    conn = db.init_db(tmp_path / "index.db")
     try:
-        after = conn.execute(
-            "SELECT type, name, sql FROM sqlite_master ORDER BY type, name").fetchall()
-        # Everything 3.7 had is there as it was; the later steps only add.
-        assert {tuple(r) for r in before} <= {tuple(r) for r in after}
-        added = {r[1] for r in after} - {r[1] for r in before}
-        assert added <= {"copies", "idx_copies_destination", "locations"}
-        assert db.get_meta(conn, "marker") == "kept"
-        assert migrations.recorded(conn) == migrations.latest(migrations.INDEX)
+        assert migrations.recorded(conn) == 4
     finally:
-        db.close(path)
+        db.close(tmp_path / "index.db")
 
 
 def test_a_step_runs_once_in_order(tmp_path):
@@ -166,33 +162,14 @@ def _a_37_home(tmp_path):
     return state
 
 
-def test_a_37_index_upgrades_after_a_copy_is_made(tmp_path):
+def test_a_37_index_is_refused_before_any_copy_is_made(tmp_path):
     from ninaivu.storage import upgrade
     state = _a_37_home(tmp_path)
-    done = upgrade.prepare(state, version="4.0.0")
-    assert done["from"] == "3.7.0" and done["backup"]
-    conn = db.init_db(state / "index.db")
-    try:
-        assert db.get_meta(conn, "schema_version") == str(db.SCHEMA_VERSION)
-        assert db.get_meta(conn, "household") == "ours"
-        assert migrations.recorded(conn) == migrations.latest(migrations.INDEX)
-    finally:
-        db.close(state / "index.db")
-
-
-def test_37_does_not_open_an_index_40_has_opened(tmp_path, monkeypatch):
-    """3.7 knows schema 6. It refuses the index and names the copy to restore."""
-    from ninaivu.storage import upgrade
-    state = _a_37_home(tmp_path)
-    upgrade.prepare(state, version="4.0.0")
-    db.init_db(state / "index.db")                         # 4.0 opens it
-    db.close(state / "index.db")
-    assert db.SCHEMA_VERSION == 7
-    monkeypatch.setattr(db, "SCHEMA_VERSION", 6)            # as 3.7 reads it
     before = (state / "index.db").read_bytes()
-    with pytest.raises(upgrade.NewerDataError, match="restore the copy taken before that update"):
-        upgrade.prepare(state, version="3.7.0")
+    with pytest.raises(upgrade.OlderDataError, match="Ninaivu 4.4.0"):
+        upgrade.prepare(state, version="5.0.0")
     assert (state / "index.db").read_bytes() == before
+    assert not (state / upgrade.BEFORE_UPDATE).exists()
 
 
 def test_the_old_module_paths_are_gone():

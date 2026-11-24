@@ -191,34 +191,23 @@ def test_console_overview_loads_after_upgrading(cfg, library):
     assert assigned.get_json()["person"]["library"] == str(library / "shared")
 
 
-def test_init_db_upgrades_legacy_assets_without_is_live(tmp_path):
-    """Bug: init_db failed on startup with 'no such column: is_live' on legacy database."""
+def test_init_db_refuses_a_legacy_index_instead_of_patching_it(tmp_path):
+    """An index made before 4.3 is not patched column by column any more
+    (5.0): it is refused untouched, and the message says to open it in 4.4."""
+    from ninaivu.storage import migrations
     path = tmp_path / "legacy_v5.db"
     raw = sqlite3.connect(path)
-    raw.execute("""
-        CREATE TABLE assets (
-            id          INTEGER PRIMARY KEY,
-            root        TEXT NOT NULL,
-            rel_path    TEXT NOT NULL,
-            filename    TEXT NOT NULL,
-            kind        TEXT NOT NULL
-        )
-    """)
+    raw.execute("CREATE TABLE assets (id INTEGER PRIMARY KEY, root TEXT NOT NULL, "
+                "rel_path TEXT NOT NULL, filename TEXT NOT NULL, kind TEXT NOT NULL)")
     raw.commit()
     raw.close()
     db.close_all()
-
-    conn = db.init_db(path)
-    have = db.columns(conn, "assets")
-    assert "is_live" in have
-    assert "visibility" in have
-
-    # Check that indexes were created successfully
-    indexes = {
-        r[0] for r in conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='assets'"
-        )
-    }
-    assert "idx_assets_live" in indexes
-    assert "idx_assets_vis" in indexes
+    with pytest.raises(migrations.IndexTooOld, match="Ninaivu 4.4.0"):
+        db.init_db(path)
+    raw = sqlite3.connect(path)
+    try:
+        assert [r[0] for r in raw.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'")] == ["assets"]
+    finally:
+        raw.close()
 

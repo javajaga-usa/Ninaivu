@@ -2,10 +2,10 @@
 
 ``tests/golden_indexes/<tag>.sql`` is the index schema exactly as that
 release's ``init_db`` made it (with the ``user_version`` it recorded). Each is
-loaded into an empty file, a row is put in a few tables, and the current
-Ninaivu opens it. The result must have the same tables, columns, indexes and
+loaded into an empty file, a row is put in a table, and the current
+Ninaivu opens it. 4.4 (and so any 4.3 or later) must have the same tables, columns, indexes and
 triggers as a brand-new index, keep the rows, and record the last migration.
-Adding a release line is dropping one more .sql file here.
+Anything older is refused and left byte for byte as it was. Adding a release line is dropping one more .sql file here.
 """
 from __future__ import annotations
 
@@ -18,6 +18,10 @@ from ninaivu.storage import db, migrations
 
 GOLDEN = Path(__file__).parent / "golden_indexes"
 TAGS = sorted(p.stem for p in GOLDEN.glob("v*.sql"))
+#: The release lines 5.0 opens: the first with the last migration step (4.3).
+#: The older ones are kept to prove they are refused, untouched.
+OPENS = ["v4.4.0"]
+REFUSED = [t for t in TAGS if t not in OPENS]
 
 
 def _shape(conn: sqlite3.Connection) -> dict[str, list[tuple]]:
@@ -52,7 +56,7 @@ def test_there_are_golden_indexes():
     assert {"v3.7.0", "v4.0.0", "v4.2.0", "v4.4.0"} <= set(TAGS)
 
 
-@pytest.mark.parametrize("tag", TAGS)
+@pytest.mark.parametrize("tag", OPENS)
 def test_the_index_of_each_release_upgrades_to_the_current_shape(tmp_path, tag):
     fresh = tmp_path / "fresh" / "index.db"
     fresh.parent.mkdir()
@@ -72,7 +76,24 @@ def test_the_index_of_each_release_upgrades_to_the_current_shape(tmp_path, tag):
         _forget(path)
 
 
-@pytest.mark.parametrize("tag", TAGS)
+@pytest.mark.parametrize("tag", REFUSED)
+def test_an_older_index_is_refused_and_left_as_it_was(tmp_path, tag):
+    path = _open_golden(tmp_path, tag)
+
+    def content() -> list[str]:
+        conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+        try:
+            return list(conn.iterdump())
+        finally:
+            conn.close()
+
+    before = content()
+    with pytest.raises(migrations.IndexTooOld, match="Ninaivu 4.4.0"):
+        db.init_db(path)
+    assert content() == before
+
+
+@pytest.mark.parametrize("tag", OPENS)
 def test_opening_it_a_second_time_changes_nothing(tmp_path, tag):
     path = _open_golden(tmp_path, tag)
     conn = db.init_db(path)

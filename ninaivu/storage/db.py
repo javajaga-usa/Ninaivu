@@ -1732,6 +1732,15 @@ def init_db(db_path: Path | str) -> sqlite3.Connection:
     conn = connect(db_path)
     key = str(db_path)
     with _write_lock:
+        # An index from before the first step kept is not opened: it is told
+        # to go through 4.4 first (storage/migrations.py), before this
+        # function changes a thing in it.
+        from . import migrations as _migrations           # noqa: PLC0415
+        try:
+            _migrations.refuse_older(conn, _migrations.INDEX, path=db_path)
+        except _migrations.IndexTooOld:
+            conn.close()
+            raise
         # Read the stored version *before* the schema script runs — on a brand
         # new file the meta table does not exist yet, which means version 0.
         try:
