@@ -536,7 +536,7 @@ function wireChrome() {
       const row = (label, value) => {
         const p = document.createElement('p');
         const strong = document.createElement('strong');
-        strong.textContent = `${i18n.t(label)}: `;
+        strong.textContent = `${label}: `;
         p.append(strong, document.createTextNode(value));
         return p;
       };
@@ -544,11 +544,11 @@ function wireChrome() {
         ? about.models.map((m) => `${i18n.t(m.label || m.id)}${m.licence ? ` (${m.licence})` : ''}`).join(', ')
         : i18n.t('None');
       body.replaceChildren(
-        row('Runs on', `${about.system}, Python ${about.python}`),
-        row('Settings and index are kept in', about.state_dir),
-        row('Library folders', about.libraries.join(', ') || i18n.t('None')),
-        row('AI models on this computer', models),
-        row('Third-party notices', about.notices),
+        row(i18n.t('Runs on'), `${about.system}, Python ${about.python}`),
+        row(i18n.t('Settings and index are kept in'), about.state_dir),
+        row(i18n.t('Library folders'), about.libraries.join(', ') || i18n.t('None')),
+        row(i18n.t('AI models on this computer'), models),
+        row(i18n.t('Third-party notices'), about.notices),
       );
     } catch {
       body.replaceChildren();
