@@ -233,7 +233,7 @@ CATALOGUE: dict[str, dict[str, Any]] = {
         # and then reads nothing. A test holds this list against the metadata
         # of whatever rapidocr is installed.
         "no_deps": True,
-        "also": ["pyclipper>=1.4.0", "numpy>=2.5.4,<3", "six>=1.17.0",
+        "also": ["pyclipper>=1.4.0", "numpy>=2.5.5,<3", "six>=1.17.0",
                  "Shapely!=2.0.4,>=2.2.0", "PyYAML", "Pillow", "tqdm",
                  "omegaconf!=2.2.1", "requests", "colorlog",
                  "onnxruntime>=1.24,<2"],
@@ -260,7 +260,7 @@ CATALOGUE: dict[str, dict[str, Any]] = {
         "label": said("Writing in Tamil and English"),
         "used_for": said("The on-device AI engine's language runner (llama.cpp), which drafts the chapters of a memory film and will answer Ask Ninaivu. Built for this computer when installed (on a Mac it uses the graphics processor, and needs Apple's command-line tools); a few minutes to install. The model itself is on the AI models page."),
         "present": _package_present("llama_cpp"),
-        "requirement": "llama-cpp-python>=0.3.36,<0.4",
+        "requirement": "llama-cpp-python>=0.3.37,<0.4",
         # Read by the model host, a process of its own, which starts after the
         # install: nothing in the server needs restarting for it.
         "restart": False,
@@ -273,7 +273,7 @@ CATALOGUE: dict[str, dict[str, Any]] = {
         "label": said("Letters read aloud in Tamil"),
         "used_for": said("Runs the Tamil voice that reads an old letter aloud (Letters read aloud, Advanced settings): transformers on PyTorch, in the engine's own process. About 2 GB installed with PyTorch; the voice itself is on the AI models page."),
         "present": _packages_present("torch", "transformers"),
-        "requirement": "transformers>=5.23.0,<6",
+        "requirement": "transformers>=5.24.0,<6",
         "also": ["--index-url", "https://download.pytorch.org/whl/cpu", "torch>=2.15.0,<3"],
         # Read by the model host, a process of its own, which starts after the
         # install: nothing in the server needs restarting for it.
@@ -284,7 +284,7 @@ CATALOGUE: dict[str, dict[str, Any]] = {
         "label": said("Voice stories as words"),
         "used_for": said("The on-device AI engine's speech reader, which writes down what is said in voice stories. It carries its own copy of the ONNX runtime and runs in the engine's own process. About 45 MB installed; the speech models are on the AI models page."),
         "present": _package_present("sherpa_onnx"),
-        "requirement": "sherpa-onnx>=2.0.1,<3",
+        "requirement": "sherpa-onnx>=2.0.2,<3",
         # Read by the model host, a process of its own, which starts after the
         # install: nothing in the server needs restarting for it.
         "restart": False,
