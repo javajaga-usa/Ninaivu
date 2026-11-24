@@ -36,6 +36,7 @@ import shutil
 import subprocess
 import sys
 import threading
+from concurrent.futures import ThreadPoolExecutor
 import time
 from dataclasses import dataclass
 from pathlib import PurePosixPath
@@ -708,20 +709,30 @@ def run_all(cfg: Any, probes: Probes | None = None, *, asked: dict[str, int] | N
             scheme: str = "http", console_running: bool = True) -> dict[str, Any]:
     """Every check, grouped by area, with a count of each state."""
     probes = probes or Probes()
-    checks: list[Check] = []
-    for area, look in (
-            ("ports", lambda: check_ports(cfg, probes, asked=asked, scheme=scheme,
-                                          console_running=console_running)),
-            ("drives", lambda: check_drives(cfg, probes)),
-            ("tailscale", lambda: check_tailscale(cfg, probes, scheme=scheme)),
-            ("permissions", lambda: check_permissions(cfg, probes))):
+    looks = (
+        ("ports", lambda: check_ports(cfg, probes, asked=asked, scheme=scheme,
+                                      console_running=console_running)),
+        ("drives", lambda: check_drives(cfg, probes)),
+        ("tailscale", lambda: check_tailscale(cfg, probes, scheme=scheme)),
+        ("permissions", lambda: check_permissions(cfg, probes)))
+
+    def look_at(item: tuple[str, Any]) -> list[Check]:
+        area, look = item
         try:
-            checks.extend(look())
+            return list(look())
         except Exception as exc:                                   # noqa: BLE001
             # One area that cannot be looked at must not hide the others.
-            checks.append(Check(area, "error", "warn",
-                                _words(said("This could not be checked.")),
-                                detail={"said": str(exc), "params": {}, "text": str(exc)}))
+            return [Check(area, "error", "warn",
+                          _words(said("This could not be checked.")),
+                          detail={"said": str(exc), "params": {}, "text": str(exc)})]
+
+    # The areas ask the machine (ports, firewall, drives, Tailscale, permission
+    # prompts), and a command that hangs holds its area for its whole timeout.
+    # Looked at together, the page waits for the slowest area, not for all four.
+    checks: list[Check] = []
+    with ThreadPoolExecutor(max_workers=len(looks), thread_name_prefix="setup-check") as pool:
+        for found in pool.map(look_at, looks):
+            checks.extend(found)
     counts = {state: sum(1 for c in checks if c.state == state) for state in STATES}
     return {
         "checked_at": time.time(),

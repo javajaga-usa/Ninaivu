@@ -40,9 +40,9 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
           <button type="button" class="btn" data-view="edited" aria-pressed="false">${i18n.t('Edited')}</button>
           <button type="button" class="btn" data-view="original" aria-pressed="false">${i18n.t('Original')}</button>
         </div>
-        <label class="ap-zoom" style="margin-left:auto; display:flex; align-items:center; gap:6px; font-size:11px; color:var(--ap-muted);">
+        <label class="ap-zoom u-38f4a3" >
           ${i18n.t('Zoom')}
-          <select data-zoom style="padding:4px 8px; font-size:11px; background:var(--ap-card); border-radius:6px; color:inherit; border:1px solid var(--ap-line);">
+          <select data-zoom class="u-960c34">
             <option value="fit">${i18n.t('Fit')}</option>
             <option value="1">100%</option>
             <option value="1.5">150%</option>
@@ -88,7 +88,7 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
 
         <div class="ap-tools-body">
           <!-- PANEL 1: ADJUSTMENTS & LOOKS -->
-          <div data-panel="adjustments" style="display:flex; flex-direction:column; gap:16px;">
+          <div data-panel="adjustments" class="u-2b1e4d">
             <div>
               <div class="ap-group-title">${i18n.t('Creative looks')}</div>
               <div class="ap-presets-grid">
@@ -107,7 +107,7 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
               <div class="ap-suggestions">${i18n.t('Choose a photo to analyze.')}</div>
             </div>
 
-            <fieldset disabled class="ap-panel ap-panel-sliders" style="border:0; padding:0; margin:0; display:flex; flex-direction:column; gap:16px; background:none;">
+            <fieldset disabled class="ap-panel ap-panel-sliders u-fe10d0" >
               <div>
                 <div class="ap-group-title">${i18n.t('Light')}</div>
                 <div class="ap-controls-light ap-controls"></div>
@@ -126,9 +126,9 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
               <div>
                 <div class="ap-group-title">${i18n.t('Composition')}</div>
                 <div class="ap-controls-geometry"></div>
-                <div style="display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:8px; font-size:11.5px; color:var(--ap-muted); margin-top:6px;">
-                  <span style="color:var(--ap-muted);">${i18n.t('Crop framing')}</span>
-                  <select data-crop style="font-size:11px; padding:4px 8px; background:var(--ap-card);">
+                <div class="u-20a743">
+                  <span class="u-adf2b0">${i18n.t('Crop framing')}</span>
+                  <select data-crop class="u-fa7bc6">
                     <option value="original">${i18n.t('Original framing')}</option>
                     <option value="square">${i18n.t('Square · 1:1')}</option>
                     <option value="landscape">${i18n.t('Landscape · 16:9')}</option>
@@ -142,12 +142,12 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
           </div>
 
           <!-- PANEL 2: AI ASSIST -->
-          <div data-panel="ai" hidden style="display:flex; flex-direction:column; gap:14px;">
+          <div data-panel="ai" hidden class="u-c7da91">
             <form class="ap-ask">
               <h2 class="ap-ask-title">${i18n.t('Natural language editing')}</h2>
-              <div style="display:flex; flex-direction:column; gap:4px; font-size:11px; color:var(--ap-muted);">
+              <div class="u-008422">
                 <span>${i18n.t('Engine')}</span>
-                <select data-provider style="font-size:11.5px; padding:6px 10px; background:var(--ap-card);">
+                <select data-provider class="u-36de0f">
                   <option value="builtin">${i18n.t('Built-in · private browser adjustments')}</option>
                   <option value="local">${i18n.t('Local AI · flexible language (Ollama)')}</option>
                   <option value="generate">${i18n.t('Generative AI · preview diffusion')}</option>
@@ -158,38 +158,38 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
                 <textarea id="ap-prompt" rows="3" maxlength="2000" placeholder="${i18n.t('e.g. Lift shadows, soften highlights, warm white balance, crop to 4:5')}" disabled></textarea>
                 <div class="ap-prompt-bar">
                   <span class="ap-prompt-shortcut">${i18n.t('Ctrl+Enter to plan')}</span>
-                  <button class="btn primary" type="submit" disabled style="padding:6px 14px; font-size:12px;">${i18n.t('Plan edits')}</button>
+                  <button class="btn primary u-8c98e2" type="submit" disabled >${i18n.t('Plan edits')}</button>
                 </div>
               </div>
 
-              <fieldset data-generation-options hidden style="border:1px solid var(--ap-line); border-radius:10px; padding:12px; display:flex; flex-direction:column; gap:8px; background:var(--ap-rail);">
-                <legend style="font-size:11px; font-weight:600; color:var(--ap-accent); padding:0 4px;">${i18n.t('Generation controls')}</legend>
-                <label style="display:flex; justify-content:space-between; align-items:center; font-size:11px; color:var(--ap-muted);">${i18n.t('Quality')}
-                  <select data-generation-quality style="font-size:11px; padding:3px 6px; background:var(--ap-card);">
+              <fieldset data-generation-options hidden class="u-87ff8a">
+                <legend class="u-d37df1">${i18n.t('Generation controls')}</legend>
+                <label class="u-a22593">${i18n.t('Quality')}
+                  <select data-generation-quality class="u-05ad2c">
                     <option value="draft">${i18n.t('Draft')}</option>
                     <option value="balanced" selected>${i18n.t('Balanced')}</option>
                     <option value="detailed">${i18n.t('Detailed')}</option>
                   </select>
                 </label>
-                <label style="display:flex; justify-content:space-between; align-items:center; font-size:11px; color:var(--ap-muted);">${i18n.t('Fidelity')}
-                  <select data-generation-fidelity style="font-size:11px; padding:3px 6px; background:var(--ap-card);">
+                <label class="u-a22593">${i18n.t('Fidelity')}
+                  <select data-generation-fidelity class="u-05ad2c">
                     <option value="preserve">${i18n.t('Preserve')}</option>
                     <option value="balanced">${i18n.t('Balanced')}</option>
                     <option value="creative">${i18n.t('Creative')}</option>
                   </select>
                 </label>
-                <label style="display:flex; flex-direction:column; gap:3px; font-size:11px; color:var(--ap-muted);">${i18n.t('Avoid in result')}
-                  <textarea data-generation-negative rows="2" maxlength="500" placeholder="blur, artifacts, oversaturation" style="font:inherit; font-size:11px; background:var(--ap-card); color:var(--ap-text); border:1px solid var(--ap-line); border-radius:6px; padding:5px 8px;"></textarea>
+                <label class="u-262272">${i18n.t('Avoid in result')}
+                  <textarea data-generation-negative rows="2" maxlength="500" placeholder="blur, artifacts, oversaturation" class="u-f7e1f3"></textarea>
                 </label>
-                <div style="display:flex; gap:8px; align-items:center;">
-                  <label style="display:flex; align-items:center; gap:6px; font-size:11px; color:var(--ap-muted);">${i18n.t('Seed')}
-                    <input data-generation-seed type="number" min="0" max="2147483647" step="1" value="42" style="width:90px; font-size:11px; padding:3px 6px; background:var(--ap-card); color:var(--ap-text); border:1px solid var(--ap-line); border-radius:6px;">
+                <div class="u-01ef7f">
+                  <label class="u-1288bb">${i18n.t('Seed')}
+                    <input data-generation-seed type="number" min="0" max="2147483647" step="1" value="42" class="u-21912a">
                   </label>
-                  <button class="btn" type="button" data-new-seed style="padding:4px 8px; font-size:11px;">${i18n.t('Random')}</button>
+                  <button class="btn u-16dc5a" type="button" data-new-seed >${i18n.t('Random')}</button>
                 </div>
               </fieldset>
 
-              <small data-provider-note style="font-size:11px; color:var(--ap-dim); line-height:1.4;">${i18n.t('Combine lighting, color, mood and framing requests. Review proposed changes before applying.')}</small>
+              <small data-provider-note class="u-d4ff1d">${i18n.t('Combine lighting, color, mood and framing requests. Review proposed changes before applying.')}</small>
               <div>
                 <div class="ap-group-title">${i18n.t('Ideas')}</div>
                 <div class="ap-prompt-ideas"></div>
@@ -197,56 +197,56 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
               <div data-hairstyles hidden>
                 <div class="ap-group-title">${i18n.t('Hairstyles · generative')}</div>
                 <div class="ap-hairstyle-ideas"></div>
-                <small style="font-size:11px; color:var(--ap-dim); line-height:1.4;">${i18n.t('A new hairstyle is drawn by the image model, so it is a generated preview to review, not a slider. Fuller hair, strands, grey and colour are in Skin & hair retouch.')}</small>
+                <small class="u-d4ff1d">${i18n.t('A new hairstyle is drawn by the image model, so it is a generated preview to review, not a slider. Fuller hair, strands, grey and colour are in Skin & hair retouch.')}</small>
               </div>
             </form>
 
             <section class="ap-plan" hidden aria-label="${i18n.t('Proposed AI edit')}">
               <h2>${i18n.t('Proposed AI edit')}</h2>
-              <p data-plan-summary style="font-size:11.5px; color:var(--ap-text); margin:0;"></p>
-              <ul data-plan-changes style="margin:4px 0; padding-left:18px;"></ul>
-              <button class="btn primary" data-apply-plan style="width:100%;">${i18n.t('Apply planned edits')}</button>
+              <p data-plan-summary class="u-319feb"></p>
+              <ul data-plan-changes class="u-0f3e9c"></ul>
+              <button class="btn primary u-046678" data-apply-plan >${i18n.t('Apply planned edits')}</button>
             </section>
 
             <section class="ap-generated" hidden aria-label="${i18n.t('AI-generated result')}">
               <h2>${i18n.t('Generated result')}</h2>
-              <p data-generated-note style="font-size:11px; color:var(--ap-muted); margin:0;"></p>
+              <p data-generated-note class="u-822975"></p>
               <img alt="${i18n.t('AI-generated edit preview')}">
-              <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                <button class="btn primary" data-save-generated hidden style="flex:1;">${i18n.t('Save to library')}</button>
-                <button class="btn" data-download-generated style="flex:1;">${i18n.t('Download image')}</button>
+              <div class="u-3de8f9">
+                <button class="btn primary u-97445a" data-save-generated hidden >${i18n.t('Save to library')}</button>
+                <button class="btn u-97445a" data-download-generated >${i18n.t('Download image')}</button>
                 <button class="btn" data-discard-generated>${i18n.t('Discard')}</button>
               </div>
             </section>
           </div>
 
           <!-- PANEL 3: MAGIC TOOLS -->
-          <div data-panel="magic" hidden style="display:flex; flex-direction:column; gap:12px;">
+          <div data-panel="magic" hidden class="u-e12feb">
             <div class="ap-magic-card">
               <h3><svg class="ap-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 3.5 11.2 7.8 15.5 9.5 11.2 11.2 9.5 15.5 7.8 11.2 3.5 9.5 7.8 7.8Z"/><path d="M17.5 14 18.4 16.6 21 17.5 18.4 18.4 17.5 21 16.6 18.4 14 17.5 16.6 16.6Z"/></svg>${i18n.t('Skin & hair retouch')}</h3>
               <p>${i18n.t('Every person in the photograph, each against their own skin: light, colour, shine and blemishes; hair strands, grey and colour. A bindi or sindoor is left as it is.')}</p>
-              <button class="btn primary" data-portrait style="align-self:flex-start;">${i18n.t('Open retouch studio')}</button>
+              <button class="btn primary u-c9adc4" data-portrait >${i18n.t('Open retouch studio')}</button>
             </div>
 
             <div class="ap-magic-card">
               <h3><svg class="ap-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.6"/><path d="m5 17 4.5-4.5 3.5 3.5 2.5-2.5L21 18"/></svg>${i18n.t('Background tools')}</h3>
               <p>${i18n.t('Automatically segment subject to remove background or apply realistic depth-of-field lens blur.')}</p>
-              <div style="display:flex; gap:6px; flex-wrap:wrap;">
+              <div class="u-6157e8">
                 <button class="btn" data-remove-bg hidden>${i18n.t('Cut out subject')}</button>
                 <button class="btn" data-blur-bg hidden>${i18n.t('Blur background')}</button>
                 <button class="btn" data-pop-bg hidden>${i18n.t('Colour pop')}</button>
               </div>
-              <section class="ap-background" hidden aria-label="${i18n.t('Background result')}" style="margin-top:10px; padding:10px; background:var(--ap-rail);">
-                <h2 data-background-title style="font-size:12px;">${i18n.t('Background result')}</h2>
-                <img alt="${i18n.t('Background preview')}" style="max-height:160px; object-fit:contain; margin:4px 0;">
-                <label data-blur-control hidden style="display:grid; grid-template-columns:minmax(0,1fr) auto; gap:4px; font-size:11px; color:var(--ap-muted); margin:4px 0;">
+              <section class="ap-background u-55d70f" hidden aria-label="${i18n.t('Background result')}" >
+                <h2 data-background-title class="u-6cb285">${i18n.t('Background result')}</h2>
+                <img alt="${i18n.t('Background preview')}" class="u-e510e8">
+                <label data-blur-control hidden class="u-091a19">
                   <span>${i18n.t('Blur strength')}</span>
-                  <input data-blur-strength type="range" min="2" max="40" value="16" style="grid-column:1/-1;">
+                  <input data-blur-strength type="range" min="2" max="40" value="16" class="u-068a8d">
                 </label>
-                <div style="display:flex; gap:6px; margin-top:6px; flex-wrap:wrap;">
-                  <button class="btn primary" data-save-background hidden style="flex:1; font-size:11.5px; padding:5px 10px;">${i18n.t('Save to library')}</button>
-                  <button class="btn" data-download-background style="flex:1; font-size:11.5px; padding:5px 10px;">${i18n.t('Download result')}</button>
-                  <button class="btn" data-discard-background style="font-size:11.5px; padding:5px 10px;">${i18n.t('Discard')}</button>
+                <div class="u-faf7a9">
+                  <button class="btn primary u-f2c090" data-save-background hidden >${i18n.t('Save to library')}</button>
+                  <button class="btn u-f2c090" data-download-background >${i18n.t('Download result')}</button>
+                  <button class="btn u-92d8fd" data-discard-background >${i18n.t('Discard')}</button>
                 </div>
               </section>
             </div>
@@ -254,58 +254,58 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
             <div class="ap-magic-card">
               <h3><svg class="ap-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 20H8.5l-4.2-4.2a1.5 1.5 0 0 1 0-2.1l9.3-9.3a1.5 1.5 0 0 1 2.1 0l4.9 4.9a1.5 1.5 0 0 1 0 2.1L12 20M9 9l7 7"/></svg>${i18n.t('Object removal & inpainting')}</h3>
               <p>${i18n.t('Paint over unwanted objects, photobombers, wires or blemishes to seamlessly patch from surroundings.')}</p>
-              <button class="btn" data-remove-object hidden style="align-self:flex-start;">${i18n.t('Remove object')}</button>
+              <button class="btn u-c9adc4" data-remove-object hidden >${i18n.t('Remove object')}</button>
             </div>
 
             <div class="ap-magic-card" data-hairstyle-card>
               <h3><svg class="ap-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 20c-1.5-5-1-11 3-14 2-1.5 5-1.5 7 0 4 3 4.5 9 3 14"/><path d="M9 10c1 2 4 3 7 2M8 14c0 3 1 5 2 6M16 14c0 3-1 5-2 6"/></svg>${i18n.t('Hairstyles')}</h3>
               <p>${i18n.t('Try a new hairstyle on one person. Only their hair and the space around it are redrawn, on the AI server at home; the face and everyone else are put back exactly as they were.')}</p>
               <div class="ap-hairstyle-ideas" data-hairstyle-magic></div>
-              <small data-hairstyle-needs hidden style="font-size:11px; color:var(--ap-dim); line-height:1.4;">${i18n.t('Hairstyles need the Creative Studio extension with an AI server that has a Paint and ask workflow. An administrator sets it up under AI → AI server.')}</small>
+              <small data-hairstyle-needs hidden class="u-d4ff1d">${i18n.t('Hairstyles need the Creative Studio extension with an AI server that has a Paint and ask workflow. An administrator sets it up under AI → AI server.')}</small>
             </div>
 
             <div class="ap-magic-card" data-add-hair-card hidden>
               <h3><svg class="ap-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20c0-6 3-10 7-12 4 2 7 6 7 12M12 8c-2 3-2 7 0 12M9 9c-3 3-3 8-1 11M15 9c3 3 3 8 1 11"/></svg>${i18n.t('Add hair · generative')}</h3>
               <p>${i18n.t('Paint where there should be hair — a receding hairline, a thin crown, a bald patch — and the AI server draws this person\'s own hair there. For hair that is there but thin, Skin & hair retouch has Fuller hair and Add hair, with no model at all.')}</p>
-              <button class="btn" data-add-hair style="align-self:flex-start;">${i18n.t('Paint where hair should be')}</button>
+              <button class="btn u-c9adc4" data-add-hair >${i18n.t('Paint where hair should be')}</button>
             </div>
 
             <div class="ap-magic-card">
               <h3><svg class="ap-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 4h8l3 3-2 3-1-1v11H8V9L7 10 5 7Z"/><path d="M12 4a2 2 0 0 0 4 0"/></svg>${i18n.t('Clothing colour')}</h3>
               <p>${i18n.t('Brush over a dress, shirt or sari and choose a new colour. The folds and the weave stay; only the colour changes, and only where you painted.')}</p>
-              <button class="btn" data-recolor style="align-self:flex-start;">${i18n.t('Open clothing colour')}</button>
+              <button class="btn u-c9adc4" data-recolor >${i18n.t('Open clothing colour')}</button>
             </div>
 
             <div class="ap-magic-card" data-gemini-magic-card hidden>
               <h3><svg class="ap-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/><circle cx="12" cy="12" r="3"/></svg>${i18n.t('Google Gemini vision & analysis')}</h3>
               <p>${i18n.t('Multimodal scene analysis, automatic photo description, semantic tagging, and smart photographic recommendations.')}</p>
-              <button class="btn primary" data-gemini-analyze style="align-self:flex-start;">${i18n.t('Analyze with Gemini')}</button>
-              <div data-gemini-analysis-result hidden style="margin-top:8px; display:flex; flex-direction:column; gap:6px; font-size:11px;">
-                <p data-gemini-caption style="color:var(--ap-text); margin:0; font-weight:500;"></p>
-                <div data-gemini-tags style="display:flex; flex-wrap:wrap; gap:4px;"></div>
-                <p data-gemini-critique style="color:var(--ap-dim); margin:0; font-style:italic;"></p>
-                <button class="btn" data-gemini-apply-suggestions style="align-self:flex-start; margin-top:4px;" hidden>${i18n.t('Apply suggested edits')}</button>
+              <button class="btn primary u-c9adc4" data-gemini-analyze >${i18n.t('Analyze with Gemini')}</button>
+              <div data-gemini-analysis-result hidden class="u-a20105">
+                <p data-gemini-caption class="u-a8dc98"></p>
+                <div data-gemini-tags class="u-7343f6"></div>
+                <p data-gemini-critique class="u-42bc83"></p>
+                <button class="btn u-012dc4" data-gemini-apply-suggestions  hidden>${i18n.t('Apply suggested edits')}</button>
               </div>
             </div>
 
             <div class="ap-magic-card" data-server-tools>
               <h3><svg class="ap-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>${i18n.t('Enhance tools')}</h3>
               <p data-server-tools-note>${i18n.t('Upscale a small photograph, restore the faces in an old one, and colourise a black-and-white print. Each needs a model: one tap per tool, nothing leaves the house.')}</p>
-              <div style="display:flex; gap:6px; flex-wrap:wrap;">
+              <div class="u-6157e8">
                 <button class="btn" data-server-job="upscale" disabled>${i18n.t('Upscale')}</button>
                 <button class="btn" data-server-job="restore" disabled>${i18n.t('Restore faces')}</button>
                 <button class="btn" data-server-job="colorize" disabled>${i18n.t('Colourise')}</button>
                 <button class="btn" data-revive hidden title="${i18n.t('Restore faces, then colourise: one tap for an old black-and-white print.')}">${i18n.t('Revive old photo')}</button>
               </div>
-              <ul data-enhance-needs hidden style="margin:4px 0 0; padding-left:16px; font-size:11px; color:var(--ap-dim); line-height:1.45;"></ul>
-              <section class="ap-server-result" hidden aria-label="${i18n.t('AI server result')}" style="margin-top:10px; padding:10px; background:var(--ap-rail);">
-                <h2 data-server-title style="font-size:12px;">${i18n.t('AI server result')}</h2>
-                <p data-server-note style="font-size:11px; color:var(--ap-muted); margin:0;"></p>
-                <img alt="${i18n.t('AI server result preview')}" style="max-height:160px; object-fit:contain; margin:4px 0;">
-                <div style="display:flex; gap:6px; margin-top:6px; flex-wrap:wrap;">
-                  <button class="btn primary" data-save-server hidden style="flex:1; font-size:11.5px; padding:5px 10px;">${i18n.t('Save to library')}</button>
-                  <button class="btn" data-download-server style="flex:1; font-size:11.5px; padding:5px 10px;">${i18n.t('Download result')}</button>
-                  <button class="btn" data-discard-server style="font-size:11.5px; padding:5px 10px;">${i18n.t('Discard')}</button>
+              <ul data-enhance-needs hidden class="u-5fb355"></ul>
+              <section class="ap-server-result u-55d70f" hidden aria-label="${i18n.t('AI server result')}" >
+                <h2 data-server-title class="u-6cb285">${i18n.t('AI server result')}</h2>
+                <p data-server-note class="u-822975"></p>
+                <img alt="${i18n.t('AI server result preview')}" class="u-e510e8">
+                <div class="u-faf7a9">
+                  <button class="btn primary u-f2c090" data-save-server hidden >${i18n.t('Save to library')}</button>
+                  <button class="btn u-f2c090" data-download-server >${i18n.t('Download result')}</button>
+                  <button class="btn u-92d8fd" data-discard-server >${i18n.t('Discard')}</button>
                 </div>
               </section>
             </div>
@@ -313,7 +313,7 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
             <div class="ap-magic-card">
               <h3><svg class="ap-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><rect x="12" y="11" width="6" height="5" rx="1"/></svg>${i18n.t('Creative Studio')}</h3>
               <p>${i18n.t('Create picture-in-picture collages, family album memories and bespoke compositions.')}</p>
-              <button class="btn" data-creative style="align-self:flex-start;">${i18n.t('Open Creative Studio')}</button>
+              <button class="btn u-c9adc4" data-creative >${i18n.t('Open Creative Studio')}</button>
             </div>
           </div>
         </div>
@@ -321,7 +321,7 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
         <!-- Footer: Sticky Download / Save -->
         <div class="ap-studio-footer">
           <button class="btn primary" data-save hidden>${i18n.t('Save copy to Ninaivu library')}</button>
-          <p data-save-note hidden style="font-size:10.5px; color:var(--ap-dim); margin:0;">${i18n.t('Saved alongside your original on Ninaivu server.')}</p>
+          <p data-save-note hidden class="u-9d1d80">${i18n.t('Saved alongside your original on Ninaivu server.')}</p>
           <div class="ap-export-row">
             <select data-format aria-label="${i18n.t('Export format')}">
               <option value="image/png">${i18n.t('PNG · lossless')}</option>
@@ -330,7 +330,7 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
             </select>
             <button class="btn" data-export disabled>${i18n.t('Download image')}</button>
           </div>
-          <div style="display:flex; justify-content:space-between; align-items:center; font-size:10.5px; color:var(--ap-dim); margin-top:2px;">
+          <div class="u-9b0f81">
             <span class="ap-dimensions"></span>
             <span>${i18n.t('Metadata stripped for privacy')}</span>
           </div>

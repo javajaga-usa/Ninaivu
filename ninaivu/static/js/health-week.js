@@ -11,6 +11,11 @@
 
 import * as i18n from './i18n.js';
 
+//: What a status dot says to somebody who cannot see its colour, translated where drawn.
+const STATUS_NAMES = { ok: i18n.key('Fine'), attention: i18n.key('Needs attention'),
+  problem: i18n.key('Problem'), off: i18n.key('Off') };
+const statusName = (status) => (STATUS_NAMES[status] ? i18n.t(STATUS_NAMES[status]) : status);
+
 const $ = (sel) => document.querySelector(sel);
 
 const el = (tag, className, text) => {
@@ -128,7 +133,7 @@ export class WeekPanel {
     text.append(el('span', 'sf-title', i18n.t(part.title)),
       el('span', 'sf-summary', part.lines.map(sentence).join(' ')));
     const dot = el('span', `sf-dot sf-${part.status}`);
-    dot.title = part.status;
+    dot.title = statusName(part.status);
     row.append(dot, text);
     if (part.status !== 'ok' && PAGES[part.page]) {
       const go = el('button', 'btn ghost small', i18n.t('Open {page}', { page: i18n.t(PAGES[part.page]) }));

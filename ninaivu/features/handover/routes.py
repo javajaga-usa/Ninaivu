@@ -32,6 +32,7 @@ from flask import Response, abort, current_app, jsonify, request
 
 from ... import __version__
 from ...server import auth
+from ...server.csp import style_attr
 from ...server.auth import ROLE_ADMIN, ROLE_FAMILY, current_user, require_admin, require_family
 from ...server.config import house_name
 from ...words import filled, refusal, said
@@ -472,7 +473,7 @@ def render_sheet(conn: sqlite3.Connection, lang: str, code: str = "") -> str:
     add(f'<!doctype html><html lang="{lang}"><head><meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
         f'<title>{e(t(said("If something happens to me — our family photos")))}</title>'
-        f"<style>{SHEET_CSS}</style></head><body>")
+        f"<style{style_attr()}>{SHEET_CSS}</style></head><body>")
     add(f'<div class="bar"><button type="button" id="print-sheet">{e(t(said("Print")))}</button></div>')
     add(f'<h1>{e(t(said("If something happens to me — our family photos")))}</h1>')
     add('<p class="lead">' + e(t(said("Written by {name} for {home}. Last reviewed {date}."),

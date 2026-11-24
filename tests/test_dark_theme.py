@@ -82,9 +82,9 @@ def test_the_charcoal_is_warm(dark):
 
 def test_the_other_pages_carry_the_same_charcoal(dark):
     bg, text = dark["--bg"], dark["--text"]
-    for page in ("share.html", "ask.html"):
-        html = (TEMPLATES / page).read_text(encoding="utf-8")
-        assert f"--ground: {bg};" in html and f"--ink: {text};" in html, page
+    for page in ("share.css", "ask.css"):
+        css = (CSS / page).read_text(encoding="utf-8")
+        assert f"--ground: {bg};" in css and f"--ink: {text};" in css, page
     for sheet, prefix in (("editor.css", "pe"), ("ai-playground.css", "ap")):
         tokens = _tokens((CSS / sheet).read_text(encoding="utf-8"), ':root[data-theme="dark"]')
         assert tokens[f"--{prefix}-bg"] == bg and tokens[f"--{prefix}-text"] == text, sheet

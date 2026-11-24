@@ -2052,3 +2052,10 @@ body.admin {
 @media (max-width: 640px) {
   .sc-check { grid-template-columns: 1fr; }
 }
+
+/* Formerly inline style attributes, one class each, so the page can
+   run under a Content-Security-Policy without 'unsafe-inline' styles.
+   The class is written three times so each wins over the rules it used to beat
+   (an inline style outranked them), yet a script's own style object still wins. */
+.u-08e13a.u-08e13a.u-08e13a{max-width:6rem}
+.u-d6f2af.u-d6f2af.u-d6f2af{margin-top:14px}

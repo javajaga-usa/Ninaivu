@@ -3810,3 +3810,19 @@ body.is-offline .sidebar,
 body.is-offline .content > :not(#offline-banner):not(#empty) {
   display: none !important;
 }
+
+/* Formerly inline style attributes, one class each, so the page can
+   run under a Content-Security-Policy without 'unsafe-inline' styles.
+   The class is written three times so each wins over the rules it used to beat
+   (an inline style outranked them), yet a script's own style object still wins. */
+.u-02617c.u-02617c.u-02617c{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.u-116966.u-116966.u-116966{margin:0}
+.u-13313b.u-13313b.u-13313b{display:flex;justify-content:space-between;align-items:center}
+.u-1b657e.u-1b657e.u-1b657e{display:flex;gap:2px}
+.u-6d0006.u-6d0006.u-6d0006{margin-left:auto}
+.u-710877.u-710877.u-710877{stop-color:color-mix(in srgb, var(--gold) 34%, var(--surface))}
+.u-a06775.u-a06775.u-a06775{stop-color:color-mix(in srgb, var(--accent) 16%, var(--surface))}
+.u-cfa5ed.u-cfa5ed.u-cfa5ed{margin:14px 0 8px;font-weight:600;text-transform:uppercase;font-size:0.75rem;letter-spacing:0.05em}
+.u-d0a510.u-d0a510.u-d0a510{width:13px;height:13px;margin-right:4px;vertical-align:-2px}
+.u-d73265.u-d73265.u-d73265{width:34px;height:34px}
+.u-f480a3.u-f480a3.u-f480a3{display:flex;justify-content:space-between;align-items:center;gap:4px}

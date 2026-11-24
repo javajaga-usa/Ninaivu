@@ -176,7 +176,7 @@ export class PortraitPanel {
 
   colours() {
     const swatches = HAIR_COLOURS.map((c) => `<button type="button" class="pp-swatch" data-pp="colour" data-hex="${c.hex}"
-        style="--swatch:${c.hex}" title="${escape(i18n.t(COLOUR_NAMES[c.key]))}" aria-label="${escape(i18n.t(COLOUR_NAMES[c.key]))}" aria-pressed="false"></button>`).join('');
+        title="${escape(i18n.t(COLOUR_NAMES[c.key]))}" aria-label="${escape(i18n.t(COLOUR_NAMES[c.key]))}" aria-pressed="false"></button>`).join('');
     return `<div class="pp-colours" role="group" aria-label="${escape(i18n.t('Hair colour'))}">
         ${swatches}
         <label class="pp-swatch pp-custom" title="${escape(i18n.t('Pick a colour'))}"><input type="color" data-pp="custom" value="#4e3424" aria-label="${escape(i18n.t('Pick a colour'))}"></label>
@@ -216,6 +216,7 @@ export class PortraitPanel {
     });
 
     this.element.querySelectorAll('[data-pp="colour"]').forEach((button) => {
+      button.style.setProperty('--swatch', button.dataset.hex);
       button.onclick = () => this.pick(button.dataset.hex);
     });
     const custom = q('[data-pp="custom"]');

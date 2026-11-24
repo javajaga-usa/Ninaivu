@@ -463,7 +463,7 @@ def test_in_tamil_the_name_is_written_in_tamil():
     assert latin == [], f"still in Latin letters: {latin[:5]}"
     assert ta["Ninaivu is locked"] == "நினைவு பூட்டப்பட்டுள்ளது"
     page = PAGE.read_text(encoding="utf-8")
-    assert '<span data-i18n="Ninaivu">Ninaivu</span>' in page, "the brand in the top bar follows too"
+    assert '<span role="heading" aria-level="1" data-i18n="Ninaivu">Ninaivu</span>' in page, "the brand in the top bar follows too"
 
 
 # --- the language follows the person -------------------------------------

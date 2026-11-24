@@ -18,40 +18,40 @@ export function openRemoveObject(source, service, {provider = 'local', onApply =
   dialog.className='ap-recolor ap-remove-dialog';
   dialog.setAttribute('aria-label',ask?ask.title:i18n.t('Remove object'));
   dialog.innerHTML=`
-    <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; padding-bottom:10px; border-bottom:1px solid var(--ap-line);">
-      <div style="display:flex; align-items:center; gap:9px;">
-        <span class="ap-brand-mark" style="width:28px; height:28px; font-size:15px;" aria-hidden="true">✦</span>
+    <div class="u-6ab333">
+      <div class="u-0c88fe">
+        <span class="ap-brand-mark u-25f681"  aria-hidden="true">✦</span>
         <div>
-          <h2 style="margin:0; font-size:15px; font-weight:650; letter-spacing:-0.2px;">${ask?ask.title:i18n.t('Object removal & inpainting')}</h2>
-          <span style="font-size:10.5px; color:var(--ap-muted);">${ask?ask.lede:i18n.t('Fill selected area from surrounding pixels')}</span>
+          <h2 class="u-b16a11">${ask?ask.title:i18n.t('Object removal & inpainting')}</h2>
+          <span class="u-c7bb46">${ask?ask.lede:i18n.t('Fill selected area from surrounding pixels')}</span>
         </div>
       </div>
-      <button class="btn" data-close-remove aria-label="${i18n.t('Close remove object')}" style="width:28px; height:28px; padding:0; border-radius:50%; display:grid; place-items:center;">✕</button>
+      <button class="btn u-e065b4" data-close-remove aria-label="${i18n.t('Close remove object')}" >✕</button>
     </div>
     <div class="ap-recolor-tools">
-      <label style="font-size:11.5px; font-weight:550; color:var(--ap-muted);">
+      <label class="u-287c0a">
         ${i18n.t('Brush size')}
-        <input data-size type="range" min="4" max="140" value="30" style="width:120px; margin:0 6px; accent-color:var(--ap-accent);">
+        <input data-size type="range" min="4" max="140" value="30" class="u-127a9d">
       </label>
-      <label style="font-size:11.5px; cursor:pointer; color:var(--ap-muted); display:flex; align-items:center; gap:5px;">
+      <label class="u-8eede2">
         <input data-erase type="checkbox"> ${i18n.t('Erase selection')}
       </label>
-      <label style="font-size:11.5px; cursor:pointer; color:var(--ap-muted); display:flex; align-items:center; gap:5px;">
+      <label class="u-8eede2">
         <input data-mask type="checkbox" checked> ${i18n.t('Show selection')}
       </label>
     </div>
-    ${ask&&ask.people&&ask.people.length>1?`<div class="ap-hairstyle-people" role="radiogroup" aria-label="${i18n.t('Whose hair')}" style="display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin:0 0 8px;"><span style="font-size:11.5px; color:var(--ap-muted);">${i18n.t('Whose hair')}</span></div>`:''}
+    ${ask&&ask.people&&ask.people.length>1?`<div class="ap-hairstyle-people u-273a67" role="radiogroup" aria-label="${i18n.t('Whose hair')}" ><span class="u-750b3f">${i18n.t('Whose hair')}</span></div>`:''}
     <canvas aria-label="${ask?i18n.t('Paint the area to redraw'):i18n.t('Paint the area to remove')}" tabindex="0"></canvas>
-    ${ask?`<label style="display:flex; flex-direction:column; gap:4px; font-size:11.5px; color:var(--ap-muted); margin:8px 0 0;">${i18n.t('What should be drawn there')}
-      <textarea data-ask rows="2" maxlength="2000" style="font:inherit; font-size:12px; background:var(--ap-card); color:var(--ap-text); border:1px solid var(--ap-line); border-radius:6px; padding:6px 8px;">${ask.prompt.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}</textarea></label>`:''}
-    <p style="font-size:11px; color:var(--ap-dim); margin:8px 0;">${i18n.t('Drag with mouse or touch. With keyboard, move brush with arrow keys and hold Space to paint.')}</p>
-    <div style="display:flex; gap:8px; flex-wrap:wrap; margin:12px 0;">
+    ${ask?`<label class="u-97f187">${i18n.t('What should be drawn there')}
+      <textarea data-ask rows="2" maxlength="2000" class="u-d2d96f">${ask.prompt.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}</textarea></label>`:''}
+    <p class="u-c6bc9e">${i18n.t('Drag with mouse or touch. With keyboard, move brush with arrow keys and hold Space to paint.')}</p>
+    <div class="u-0fcd2e">
       <button class="btn" data-clear>${i18n.t('Clear selection')}</button>
       <button class="btn primary" data-apply disabled>${ask?i18n.t('Draw it'):i18n.t('Remove selected area')}</button>
       <button class="btn" data-apply-photo disabled ${onApply?'':'hidden'}>${i18n.t('Apply to photo')}</button>
       <button class="btn" data-download disabled>${i18n.t('Download result')}</button>
     </div>
-    <p role="status" style="font-size:11.5px; color:var(--ap-muted); margin:0;">${i18n.t('Select the area before applying.')}</p>`;
+    <p role="status" class="u-8afc9b">${i18n.t('Select the area before applying.')}</p>`;
 
   document.body.append(dialog);
   const $=s=>dialog.querySelector(s), canvas=$('canvas');

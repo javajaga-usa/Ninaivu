@@ -250,11 +250,12 @@ def test_a_layout_over_eight_megabytes_is_still_compressed():
     from flask import Flask
 
     import ninaivu
+    from ninaivu.server import compress
 
     app = Flask(__name__)
     items = [[i, 133, 1, 2, 0, "1700000000r0", "abc"] for i in range(400_000)]
     body = json.dumps({"segments": [{"key": "2024-01-01", "items": items}]})
-    assert len(body) > ninaivu._GZIP_MAX_BYTES
+    assert len(body) > compress._GZIP_MAX_BYTES
     with app.test_request_context("/api/segments", headers={"Accept-Encoding": "gzip"}):
         response = app.response_class(body, mimetype="application/json")
         ninaivu._gzip_text(response)
