@@ -653,8 +653,6 @@ class Config:
     thumb_quality: int = 82
     #: Thumbnail file format: ``WEBP`` or ``JPEG``.
     thumb_format: str = "WEBP"
-    #: Extract video poster frames (needs ffmpeg or opencv).
-    video_thumbs: bool = True
     #: Seconds into a video to grab the poster frame.
     video_thumb_offset: float = 1.0
     # --- Place names -------------------------------------------------------

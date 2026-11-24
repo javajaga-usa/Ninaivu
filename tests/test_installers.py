@@ -92,7 +92,7 @@ def test_the_release_workflow_builds_the_platform_downloads_and_signs_only_with_
     # Three downloads: Windows x64, Apple silicon and Linux x64, the last
     # also opened on Debian 13 (Debian 12 is not supported). No arm64 Linux build.
     assert set(flow["jobs"]) == {"gate", "windows", "macos", "linux", "debian", "pair-across",
-                                 "release", "docker"}
+                                 "release"}
     assert flow["jobs"]["release"]["needs"] == ["gate", "windows", "macos", "linux", "debian",
                                                 "pair-across"]
     # GitHub's runners unless a repository variable names one at home (the

@@ -231,8 +231,7 @@ def cfg(tmp_path: Path, library: Path):
     # shipped defaults.
     from ninaivu.server import settings_groups
     for name in (*settings_groups.ALWAYS_ON, *settings_groups.FOLLOW_THEIR_MODEL):
-        if name not in ("video_thumbs",):
-            setattr(config, name, False)
+        setattr(config, name, False)
     config.workers = 2
     config.open_browsing = True
     # The fixtures draw 400x300 solid-colour JPEGs a few kilobytes each. Real

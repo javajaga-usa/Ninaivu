@@ -378,13 +378,10 @@ def test_no_secret_is_written_into_a_script():
                 assert not re.search(r"\$\{\{\s*secrets\.", step.get("run", "")), (path.name, name)
 
 
-def test_the_docker_image_is_pushed_from_the_release():
-    """A-49: pushed only on a tag push, the image stayed at 0.1.2."""
+def test_the_docker_image_is_not_pushed_from_the_release():
+    """5.0: Docker is not needed, so a release publishes no image (the compose file stays for running from source)."""
     release = _workflow("release.yml")
-    job = release["jobs"]["docker"]
-    assert job["uses"] == "./.github/workflows/docker.yml"
-    assert job["needs"] == ["gate", "release"]
-    assert job["permissions"]["packages"] == "write"
+    assert "docker" not in release["jobs"]
     docker = _workflow("docker.yml")
     on = docker[True] if True in docker else docker["on"]
     assert "tags" not in on["push"] and "workflow_call" in on
@@ -597,13 +594,12 @@ def test_the_version_is_newer_than_the_latest_release(gate, latest, ok):
         assert "not newer than the latest release" in done.stdout and output == ""
 
 
-def test_a_passing_run_without_windows_stops_the_release(gate):
-    """WINDOWS_TESTS=weekly leaves Windows out of a push's run, which still passes."""
+def test_a_passing_run_without_windows_still_releases(gate):
+    """5.0: the Windows tests are not a condition (WINDOWS_TESTS=weekly leaves them out)."""
     names = [n for n in EVERY_SYSTEM if "windows" not in n]
     (gate.fake / "jobs").write_text(_jobs(*names))
-    done, output = gate()
-    assert done.returncode == 1 and "Tests · windows-latest" in done.stdout, done.stdout
-    assert output == ""
+    done, _ = gate()
+    assert done.returncode == 0, done.stdout
 
 
 def test_a_passing_run_without_the_mac_stops_the_release(gate):
@@ -614,9 +610,15 @@ def test_a_passing_run_without_the_mac_stops_the_release(gate):
 
 
 def test_a_failed_job_in_the_run_stops_the_release(gate):
+    (gate.fake / "jobs").write_text(_jobs(*EVERY_SYSTEM, failed=("Tests · ubuntu-latest · Python 3.14",)))
+    done, _ = gate()
+    assert done.returncode == 1 and "did not pass: Tests · ubuntu-latest · Python 3.14" in done.stdout
+
+
+def test_a_failed_windows_test_job_does_not_stop_the_release(gate):
     (gate.fake / "jobs").write_text(_jobs(*EVERY_SYSTEM, failed=("Tests · windows-latest · Python 3.14",)))
     done, _ = gate()
-    assert done.returncode == 1 and "did not pass: Tests · windows-latest · Python 3.14" in done.stdout
+    assert done.returncode == 0, done.stdout
 
 
 def test_a_run_workflow_run_of_the_commit_counts(gate):

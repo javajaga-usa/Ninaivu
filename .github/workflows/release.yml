@@ -5,7 +5,7 @@ name: Release installers
 # Apple silicon (a zip: the Ninaivu folder with Ninaivu.app) and Linux x64 (a
 # .deb installer). Windows and Mac are portable folders. Each
 # carries its own Python and every package, and ships Ninaivu as bytecode,
-# not source. And the Docker image (x64).
+# not source.
 #
 # Signing is real only when the secrets exist. Without them every job still
 # builds, but unsigned, and the release notes say so — a fork can test the
@@ -220,14 +220,15 @@ jobs:
           # and a passing run that never ran a system says nothing about it.
           code=$(api "actions/runs/$run/jobs?per_page=100")
           [ "$code" = 200 ] || { echo "::error::could not read the jobs of run $run (HTTP $code)"; exit 1; }
-          bad=$(jq -r '[.jobs[] | select(.conclusion != "success" and .conclusion != "skipped") | .name] | join(", ")' "$RUNNER_TEMP/api.json")
+          # The Windows test job is not a condition (5.0): the Windows download is built and opened below.
+          bad=$(jq -r '[.jobs[] | select(.conclusion != "success" and .conclusion != "skipped" and (.name | startswith("Tests · windows") | not)) | .name] | join(", ")' "$RUNNER_TEMP/api.json")
           [ -z "$bad" ] || { echo "::error::in run $run these did not pass: $bad"; exit 1; }
-          for wanted in "Tests · windows-latest · Python 3.14" "Tests · ubuntu-latest · Python 3.14" \
+          for wanted in "Tests · ubuntu-latest · Python 3.14" \
                         "Full tier · Apple silicon" "Basic tier" "Lint"; do
             found=$(jq --arg w "$wanted" '[.jobs[] | select((.name | startswith($w)) and .conclusion == "success")] | length' "$RUNNER_TEMP/api.json")
             [ "$found" -gt 0 ] || { echo "::error::run $run has no passing '$wanted' job; run Tests & Linting on main with Run workflow, which includes every system, and try again"; exit 1; }
           done
-          echo "Windows, Linux and the Apple-silicon Mac all passed in run $run"
+          echo "Linux and the Apple-silicon Mac tests passed in run $run"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "publish_to=$publish_to" >> "$GITHUB_OUTPUT"
           echo "releasing $version"
@@ -746,21 +747,3 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/v$VERSION" -f sha="$GITHUB_SHA"
-
-  # The container image for this version, pushed to the GitHub container
-  # registry with the version's tags. From here rather than on the tag push in
-  # docker.yml: a release made with "Run workflow" pushes no tag event, and the
-  # image stopped at 0.1.2 while the installers went on to 1.0.1.
-  docker:
-    name: Docker image
-    needs: [gate, release]
-    permissions:
-      contents: read
-      packages: write
-      # A called workflow can hold no more than its caller grants: these two
-      # are for the image's provenance attestation in docker.yml.
-      id-token: write
-      attestations: write
-    uses: ./.github/workflows/docker.yml
-    with:
-      version: ${{ needs.gate.outputs.version }}
