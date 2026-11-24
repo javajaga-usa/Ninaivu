@@ -14,7 +14,7 @@ It has three parts, and each has a name:
 | **Mugil** (முகில், *cloud*) | Backup: an encrypted copy of the library on Google Drive, and your phone's photographs sent to the house |
 | **Sudar** (சுடர், *glow*) | The photo studio: adjustments, straightening, crops and suggestions, done in the browser without changing the original |
 
-> **Status: 4.4.0.** Ninaivu is the general edition of a server that has run one household's library for a year. It has about 8,000 tests, and the Windows and Apple-silicon Mac portable downloads and the Linux Debian installer each carry their own Python. They are not yet signed; see [ROADMAP.md](docs/ROADMAP.md) for what comes next.
+> **Status: 5.0.0.** Ninaivu is the general edition of a server that has run one household's library for a year. It has about 8,000 tests, and the Windows and Apple-silicon Mac portable downloads and the Linux Debian installer each carry their own Python. They are not yet signed; see [ROADMAP.md](docs/ROADMAP.md) for what comes next.
 
 [Download](https://github.com/javajaga-usa/Ninaivu/releases) · [Read the guide](https://javajaga-usa.github.io/Ninaivu/) · [What's changed](docs/CHANGELOG.md) · [Report a problem](https://github.com/javajaga-usa/Ninaivu/issues)
 
@@ -41,7 +41,7 @@ Downloads for Windows (x64), Macs with Apple silicon and Linux (x64)
 are on the [releases page](https://github.com/javajaga-usa/Ninaivu/releases).
 Windows and Mac use portable folders: open **Ninaivu.exe** or **Ninaivu.app**.
 On Debian or Ubuntu, install the Linux **.deb** with your software installer,
-or run `sudo apt install ./Ninaivu-4.4.0-linux-x64.deb`, then open **Ninaivu**
+or run `sudo apt install ./Ninaivu-5.0.0-linux-x64.deb`, then open **Ninaivu**
 from the applications menu (`ninaivu --server ~/Pictures` without a desktop).
 All three include their own Python. Linux keeps your library, settings and
 models in `~/.ninaivu`, including when the package is upgraded or removed.

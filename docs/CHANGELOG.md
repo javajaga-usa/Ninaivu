@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 5.0.0 — 24 November 2026
+
 - **Docs follow the 5.0 decisions.** The administrator guide, roadmap and index say Docker is built from the checkout (no published image) and that 5.0 ships as one release.
 - **One more switch is gone (P2).** `video_thumbs` (poster frames for videos) was on, hidden and cheap, and is now always on; a saved value is ignored. The switches that stay are the ones with a real choice in them.
 - **Release decisions for 5.0.** A release no longer publishes a Docker image (the compose file stays for running from source), the Windows test job is no longer a condition of releasing (the Windows download is still built and opened), and the arm64 build is the Mac's only. 5.0 ships as one release, without betas.
