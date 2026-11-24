@@ -78,7 +78,7 @@ SENT = "replica-sent.db"
 SETTINGS = (
     "roots", "active_root", "lock_roots", "house_name", "open_browsing",
     "lock_after_minutes", "thumb_sizes", "thumb_format", "thumb_quality",
-    "video_thumbs", "page_size", "max_page_size", "nsfw_filter", "hide_screens",
+    "page_size", "max_page_size", "nsfw_filter", "hide_screens",
     "strip_location", "home_lat", "home_lon", "home_radius_m", "index_hidden",
     "southern_hemisphere", "map_tiles",
     "place_names", "faces_enabled", "ocr_enabled", "min_media_bytes",

@@ -759,10 +759,9 @@ def build_record(root: Path, rel_path: str, st: os.stat_result, cfg: Config,
                     break
         elif kind == "video":
             record.update(media.probe_video(abs_path))
-            if cfg.video_thumbs:
-                source = media.extract_video_frame(abs_path, cfg.video_thumb_offset)
-                if source and not record.get("width"):
-                    record["width"], record["height"] = source.size
+            source = media.extract_video_frame(abs_path, cfg.video_thumb_offset)
+            if source and not record.get("width"):
+                record["width"], record["height"] = source.size
         elif kind == "audio":
             info = media.probe_audio(abs_path)
             record["duration"] = info.get("duration")

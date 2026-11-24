@@ -87,7 +87,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
         "workers", "ai_runtime", "describe_photos", "memory_films", "our_year", "video_moments",
         "then_and_now", "life_story", "festival_albums", "event_albums", "letters_aloud", "young_faces", "easy_view", "photo_talk", "find_print",
         "photo_stacks", "share_blur_strangers", "voice_search",
-        "colour_photos", "thumb_sizes", "thumb_quality", "thumb_format", "video_thumbs",
+        "colour_photos", "thumb_sizes", "thumb_quality", "thumb_format",
         "video_thumb_offset", "blur_threshold", "dark_threshold",
         "bright_threshold", "highlight_clip_threshold", "low_res_pixels",
         "occasion_gap_hours", "occasion_radius_km", "occasion_min_items",
@@ -111,7 +111,7 @@ ALWAYS_ON: tuple[str, ...] = (
     # is used, or is cheap and long proven.
     "photo_frame", "time_capsules", "memory_films", "our_year", "then_and_now", "life_story",
     "festival_albums", "photo_stacks", "find_print", "content_fingerprints",
-    "change_journal", "video_thumbs", # Nothing reaches anybody but the administrator, or the person on their
+    "change_journal", # Nothing reaches anybody but the administrator, or the person on their
     # own device, until they choose it.
     "offline_albums",
     "event_albums",

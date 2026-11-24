@@ -210,7 +210,6 @@ them; *runtime* ones say how this start was made and are never saved.
 | `thumb_sizes` | `[256, 640]` |  | expert | Thumbnail edge lengths made for every photograph. |
 | `thumb_quality` | `82` |  | expert | Thumbnail compression quality (1–100). |
 | `thumb_format` | `'WEBP'` |  | expert | Thumbnail file format: WEBP or JPEG. |
-| `video_thumbs` | `True` |  | expert | Extract video poster frames (needs ffmpeg or opencv). |
 | `video_thumb_offset` | `1.0` |  | expert | Seconds into a video to grab the poster frame. |
 | `blur_threshold` | `45.0` |  | expert | Laplacian variance below which a photograph reads as soft. Measured at a fixed size (see media.QUALITY_EDGE) so one number holds across cameras. Deliberately low — a wrongly flagged keeper is worse than a soft frame that slips through. |
 | `dark_threshold` | `0.16` |  | expert | Mean luma, 0-1. Below the first is underexposed, above the second is washed out. |
