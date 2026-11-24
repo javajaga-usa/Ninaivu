@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Speed budgets in the tests (P18).** `tests/test_page_budgets.py` runs `tools/bench_app.py` on 20,000 made-up rows and fails a pull request when any page of the family app or the console takes over 3.5 s the first time or 400 ms when asked again, or answers with a server error. The budgets are about five times today's slowest and will be tightened as pages get faster.
 - **An About box in the console (P17).** The console has an **About Ninaivu** button beside Sign out, as the family app already had. It shows the version, the computer and Python it runs on, where the settings and index are kept, the library folders and the AI models installed here with their licences. It reads only what Ninaivu already knows (`/api/admin/about`, administrator only) and sends nothing.
 - **Fixed on main:** `ninaivu/static/js/api.js` was out of date with the AI models Delete route (#488), and the tests that build a toy index now mark it as opened by 4.3 or later.
 - **A `tools/release_prep.py`** bumps the version in the five places that repeat it and folds Unreleased into the changelog (`--check` says whether they agree); CI type-checks the upgrade path with mypy.
