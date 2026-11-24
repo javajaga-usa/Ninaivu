@@ -23,6 +23,7 @@ def _package(path, system, label=None):
         with closing(sqlite3.connect(state / 'index.db')) as conn, conn:
             conn.execute('CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT)')
             conn.execute('CREATE TABLE assets (id INTEGER PRIMARY KEY, words TEXT)')
+            conn.execute('PRAGMA user_version = 4')
             conn.execute('INSERT INTO assets(words) VALUES (?)', (label,))
         (state / 'config.json').write_text('{}')
         (state / upgrade.VERSION_FILE).write_text(json.dumps({'version': '1.0.0'}))
@@ -78,6 +79,7 @@ def test_go_back_returns_a_library_brought_into_the_home_folder(tmp_path, monkey
     with closing(sqlite3.connect(original / 'index.db')) as conn, conn:
         conn.execute('CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT)')
         conn.execute('CREATE TABLE assets (id INTEGER PRIMARY KEY, words TEXT)')
+        conn.execute('PRAGMA user_version = 4')
         conn.execute('INSERT INTO assets(words) VALUES (?)', ('family before upgrade',))
     (original / 'config.json').write_text('{}')
     (original / upgrade.VERSION_FILE).write_text(json.dumps({'version': '1.0.0'}))

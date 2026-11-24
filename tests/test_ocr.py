@@ -139,6 +139,7 @@ def test_an_index_built_before_the_column_is_rebuilt(tmp_path):
     """)
     conn.execute("INSERT INTO assets(root, rel_path, filename, kind) "
                  "VALUES ('r', 'a.jpg', 'seaside.jpg', 'picture')")
+    conn.execute("PRAGMA user_version = 4")           # an index 4.3 or later has opened
     conn.commit()
     conn.close()
 
