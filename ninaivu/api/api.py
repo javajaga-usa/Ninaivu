@@ -3881,6 +3881,23 @@ def number_too_large(error: OverflowError):
     return json_errors(InternalServerError(original_exception=error))
 
 
+@bp.app_errorhandler(ValueError)
+def null_in_a_path(error: ValueError):
+    """A NUL character in a folder or file name a request sent: a 400, not a 500.
+
+    No file system allows one, and Python refuses such a path with
+    ValueError ("embedded null byte") the moment it is looked at. The routes
+    that take a folder typed by a person (add a library, add the archive to
+    the library, restore an off-site folder) reached that before any check of
+    their own and answered with a server error. Any other ValueError is left
+    as it was: raised again, so it is logged and answered as a fault.
+    """
+    if request.path.startswith("/api/") and "embedded null" in str(error):
+        return jsonify({**body_for(said("That folder or file name has a character no folder can have.")),
+                        "status": 400}), 400
+    raise error
+
+
 #: What an error with nothing more particular to say tells a person.
 PLAIN_ERRORS = {
     400: said("That request could not be understood."),

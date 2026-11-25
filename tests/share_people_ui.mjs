@@ -20,7 +20,7 @@ try {
   await page.route('http://ninaivu.test/**', async route => {
     const path = new URL(route.request().url()).pathname;
     if (path === '/share/test-token') return route.fulfill({ contentType: 'text/html', body: template,
-      headers: { 'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'" } });
+      headers: { 'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'" } });
     if (path === '/static/js/share.js') return route.fulfill({ contentType: 'text/javascript', body: script });
     if (path === '/static/js/i18n.js') return route.fulfill({ contentType: 'text/javascript', body: i18n });
     // English needs no locale file — every key is its own English — but the
