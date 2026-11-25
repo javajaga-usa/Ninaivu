@@ -200,10 +200,14 @@ jobs:
             # Only runs of this very commit (a push, or Run workflow on main):
             # a pull request's run tested the merge of it with its base,
             # which is a different commit.
-            passed=$(jq '[.workflow_runs[] | select((.event == "push" or .event == "workflow_dispatch") and .status == "completed" and .conclusion == "success")] | length' "$RUNNER_TEMP/api.json")
+            # A run that finished counts, whatever it ended as: the Windows test
+            # job is not a condition (5.0), so a run it failed can still be a
+            # good run. The jobs below say which job failed, and Windows is the
+            # only one allowed to.
+            passed=$(jq '[.workflow_runs[] | select((.event == "push" or .event == "workflow_dispatch") and .status == "completed" and (.conclusion == "success" or .conclusion == "failure"))] | length' "$RUNNER_TEMP/api.json")
             running=$(jq '[.workflow_runs[] | select((.event == "push" or .event == "workflow_dispatch") and .status != "completed")] | length' "$RUNNER_TEMP/api.json")
             if [ "$passed" -gt 0 ]; then
-              run=$(jq '[.workflow_runs[] | select((.event == "push" or .event == "workflow_dispatch") and .status == "completed" and .conclusion == "success")] | max_by(.run_number) | .id' "$RUNNER_TEMP/api.json")
+              run=$(jq '[.workflow_runs[] | select((.event == "push" or .event == "workflow_dispatch") and .status == "completed" and (.conclusion == "success" or .conclusion == "failure"))] | max_by(.run_number) | .id' "$RUNNER_TEMP/api.json")
               echo "Tests & Linting passed on $SHA (run $run)"; break
             fi
             if [ "$running" -eq 0 ]; then
