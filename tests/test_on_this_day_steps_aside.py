@@ -30,6 +30,10 @@ PLAIN = {"q": "", "kinds": [], "favorites": False, "duplicates": False,
          "person": 0, "occasion": 0, "album": 0, "near": 0, "sort": "date_desc"}
 
 CASES = [
+    # Memories, the first view the family app opens on, is the gallery too.
+    ("moments", {}, True),
+    ("moments", {"q": "beach"}, False),
+    ("documents", {}, False),
     ("all", {}, True),
     ("all", {"sort": "date_asc"}, True),
     ("all", {"q": "beach"}, False),
@@ -59,6 +63,7 @@ def test_the_strip_shows_only_on_the_plain_gallery():
             [[view, {**PLAIN, **change}] for view, change, _ in CASES]) + ";",
         "let state;",
         _function(source, "anyFilter"),
+        _function(source, "homeView"),
         _function(source, "memoriesBannerWanted"),
         "console.log(JSON.stringify(cases.map(([view, filters]) => {",
         "  state = { view, filters };",

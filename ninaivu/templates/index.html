@@ -332,18 +332,43 @@
       </div>
     </section>
 
+    <!-- Memories first, and opened by default: the photographs and videos
+         without screenshots or documents. Then grouped by what each is for:
+         everything there is, the moments kept close, and what an
+         administrator tidies up. -->
     <nav class="side-block" aria-label="Views" data-i18n-label="Views">
-      <button class="side-item active" data-view="all">
+      <button class="side-item active" data-view="moments" id="nav-moments">
+        <svg viewBox="0 0 24 24"><rect x="3" y="7" width="14" height="13" rx="2"/><path d="M7 4h12a2 2 0 0 1 2 2v11"/><path d="m3 16 4-4 3 3 2-2 5 5"/></svg>
+        <span data-i18n="Memories">Memories</span><b id="count-moments"></b>
+      </button>
+      <h3 class="side-title side-group" data-i18n="Library">Library</h3>
+      <button class="side-item" data-view="all">
         <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m3 16 5-5 4 4 3-3 6 6"/></svg>
         <span data-i18n="All media">All media</span><b id="count-all"></b>
       </button>
-      <button class="side-item" data-view="memories" id="nav-memories">
-        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><polyline points="12 6 12 12 16 14"/></svg>
-        <span data-i18n="On This Day">On This Day</span><b id="count-memories"></b>
+      <button class="side-item" data-view="pictures">
+        <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.6"/><path d="m5 17 4.5-4.5 3.5 3.5 2.5-2.5L21 18"/></svg>
+        <span data-i18n="Photos">Photos</span><b id="count-pic"></b>
+      </button>
+      <button class="side-item" data-view="videos">
+        <svg viewBox="0 0 24 24"><rect x="3" y="6" width="12" height="12" rx="2"/><path d="m15 10 6-3v10l-6-3Z"/></svg>
+        <span data-i18n="Videos">Videos</span><b id="count-vid"></b>
       </button>
       <button class="side-item" data-view="live" id="nav-live">
         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M5 12a7 7 0 0 1 14 0M2 12a10 10 0 0 1 20 0"/></svg>
         <span data-i18n="Live Photos">Live Photos</span><b id="count-live"></b>
+      </button>
+      <!-- Sound recordings are administrator-only (see ninaivu/db.py:
+           ADMIN_ONLY_KINDS). Offering the filter to everyone else would be a
+           link to a permanently empty gallery. -->
+      <button class="side-item admin-only" data-view="audio" hidden>
+        <svg viewBox="0 0 24 24"><path d="M9 18V6l11-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></svg>
+        <span data-i18n="Audio">Audio</span><b id="count-aud"></b>
+      </button>
+      <h3 class="side-title side-group" data-i18n="Kept close">Kept close</h3>
+      <button class="side-item" data-view="memories" id="nav-memories">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><polyline points="12 6 12 12 16 14"/></svg>
+        <span data-i18n="On This Day">On This Day</span><b id="count-memories"></b>
       </button>
       <button class="side-item" data-view="favorites">
         <svg viewBox="0 0 24 24"><path d="M12 20.5 4.5 13a4.6 4.6 0 0 1 6.5-6.5l1 1 1-1A4.6 4.6 0 0 1 19.5 13Z"/></svg>
@@ -356,20 +381,17 @@
         <svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
         <span data-i18n="Only to me">Only to me</span><b id="count-private"></b>
       </button>
-      <button class="side-item" data-view="pictures">
-        <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.6"/><path d="m5 17 4.5-4.5 3.5 3.5 2.5-2.5L21 18"/></svg>
-        <span data-i18n="Photos">Photos</span><b id="count-pic"></b>
+      <h3 class="side-title side-group" data-i18n="Tidy up">Tidy up</h3>
+      <!-- Documents and screenshots only, by the same judgement the hiding
+           rule makes (storage/db_visibility.py, screen_clause). They are
+           hidden from family members, so this is an administrator's view. -->
+      <button class="side-item admin-only" data-view="documents" id="nav-documents" hidden>
+        <svg viewBox="0 0 24 24"><path d="M7 3.5h7l4 4V20a.5.5 0 0 1-.5.5h-10.5A.5.5 0 0 1 6.5 20V4a.5.5 0 0 1 .5-.5Z"/><path d="M14 3.5V8h4M9.5 12.5h5M9.5 16h5"/></svg>
+        <span data-i18n="Documents">Documents</span><b id="count-docs"></b>
       </button>
-      <button class="side-item" data-view="videos">
-        <svg viewBox="0 0 24 24"><rect x="3" y="6" width="12" height="12" rx="2"/><path d="m15 10 6-3v10l-6-3Z"/></svg>
-        <span data-i18n="Videos">Videos</span><b id="count-vid"></b>
-      </button>
-      <!-- Sound recordings are administrator-only (see ninaivu/db.py:
-           ADMIN_ONLY_KINDS). Offering the filter to everyone else would be a
-           link to a permanently empty gallery. -->
-      <button class="side-item admin-only" data-view="audio" hidden>
-        <svg viewBox="0 0 24 24"><path d="M9 18V6l11-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></svg>
-        <span data-i18n="Audio">Audio</span><b id="count-aud"></b>
+      <button class="side-item" data-view="duplicates">
+        <svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>
+        <span data-i18n="Duplicates">Duplicates</span><b id="count-dup"></b>
       </button>
       <button class="side-item admin-only" data-view="hidden" hidden>
         <svg viewBox="0 0 24 24"><path d="M10.6 5.2A9.7 9.7 0 0 1 12 5c5 0 9 4.5 9 7a11 11 0 0 1-2.2 3.4M6.3 6.6C3.9 8.2 3 10.6 3 12c0 2.5 4 7 9 7 1.6 0 3-.4 4.3-1.1M3 3l18 18"/></svg>
@@ -378,10 +400,6 @@
       <button class="side-item admin-only" data-view="public" hidden>
         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18"/></svg>
         <span data-i18n="Public">Public</span><b id="count-public"></b>
-      </button>
-      <button class="side-item" data-view="duplicates">
-        <svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>
-        <span data-i18n="Duplicates">Duplicates</span><b id="count-dup"></b>
       </button>
     </nav>
 
@@ -433,14 +451,14 @@
       <div class="trip-list" id="trip-list"></div>
     </section>
 
-    <section class="side-block" id="tags-block" hidden>
-      <h3 class="side-title" data-i18n="Discovered by AI">Discovered by AI</h3>
-      <div class="chips" id="tag-cloud"></div>
-    </section>
-
     <section class="side-block" id="years-block" hidden>
       <h3 class="side-title" data-i18n="Years">Years</h3>
       <div class="chips" id="year-list"></div>
+    </section>
+
+    <section class="side-block" id="tags-block" hidden>
+      <h3 class="side-title" data-i18n="Discovered by AI">Discovered by AI</h3>
+      <div class="chips" id="tag-cloud"></div>
     </section>
 
     <section class="side-block" id="folders-block" hidden>

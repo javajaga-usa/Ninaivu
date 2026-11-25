@@ -72,6 +72,17 @@ def query_on_this_day(
             where.append(scope_sql)
             params.extend(scope_params)
 
+    # A memory is of people and places, not of paperwork: a screenshot, a
+    # receipt or a scanned document taken on this day years ago is nothing
+    # anybody wants to be reminded of (user, 25 November 2026). For an
+    # administrator too, who sees them in the Documents view instead.
+    from .db_visibility import screen_clause           # noqa: PLC0415
+    screens_sql, screens_params = screen_clause(conn, "a")
+    where.append(f"NOT {screens_sql}")
+    params.extend(screens_params)
+    # The frames under a photo stack's top one are that moment again.
+    where.append("a.stacked = 0")
+
     m_str = f"{month:02d}"
     d_str = f"{day:02d}"
     target_md = f"-{m_str}-{d_str}"
@@ -85,19 +96,22 @@ def query_on_this_day(
 
     projection = ("a.*, COALESCE(ua.favorite, 0) AS mine_favorite, "
                   "COALESCE(ua.rating, 0) AS mine_rating, "
-                  + _YEAR_SQL + " AS year_str")
+                  + _YEAR_SQL + " AS year_str, "
+                  "(SELECT COUNT(*) FROM faces f WHERE f.asset_id = a.id) AS face_count")
 
+    # More than are kept: near-duplicates fold into one below.
     rows = conn.execute(
         f"SELECT {projection} FROM assets a {mine} WHERE {where_sql} "
         f"ORDER BY COALESCE(a.captured_at, a.mtime) DESC LIMIT ?",
-        (*join_params, *params, limit),
+        (*join_params, *params, int(limit) * ON_DAY_POOL),
     ).fetchall()
 
-    items = [row_to_dict(r) for r in rows]
+    picked = _people_first(rows)[:int(limit)]
+    items = [item for item, _ in picked]
     years_map: dict[str, list[dict[str, Any]]] = {}
-    for idx, r in enumerate(rows):
-        yr = str(r["year_str"]) if r["year_str"] else "Unknown"
-        years_map.setdefault(yr, []).append(items[idx])
+    for item, row in picked:
+        yr = str(row["year_str"]) if row["year_str"] else "Unknown"
+        years_map.setdefault(yr, []).append(item)
 
     return {
         "month": month,
@@ -106,6 +120,41 @@ def query_on_this_day(
         "items": items,
         "years": years_map,
     }
+
+
+#: How many rows :func:`query_on_this_day` reads for each one it returns. A
+#: burst of thirty near-identical frames is one memory, so the day is read
+#: wider than it is shown.
+ON_DAY_POOL = 4
+
+
+def _people_first(rows: Sequence[sqlite3.Row]) -> list[tuple[dict[str, Any], sqlite3.Row]]:
+    """On this day's rows, one of each near-duplicate group, people first.
+
+    Near-duplicates (``dup_group``, the scan's picture-hash groups: a burst,
+    a resized copy, the one WhatsApp sent back) are one moment, so each group
+    is shown once, by its member with the most faces and then the sharpest.
+    Then photographs with people in them come before those without, newest
+    year first within each: the memory of a day is who was there.
+    """
+    best: dict[str, tuple[tuple[int, float], int]] = {}
+    for at, row in enumerate(rows):
+        group = row["dup_group"]
+        if not group:
+            continue
+        rank = (int(row["face_count"] or 0), float(row["sharpness"] or 0.0))
+        if group not in best or rank > best[group][0]:
+            best[group] = (rank, at)
+    kept = [(at, row) for at, row in enumerate(rows)
+            if not row["dup_group"] or best[row["dup_group"]][1] == at]
+    # Stable: the newest-first order of the query holds within each half.
+    kept.sort(key=lambda pair: 0 if int(pair[1]["face_count"] or 0) else 1)
+    out = []
+    for _, row in kept:
+        item = row_to_dict(row)
+        item.pop("face_count", None)
+        out.append((item, row))
+    return out
 
 
 # ---------------------------------------------------------------------------
