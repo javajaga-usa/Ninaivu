@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pytest
 
-from ninaivu.media import faces as faces_mod
+from ninaivu.models.faces import engine as faces_mod
 from ninaivu.media import model_catalog, orientnet
 
 

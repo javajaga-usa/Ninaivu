@@ -44,10 +44,22 @@ without touching the core (`DELETE /api/admin/ai-models/<id>`).
 The catalogue (`media/model_catalog.py`) lists each model with its files,
 checksums, licence and the packages it needs, and `tests/test_model_manifests.py`
 checks that every entry is a complete manifest (what it is for, source, licence,
-what runs it, and every file pinned to its bytes and a SHA-256, or the git blob id of a pinned revision). What is not yet
-done: faces and picture search still live under `ninaivu/media` beside core
-code. Moving each feature
-into its own package with its own manifest (the way `ninaivu/features` and
-`extensions/` already work) is done one feature at a time, least connected
-first (colour, the Playground's tools), faces last. Each step keeps the rules
-above green.
+what runs it, and every file pinned to its bytes and a SHA-256, or the git blob id of a pinned revision).
+
+Each model feature moves into a package of its own under `ninaivu/models/`,
+one at a time, the least connected first. Three are there (5.2):
+
+| Package | Holds | Was |
+|---|---|---|
+| `models/colour` | `files` (where DDColor is looked for), `lab` (the arithmetic that lays its colour under a photograph), `runner` (the capability the model host loads) | `runtime.colour`, and the same names in `media.onnx_tools` |
+| `models/search` | `runner`, SigLIP 2 through ONNX Runtime in the model host | `runtime.siglip` |
+| `models/faces` | `engine` (detector, recogniser, quality gate, crops), `arcface` (the second pair) | `media.faces`, `media.faces_arcface` |
+
+The old names are gone (nothing stands in for a moved module; `tests/test_migrations.py` keeps it that way), so every import names the package. What more than one model uses stays outside a
+plugin: `runtime/ort_session.py` opens an ONNX Runtime session for all of them,
+and who a face *is* (`media/facematch.py`, `faceindex.py`) is the core's.
+
+What is left: the description, speech, voice and writing models are still in
+`ninaivu/runtime/` (they already run only in the model host, and florence still
+takes `missing_packages` from the search runner), and the Playground's tools
+are in `media/onnx_tools.py`. Each step keeps the rules above green.

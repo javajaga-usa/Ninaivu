@@ -24,7 +24,8 @@ from pathlib import Path
 from typing import Any, Callable, Sequence
 
 from ..storage import db
-from . import faces as faces_mod, facematch
+from . import facematch
+from ..models.faces import engine as faces_mod
 
 log = logging.getLogger("ninaivu.faceindex")
 

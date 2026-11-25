@@ -38,7 +38,8 @@ def pictures(paths: list[Path], count: int) -> list[Path]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    from ninaivu.media import facematch, faces, model_catalog
+    from ninaivu.media import facematch, model_catalog
+    from ninaivu.models.faces import engine as faces
     from ninaivu.server.config import Config
 
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])

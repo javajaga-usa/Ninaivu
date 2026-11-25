@@ -39,7 +39,7 @@ def _straightener():
 def straighten_status():
     from ..media import orientnet                            # noqa: PLC0415
 
-    from ..media import faces as faces_mod                    # noqa: PLC0415
+    from ..models.faces import engine as faces_mod                    # noqa: PLC0415
 
     cfg = _cfg()
     summary = _straightener().summary()
@@ -68,7 +68,8 @@ def straighten_model():
     Both models, because needing two and being told about them one at a time
     is the same wait split into two disappointments.
     """
-    from ..media import faces as faces_mod, orientnet         # noqa: PLC0415
+    from ..media import orientnet         # noqa: PLC0415
+    from ..models.faces import engine as faces_mod         # noqa: PLC0415
 
     cfg = _cfg()
     result = orientnet.fetch_model()

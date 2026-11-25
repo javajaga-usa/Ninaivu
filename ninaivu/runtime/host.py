@@ -49,11 +49,11 @@ QUICK_IDLE_SECONDS = 300.0
 #: Every capability the host can be asked for, by name, and where it is.
 CAPABILITIES: dict[str, str] = {
     "transcribe": "ninaivu.runtime.speech:TRANSCRIBE",
-    "search": "ninaivu.runtime.siglip:SEARCH",
+    "search": "ninaivu.models.search.runner:SEARCH",
     "describe": "ninaivu.runtime.florence:DESCRIBE",
     "generate": "ninaivu.runtime.llm:GENERATE",
     "look": "ninaivu.runtime.llm:LOOK",
-    "colour": "ninaivu.runtime.colour:COLOUR",
+    "colour": "ninaivu.models.colour.runner:COLOUR",
     "speak": "ninaivu.runtime.voice:SPEAK",
 }
 

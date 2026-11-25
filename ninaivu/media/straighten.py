@@ -319,7 +319,7 @@ class Straightener:
         over a photograph the orientation model has already picked out.
         """
         if self._faces is None:
-            from . import faces as faces_mod                # noqa: PLC0415
+            from ..models.faces import engine as faces_mod                # noqa: PLC0415
 
             self._faces = faces_mod.FaceEngine(self.cfg.state_dir)
         return self._faces

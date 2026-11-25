@@ -225,7 +225,7 @@ def test_the_colourising_model_is_found_by_hand_or_by_setting(tmp_path, monkeypa
     monkeypatch.setattr(model_catalog, "_root", None)
     monkeypatch.setenv("NINAIVU_AI_MODELS_DIR", str(tmp_path / "models"))
     monkeypatch.delenv("NINAIVU_COLORIZE_MODEL", raising=False)
-    monkeypatch.setattr(onnx_tools, "local_setting", lambda name, default="": default)
+    monkeypatch.setattr("ninaivu.models.colour.files.local_setting", lambda name, default="": default)
     assert onnx_tools.colorize_model_path() is None and not onnx_tools.available("colorize")
     placed = tmp_path / "models" / "onnx" / "ddcolor.onnx"
     placed.parent.mkdir(parents=True)
@@ -464,7 +464,7 @@ def test_siglip_2_from_its_weights_file_prepares_photographs_as_it_was_trained(
     assert seen["pretrained"] == str(weights)
     assert seen["image_mean"] == (0.5, 0.5, 0.5) and seen["image_std"] == (0.5, 0.5, 0.5)
     assert seen["image_resize_mode"] == "squash" and seen["image_interpolation"] == "bicubic"
-    from ninaivu.runtime import siglip
+    from ninaivu.models.search import runner as siglip
     assert siglip.MODEL_ID == f"ViT-B-16-SigLIP2/{ai.SIGLIP2_LABEL}", \
         "the ONNX engine's vectors are filed with these"
 

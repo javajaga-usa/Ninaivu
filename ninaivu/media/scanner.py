@@ -36,7 +36,8 @@ from typing import Any, Callable, Iterable, Iterator
 import numpy as np
 from PIL import Image
 
-from . import audio_art, faces as faces_mod, media, revealing, screens, upright
+from . import audio_art, media, revealing, screens, upright
+from ..models.faces import engine as faces_mod
 from .. import engine as jobs
 from ..archive import dates as capture_dates
 from ..storage import db, fingerprints, journal, locations
@@ -4210,7 +4211,7 @@ class Scanner:
         finally:
             pool.shutdown(wait=False)
         conn = db.ready_connection(self.cfg.db_path)
-        from . import faces as faces_mod                  # noqa: PLC0415
+        from ..models.faces import engine as faces_mod                  # noqa: PLC0415
         from .faceindex import face_model                 # noqa: PLC0415
         return plan_regroup(conn, roots, should_stop,
                             model_id=faces_mod.model_id_for(face_model(self.cfg)))

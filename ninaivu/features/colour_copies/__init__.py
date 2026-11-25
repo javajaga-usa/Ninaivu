@@ -3,7 +3,7 @@ original on this computer, which is never changed.
 
 ``routes.py`` is what was ``features/colour_copies/routes.py`` and ``storage.py`` what was
 ``features/colour_copies/storage.py``; the old names are kept as the very same
-modules. The model itself stays in ``runtime/colour.py`` with the other
+modules. The model itself stays in ``models/colour/runner.py`` with the other
 models, and the gallery's own listings read the copies' table
 (``api/api.py``).
 """

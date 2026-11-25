@@ -58,7 +58,7 @@ def find_faces(state_dir: str, path: str, rotation: int, model: str = "sface") -
     crop and embedding), ``None`` when the file cannot be read as an image,
     :data:`MISSING` when it is not there, :data:`AGAIN` when the models are
     not. *model* is the ``face_model`` setting: which pair of models looks."""
-    from ..media import faces                             # noqa: PLC0415
+    from ..models.faces import engine as faces                             # noqa: PLC0415
     if not Path(path).exists():
         return MISSING
     kept = _kept()
@@ -139,7 +139,8 @@ def plan_faces(db_path: str, roots: Any, model: str = "sface") -> dict[str, Any]
     """Work out how the faces of *roots* group into people
     (``faceindex.plan_regroup``), reading the index and writing nothing.
     *model* is the ``face_model`` setting."""
-    from ..media import faceindex, faces                  # noqa: PLC0415
+    from ..media import faceindex                  # noqa: PLC0415
+    from ..models.faces import engine as faces                  # noqa: PLC0415
     from ..storage import db                              # noqa: PLC0415
     conn = db.connect(db_path)
     try:

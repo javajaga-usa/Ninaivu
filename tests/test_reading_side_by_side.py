@@ -8,7 +8,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from ninaivu.media import faceindex, faces as faces_mod, ocr
+from ninaivu.media import faceindex, ocr
+from ninaivu.models.faces import engine as faces_mod
 from ninaivu.media.scanner import Scanner
 
 

@@ -89,16 +89,24 @@ export class AIModelsPanel {
     }
   }
 
-  // Everything the features that are on need, one download after another.
+  // Everything the features that are on need, one download after another:
+  // the Extras (packages and tools) they run on first in line, then the models.
   async downloadNeeded() {
     const needed = this.data?.needed;
-    if (!needed?.ids.length) return;
+    const extras = needed?.extras || { ids: [], labels: {} };
+    if (!needed?.ids.length && !extras.ids.length) return;
     const names = needed.ids.map((id) => {
       const model = this.data.models.find((m) => m.id === id);
       return `• ${i18n.t(model ? model.label : id)}`;
     }).join('\n');
-    const asking = `${i18n.t('Download {count} models ({size}), one after another?', {
-      count: needed.ids.length, size: megabytes(needed.bytes) })}\n\n${names}`;
+    const more = extras.ids.map((id) => `• ${i18n.t(extras.labels[id] || id)}`).join('\n');
+    let asking = needed.ids.length
+      ? `${i18n.t('Download {count} models ({size}), one after another?', {
+        count: needed.ids.length, size: megabytes(needed.bytes) })}\n\n${names}`
+      : i18n.t('Install the extras the models run on, one after another?');
+    if (more) {
+      asking += `\n\n${i18n.t('And install these extras from Home & extensions first, one after another:')}\n${more}`;
+    }
     if (!window.confirm(asking)) return;
     try {
       this.render(await json('/api/admin/ai-models/download-needed', {
@@ -146,17 +154,23 @@ export class AIModelsPanel {
     const hint = $('#am-needed-hint');
     const pending = needed.ids.filter((id) => !(data.queued || []).includes(id)
       && (data.models.find((m) => m.id === id)?.download || {}).status !== 'downloading');
-    box.hidden = !needed.ids.length && !waiting && !needed.skipped.length;
-    button.hidden = !pending.length;
+    const extras = (needed.extras || { ids: [] }).ids;
+    box.hidden = !needed.ids.length && !waiting && !needed.skipped.length && !extras.length;
+    button.hidden = !pending.length && !extras.length;
     button.onclick = () => this.downloadNeeded();
     const lines = [];
     if (pending.length) {
       lines.push(i18n.t('{count} models for the features that are on ({size}), downloaded one after another.', {
         count: pending.length, size: megabytes(needed.bytes) }));
-    } else if (waiting) {
-      lines.push(i18n.t('Downloading, one after another: {count} to go.', { count: waiting }));
-    } else {
-      lines.push(i18n.t('Every model the features that are on need is here.'));
+    }
+    if (extras.length) {
+      lines.push(i18n.t('{count} extras from Home & extensions come with them, installed first.', {
+        count: extras.length }));
+    }
+    if (!pending.length && !extras.length) {
+      lines.push(waiting
+        ? i18n.t('Downloading, one after another: {count} to go.', { count: waiting })
+        : i18n.t('Every model the features that are on need is here.'));
     }
     if (needed.skipped.length) {
       lines.push(i18n.t('Not included, because Python packages are missing: {names}.', {

@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import hashlib
 import io
-import json
 import os
 import tarfile
 import threading
@@ -613,7 +612,7 @@ def test_the_switch_is_on_the_advanced_page_and_off_by_default(scanned):
     assert cfg.ai_runtime is False
     groups = client.get("/api/admin/settings/all").get_json()["groups"]
     advanced = next(g for g in groups if g["name"] == "Advanced")
-    assert "ai_runtime" in json.dumps(advanced)
+    assert "ai_runtime" not in {s["name"] for s in advanced["settings"]}, "follows its model (5.2)"
     response = client.post("/api/admin/settings/all", json={"settings": {"ai_runtime": True}})
     assert response.status_code == 200 and response.get_json()["restart"] == []
     assert cfg.ai_runtime is True

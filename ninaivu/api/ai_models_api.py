@@ -9,6 +9,7 @@ whose packages are missing says which command to run.
 from __future__ import annotations
 
 import importlib.util
+import logging
 from typing import Any
 
 from flask import Blueprint, current_app, jsonify
@@ -107,7 +108,8 @@ def _payload() -> dict[str, Any]:
 
 
 def _engine_state(cfg: Any, engine_name: str, onnx_ready: bool) -> dict[str, Any]:
-    from ..runtime import florence, siglip                 # noqa: PLC0415
+    from ..runtime import florence                 # noqa: PLC0415
+    from ..models.search import runner as siglip                 # noqa: PLC0415
     from ..storage import descriptions                     # noqa: PLC0415
     services = current_app.config.get("MV_SERVICES")
     describer = getattr(services, "describer", None)
@@ -208,7 +210,7 @@ def needed_models(cfg: Any) -> dict[str, Any]:
     here already. A model whose Python packages are missing is listed under
     ``skipped`` with them, rather than downloaded to sit unused.
     """
-    from ..media import faces as faces_mod                   # noqa: PLC0415
+    from ..models.faces import engine as faces_mod                   # noqa: PLC0415
     from ..runtime import florence                           # noqa: PLC0415
     wanted: list[str] = ["faces", "orientation"]
     if faces_mod.model_id_for(getattr(cfg, "face_model", "sface")) == faces_mod.ARCFACE_MODEL_ID:
@@ -249,7 +251,63 @@ def needed_models(cfg: Any) -> dict[str, Any]:
             continue
         ids.append(model_id)
     return {"ids": ids, "bytes": sum(model_catalog.total_bytes(m) for m in ids),
-            "skipped": skipped}
+            "skipped": skipped, "extras": needed_extras(cfg)}
+
+
+#: Extras that stay out of "Download all" however it is asked: the PyTorch
+#: image engine (about 2 GB, and the light engine does the same job).
+EXTRAS_LEFT_OUT = ("image-model",)
+
+
+def needed_extras(cfg: Any) -> dict[str, Any]:
+    """The Extras of the Home & extensions page that are not here yet and
+    that "Download all" brings in with the models: the packages and tools the
+    models run on, installed one after another before the models they unblock.
+
+    Left out: what cannot be installed on this computer (it says why on the
+    Extras tab), the PyTorch image engine, and the Tamil voice's PyTorch
+    package unless Letters read aloud is on.
+    """
+    from ..media import components                           # noqa: PLC0415
+    ids: list[str] = []
+    for component_id in components.CATALOGUE:
+        if component_id in EXTRAS_LEFT_OUT:
+            continue
+        if component_id == "transformers" and not getattr(cfg, "letters_aloud", False):
+            continue
+        shown = components.describe(component_id)
+        if shown["installed"] or shown["installing"] or shown["cannot"]:
+            continue
+        ids.append(component_id)
+    return {"ids": ids, "labels": {i: components.CATALOGUE[i]["label"] for i in ids}}
+
+
+def install_extras_then_models(db_path, cfg: Any, extra_ids: list[str]) -> list[str]:
+    """Install *extra_ids* one after another (two pip runs at once would
+    fight over one environment), then queue the models that were waiting on
+    their packages. Returns what was started; the rest happens on a thread."""
+    import threading                                          # noqa: PLC0415
+    from ..media import components                            # noqa: PLC0415
+    ids = [i for i in extra_ids if i in components.CATALOGUE]
+    if not ids:
+        return []
+
+    def work() -> None:
+        import importlib                                      # noqa: PLC0415
+        import time                                           # noqa: PLC0415
+        for component_id in ids:
+            started, _why = components.install(component_id)
+            while started and components.installs.running(component_id):
+                time.sleep(2)
+        importlib.invalidate_caches()
+        try:
+            queue_model_downloads(db_path, needed_models(cfg)["ids"])
+        except Exception:                                     # noqa: BLE001 - the models stay on the page
+            logging.getLogger(__name__).warning(
+                "could not queue the models the new packages unblocked", exc_info=True)
+
+    threading.Thread(target=work, name="ninaivu-download-all-extras", daemon=True).start()
+    return ids
 
 
 def queue_model_downloads(db_path, model_ids: list[str]) -> list[str]:
@@ -271,11 +329,15 @@ def download_needed():
     cfg = current_app.config["MV_CONFIG"]
     needed = needed_models(cfg)
     added = queue_model_downloads(cfg.db_path, needed["ids"])
-    if added:
+    extras = install_extras_then_models(
+        cfg.db_path, cfg, (needed.get("extras") or {}).get("ids", []))
+    if added or extras:
         auth.audit(db.connect(cfg.db_path), current_user().id, "ai_model_download",
                    f"all needed: {', '.join(added)} "
-                   f"({sum(model_catalog.total_bytes(m) for m in added)} bytes)")
-    return jsonify({"ok": True, "started": added, **_payload()}), 202 if added else 200
+                   f"({sum(model_catalog.total_bytes(m) for m in added)} bytes)"
+                   + (f"; extras: {', '.join(extras)}" if extras else ""))
+    return jsonify({"ok": True, "started": added, "extras_started": extras,
+                    **_payload()}), 202 if (added or extras) else 200
 
 
 # ---------------------------------------------------------------------------

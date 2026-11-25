@@ -16,7 +16,7 @@ from the AI models page (catalogue entry ``faces-arcface``):
     this one places a family far more finely: siblings, parents and children,
     and one child across ten years, which is what a family library is full of.
 
-Both are the same shape as the OpenCV pair in :mod:`ninaivu.media.faces`:
+Both are the same shape as the OpenCV pair in :mod:`ninaivu.models.faces.engine`:
 a detector that gives rows of ``x, y, w, h, five landmarks, score`` and a
 recogniser that aligns and embeds one such row. :class:`FaceEngine` drives
 either through that one shape, so everything downstream (the quality gate,

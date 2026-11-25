@@ -13,7 +13,7 @@ from PIL import Image, ImageOps
 from ninaivu import runtime
 from ninaivu.features.colour_copies import routes as api_colour
 from ninaivu.media import media, model_catalog, onnx_tools, upload_review
-from ninaivu.runtime import colour as colour_mod
+from ninaivu.models.colour import runner as colour_mod  # the same module as ninaivu.models.colour.runner
 from ninaivu.runtime.host import CAPABILITIES, resolve
 from ninaivu.server.config import Config
 from ninaivu.server.settings_groups import GROUPS, OFF_THE_PAGE
@@ -82,9 +82,9 @@ def test_the_colour_is_laid_under_the_photographs_own_light(tmp_path):
 
 
 def test_the_capability_is_registered_and_says_what_is_missing(monkeypatch, tmp_path):
-    assert CAPABILITIES["colour"] == "ninaivu.runtime.colour:COLOUR"
+    assert CAPABILITIES["colour"] == "ninaivu.models.colour.runner:COLOUR"
     assert resolve(CAPABILITIES["colour"]) is colour_mod.COLOUR
-    monkeypatch.setattr(onnx_tools, "colorize_model_path", lambda: None)
+    monkeypatch.setattr("ninaivu.models.colour.files.colorize_model_path", lambda: None)
     # Some runners (Python 3.14) have no ONNX Runtime; that is said first.
     assert any(words in (colour_mod.ready() or "") for words in ("colouring model", "ONNX Runtime"))
     real = colour_mod.importlib.util.find_spec

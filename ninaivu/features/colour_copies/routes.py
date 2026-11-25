@@ -15,7 +15,7 @@ JPEG, upright, which nothing keeps: the page shows it beside the original and,
 if the family wants it, saves it through the photo editor's own route
 (``/api/asset/<id>/edited-copy?made=colour``), as a copy beside the original.
 The original is never written to. The photograph is turned upright and
-handed to the quick model host as a private file (runtime/colour.py), and
+handed to the quick model host as a private file (models/colour/runner.py), and
 both files are removed as soon as the answer is read.
 
 ``GET /api/asset/<id>/colour/upright`` is the photograph as the browser sees
@@ -36,7 +36,7 @@ from PIL import Image
 
 from ... import runtime
 from ...media import media, onnx_tools, upright
-from ...runtime import colour as colour_mod
+from ...models.colour import runner as colour_mod
 from ...server import features
 from ...server.auth import current_user, require_family
 from ...storage import db

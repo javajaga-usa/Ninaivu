@@ -6,11 +6,11 @@ from ninaivu.server import features, settings_groups
 from ninaivu.server.config import Config
 
 
-def test_the_page_shows_thirty_four_switches():
-    """Thirty-three, and easy view since 4.2."""
+def test_the_page_shows_twenty_seven_switches():
+    """Thirty-four until 5.2 took seven more off the page."""
     shown = [s for g in settings_groups.describe(Config())["groups"] for s in g["settings"]
              if s["kind"] == "bool"]
-    assert len(shown) == 34
+    assert len(shown) == 27
     assert not {s["name"] for s in shown} & settings_groups.OFF_THE_PAGE
 
 

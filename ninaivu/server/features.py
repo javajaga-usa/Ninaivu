@@ -47,10 +47,11 @@ def _why_not(need: str) -> str | None:
         from ..runtime import transcriber                        # noqa: PLC0415
         return transcriber.ready()
     if need == "colour":
-        from ..runtime import colour                             # noqa: PLC0415
+        from ..models.colour import runner as colour                             # noqa: PLC0415
         return colour.ready()
     if need == "any":
-        from ..runtime import florence, siglip                   # noqa: PLC0415
+        from ..runtime import florence                   # noqa: PLC0415
+        from ..models.search import runner as siglip                   # noqa: PLC0415
         checks: tuple[Callable[[], str | None], ...] = (
             siglip.ready, florence.ready, lambda: _why_not("speech"),
             lambda: _why_not("writing"), lambda: _why_not("colour"))

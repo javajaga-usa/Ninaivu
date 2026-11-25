@@ -751,7 +751,7 @@ def test_a_real_portrait_is_found_and_selected_sensibly(monkeypatch):
     from pathlib import Path
 
     from ninaivu.media import model_catalog
-    from ninaivu.media.faces import FaceEngine
+    from ninaivu.models.faces.engine import FaceEngine
 
     # An earlier test's app may have pointed every model at its own empty folder; this one wants the real ones.
     monkeypatch.setattr(model_catalog, "_root", None)
@@ -799,7 +799,7 @@ def test_the_downloaded_parser_finds_hair_against_the_moon(monkeypatch):
     from pathlib import Path
 
     from ninaivu.media import face_parser, model_catalog
-    from ninaivu.media.faces import FaceEngine
+    from ninaivu.models.faces.engine import FaceEngine
 
     monkeypatch.setattr(model_catalog, "_root", None)
     monkeypatch.delenv("NINAIVU_AI_MODELS_DIR", raising=False)

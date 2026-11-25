@@ -10,7 +10,8 @@ from types import SimpleNamespace
 import pytest
 
 from ninaivu import ai
-from ninaivu.media import faces as faces_mod, model_catalog
+from ninaivu.media import model_catalog
+from ninaivu.models.faces import engine as faces_mod
 from ninaivu.media.faceindex import follow_the_index
 from ninaivu.media.scanner import AI_VERSION, VECTORS_OWED_KEY, Scanner
 from ninaivu.runtime import florence

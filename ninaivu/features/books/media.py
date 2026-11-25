@@ -482,7 +482,7 @@ def signal_bonus(signal: dict[str, Any] | None) -> float:
 
     ``taste`` is the search model's judgement relative to the other candidates
     (media/taste.py, about −2.5 to 2.5); ``face_quality`` the clearest face's
-    0–1 quality (media/faces.py); ``named`` how many people the family has
+    0–1 quality (models/faces/engine.py); ``named`` how many people the family has
     named are in it; ``stories`` how many voice stories were recorded about it;
     ``albums`` how many albums somebody put it in. A story is the strongest
     sign there is that a photograph matters to somebody.

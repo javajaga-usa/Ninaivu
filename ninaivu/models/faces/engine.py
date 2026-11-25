@@ -19,7 +19,7 @@ engine reports itself unavailable and every caller carries on without faces —
 the same contract :mod:`ninaivu.ai` keeps.
 
 A second pair can take their place: InsightFace's SCRFD detector and ArcFace
-recogniser (:mod:`ninaivu.media.faces_arcface`, run by ONNX Runtime), chosen
+recogniser (:mod:`ninaivu.models.faces.arcface`, run by ONNX Runtime), chosen
 with the ``face_model`` setting once downloaded from the AI models page. The
 engine drives either through one shape — detector rows of a box, five
 landmarks and a score; a recogniser that aligns and embeds one row — so the
@@ -47,7 +47,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
 
-from ..words import Said, said
+from ...words import Said, said
 
 log = logging.getLogger("ninaivu.faces")
 
@@ -105,7 +105,7 @@ MODELS: dict[str, dict[str, Any]] = {
 EMBED_DIM = 128
 
 #: The other pair the engine can run: InsightFace's SCRFD detector and
-#: ArcFace recogniser (:mod:`ninaivu.media.faces_arcface`), chosen with the
+#: ArcFace recogniser (:mod:`ninaivu.models.faces.arcface`), chosen with the
 #: ``face_model`` setting once downloaded from the AI models page. Its
 #: embeddings are 512 values, so a row's model says how to read its BLOB.
 ARCFACE_MODEL_ID = "scrfd-10g/arcface-w600k-r50"
@@ -185,7 +185,7 @@ def models_dir(state_dir: Path | None = None) -> Path:
     grouping behind. *state_dir* is accepted and ignored so that callers
     holding one do not all have to change at once.
     """
-    from . import model_catalog                         # noqa: PLC0415
+    from ...media import model_catalog                         # noqa: PLC0415
 
     return model_catalog.models_root()
 
@@ -223,13 +223,13 @@ def _model_files(model: str) -> dict[str, dict[str, str]]:
     """``{"detector": {...}, "recognizer": {...}}`` for a ``face_model`` choice."""
     if model_id_for(model) != ARCFACE_MODEL_ID:
         return MODELS
-    from . import faces_arcface                              # noqa: PLC0415
-    from . import model_catalog                              # noqa: PLC0415
+    from . import arcface                              # noqa: PLC0415
+    from ...media import model_catalog                              # noqa: PLC0415
 
     folder = model_catalog.MODELS["faces-arcface"]["files"][0]["folder"]
     return {
-        "detector": {"file": f"{folder}/{faces_arcface.DETECTOR_FILE}"},
-        "recognizer": {"file": f"{folder}/{faces_arcface.RECOGNIZER_FILE}"},
+        "detector": {"file": f"{folder}/{arcface.DETECTOR_FILE}"},
+        "recognizer": {"file": f"{folder}/{arcface.RECOGNIZER_FILE}"},
     }
 
 
@@ -375,7 +375,7 @@ class FaceEngine:
         if importlib.util.find_spec("onnxruntime") is None:
             self.unavailable_reason = said("ONNX Runtime is not installed (the console's Extras page, or requirements/requirements-ai-local.txt)")
             return
-        from . import faces_arcface                              # noqa: PLC0415
+        from . import arcface                              # noqa: PLC0415
 
         directory = models_dir(self.state_dir)
         files = _model_files("arcface")
@@ -389,13 +389,13 @@ class FaceEngine:
             return
         self._waiting_for_files = False
         try:
-            pair = faces_arcface.Recogniser(directory / Path(files["detector"]["file"]).parent)
+            pair = arcface.Recogniser(directory / Path(files["detector"]["file"]).parent)
         except Exception as exc:  # noqa: BLE001
             self._detector = self._recognizer = None
             self.unavailable_reason = f"could not load the ArcFace models: {exc}"
             return
         self._detector = self._recognizer = pair
-        self.min_det_score = faces_arcface.MIN_DET_SCORE
+        self.min_det_score = arcface.MIN_DET_SCORE
 
     @property
     def available(self) -> bool:
@@ -696,7 +696,7 @@ def load_image_for_faces(path: Path, rotation: int = 0):
     orientation detector saved — the same two steps the thumbnails were baked
     with, so a stored face box lines up with what the viewer displays.
     """
-    from . import media  # noqa: PLC0415 - avoids an import cycle at module load
+    from ...media import media  # noqa: PLC0415 - avoids an import cycle at module load
 
     try:
         with media._open_oriented(path) as img:

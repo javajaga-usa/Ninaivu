@@ -116,7 +116,7 @@ export class FacesPanel {
       const warn = el('div', 'notice');
       warn.appendChild(el('strong', null, i18n.t('Face grouping is not running.')));
       // The server's reason, in this language; one naming files comes as its
-      // template and values too (media/faces.py).
+      // template and values too (models/faces/engine.py).
       const reason = engine.reason_said ? i18n.fromServer(engine.reason_said)
         : (engine.reason ? i18n.t(engine.reason) : '');
       warn.appendChild(el('p', 'hint', reason || i18n.t('Unavailable.')));

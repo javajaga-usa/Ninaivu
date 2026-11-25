@@ -10,7 +10,7 @@ Tiers, chosen automatically:
 
 ``onnx``
     The same SigLIP 2 model as ``clip``, without PyTorch: ONNX Runtime in the
-    on-device AI engine's model host (:class:`OnnxEngine`, runtime/siglip.py).
+    on-device AI engine's model host (:class:`OnnxEngine`, models/search/runner.py).
     Used in place of ``clip`` when the engine is switched on (``ai_runtime``)
     and its search model has been downloaded.
 
@@ -586,7 +586,7 @@ class ClipEngine(Engine):
 # ---------------------------------------------------------------------------
 
 class OnnxEngine(Engine):
-    """SigLIP 2 through ONNX Runtime, in the model host (runtime/siglip.py).
+    """SigLIP 2 through ONNX Runtime, in the model host (models/search/runner.py).
 
     Used instead of :class:`ClipEngine` when the on-device AI engine is on
     (``ai_runtime``) and its search model and packages are here. The same
@@ -614,7 +614,7 @@ class OnnxEngine(Engine):
     IDLE_SECONDS = 1800.0
 
     def __init__(self, cfg: Any, host: Any = None) -> None:
-        from .runtime import siglip                               # noqa: PLC0415
+        from .models.search import runner as siglip                               # noqa: PLC0415
         self.model_id = siglip.MODEL_ID
         self._cfg = cfg
         self._host = host
@@ -671,7 +671,7 @@ class OnnxEngine(Engine):
     @staticmethod
     def _load(path: Path):
         """(heuristic tags, the model's 224-pixel square) for one photograph."""
-        from .runtime.siglip import pixels                        # noqa: PLC0415
+        from .models.search.runner import pixels                        # noqa: PLC0415
         try:
             with Image.open(path) as img:
                 rgb = img.convert("RGB")
@@ -720,7 +720,7 @@ class OnnxEngine(Engine):
 
     def embed_images(self, images: Sequence[Any]):
         """Unit vectors for already-open PIL images, one row each."""
-        from .runtime.siglip import pixels                        # noqa: PLC0415
+        from .models.search.runner import pixels                        # noqa: PLC0415
         rows = np.asarray(self.host.call("search", op="pixels", timeout=self.BATCH_TIMEOUT,
                                          pixels=[pixels(image) for image in images]),
                           dtype="float32")
@@ -747,7 +747,8 @@ def explicit_line(cfg: Any, engine: Any) -> float:
 def onnx_search_ready(cfg: Any) -> bool:
     """Whether search should run through the on-device engine: switched on,
     and its model and packages here."""
-    from .runtime import enabled, siglip                          # noqa: PLC0415
+    from .runtime import enabled                          # noqa: PLC0415
+    from .models.search import runner as siglip                          # noqa: PLC0415
     return enabled(cfg) and siglip.ready() is None
 
 

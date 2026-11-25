@@ -18,7 +18,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from ninaivu.media import facematch as fm, faces as faces_mod, model_catalog
+from ninaivu.media import facematch as fm, model_catalog
+from ninaivu.models.faces import engine as faces_mod
 from ninaivu.storage import db
 
 
@@ -218,7 +219,7 @@ def _arcface_engine(cfg):
             return engine
     folder = os.environ.get("NINAIVU_TEST_ARCFACE")
     if folder:
-        from ninaivu.media import faces_arcface
+        from ninaivu.models.faces import arcface as faces_arcface
         pair = faces_arcface.Recogniser(Path(folder), threads=2)
         engine = faces_mod.FaceEngine(cfg.state_dir, model="arcface")
         engine._detector = engine._recognizer = pair

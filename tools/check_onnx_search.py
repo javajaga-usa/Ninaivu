@@ -1,7 +1,7 @@
 """Check search without PyTorch against search with it, on your own photographs.
 
 The on-device AI engine runs SigLIP 2 through ONNX Runtime instead of PyTorch
-(ninaivu/runtime/siglip.py) and keeps PyTorch's model id, so a library indexed
+(ninaivu/models/search/runner.py) and keeps PyTorch's model id, so a library indexed
 with SigLIP 2 is not indexed again. This says whether that is safe here: for
 each photograph it makes the vector both ways and prints how alike they are
 (1.0 is identical), does the same for a few searches, and times both:
@@ -41,7 +41,8 @@ def main(argv: list[str] | None = None) -> int:
 
     from ninaivu import ai
     from ninaivu.media import model_catalog
-    from ninaivu.runtime import ModelHost, devices, siglip
+    from ninaivu.runtime import ModelHost, devices
+    from ninaivu.models.search import runner as siglip
     from ninaivu.server.config import Config
     from try_captions import pictures
 

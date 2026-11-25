@@ -15,7 +15,8 @@ import urllib.error
 
 import pytest
 
-from ninaivu.media import faces, model_catalog
+from ninaivu.media import model_catalog
+from ninaivu.models.faces import engine as faces
 
 BLOCKED = urllib.error.URLError(ssl.SSLError(1, "[SSL: WRONG_VERSION_NUMBER] wrong version number"))
 

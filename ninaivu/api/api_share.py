@@ -689,7 +689,7 @@ def _blurs_strangers(row: dict[str, Any]) -> bool:
 
 def _face_locator():
     """The face model's every-face finder over a picture, or None without it."""
-    from ..media.faces import pil_to_bgr                      # noqa: PLC0415
+    from ..models.faces.engine import pil_to_bgr                      # noqa: PLC0415
     from .api_faces import _face_indexer                      # noqa: PLC0415
 
     try:

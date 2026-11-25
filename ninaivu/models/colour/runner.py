@@ -4,7 +4,7 @@ DDColor (Kang et al., ICCV 2023; Apache-2.0), the ONNX export FaceFusion
 publishes on GitHub, pinned on the AI models page as ``colour``. It sees a
 photograph's lightness as a grey square of 512 pixels and answers with the
 colour it believes belongs there; that colour is laid under the photograph's
-own lightness at full size (media/onnx_tools.py, :func:`colour_image`), so the
+own lightness at full size (:func:`.lab.colour_image`), so the
 grain, the edges and the faces stay the original's and only the hue is new.
 
 The server writes the photograph, upright, to a private file and names it;
@@ -23,8 +23,8 @@ import time
 from pathlib import Path
 from typing import Any
 
-from ..words import said
-from .host import Capability, Unavailable
+from ...runtime.host import Capability, Unavailable
+from ...words import said
 
 log = logging.getLogger(__name__)
 
@@ -36,8 +36,8 @@ MODEL = "colour"
 
 def model_path() -> Path | None:
     """Where the colouring model is, downloaded or placed by hand."""
-    from ..media import onnx_tools                             # noqa: PLC0415
-    path = onnx_tools.colorize_model_path()
+    from .files import colorize_model_path                     # noqa: PLC0415
+    path = colorize_model_path()
     return path if path is not None and path.is_file() else None
 
 
@@ -53,8 +53,8 @@ def ready() -> str | None:
 def _load(setup: dict[str, Any]) -> dict[str, Any]:
     if why := ready():
         raise Unavailable(why)
-    from .devices import coreml_cache, image_providers         # noqa: PLC0415
-    from .siglip import _session                               # noqa: PLC0415
+    from ...runtime.devices import coreml_cache, image_providers  # noqa: PLC0415
+    from ...runtime.ort_session import _session                     # noqa: PLC0415
     path = model_path()
     started = time.monotonic()
     session = _session(path, int(setup.get("threads") or 2),
@@ -69,11 +69,11 @@ def colour(kept: dict[str, Any], *, path: str, out: str, quality: int = 92) -> d
     """Colour the picture at *path* and write it to *out* as a JPEG."""
     from PIL import Image                                      # noqa: PLC0415
 
-    from ..media import onnx_tools                             # noqa: PLC0415
+    from .lab import colour_image                              # noqa: PLC0415
     started = time.monotonic()
     session, name = kept["session"], kept["input"]
     with Image.open(path) as image:
-        coloured = onnx_tools.colour_image(image, lambda grey: session.run(None, {name: grey})[0])
+        coloured = colour_image(image, lambda grey: session.run(None, {name: grey})[0])
     coloured.save(out, "JPEG", quality=int(quality), optimize=True)
     return {"width": coloured.width, "height": coloured.height,
             "version": COLOUR_VERSION, "took": round(time.monotonic() - started, 2)}

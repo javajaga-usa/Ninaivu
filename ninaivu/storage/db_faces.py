@@ -306,7 +306,7 @@ def turn_faces(conn: sqlite3.Connection, asset_id: int, step: int,
 
 
 def face_schema_version() -> int:
-    from ..media.faces import FACE_VERSION  # noqa: PLC0415 - avoids an import cycle
+    from ..models.faces.engine import FACE_VERSION  # noqa: PLC0415 - avoids an import cycle
     return FACE_VERSION
 
 

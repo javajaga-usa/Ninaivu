@@ -69,7 +69,7 @@ ALL = {name: f"runtime_fakes:{name.upper()}" for name in ("echo", "crash", "slow
 
 def _siglip(setup):
     from pathlib import Path
-    from ninaivu.runtime import siglip
+    from ninaivu.models.search import runner as siglip
     return siglip.Siglip(Path(setup["models"]))
 
 
@@ -80,7 +80,7 @@ def _florence(setup):
 
 
 def _search(kept, **kwargs):
-    from ninaivu.runtime import siglip
+    from ninaivu.models.search import runner as siglip
     return siglip.search(kept, **kwargs)
 
 

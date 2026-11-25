@@ -133,7 +133,7 @@ def faces_status():
 @require_admin
 def faces_download_models():
     """Fetch the two ONNX models. Ninaivu does not ship them."""
-    from ..media import faces as faces_mod  # noqa: PLC0415
+    from ..models.faces import engine as faces_mod  # noqa: PLC0415
     result = faces_mod.fetch_models(_cfg().state_dir)
     current_app.config.pop("MV_FACES", None)   # reload with the models present
     scanner = current_app.config.get("MV_SCANNER")

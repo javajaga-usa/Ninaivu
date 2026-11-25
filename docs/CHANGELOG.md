@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- **Download all also installs the Extras.** On the AI models page, **Download all** now brings in the Home & extensions packages that are missing (one after another), then the models they unblock. The PyTorch image engine is left out, and so is `transformers` unless Letters read aloud is on.
+- **Seven more switches go from Advanced settings.** `scrub_repair`, `young_faces` (now on by default) and `describe_photos` (follows the AI models page) are always on or follow their model; `ai_gpu`, `cloud_full_speed`, `notify_smtp_tls` and `tailnet_https` move to the Tuning page. A saved value keeps working. `cloud_encrypt` and `cloud_autostart` stay.
+- **Colour, search and faces are model plugins (P16).** Each lives in a package of its own under `ninaivu/models/` (`colour`, `search`, `faces`), and every import names the new place. An ONNX Runtime session, which more than one of them opens, is in `runtime/ort_session.py`. Nothing changes for a household; the core stays free of model code.
+
 ## 5.1.0 — 25 November 2026
 
 - **A run that Windows failed can be released.** The release check wanted the whole test run to end green, so a Windows failure stopped a release even though the Windows tests are not a condition (5.0). It now accepts a finished run and names any job other than Windows that failed.
