@@ -217,6 +217,8 @@ export function buildQuery(filters) {
   for (const kind of filters.kinds || []) params.append('kind', kind);
   if (filters.favorites) params.set('favorites', '1');
   if (filters.duplicates) params.set('duplicates', '1');
+  if (filters.screens) params.set('screens', '1');
+  if (filters.noScreens) params.set('no_screens', '1');
   if (filters.is_live) params.set('is_live', '1');
   if (filters.tag) params.set('tag', filters.tag);
   if (filters.folder) params.set('folder', filters.folder);

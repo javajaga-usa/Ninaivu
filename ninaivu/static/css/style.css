@@ -725,6 +725,9 @@ button.job-row:focus-visible { outline: 2px solid var(--accent); outline-offset:
   background: var(--accent-weak); color: var(--accent); font-weight: 560;
 }
 .side-item.active b { color: var(--accent); }
+/* The headings inside the views list: Library, Memories, Tidy up. */
+.side-title.side-group { padding-top: 10px; }
+.side-title.side-group:first-child { padding-top: 0; }
 
 .chips { display: flex; flex-wrap: wrap; gap: 5px; padding: 0 4px; }
 .chip {
