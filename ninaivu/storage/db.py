@@ -2082,6 +2082,7 @@ from .db_visibility import (  # noqa: E402,F401 - re-exported
     raw_twin_of,
     restore_screens,
     screen_clause,
+    documents_clause,
     screens_not_explicit,
     search_shield_clause,
     set_folder_visibility,

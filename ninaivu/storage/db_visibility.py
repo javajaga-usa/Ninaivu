@@ -669,6 +669,44 @@ def screen_clause(conn: sqlite3.Connection, alias: str = "") -> tuple[str, list[
     return f"({dot}kind='picture' AND ({' OR '.join(parts)}))", params
 
 
+#: Words the tagger gives a picture of a screen or a page (``ai.LABELS``:
+#: the same labels from every search model). Matched as whole tags.
+DOCUMENT_TAGS = ("screenshot", "document", "receipt", "chart")
+
+
+def documents_clause(conn: sqlite3.Connection, alias: str = "") -> tuple[str, list[Any]]:
+    """SQL true for a picture the family app files under Documents.
+
+    :func:`screen_clause` and more. That one is the hiding rule's judgement,
+    and with a search model nobody has measured a line for (SigLIP 2, which
+    ``clip_model = "auto"`` picks once it is downloaded) it is the name and
+    what the rule already hid, nothing else: a passport photographed with the
+    camera, a receipt, or a chat saved from WhatsApp as ``IMG-…-WA0001.jpg``
+    went on into Memories and On this day (user, 25 November 2026). So this
+    adds two readings that do not depend on which model is in use now:
+
+    * a picture score stored by a measured model, at its line, whichever
+      model searches today;
+    * a tag the tagger (or a person) gave it: screenshot, document, receipt
+      or chart.
+
+    Only for what is listed where; nothing is hidden by it.
+    """
+    from ..media import screens                      # noqa: PLC0415
+
+    dot = f"{alias}." if alias else ""
+    base, params = screen_clause(conn, alias)
+    parts = [base]
+    if screens.THRESHOLDS:
+        parts.append(f"({dot}kind='picture' AND {dot}screen_version=? "
+                     f"AND {dot}screen_score >= ?)")
+        params = [*params, screens.SCREEN_VERSION, float(min(screens.THRESHOLDS.values()))]
+    tags = " OR ".join(f"{dot}tags LIKE ?" for _ in DOCUMENT_TAGS)
+    parts.append(f"({dot}kind='picture' AND ({tags}))")
+    params = [*params, *(f'%"{tag}"%' for tag in DOCUMENT_TAGS)]
+    return f"({' OR '.join(parts)})", params
+
+
 def search_shield_clause(conn: sqlite3.Connection, alias: str,
                          near_explicit: float = 0.0,
                          revealing: float = 0.0) -> tuple[str, list[Any]]:

@@ -160,3 +160,40 @@ def test_memories_is_the_first_view_and_opens_by_default(tmp_path):
                                   kinds=["picture", "video"])
         assert [r["rel_path"] for r in rows] == ["beach.jpg"], ceiling
         assert db.library_stats(conn, ["/lib"], max_visibility=ceiling)["memories"] == 1
+
+
+def test_documents_the_current_search_model_cannot_judge_still_leave_memories(tmp_path):
+    """The user, 25 November 2026, on 5.1.0: documents and screenshots still in
+    Memories. With SigLIP 2 searching, the hiding rule's judgement is the name
+    alone, so a camera photo of a passport, a receipt, or a WhatsApp image
+    named IMG-…-WA0001.jpg passed. The tagger's words and a score stored by the
+    measured model now count too, whichever model searches today."""
+    db, conn = _library(tmp_path)
+    db.set_meta(conn, "ai_model_id", "ViT-B-16-SigLIP2/webli")
+    _add(conn, "beach.jpg", year=2015, faces=2)
+    ids = {
+        "IMG-20150314-WA0001.jpg": '["screenshot", "phone"]',
+        "IMG_1001.jpg": '["document", "book"]',
+        "IMG_1002.jpg": '["receipt"]',
+        "IMG_1003.jpg": '[]',
+    }
+    for name, tags in ids.items():
+        rid = _add(conn, name, year=2015)
+        conn.execute("UPDATE assets SET tags=? WHERE id=?", (tags, rid))
+    # Scored by ViT-B-32 before the switch, at its line.
+    conn.execute("UPDATE assets SET screen_score=0.93, screen_version=1 "
+                 "WHERE rel_path='IMG_1003.jpg'")
+    # A word that only contains one of them is not it.
+    rid = _add(conn, "IMG_1004.jpg", year=2015)
+    conn.execute("UPDATE assets SET tags='[\"documentary\"]' WHERE id=?", (rid,))
+    conn.commit()
+
+    rows, _ = db.query_assets(conn, ["/lib"], max_visibility=2, no_screens=True,
+                              kinds=["picture", "video"])
+    assert sorted(r["rel_path"] for r in rows) == ["IMG_1004.jpg", "beach.jpg"]
+    rows, _ = db.query_assets(conn, ["/lib"], max_visibility=2, screens_only=True)
+    assert len(rows) == 4
+    stats = db.library_stats(conn, ["/lib"], max_visibility=2)
+    assert (stats["memories"], stats["documents"]) == (2, 4)
+    names, _ = _on_day(db, conn)
+    assert sorted(names) == ["IMG_1004.jpg", "beach.jpg"]
