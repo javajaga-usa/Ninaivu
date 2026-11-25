@@ -106,6 +106,10 @@ async function visit(name, options) {
 
 const desk = await visit('desktop', { viewport: { width: 1280, height: 800 } });
 ok('the library has photographs', desk.items.length >= 4, String(desk.items.length));
+// On by default since 5.2, so turn it off first to see the off state.
+await switchOn(desk.context, false);
+await desk.page.reload({ waitUntil: 'networkidle' });
+await desk.page.waitForFunction(() => document.querySelectorAll('#grid .cell').length > 0, { timeout: 30000 });
 ok('off: no entry in the Create menu', await desk.page.locator('#young-btn').evaluate((b) => b.hidden));
 ok('the console switches it on', (await switchOn(desk.context, true)) === 200);
 await desk.page.reload({ waitUntil: 'networkidle' });
