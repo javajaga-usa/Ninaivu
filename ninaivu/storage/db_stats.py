@@ -101,15 +101,15 @@ def library_stats(conn: sqlite3.Connection, roots: Sequence[str] | str | None = 
     # administrator's Documents view counts them; the Memories view, the
     # family app's first, is the photographs and videos without them.
     # Remembered with the rest until the library changes.
-    screens_sql, screens_params = _db.screen_clause(conn, "a")
+    screens_sql, screens_params = _db.documents_clause(conn, "a")
     screens = cached_aggregate(
         conn, ("screens", where_sql, tuple(params), screens_sql, tuple(screens_params)),
         lambda: conn.execute(
             f"SELECT COUNT(*) n FROM assets a WHERE {where_sql} AND {screens_sql} "
             f"AND a.live_clip = 0 AND a.raw_twin = 0", [*params, *screens_params],
         ).fetchone()["n"],
-        # The screen check's scores are written by the tagger as well.
-        max_age=600)
+        # The screen check's scores and the tags are the tagger's.
+        also=(TAGS_GENERATION_KEY,), max_age=600)
     # Hidden from the family, so not counted out loud for anybody else.
     documents = screens if int(max_visibility) >= 2 else 0
     memories = max(0, (row["pictures"] or 0) + (row["videos"] or 0) - (screens or 0))
