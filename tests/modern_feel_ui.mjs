@@ -71,6 +71,11 @@ async function gallery(motion) {
   const bars = await page.evaluate(async () => {
     const scroller = document.querySelector('.scroller');
     const color = () => getComputedStyle(scroller).scrollbarColor;
+    // Whatever scrolled just before (the viewer putting the gallery back where
+    // it was) keeps the bar showing for a moment: wait for it to rest first.
+    for (let i = 0; i < 40 && scroller.classList.contains('bars-on'); i += 1) {
+      await new Promise((r) => setTimeout(r, 100));
+    }
     const resting = color();
     scroller.scrollTop += 300;
     await new Promise((r) => setTimeout(r, 120));
