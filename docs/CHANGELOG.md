@@ -1,7 +1,5 @@
 # Changelog
 
-## Unreleased
-
 ## 5.0.0 — 24 November 2026
 
 - **Docs follow the 5.0 decisions.** The administrator guide, roadmap and index say Docker is built from the checkout (no published image) and that 5.0 ships as one release.

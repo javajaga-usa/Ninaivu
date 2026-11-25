@@ -21,12 +21,12 @@ def test_every_place_says_the_one_version(prep):
     assert prep.problems() == []
 
 
-def test_folding_opens_a_new_unreleased_section(prep):
+def test_folding_leaves_the_release_section_newest(prep):
     text = "# Changelog\n\n## Unreleased\n\n- a thing\n\n## 4.4.0 — 15 November 2026\n"
     out = prep.fold(text, "5.0.0", "1 December 2026")
-    assert out.index("## Unreleased") < out.index("## 5.0.0 — 1 December 2026")
     assert out.index("## 5.0.0 — 1 December 2026") < out.index("- a thing")
-    assert out.count("## Unreleased") == 1
+    assert "## Unreleased" not in out
+    assert out.splitlines()[2].startswith("## 5.0.0")
 
 
 def test_a_version_already_in_the_changelog_is_refused(prep):
