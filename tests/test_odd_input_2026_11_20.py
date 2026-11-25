@@ -58,3 +58,31 @@ def test_a_person_named_with_a_photograph_no_longer_there(admin):
                                   "/api/library/browse?path=%00"])
 def test_odd_query_values_are_not_a_500(admin, path):
     assert admin.get(path).status_code < 500
+
+
+@pytest.mark.parametrize("path, body", [
+    ("/api/library/root", {"path": "/tmp/a\x00b"}),
+    ("/api/archive/adopt", {"path": "/tmp/a\x00b"}),
+    ("/api/offsite/restore", {"folder": "/tmp/a\x00b"}),
+])
+def test_a_nul_in_a_folder_name_is_a_400(admin, path, body):
+    """Found by the 25 November 2026 sweep: Python refuses a path with a NUL
+    in it (ValueError) before any check of the route's own, which was a 500."""
+    response = admin.post(path, json=body)
+    assert response.status_code == 400, response.get_json()
+    assert "character no folder can have" in response.get_json()["error"]
+
+
+def test_any_other_value_error_is_still_a_fault(app, people):
+    """The NUL answer is for that one refusal: other ValueErrors stay faults."""
+    from flask import Blueprint
+    probe = Blueprint("probe_value_error", __name__)
+
+    @probe.get("/api/probe-value-error")
+    def _boom():
+        raise ValueError("something else")
+
+    app.register_blueprint(probe)
+    app.config["PROPAGATE_EXCEPTIONS"] = False
+    client = login(app.test_client(), *ADMIN)
+    assert client.get("/api/probe-value-error").status_code == 500

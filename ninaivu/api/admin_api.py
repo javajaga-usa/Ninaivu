@@ -2493,7 +2493,7 @@ def _run_scrubber(db_path: Path | str, after_id: int = 0, workload=None, notify=
     start_scrubber_job). :func:`stop_scrubber` ends it between two files, and
     while it waits for its turn.
     """
-    global _SCRUBBER_RUNNING, _SCRUBBER_PROGRESS
+    global _SCRUBBER_RUNNING
     from ..storage import resume                          # noqa: PLC0415
 
     # Everything from the first line is under the ``try``: the running flag was

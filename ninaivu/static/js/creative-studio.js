@@ -422,7 +422,20 @@ export async function openCreativeStudio({original=null, edited=null, ids=null, 
     return `<!doctype html><html lang="${i18n.language()}"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><style>${style}</style><h1>${title}</h1><p>${story}</p>${content}</html>`;
   }
   $('[data-export]').onclick=()=>{stop();render();if($('[data-export]').disabled)return;const creation=mode();if(PAGES.includes(creation))download(new Blob([documentHTML()],{type:'text/html'}),`ninaivu-${creation}.html`);else canvas.toBlob(blob=>blob&&download(blob,`ninaivu-${creation}.png`));status(i18n.t('Download prepared. Keep the file to preserve this creation.'));};
-  $('[data-print]').onclick=()=>{stop();render();const win=window.open('','_blank');if(!win){status(i18n.t('Allow a popup to open the print layout.'));return;}const printable=documentHTML().replace(/<script>[\s\S]*?<\/script>/g,'').replace(/<audio[\s\S]*?<\/audio>/g,'').replace('</style>','@media print{.slide[hidden]{display:block!important}}</style>');win.document.open();win.document.write(printable);win.document.close();win.opener=null;Promise.all([...win.document.images].map(img=>img.decode().catch(()=>{}))).then(()=>{if(!win.closed){win.focus();win.print();}});};
+  $('[data-print]').onclick=()=>{stop();render();const win=window.open('','_blank');if(!win){status(i18n.t('Allow a popup to open the print layout.'));return;}const page=documentHTML().replace(/<script>[\s\S]*?<\/script>/g,'').replace(/<audio[\s\S]*?<\/audio>/g,'');
+    // The blank window keeps this page's Content-Security-Policy, which
+    // refuses a <style> block and a style attribute (style-src 'self'), so
+    // the print layout came out unstyled. Its rules go in as a stylesheet
+    // built by script instead, and the before/after line through the
+    // element's own style, both of which the policy allows.
+    const rules=(page.match(/<style>([\s\S]*?)<\/style>/)||[])[1]||'';
+    const cut=(page.match(/id="before" style="clip-path:([^"]*)"/)||[])[1];
+    const printable=page.replace(/<style>[\s\S]*?<\/style>/,'').replace(/ style="[^"]*"/g,'');
+    win.document.open();win.document.write(printable);win.document.close();win.opener=null;
+    try{const sheet=new win.CSSStyleSheet();sheet.replaceSync(`${rules}@media print{.slide[hidden]{display:block!important}}`);win.document.adoptedStyleSheets=[sheet];}
+    catch{/* an older browser prints it plainly */}
+    const before=win.document.getElementById('before');if(before&&cut)before.style.clipPath=cut;
+    Promise.all([...win.document.images].map(img=>img.decode().catch(()=>{}))).then(()=>{if(!win.closed){win.focus();win.print();}});};
   const now=new Date();$('[data-month]').value=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
   dialog.showModal();
   if(!editing)startFromLibrary();

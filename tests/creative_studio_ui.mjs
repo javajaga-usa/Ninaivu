@@ -13,7 +13,7 @@ const photoCount=page=>page.locator('#creative-studio .cs-thumb').count();
 async function until(check,what){for(let i=0;i<100;i++){if(check())return;await new Promise(r=>setTimeout(r,50));}throw new Error(`never happened: ${what}`);}
 const root=path.resolve('ninaivu/static');
 const server=http.createServer(async(req,res)=>{
-  if(req.url==='/'){res.setHeader('Content-Type','text/html');res.setHeader('Content-Security-Policy',"default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; script-src 'self'");res.end('<html><link rel="stylesheet" href="/static/css/style.css"><button id="open">Open</button></html>');return;}
+  if(req.url==='/'){res.setHeader('Content-Type','text/html');res.setHeader('Content-Security-Policy',"default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; style-src 'self'; script-src 'self'");res.end('<html><link rel="stylesheet" href="/static/css/style.css"><button id="open">Open</button></html>');return;}
   const file=path.resolve(root,'.'+req.url.replace(/^\/static/,''));
   if(!file.startsWith(root+path.sep)){res.writeHead(404).end();return;}
   try{res.setHeader('Content-Type',file.endsWith('.css')?'text/css':'text/javascript');res.end(await fs.readFile(file));}catch{res.writeHead(404).end();}
@@ -75,6 +75,8 @@ try{
           await printable.emulateMedia({media:'print'});
           assert.equal(await printable.locator('script').count(),0);
           assert.equal(await printable.locator('.slide:visible').count(),2);
+          // Styled under the app's own policy (no inline styles): the page's width and font.
+          assert.equal(await printable.evaluate(()=>getComputedStyle(document.body).maxWidth),'1000px');
           await printable.close();
         }
       }else{assert.equal(bytes.readUInt32BE(16),1440);assert.equal(bytes.readUInt32BE(20),['recipe','calendar'].includes(mode)?1800:1080);}
