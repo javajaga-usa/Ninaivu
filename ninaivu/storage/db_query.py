@@ -390,12 +390,12 @@ def query_assets(
     if screens_only:
         # The family app's Documents view: screenshots, documents and
         # screens, by the same judgement the hiding rule makes.
-        screens_sql, screens_params = _db.screen_clause(conn, "a")
+        screens_sql, screens_params = _db.documents_clause(conn, "a")
         where.append(screens_sql)
         params.extend(screens_params)
     if no_screens:
         # The family app's Memories view: everything but those.
-        screens_sql, screens_params = _db.screen_clause(conn, "a")
+        screens_sql, screens_params = _db.documents_clause(conn, "a")
         where.append(f"NOT {screens_sql}")
         params.extend(screens_params)
     if is_live:
@@ -570,7 +570,8 @@ def query_assets(
         if 0 < limit and returned < limit and (returned or not offset):
             return offset + returned
         if rememberable or words:
-            also = ((TAGS_GENERATION_KEY,) if tag else ()) \
+            # Documents and Memories read the tagger's words as well.
+            also = ((TAGS_GENERATION_KEY,) if tag or screens_only or no_screens else ()) \
                 + ((FACES_GENERATION_KEY,) if person or people else ()) \
                 + ((OCCASIONS_GENERATION_KEY,) if occasion else ()) \
                 + ((PLACES_GENERATION_KEY,) if place or near else ()) \

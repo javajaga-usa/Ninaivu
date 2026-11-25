@@ -76,8 +76,8 @@ def query_on_this_day(
     # receipt or a scanned document taken on this day years ago is nothing
     # anybody wants to be reminded of (user, 25 November 2026). For an
     # administrator too, who sees them in the Documents view instead.
-    from .db_visibility import screen_clause           # noqa: PLC0415
-    screens_sql, screens_params = screen_clause(conn, "a")
+    from .db_visibility import documents_clause        # noqa: PLC0415
+    screens_sql, screens_params = documents_clause(conn, "a")
     where.append(f"NOT {screens_sql}")
     params.extend(screens_params)
     # The frames under a photo stack's top one are that moment again.

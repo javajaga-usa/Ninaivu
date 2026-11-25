@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Memories and On this day leave out the documents the search model could not judge.** Which pictures are screenshots or documents was the hiding rule's judgement alone, and with SigLIP 2 searching (which `clip_model = "auto"` picks once downloaded) that is the file name and nothing else: a passport or receipt photographed with the camera, or a chat saved from WhatsApp as `IMG-…-WA0001.jpg`, stayed in Memories and On this day. Those views, Documents and its count now also read the tagger's words (screenshot, document, receipt, chart) and a score the measured model stored earlier. Nothing is hidden by this; it only decides where an item is listed.
+
 ## 5.1.0 — 25 November 2026
 
 - **A run that Windows failed can be released.** The release check wanted the whole test run to end green, so a Windows failure stopped a release even though the Windows tests are not a condition (5.0). It now accepts a finished run and names any job other than Windows that failed.
