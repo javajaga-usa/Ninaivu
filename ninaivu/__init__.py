@@ -53,7 +53,7 @@ from .server.config import Config
 from .scan_plan import ScanPlanning
 from . import extensions
 
-__version__ = "5.0.0"
+__version__ = "5.1.0"
 APP_NAME = "Ninaivu"
 TAGLINE = "Your family's media, at home."
 #: Who holds the copyright, shown in About and the console. The licence stays

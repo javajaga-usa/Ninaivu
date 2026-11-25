@@ -1191,7 +1191,8 @@ def _segments_etag(conn, filters: dict[str, Any], stacked: bool = False) -> str 
 #: camera, favourites, a quality flag — may match a frame under the top one
 #: and not the top one itself, and every frame is listed then.
 _STACKED_UNDER = {"kinds", "date_from", "date_to", "folder", "occasion", "visibility",
-                  "sort", "include_nsfw", "include_trashed", "guest_search", "radius_km"}
+                  "sort", "include_nsfw", "include_trashed", "guest_search", "radius_km",
+                  "no_screens"}
 
 
 def _stacks_apply(conn, filters: dict[str, Any]) -> bool:  # noqa: ANN001

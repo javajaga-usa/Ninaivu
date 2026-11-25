@@ -156,6 +156,10 @@ def test_the_timeline_shows_the_top_photograph_with_its_count(burst, as_family):
     folder = as_family.get(f"/api/assets?ids={burst['sharpest']}").get_json()["items"][0]["folder"]
     tiles, _ = _tiles(as_family, f"folder={folder}")
     assert burst["sharpest"] in tiles and len([a for a in burst["beach"] if a in tiles]) == 1
+    # Memories, the family app's first view, leaves out screenshots and
+    # documents; a stack is still one tile there.
+    tiles, _ = _tiles(as_family, "no_screens=1")
+    assert burst["sharpest"] in tiles and len([a for a in burst["beach"] if a in tiles]) == 1
     # Anything a frame under the top one may match and the top one not:
     # every frame.
     for query in ("favorites=1", "q=beach", "quality=blurry", "duplicates=1"):
