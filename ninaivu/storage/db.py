@@ -2083,6 +2083,7 @@ from .db_visibility import (  # noqa: E402,F401 - re-exported
     restore_screens,
     screen_clause,
     documents_clause,
+    DOCUMENT_TAGS,
     screens_not_explicit,
     search_shield_clause,
     set_folder_visibility,
