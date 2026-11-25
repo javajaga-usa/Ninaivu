@@ -1007,6 +1007,8 @@ function renderCounts(stats) {
   $('#root-meta').textContent =
     `${i18n.items(stats.count)} · ${humanBytes(stats.bytes)}`;
   $('#count-all').textContent = stats.count.toLocaleString();
+  const moments = $('#count-moments');
+  if (moments) moments.textContent = (stats.memories ?? '').toLocaleString();
   $('#count-fav').textContent = stats.favorites || '';
   $('#count-private').textContent = stats.private || '';
   $('#count-pic').textContent = stats.pictures || '';
@@ -1023,6 +1025,8 @@ function renderCounts(stats) {
   $('#count-dup').textContent = stats.duplicate_groups || '';
   $('#count-hidden').textContent = stats.hidden || '';
   $('#count-public').textContent = stats.public || '';
+  const docs = $('#count-docs');
+  if (docs) docs.textContent = stats.documents || '';
 }
 
 async function refreshCounts() {
@@ -1106,6 +1110,12 @@ function keepForOffline(filters, segments, sizes) {
   } catch { /* a convenience, never a blocker */ }
 }
 
+/** The two views that are the gallery itself rather than a part of it:
+ *  Memories (the first, and the default) and All media. */
+function homeView() {
+  return state.view === 'moments' || state.view === 'all';
+}
+
 function currentFilters() {
   const filters = { ...state.filters };
   if (state.view === 'favorites') filters.favorites = true;
@@ -1114,6 +1124,13 @@ function currentFilters() {
   if (state.view === 'videos') filters.kinds = ['video'];
   if (state.view === 'audio') filters.kinds = ['audio'];
   if (state.view === 'duplicates') filters.duplicates = true;
+  if (state.view === 'documents') filters.screens = true;
+  if (state.view === 'moments') {
+    // Memories, the family app's first view: photographs and videos, and
+    // no screenshot or document among them (user, 25 November 2026).
+    filters.kinds = ['picture', 'video'];
+    filters.noScreens = true;
+  }
   if (state.view === 'hidden') filters.visibility = 'hidden';
   if (state.view === 'public') filters.visibility = 'public';
   if (state.view === 'live') filters.is_live = '1';
@@ -1191,7 +1208,7 @@ async function reload({ resetScroll = false } = {}) {
       // photograph. "This filter has no items yet" with Clear filters sent
       // them looking for a filter, and the button reloaded the same empty view.
       showEmpty(i18n.t(EMPTY_VIEW[state.view]), i18n.t('Nothing here yet.'), { scene: 'filter', showAll: true });
-    } else if (!data.total && !anyFilter() && state.view === 'all') {
+    } else if (!data.total && !anyFilter() && homeView()) {
       // Every photograph, and none at all: nothing in the library this person
       // can see yet. There was no filter to clear, and Clear filters reloaded
       // the same empty page; an administrator is sent to the console instead.
@@ -1220,7 +1237,7 @@ async function reload({ resetScroll = false } = {}) {
     setLoading(false);
   }
   renderFilterBar();
-  document.querySelector('.week-card')?.classList.toggle('aside', anyFilter() || state.view !== 'all');
+  document.querySelector('.week-card')?.classList.toggle('aside', anyFilter() || !homeView());
   showMemoriesBanner();
   loadDuplicatesIfNeeded();
   loadMoreIfNear();
@@ -1287,7 +1304,7 @@ const skeletonKey = () => `skeleton.${state.user?.id ?? 'guest'}`;
  *  next time it loads (see setLoading). Only the plain gallery's: a search's
  *  would greet the next visit with the wrong picture. */
 function rememberSkeleton() {
-  if (anyFilter() || state.view !== 'all') return;
+  if (anyFilter() || !homeView()) return;
   const tiles = grid.layout.cells.slice(0, 30)
     .filter((cell) => cell.swatch)
     .map((cell) => [cell.swatch, Math.round(Math.min(Math.max(cell.aspect || 1, .5), 2.4) * 100) / 100]);
@@ -1341,6 +1358,7 @@ const EMPTY_VIEW = {
   live: i18n.key('No Live Photos yet'),
   hidden: i18n.key('Nothing is hidden'),
   public: i18n.key('Nothing shared with guests yet'),
+  documents: i18n.key('No documents or screenshots'),
 };
 
 /** Back to every photograph from a sidebar view, as the H key does. */
@@ -2711,7 +2729,7 @@ let activeMemories = [];
  * back once everything is cleared again.
  */
 function memoriesBannerWanted() {
-  return state.view === 'all' && !anyFilter();
+  return homeView() && !anyFilter();
 }
 
 /** Moments inside videos (static/js/video-moments.js), while switched on. */

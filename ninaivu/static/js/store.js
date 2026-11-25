@@ -22,7 +22,7 @@ export const store = {
 /** The family app: the signed-in person, the view and filters, and the library. */
 export const state = {
   user: null,
-  view: 'all',
+  view: 'moments',
   filters: { q: '', kinds: [], favorites: false, duplicates: false,
              tag: '', folder: '', camera: '', from: '', to: '', person: 0,
              occasion: 0, album: 0, near: 0, sort: 'date_desc' },

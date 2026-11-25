@@ -5823,5 +5823,9 @@
   "Settings and index are kept in": "அமைப்புகளும் அட்டவணையும் இங்கே உள்ளன",
   "AI models on this computer": "இந்தக் கணினியில் உள்ள AI மாதிரிகள்",
   "Third-party notices": "மூன்றாம் தரப்பு அறிவிப்புகள்",
-  "Problem": "சிக்கல்"
+  "Problem": "சிக்கல்",
+  "Documents": "ஆவணங்கள்",
+  "Tidy up": "ஒழுங்கமைப்பு",
+  "No documents or screenshots": "ஆவணங்களோ திரைப்பிடிப்புகளோ இல்லை",
+  "Kept close": "நெருக்கமானவை"
 }
