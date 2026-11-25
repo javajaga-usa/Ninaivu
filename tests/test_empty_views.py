@@ -23,9 +23,10 @@ def _empty_views() -> dict[str, str]:
 
 def test_every_sidebar_view_that_can_be_empty_names_what_is_missing():
     views = set(re.findall(r'data-view="([a-z-]+)"', PAGE))
-    # All is the gallery itself; Memories opens the viewer; Duplicates and the
-    # private folder have screens of their own for "nothing here".
-    expected = views - {"all", "memories", "duplicates", "private"}
+    # All and Memories (moments) are the gallery itself; On This Day
+    # (memories) opens the viewer; Duplicates and the private folder have
+    # screens of their own for "nothing here".
+    expected = views - {"all", "moments", "memories", "duplicates", "private"}
     assert expected <= set(_empty_views()), expected - set(_empty_views())
 
 
@@ -38,7 +39,7 @@ def test_the_empty_view_offers_every_photograph_not_a_filter_to_clear():
 
 
 def test_the_weeks_card_steps_aside_while_anything_narrows_the_gallery():
-    assert "classList.toggle('aside', anyFilter() || state.view !== 'all')" in APP
+    assert "classList.toggle('aside', anyFilter() || !homeView())" in APP
     css = (STATIC / "css" / "style.css").read_text(encoding="utf-8")
     assert ".week-card.aside { display: none; }" in css
 
@@ -46,7 +47,7 @@ def test_the_weeks_card_steps_aside_while_anything_narrows_the_gallery():
 def test_an_empty_library_says_so_rather_than_offering_a_filter_to_clear():
     # Every photograph, no filter, and nothing at all: there was no filter to
     # clear, and Clear filters reloaded the same empty page.
-    assert "!data.total && !anyFilter() && state.view === 'all'" in APP
+    assert "!data.total && !anyFilter() && homeView()" in APP
     assert "showEmpty(i18n.t('No photographs yet'), i18n.t('Nothing here yet.')," in APP
     # An administrator is offered the console, where the library is set up.
     assert "} else if (needsFolder || toConsole) {" in APP

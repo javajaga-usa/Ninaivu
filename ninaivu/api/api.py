@@ -471,6 +471,8 @@ def _filters_from_request() -> dict[str, Any]:
         # What the viewer may see still decides: a family member is shown
         # none of the hidden ones.
         "screens_only": _bool_arg("screens"),
+        # And the other way round: the family app's Memories view.
+        "no_screens": _bool_arg("no_screens"),
         "is_live": _bool_arg("is_live"),
         "quality": _quality_arg(),
         "occasion": _int_arg("occasion") or None,

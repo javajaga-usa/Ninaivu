@@ -332,11 +332,17 @@
       </div>
     </section>
 
-    <!-- Grouped by what each is for: everything there is, the moments kept
-         and remembered, and what an administrator tidies up. -->
+    <!-- Memories first, and opened by default: the photographs and videos
+         without screenshots or documents. Then grouped by what each is for:
+         everything there is, the moments kept close, and what an
+         administrator tidies up. -->
     <nav class="side-block" aria-label="Views" data-i18n-label="Views">
+      <button class="side-item active" data-view="moments" id="nav-moments">
+        <svg viewBox="0 0 24 24"><rect x="3" y="7" width="14" height="13" rx="2"/><path d="M7 4h12a2 2 0 0 1 2 2v11"/><path d="m3 16 4-4 3 3 2-2 5 5"/></svg>
+        <span data-i18n="Memories">Memories</span><b id="count-moments"></b>
+      </button>
       <h3 class="side-title side-group" data-i18n="Library">Library</h3>
-      <button class="side-item active" data-view="all">
+      <button class="side-item" data-view="all">
         <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m3 16 5-5 4 4 3-3 6 6"/></svg>
         <span data-i18n="All media">All media</span><b id="count-all"></b>
       </button>
@@ -359,7 +365,7 @@
         <svg viewBox="0 0 24 24"><path d="M9 18V6l11-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="16" r="2.5"/></svg>
         <span data-i18n="Audio">Audio</span><b id="count-aud"></b>
       </button>
-      <h3 class="side-title side-group" data-i18n="Memories">Memories</h3>
+      <h3 class="side-title side-group" data-i18n="Kept close">Kept close</h3>
       <button class="side-item" data-view="memories" id="nav-memories">
         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><polyline points="12 6 12 12 16 14"/></svg>
         <span data-i18n="On This Day">On This Day</span><b id="count-memories"></b>

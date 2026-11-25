@@ -4,7 +4,8 @@
 
 - **On this day is about people.** The family app's On this day leaves out screenshots, documents and photos of screens (for an administrator too, and also the ones shown to the family by hand), shows each group of near-duplicate photos once, by the frame with the most faces and then the sharpest, and puts photographs with people in them before the rest. The frames under a photo stack's top one are left out as well.
 - **A Documents view in the family app.** An administrator's left pane has **Documents**, listing only screenshots, documents and photos of screens, by the same judgement the hiding rule makes, with a count beside it. Family members are not offered it: those items stay hidden from them (`?screens=1` on the gallery's questions; a family member asking is shown none of the hidden ones).
-- **The family app's left pane is grouped.** The views sit under **Library** (All media, Photos, Videos, Live Photos, Audio), **Memories** (On This Day, Favourites, Only to me) and **Tidy up** (Documents, Duplicates, Hidden, Public); Years now comes before the AI's tags. In Tamil too.
+- **Memories opens the family app.** A new first view, **Memories**, is where the family app starts: photographs and videos only, without screenshots, documents or sound recordings (`?no_screens=1`), with its own count. All media is still one click away.
+- **The family app's left pane is grouped.** Under Memories, the views sit under **Library** (All media, Photos, Videos, Live Photos, Audio), **Kept close** (On This Day, Favourites, Only to me) and **Tidy up** (Documents, Duplicates, Hidden, Public); Years now comes before the AI's tags. In Tamil too.
 - **Sign out sits in its row in the console.** Once About joined the round buttons at the bottom of the console's sidebar, Sign out no longer fitted and sat alone on a row of its own. The six buttons now share one even row under Family app (two rows of three on a touch screen).
 
 ## 5.0.0 — 24 November 2026

@@ -219,6 +219,7 @@ def query_assets(
     visibility: int | None = None,
     duplicates_only: bool = False,
     screens_only: bool = False,
+    no_screens: bool = False,
     is_live: bool = False,
     min_size: int = 0,
     exclude_reviewed_large: bool = False,
@@ -391,6 +392,11 @@ def query_assets(
         # screens, by the same judgement the hiding rule makes.
         screens_sql, screens_params = _db.screen_clause(conn, "a")
         where.append(screens_sql)
+        params.extend(screens_params)
+    if no_screens:
+        # The family app's Memories view: everything but those.
+        screens_sql, screens_params = _db.screen_clause(conn, "a")
+        where.append(f"NOT {screens_sql}")
         params.extend(screens_params)
     if is_live:
         where.append("a.is_live = 1")

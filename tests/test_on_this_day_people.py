@@ -106,10 +106,10 @@ def test_documents_view_lists_only_documents_and_screenshots(tmp_path):
 def test_the_sidebar_groups_its_views_and_offers_documents_to_administrators():
     page = (ROOT / "ninaivu" / "templates" / "index.html").read_text(encoding="utf-8")
     nav = page[page.index('aria-label="Views"'):page.index("</nav>", page.index('aria-label="Views"'))]
-    order = re.findall(r'data-view="([a-z]+)"|data-i18n="(Library|Memories|Tidy up)"', nav)
+    order = re.findall(r'data-view="([a-z]+)"|data-i18n="(Library|Kept close|Tidy up)"', nav)
     flat = [view or heading for view, heading in order]
-    assert flat == ["Library", "all", "pictures", "videos", "live", "audio",
-                    "Memories", "memories", "favorites", "private",
+    assert flat == ["moments", "Library", "all", "pictures", "videos", "live", "audio",
+                    "Kept close", "memories", "favorites", "private",
                     "Tidy up", "documents", "duplicates", "hidden", "public"]
     assert re.search(r'class="side-item admin-only" data-view="documents"', nav)
     # Years sit with the other ways in by date, before the AI's tags.
@@ -124,7 +124,7 @@ def test_the_new_words_are_in_tamil():
     import json
 
     ta = json.loads((ROOT / "ninaivu" / "static" / "i18n" / "ta.json").read_text(encoding="utf-8"))
-    for key in ("Documents", "Tidy up", "No documents or screenshots"):
+    for key in ("Documents", "Tidy up", "No documents or screenshots", "Kept close", "Memories"):
         assert ta.get(key) and ta[key] != key, key
 
 
@@ -134,3 +134,29 @@ def test_the_consoles_round_buttons_share_one_row_under_family_app():
     assert ".admin-bar-actions a.btn { grid-column: 1 / -1; width: 100%; }" in css
     # Sign out was pushed to the right of a row of its own.
     assert ".admin-bar-actions .icon-btn:last-child { margin-left: auto; }" not in css
+
+
+def test_memories_is_the_first_view_and_opens_by_default(tmp_path):
+    """The user, later the same day: Memories as the default top option,
+    holding only photos and videos, without documents and screenshots."""
+    page = (ROOT / "ninaivu" / "templates" / "index.html").read_text(encoding="utf-8")
+    nav = page[page.index('aria-label="Views"'):]
+    first = re.search(r'<button class="([^"]*)" data-view="([a-z]+)"', nav)
+    assert first.group(2) == "moments" and "active" in first.group(1)
+    store = (ROOT / "ninaivu" / "static" / "js" / "store.js").read_text(encoding="utf-8")
+    assert "view: 'moments'," in store
+    app = (ROOT / "ninaivu" / "static" / "js" / "app.js").read_text(encoding="utf-8")
+    assert "filters.kinds = ['picture', 'video'];\n    filters.noScreens = true;" in app
+
+    db, conn = _library(tmp_path)
+    _add(conn, "beach.jpg", year=2015, faces=2)
+    _add(conn, "Screenshot_1.png", year=2015)
+    _add(conn, "passport.jpg", year=2016, visibility=2, vis_source="screen")
+    conn.execute("INSERT INTO assets(root, rel_path, filename, kind, date_key, visibility, "
+                 "indexed_at) VALUES('/lib', 'call.m4a', 'call.m4a', 'audio', '2016-01-01', 1, 0)")
+    conn.commit()
+    for ceiling in (1, 2):
+        rows, _ = db.query_assets(conn, ["/lib"], max_visibility=ceiling, no_screens=True,
+                                  kinds=["picture", "video"])
+        assert [r["rel_path"] for r in rows] == ["beach.jpg"], ceiling
+        assert db.library_stats(conn, ["/lib"], max_visibility=ceiling)["memories"] == 1
