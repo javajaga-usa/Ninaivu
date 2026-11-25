@@ -97,6 +97,21 @@ def library_stats(conn: sqlite3.Connection, roots: Sequence[str] | str | None = 
             f"WHERE {where_sql}", params,
         ).fetchone()["n"], also=(EMBEDDINGS_GENERATION_KEY,))
 
+    # The family app's Documents view, for an administrator: the family is
+    # shown none of these (the hiding rule), so they are not counted for
+    # anybody else. Remembered with the rest until the library changes.
+    documents = 0
+    if int(max_visibility) >= 2:
+        screens_sql, screens_params = _db.screen_clause(conn, "a")
+        documents = cached_aggregate(
+            conn, ("documents", where_sql, tuple(params), screens_sql, tuple(screens_params)),
+            lambda: conn.execute(
+                f"SELECT COUNT(*) n FROM assets a WHERE {where_sql} AND {screens_sql} "
+                f"AND a.live_clip = 0 AND a.raw_twin = 0", [*params, *screens_params],
+            ).fetchone()["n"],
+            # The screen check's scores are written by the tagger as well.
+            max_age=600)
+
     # From this person's favourites outward, not from the library inward.
     # SQLite chose to walk every visible item and look each one up among the
     # favourites — sixty milliseconds on 100,000 items for a count that is
@@ -123,6 +138,7 @@ def library_stats(conn: sqlite3.Connection, roots: Sequence[str] | str | None = 
         "public": row["public"] or 0,
         "hidden": row["hidden"] or 0,
         "duplicate_groups": dupes or 0,
+        "documents": documents or 0,
         "embedded": embedded or 0,
         # This viewer's own "Only to me" items. Nobody else's: the number is
         # theirs alone, as their favourites are.

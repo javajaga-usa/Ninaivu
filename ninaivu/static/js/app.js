@@ -1023,6 +1023,8 @@ function renderCounts(stats) {
   $('#count-dup').textContent = stats.duplicate_groups || '';
   $('#count-hidden').textContent = stats.hidden || '';
   $('#count-public').textContent = stats.public || '';
+  const docs = $('#count-docs');
+  if (docs) docs.textContent = stats.documents || '';
 }
 
 async function refreshCounts() {
@@ -1114,6 +1116,7 @@ function currentFilters() {
   if (state.view === 'videos') filters.kinds = ['video'];
   if (state.view === 'audio') filters.kinds = ['audio'];
   if (state.view === 'duplicates') filters.duplicates = true;
+  if (state.view === 'documents') filters.screens = true;
   if (state.view === 'hidden') filters.visibility = 'hidden';
   if (state.view === 'public') filters.visibility = 'public';
   if (state.view === 'live') filters.is_live = '1';
@@ -1341,6 +1344,7 @@ const EMPTY_VIEW = {
   live: i18n.key('No Live Photos yet'),
   hidden: i18n.key('Nothing is hidden'),
   public: i18n.key('Nothing shared with guests yet'),
+  documents: i18n.key('No documents or screenshots'),
 };
 
 /** Back to every photograph from a sidebar view, as the H key does. */

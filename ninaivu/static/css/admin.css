@@ -1300,7 +1300,22 @@ body.admin .admin-bar .brand span:not(.console-tag) { display: inline; }
     background: var(--bg-elev);
   }
   .admin-bar-actions a.btn { flex: 1 1 100%; justify-content: center; height: 32px; }
-  .admin-bar-actions .icon-btn:last-child { margin-left: auto; }
+  /* Family app across the top, and the six round buttons (language, search,
+     theme, profile, About, Sign out) in one even row below it. They wrapped
+     as they came: once About joined them, Sign out no longer fitted the
+     sidebar's width and sat alone on a row of its own at the right. */
+  .admin-bar-actions {
+    display: grid; grid-template-columns: repeat(6, minmax(0, 1fr));
+    justify-items: center; align-items: center; gap: 8px 0;
+  }
+  .admin-bar-actions a.btn { grid-column: 1 / -1; width: 100%; }
+}
+/* A touch laptop's 44 px buttons do not fit six across 224 px: two even rows
+   of three instead. */
+@media (min-width: 1100px) and (pointer: coarse) {
+  .admin-bar-actions { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (min-width: 1100px) {
   .admin-main { max-width: 1280px; padding: 40px 48px 72px; }
 }
 @media (max-width: 1099px) {
