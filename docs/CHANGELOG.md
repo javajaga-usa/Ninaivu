@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **`db.py` is a third smaller (P12).** The writes to `assets` (upsert, update, delete-missing, the scan runs and renaming a file in place) moved into `storage/db_assets.py`. Every name is still read as before (`db.upsert_asset`, `db.PruneRefused`, and the rest). Nothing changes for a household.
 - **The gallery says what it is to a screen reader.** Its container was marked `role="grid"` with no rows, which the accessibility rules do not allow (a grid holds rows of cells). It is now a list of items, which is what a gallery of pictures of this kind is. Nothing looks or moves differently.
 
 ## 5.0.0 — 24 November 2026
