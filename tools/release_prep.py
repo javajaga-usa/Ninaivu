@@ -7,7 +7,8 @@
 The version lives in ``ninaivu/__init__.py``; the places that repeat it are
 the two extensions, the README's status line and its .deb example. Folding
 turns ``## Unreleased`` in docs/CHANGELOG.md into ``## <version> — <date>``
-and leaves a new, empty ``## Unreleased`` above it. Nothing is committed, and
+and nothing is left above it: the release workflow wants the newest section
+to be the release's own, so the next change opens ``## Unreleased`` again. Nothing is committed, and
 nothing is tagged or published: the release workflow does that on a green
 main, and a person starts it.
 """
@@ -62,13 +63,13 @@ def problems() -> list[str]:
 
 
 def fold(changelog: str, version: str, date: str) -> str:
-    """``## Unreleased`` becomes the release's section, and a new one is opened."""
+    """``## Unreleased`` becomes the release's section, with nothing above it."""
     marker = "## Unreleased\n"
     if marker not in changelog:
         raise SystemExit("docs/CHANGELOG.md has no '## Unreleased' section to fold")
     if re.search(rf"^## {re.escape(version)} ", changelog, re.M):
         raise SystemExit(f"docs/CHANGELOG.md already has a section for {version}")
-    return changelog.replace(marker, f"## Unreleased\n\n## {version} — {date}\n", 1)
+    return changelog.replace(marker, f"## {version} — {date}\n", 1)
 
 
 def prepare(version: str, date: str) -> None:
