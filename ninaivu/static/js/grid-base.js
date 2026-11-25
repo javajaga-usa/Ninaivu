@@ -960,7 +960,7 @@ export class Grid extends EventTarget {
   createCell() {
     const node = document.createElement('div');
     node.className = 'cell';
-    node.setAttribute('role', 'gridcell');
+    node.setAttribute('role', 'listitem');
     node.tabIndex = -1;
     const img = document.createElement('img');
     img.decoding = 'async';

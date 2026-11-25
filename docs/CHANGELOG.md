@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **`db.py` is a third smaller (P12).** The writes to `assets` (upsert, update, delete-missing, the scan runs and renaming a file in place) moved into `storage/db_assets.py`. Every name is still read as before (`db.upsert_asset`, `db.PruneRefused`, and the rest). Nothing changes for a household.
+- **`Services` is smaller (P12).** The questions start-up asks before it reads a library (which folders the drive says changed, whether a walk is worth it, whether analysis is still owed) moved into `ninaivu/scan_plan.py`. Nothing changes for a household.
+- **The gallery says what it is to a screen reader.** Its container was marked `role="grid"` with no rows, which the accessibility rules do not allow (a grid holds rows of cells). It is now a list of items, which is what a gallery of pictures of this kind is. Nothing looks or moves differently.
 - **On this day is about people.** The family app's On this day leaves out screenshots, documents and photos of screens (for an administrator too, and also the ones shown to the family by hand), shows each group of near-duplicate photos once, by the frame with the most faces and then the sharpest, and puts photographs with people in them before the rest. The frames under a photo stack's top one are left out as well.
 - **A Documents view in the family app.** An administrator's left pane has **Documents**, listing only screenshots, documents and photos of screens, by the same judgement the hiding rule makes, with a count beside it. Family members are not offered it: those items stay hidden from them (`?screens=1` on the gallery's questions; a family member asking is shown none of the hidden ones).
 - **Memories opens the family app.** A new first view, **Memories**, is where the family app starts: photographs and videos only, without screenshots, documents or sound recordings (`?no_screens=1`), with its own count. All media is still one click away.
