@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 5.1.0 — 25 November 2026
 
 - **The Creative Studio's print layout is styled again.** Since 5.0's stricter page policy (no inline styles), the window **Print** opens kept that policy and refused the layout's own `<style>` block, so the page printed unstyled: full-width pictures, no cards, and every slide of a slideshow but the first left out. Its rules now go in as a stylesheet built by script, and the before/after line through the element's style, both of which the policy allows. The browser tests that serve the studio and the share page now use the app's own policy rather than one that still allowed inline styles, which is how this was missed.
 - **A NUL in a folder name is a 400, not a 500.** Adding a library folder, adding the archive to the library and restoring an off-site copy into a folder answered a name with a NUL character in it with a server error (Python refuses such a path before the route's own checks). It is now refused with "That folder or file name has a character no folder can have." in English and Tamil. Found by a sweep of every write route with odd bodies.
