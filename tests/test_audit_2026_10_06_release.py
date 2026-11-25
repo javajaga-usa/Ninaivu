@@ -323,14 +323,21 @@ def test_the_public_repository_is_checked_before_anything_is_built(gate, problem
     assert output == ""
 
 
-def test_failed_tests_stop_the_release(gate):
-    done, _ = gate(runs=_runs(("completed", "failure")))
+def test_a_cancelled_run_stops_the_release(gate):
+    done, _ = gate(runs=_runs(("completed", "cancelled")))
     assert done.returncode == 1 and "has not passed" in done.stdout
+
+
+def test_failed_tests_stop_the_release(gate):
+    """A run that ended as a failure counts only if the job that failed is Windows."""
+    (gate.fake / "jobs").write_text(_jobs(*EVERY_SYSTEM, failed=("Tests · ubuntu-latest · Python 3.14",)))
+    done, _ = gate(runs=_runs(("completed", "failure")))
+    assert done.returncode == 1 and "did not pass: Tests · ubuntu-latest · Python 3.14" in done.stdout
 
 
 def test_tests_still_running_are_waited_for(gate):
     (gate.fake / "runs.1").write_text(_runs(("in_progress", None)))
-    (gate.fake / "runs.2").write_text(_runs(("queued", None), ("completed", "failure")))
+    (gate.fake / "runs.2").write_text(_runs(("queued", None), ("completed", "cancelled")))
     done, output = gate(runs=_runs(("completed", "success")))
     assert done.returncode == 0, done.stdout + done.stderr
     assert done.stdout.count("still running") == 2 and output.split()[0] == "version=2.3.4"
@@ -617,7 +624,8 @@ def test_a_failed_job_in_the_run_stops_the_release(gate):
 
 def test_a_failed_windows_test_job_does_not_stop_the_release(gate):
     (gate.fake / "jobs").write_text(_jobs(*EVERY_SYSTEM, failed=("Tests · windows-latest · Python 3.14",)))
-    done, _ = gate()
+    # The run as a whole ends as a failure when Windows fails (the 5.1.0 release met this).
+    done, _ = gate(runs=_runs(("completed", "failure")))
     assert done.returncode == 0, done.stdout
 
 
