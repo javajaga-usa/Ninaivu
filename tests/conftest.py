@@ -232,6 +232,10 @@ def cfg(tmp_path: Path, library: Path):
     from ninaivu.server import settings_groups
     for name in (*settings_groups.ALWAYS_ON, *settings_groups.FOLLOW_THEIR_MODEL):
         setattr(config, name, False)
+    # These two were on before 5.2 whatever a test did (the repair and the
+    # descriptions), so the fixture keeps them on.
+    config.scrub_repair = True
+    config.describe_photos = True
     config.workers = 2
     config.open_browsing = True
     # The fixtures draw 400x300 solid-colour JPEGs a few kilobytes each. Real

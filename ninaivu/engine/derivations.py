@@ -183,7 +183,7 @@ def _text_give_up(ctx: Context, conn, item: int) -> None:  # noqa: ANN001
 # -- finding faces ---------------------------------------------------------
 
 def _faces_version() -> int:
-    from ..media import faces                             # noqa: PLC0415
+    from ..models.faces import engine as faces                             # noqa: PLC0415
     return int(faces.FACE_VERSION)
 
 
@@ -212,7 +212,7 @@ def _face_model(ctx: Context) -> str:
 def _faces_prepare(ctx: Context, conn, item: int, detected: Any) -> Any:  # noqa: ANN001
     """The rows to store, with the crops written: outside the write group,
     so a family member's write never waits on the crops of a group shot."""
-    from ..media import faces                             # noqa: PLC0415
+    from ..models.faces import engine as faces                             # noqa: PLC0415
     if detected is None:
         return None
     if not db.ai_may_read(conn, item):
@@ -229,7 +229,7 @@ def _faces_prepare(ctx: Context, conn, item: int, detected: Any) -> Any:  # noqa
 
 
 def _faces_store(ctx: Context, conn, item: int, rows: Any) -> bool:  # noqa: ANN001
-    from ..media import faces                             # noqa: PLC0415
+    from ..models.faces import engine as faces                             # noqa: PLC0415
     if rows is None:
         # Unreadable, or not an image any more: done anyway, as the 1.x pass
         # marks it, or every pass retries the same broken file for ever.

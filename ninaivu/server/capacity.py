@@ -536,7 +536,7 @@ def recommend(facts: dict[str, Any]) -> list[dict[str, Any]]:
           and ninaivu.get("ai_gpu", True)
           and str(ninaivu.get("ai_image_device") or "").startswith("coreml")):
         # Asked for Core ML and loaded on the processor: Core ML would not
-        # take the model (runtime/siglip.py logs why).
+        # take the model (models/search/runner.py logs why).
         out.append(_advice(
             "gpu", "consider", said("Core ML would not take the image model"),
             said("Ninaivu is set to analyse photographs with Core ML, but the model loaded on the processor. The log says why: look for “would not load on”.")))

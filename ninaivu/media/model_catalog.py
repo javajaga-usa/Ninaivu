@@ -368,7 +368,7 @@ MODELS: dict[str, dict[str, Any]] = {
              "sha256": "5b805bba7b5660ab7070b5a381dcf75e5b3e04199f1e9387232a77a00095102e"},
         ],
     },
-    # The on-device AI engine's image models (ninaivu/runtime/siglip.py and
+    # The on-device AI engine's image models (ninaivu/models/search/runner.py and
     # florence.py), run by ONNX Runtime in the model host: no PyTorch.
     #
     # Search is SigLIP 2 B/16 exactly as the PyTorch engine runs it, in the

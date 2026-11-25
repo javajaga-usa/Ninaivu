@@ -22,7 +22,7 @@ from flask import jsonify
 from PIL import Image
 
 from ..media import face_parser, portrait, segmentation
-from ..media.faces import pil_to_bgr
+from ..models.faces.engine import pil_to_bgr
 from ..server.auth import require_family
 from ._body import read_at_most
 from .api import bp

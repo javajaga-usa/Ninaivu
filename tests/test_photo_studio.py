@@ -15,7 +15,7 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from ninaivu.media import faces as faces_mod
+from ninaivu.models.faces import engine as faces_mod
 from ninaivu.media import portrait
 from synthetic_faces import draw
 

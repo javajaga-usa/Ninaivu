@@ -151,7 +151,7 @@ def version() -> int:
 def ready() -> str | None:
     """Why photographs cannot be described here, or None when they can."""
     from ..words import said                                   # noqa: PLC0415
-    from .siglip import missing_packages                       # noqa: PLC0415
+    from ..models.search.runner import missing_packages                       # noqa: PLC0415
     if why := missing_packages():
         return why
     if chosen_model() is None:
@@ -226,7 +226,7 @@ class Florence:
                  device: str | None = None, cache: str | None = None) -> None:
         from tokenizers import Tokenizer                        # noqa: PLC0415
         from .devices import CPU, coreml_cache, image_providers  # noqa: PLC0415
-        from .siglip import _session                            # noqa: PLC0415
+        from .ort_session import _session                            # noqa: PLC0415
         root = Path(root)
         parts = PARTS[model_id]
         for name in parts.values():

@@ -504,7 +504,7 @@ class Services(ScanPlanning):
 
     def quick_host(self):
         """The model host for answers a person is waiting for: a search
-        spoken aloud, colour for one photograph (runtime/colour.py). Its own
+        spoken aloud, colour for one photograph (models/colour/runner.py). Its own
         process, so it is never behind the background's long calls; it
         leaves sooner when idle, as what it holds is asked for in bursts."""
         with self._model_host_lock:

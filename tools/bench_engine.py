@@ -165,7 +165,8 @@ def scan(work: Path, root: Path, engine: bool, faces: bool) -> dict:
 
 
 def main() -> int:
-    from ninaivu.media import faces as faces_mod, ocr
+    from ninaivu.media import ocr
+    from ninaivu.models.faces import engine as faces_mod
 
     if not ocr.available():
         print("  reading words is not installed (requirements/requirements-ocr.txt)")

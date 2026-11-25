@@ -46,13 +46,13 @@ COVERED = (
 )
 
 #: The learned scale (as a logarithm) and bias of each search model whose
-#: scores this reads; runtime/siglip.py has where SigLIP 2's come from.
+#: scores this reads; models/search/runner.py has where SigLIP 2's come from.
 MODELS: dict[str, tuple[float, float]] = {}
 
 
 def _known() -> dict[str, tuple[float, float]]:
     if not MODELS:
-        from ..runtime import siglip                     # noqa: PLC0415
+        from ..models.search import runner as siglip                     # noqa: PLC0415
         MODELS[siglip.MODEL_ID] = (siglip.LOG_SCALE, siglip.BIAS)
     return MODELS
 

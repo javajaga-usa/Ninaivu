@@ -40,7 +40,8 @@ from typing import Any
 import numpy as np
 from flask import abort, jsonify
 
-from ...media import facematch, faces as faces_mod, young_faces as guess
+from ...media import facematch, young_faces as guess
+from ...models.faces import engine as faces_mod
 from ...media.faceindex import CLUSTER_MIN_QUALITY
 from ..life_story.media import _relation
 from ...server.auth import current_user, require_family

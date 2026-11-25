@@ -22,7 +22,8 @@ from PIL import Image
 from ninaivu import ai
 from ninaivu.media import model_catalog
 from ninaivu.runtime import describer as describer_mod
-from ninaivu.runtime import florence, siglip
+from ninaivu.runtime import florence
+from ninaivu.models.search import runner as siglip
 from ninaivu.runtime.describer import Describer
 from ninaivu.runtime.host import HostCrashed, ModelHost, Unavailable
 from ninaivu.storage import db, descriptions

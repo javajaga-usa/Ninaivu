@@ -7,7 +7,8 @@ import threading
 import time
 from pathlib import Path
 
-from ninaivu.media import faceindex, faces as faces_mod, media, orientnet, straighten
+from ninaivu.media import faceindex, media, orientnet, straighten
+from ninaivu.models.faces import engine as faces_mod
 from ninaivu.storage import db, resume
 
 

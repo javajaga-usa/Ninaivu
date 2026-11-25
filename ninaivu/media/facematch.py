@@ -105,7 +105,7 @@ class Thresholds:
 SFACE = Thresholds()
 ARCFACE = Thresholds(same=0.30, auto=0.52, cluster=0.48, link=0.36, margin=0.06)
 
-#: By the engine's ``model_id`` (:mod:`ninaivu.media.faces`); SFace's for one
+#: By the engine's ``model_id`` (:mod:`ninaivu.models.faces.engine`); SFace's for one
 #: unknown, as every row in a library made before the setting existed is.
 PROFILES: dict[str, Thresholds] = {
     "yunet-2023mar/sface-2021dec": SFACE,

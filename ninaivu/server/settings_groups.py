@@ -115,6 +115,9 @@ ALWAYS_ON: tuple[str, ...] = (
     # own device, until they choose it.
     "offline_albums",
     "event_albums",
+    # 5.2: a repair from a good copy is always wanted, and young faces does
+    # nothing until the faces feature has found faces.
+    "scrub_repair", "young_faces", "describe_photos",
 )
 #: On by default, and on in fact only once the model each needs is on this
 #: computer: the AI models page is the one place that is decided
@@ -127,6 +130,9 @@ TUNING_ONLY: tuple[str, ...] = (
     "lock_roots", "follow_symlinks", "import_voice_audio_only", "straighten_requires_face",
     "straighten_auto", "straighten_auto_apply", "detect_orientation", "orientation_ai",
     "watch", "southern_hemisphere", "letters_aloud", "video_moments", "debug",
+    # 5.2: the device is chosen by the hardware tier, the backup's speed by its
+    # hours and rate, and a mail or tailnet connection by its port and name.
+    "ai_gpu", "cloud_full_speed", "notify_smtp_tls", "tailnet_https",
 )
 #: Not shown on the Advanced page at all.
 OFF_THE_PAGE: frozenset[str] = frozenset(

@@ -530,7 +530,7 @@ def _engine(cfg):
     skipping forever on the one machine where they could have caught something.
     """
     from pathlib import Path
-    from ninaivu.media import faces as faces_mod
+    from ninaivu.models.faces import engine as faces_mod
 
     for state in (cfg.state_dir, Path.home() / ".ninaivu"):
         engine = faces_mod.FaceEngine(state)
@@ -542,7 +542,7 @@ def _engine(cfg):
 def test_the_engine_reports_itself_rather_than_raising(cfg):
     """A missing model is a state to report, never an exception. Every caller
     is written to carry on without faces."""
-    from ninaivu.media import faces as faces_mod
+    from ninaivu.models.faces import engine as faces_mod
     engine = faces_mod.FaceEngine(cfg.state_dir / "definitely-not-here")
     assert engine.available is False
     assert isinstance(engine.info, dict)
@@ -561,14 +561,14 @@ def test_detection_finds_no_faces_in_a_plain_colour(cfg):
 def test_embeddings_are_unit_length(cfg):
     """Cosine similarity is a dot product only if the vectors are normalised.
     Everything downstream assumes it."""
-    from ninaivu.media import faces as faces_mod
+    from ninaivu.models.faces import engine as faces_mod
     vector = faces_mod.normalise(np.array([3.0, 4.0] + [0.0] * 126, dtype="float32"))
     assert np.isclose(float(np.linalg.norm(vector)), 1.0)
 
 
 def test_a_face_version_bump_makes_a_rescan_reconsider_everything(scanned):
     """``face_version`` is what makes the pass resumable and re-runnable."""
-    from ninaivu.media import faces as faces_mod
+    from ninaivu.models.faces import engine as faces_mod
     cfg, conn, _ = scanned
     pending = db.assets_needing_faces(conn, cfg.active_root,
                                       faces_mod.FACE_VERSION)
@@ -604,7 +604,7 @@ def test_confirmed_assignments_survive_redetection(scanned):
 
 def test_detect_pass_pipeline_scans_and_stores(scanned):
     from ninaivu.media.faceindex import FaceIndexer
-    from ninaivu.media.faces import DetectedFace
+    from ninaivu.models.faces.engine import DetectedFace
     cfg, conn, _ = scanned
 
     class MockEngine:

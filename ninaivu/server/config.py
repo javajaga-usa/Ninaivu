@@ -1106,7 +1106,7 @@ class Config:
     #: this?" link. Worked out on this computer from the faces already found;
     #: nothing is sent anywhere, and nothing is named until somebody says
     #: yes. See ninaivu/media/young_faces.py.
-    young_faces: bool = setting(False, env="NINAIVU_YOUNG_FACES")
+    young_faces: bool = setting(True, env="NINAIVU_YOUNG_FACES")
     #: Easy view: for a grandparent, the family app with bigger photographs
     #: and words, fewer buttons, and each photograph told aloud in Tamil or
     #: English: who the family named in it, where and when it was taken and

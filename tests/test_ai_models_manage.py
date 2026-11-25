@@ -244,6 +244,64 @@ def test_download_needed_queues_them_and_remembers_them(as_admin, scanned, monke
     assert conn.execute("SELECT 1 FROM audit WHERE action='ai_model_download'").fetchone()
 
 
+def _fake_extras(monkeypatch, state):
+    """Stand-ins for the Extras tab: nothing installs, and *state* says what is here."""
+    from ninaivu.media import components
+    monkeypatch.setattr(components, "describe", lambda cid: {
+        "installed": state.get(cid) == "installed", "installing": state.get(cid) == "installing",
+        "cannot": "no package manager" if state.get(cid) == "cannot" else ""})
+    return components
+
+
+def test_download_all_brings_in_the_extras_that_are_missing(cfg, monkeypatch):
+    components = _fake_extras(monkeypatch, {"ffmpeg": "installed", "heif": "installing",
+                                            "opencv": "cannot"})
+    extras = ai_models_api.needed_extras(cfg)
+    assert "ffmpeg" not in extras["ids"] and "heif" not in extras["ids"] \
+        and "opencv" not in extras["ids"], "here, being installed, or not installable"
+    assert "onnxruntime" in extras["ids"] and "llama_cpp" in extras["ids"]
+    assert "image-model" not in extras["ids"], "the 2 GB PyTorch engine stays out"
+    assert "transformers" not in extras["ids"], "the Tamil voice's PyTorch is for Letters read aloud"
+    assert extras["labels"]["onnxruntime"] == components.CATALOGUE["onnxruntime"]["label"]
+    cfg.letters_aloud = True
+    assert "transformers" in ai_models_api.needed_extras(cfg)["ids"]
+
+
+def test_extras_install_one_after_another_and_then_the_models_they_unblock(cfg, monkeypatch):
+    from ninaivu.media import components
+    order = []
+    running = {"onnxruntime": 2}                       # still "installing" for two looks
+    monkeypatch.setattr(components, "install", lambda cid: order.append(("install", cid)) or (True, ""))
+
+    class Installs:
+        def running(self, cid):
+            running[cid] = running.get(cid, 0) - 1
+            return running[cid] > 0
+    monkeypatch.setattr(components, "installs", Installs())
+    monkeypatch.setattr("time.sleep", lambda _s: None)
+    queued = threading.Event()
+    monkeypatch.setattr(ai_models_api, "needed_models", lambda c: {"ids": ["text-model"], "extras": {"ids": []}})
+    monkeypatch.setattr(ai_models_api, "queue_model_downloads",
+                        lambda path, ids: order.append(("models", list(ids))) or queued.set())
+    started = ai_models_api.install_extras_then_models(
+        cfg.db_path, cfg, ["onnxruntime", "tokenizers", "no-such-extra"])
+    assert started == ["onnxruntime", "tokenizers"]
+    assert queued.wait(5)
+    assert order == [("install", "onnxruntime"), ("install", "tokenizers"),
+                     ("models", ["text-model"])], "one pip at a time, the models after"
+
+
+def test_download_all_with_only_extras_still_starts(as_admin, scanned, monkeypatch):
+    cfg, conn, _ = scanned
+    monkeypatch.setattr(ai_models_api, "needed_models", lambda c: {
+        "ids": [], "bytes": 0, "skipped": [], "extras": {"ids": ["onnxruntime"], "labels": {}}})
+    monkeypatch.setattr(ai_models_api, "install_extras_then_models", lambda path, c, ids: list(ids))
+    response = as_admin.post("/api/admin/ai-models/download-needed", json={})
+    assert response.status_code == 202 and response.get_json()["extras_started"] == ["onnxruntime"]
+    row = conn.execute("SELECT detail FROM audit WHERE action='ai_model_download'").fetchone()
+    assert "extras: onnxruntime" in row[0]
+
+
 def test_start_up_carries_the_queue_on_one_after_another(cfg, monkeypatch):
     from ninaivu import Services
     services = Services(cfg)

@@ -20,7 +20,7 @@ So the console fetches them. Three kinds, because they arrive in three ways:
   Ninaivu is already running in. Never an arbitrary name: the id chooses the
   pinned requirement, so nothing a request says can decide what is installed.
 * **A model**, which Ninaivu already knows how to fetch, verify and install
-  (media/model_catalog.py, media/faces.py, media/orientnet.py). Listed here so
+  (media/model_catalog.py, models/faces/engine.py, media/orientnet.py). Listed here so
   one page answers "what is missing", with the work left where it was.
 
 Every install runs on its own thread and keeps its output, so the console can

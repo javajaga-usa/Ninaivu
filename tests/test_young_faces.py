@@ -17,7 +17,7 @@ import pytest
 
 from ninaivu.media import facematch, young_faces as guess
 from ninaivu.server.config import Config
-from ninaivu.server.settings_groups import GROUPS
+from ninaivu.server import settings_groups
 from ninaivu.storage import db
 from ninaivu.features.family_tree import storage as family_tree
 from ninaivu.features.then_and_now import storage as born_store
@@ -201,9 +201,9 @@ def album(app, people):
             "hidden": hidden, "cfg": cfg}
 
 
-def test_off_by_default_and_under_advanced():
-    assert Config().young_faces is False
-    assert "young_faces" in GROUPS["Advanced"]
+def test_on_by_default_and_off_the_advanced_page():
+    assert Config().young_faces is True
+    assert "young_faces" in settings_groups.OFF_THE_PAGE
 
 
 def test_every_route_is_404_until_switched_on(as_family):

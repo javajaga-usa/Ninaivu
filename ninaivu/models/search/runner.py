@@ -44,7 +44,8 @@ import unicodedata
 from pathlib import Path
 from typing import Any, Sequence
 
-from .host import Capability, Unavailable
+from ...runtime.host import Capability, Unavailable
+from ...runtime.ort_session import _session  # noqa: F401 - patched by name in the tests
 
 log = logging.getLogger(__name__)
 
@@ -69,7 +70,7 @@ _PUNCTUATION = str.maketrans("", "", string.punctuation)
 
 
 def folder() -> Path:
-    from ..media import model_catalog                          # noqa: PLC0415
+    from ...media import model_catalog                          # noqa: PLC0415
     return model_catalog.models_root() / model_catalog.MODELS[MODEL]["files"][0]["folder"]
 
 
@@ -81,7 +82,7 @@ PACKAGES = ("onnxruntime", "tokenizers")
 def missing_packages() -> str | None:
     """Why the image engine's packages cannot be used here, or None."""
     import importlib.util                                      # noqa: PLC0415
-    from ..words import said                                   # noqa: PLC0415
+    from ...words import said                                   # noqa: PLC0415
     if any(importlib.util.find_spec(name) is None for name in PACKAGES):
         return said("the image engine is not installed (Search and descriptions without PyTorch, under Extras on the Home & extensions page)")
     return None
@@ -89,8 +90,8 @@ def missing_packages() -> str | None:
 
 def ready() -> str | None:
     """Why search cannot run through ONNX here, or None when it can."""
-    from ..media import model_catalog                          # noqa: PLC0415
-    from ..words import said                                   # noqa: PLC0415
+    from ...media import model_catalog                          # noqa: PLC0415
+    from ...words import said                                   # noqa: PLC0415
     if why := missing_packages():
         return why
     if not model_catalog.installed(MODEL):
@@ -155,36 +156,12 @@ def unit(rows: Any) -> Any:
 # The model, inside the host
 # ---------------------------------------------------------------------------
 
-def _session(path: Path, threads: int, providers: Sequence[Any],
-             fixed: dict[str, int] | None = None) -> Any:
-    """An ONNX Runtime session. *fixed* gives sizes the model leaves open
-    (its input's named dimensions) one value, so an accelerator is handed a
-    model of one shape (runtime/florence.py)."""
-    import onnxruntime                                         # noqa: PLC0415
-    options = onnxruntime.SessionOptions()
-    options.intra_op_num_threads = max(1, int(threads))
-    options.inter_op_num_threads = 1
-    for name, size in (fixed or {}).items():
-        options.add_free_dimension_override_by_name(name, int(size))
-    try:
-        return onnxruntime.InferenceSession(str(path), options, providers=list(providers))
-    except Exception:                                          # noqa: BLE001
-        if list(providers) == ["CPUExecutionProvider"]:
-            raise
-        # An accelerator that cannot take this model fails at load, not
-        # quietly: the processor takes anything.
-        log.warning("%s would not load on %s; using the processor", path.name, providers[0],
-                    exc_info=True)
-        return onnxruntime.InferenceSession(str(path), options,
-                                            providers=["CPUExecutionProvider"])
-
-
 class Siglip:
     """SigLIP 2's two halves, each loaded the first time it is needed."""
 
     def __init__(self, root: Path, threads: int = 2, device: str | None = None,
                  cache: str | None = None) -> None:
-        from .devices import CPU, resolve_image_device          # noqa: PLC0415
+        from ...runtime.devices import CPU, resolve_image_device          # noqa: PLC0415
         self.root = Path(root)
         self.threads = threads
         # The image half is the one measured on Core ML (devices.py); the
@@ -208,7 +185,7 @@ class Siglip:
     @property
     def visual(self) -> Any:
         if self._visual is None:
-            from .devices import coreml_cache, image_providers  # noqa: PLC0415
+            from ...runtime.devices import coreml_cache, image_providers  # noqa: PLC0415
             started = time.monotonic()
             path = self._file("visual/model.onnx")
             self._visual = _session(path, self.threads,
@@ -223,7 +200,7 @@ class Siglip:
         it is loaded: Core ML hands a model it cannot take to the processor."""
         if self._visual is None:
             return None
-        from .devices import device_code                        # noqa: PLC0415
+        from ...runtime.devices import device_code                        # noqa: PLC0415
         return device_code(self._visual.get_providers()[0], self._device)
 
     @property
@@ -279,7 +256,7 @@ class Siglip:
 
 
 def _prompt_key() -> str:
-    from .. import ai                                          # noqa: PLC0415
+    from ... import ai                                          # noqa: PLC0415
     spec = json.dumps([SEARCH_VERSION, ai.FLAT_CONCEPTS, list(ai.TEMPLATES), ai.NSFW_PROMPTS])
     return hashlib.sha256(spec.encode("utf-8")).hexdigest()[:16]
 
@@ -289,7 +266,7 @@ def _prompt_vectors(model: Siglip) -> dict[str, Any]:
     description's, from the file beside the model when it is the one for
     these descriptions; made and written there when it is not."""
     import numpy as np                                         # noqa: PLC0415
-    from .. import ai                                          # noqa: PLC0415
+    from ... import ai                                          # noqa: PLC0415
     kept = model.root / f"prompts-{_prompt_key()}.npz"
     try:
         with np.load(kept) as saved:
@@ -316,7 +293,7 @@ def score(vectors: Any, prompts: dict[str, Any], *, tag_threshold: float,
     """Tags and the explicit-content probability for each photograph's vector,
     as ai.ClipEngine works them out for SigLIP."""
     import numpy as np                                         # noqa: PLC0415
-    from .. import ai                                          # noqa: PLC0415
+    from ... import ai                                          # noqa: PLC0415
     if not len(vectors):
         return []
     sims = vectors @ prompts["concepts"].T

@@ -128,7 +128,7 @@ def test_no_nearer_line_on_clips_scale(nearly, as_family, app):
 # -- People in only their underwear ---------------------------------------------
 
 from ninaivu.media import revealing  # noqa: E402
-from ninaivu.runtime import siglip  # noqa: E402
+from ninaivu.models.search import runner as siglip  # noqa: E402
 
 BARE, SWIM, PLAIN = np.eye(4, dtype="float32")[:3]
 

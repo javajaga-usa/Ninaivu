@@ -11,8 +11,9 @@ from types import SimpleNamespace
 import pytest
 from PIL import Image
 
-from ninaivu.media import (ai_editing, audio_art, date_edit, face_parser, faces,
+from ninaivu.media import (ai_editing, audio_art, date_edit, face_parser,
                            jobs, media, orientnet, stills, stripped_video)
+from ninaivu.models.faces import engine as faces
 
 
 # -- face models that arrive while Ninaivu runs are used without a restart ----
