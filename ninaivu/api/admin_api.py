@@ -2737,6 +2737,33 @@ def scrubber_status():
     return jsonify(summary)
 
 
+@admin_bp.post("/api/admin/scrubber/removed")
+@require_admin
+def scrubber_removed():
+    """The files the storage check could not find were removed on purpose,
+    in Finder or another program: recorded as deleted, as the bin records
+    it, and forgotten, so they are no longer listed as missing and nothing
+    puts them back (storage/on_purpose.py). ``ids``: some of them; left out,
+    all of them."""
+    from ..storage import on_purpose                      # noqa: PLC0415
+    data = json_object()
+    ids = data.get("ids")
+    if ids is not None and (not isinstance(ids, list)
+                            or not all(isinstance(i, int) and not isinstance(i, bool) for i in ids)):
+        return jsonify({"error": "ids must be a list of numbers", "status": 400}), 400
+    cfg = _cfg()
+    conn = _conn()
+    result = on_purpose.mark_removed(conn, ids, roots=cfg.library_roots)
+    for base in result.pop("thumbs"):
+        media.remove_thumbnails(cfg.thumbs_dir, base, cfg.thumb_sizes, cfg.thumb_format)
+    with _scrubber_seen_lock:
+        _scrubber_seen.update(at=0.0, summary=None, issues=None)
+    if result["removed"]:
+        auth.audit(conn, current_user().id, "removed_on_purpose",
+                   f"{result['removed']} not found by the storage check")
+    return jsonify(result)
+
+
 
 # ---------------------------------------------------------------------------
 # Stopping, from outside
@@ -2954,15 +2981,19 @@ def repair_status():
 @admin_bp.post("/api/admin/repair")
 @require_admin
 def repair_start():
-    """Put back what the storage check found damaged or missing, from a copy
-    whose bytes match what the file was."""
+    """Put back what the storage check found damaged, from a copy whose bytes
+    match what the file was; with ``missing``, what it could not find too."""
     data = json_object()
     ids = data.get("ids")
     if ids is not None and (not isinstance(ids, list)
                             or not all(isinstance(i, int) and not isinstance(i, bool) for i in ids)):
         return jsonify({"error": "ids must be a list of numbers", "status": 400}), 400
+    missing = data.get("missing", False)
+    if not isinstance(missing, bool):
+        return jsonify({"error": "missing must be true or false", "status": 400}), 400
     try:
-        status = _repairer().start(ids or None)
+        # Missing ones only when asked: they may have been removed on purpose.
+        status = _repairer().start(ids or None, missing=missing)
     except ValueError as exc:
         return jsonify({"error": str(exc), "status": 409}), 409
     auth.audit(_conn(), current_user().id, "repair", f"{status['waiting']} waiting")

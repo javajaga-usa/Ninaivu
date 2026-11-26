@@ -92,7 +92,7 @@ them; *runtime* ones say how this start was made and are never saved.
 | `offsite_access_key` |  |  | household | The service's access key id (the secret key is kept apart, never here). |
 | `offsite_every_hours` | `24` |  | household | How often the off-site copy is brought up to date, in hours. |
 | `scrub_every_days` | `30` |  | household | How often the storage check reads every file of the library and compares it with its fingerprint, by itself, starting in the small hours (ninaivu/storage/repair.py). 0 leaves it to the button. |
-| `scrub_repair` | `True` |  | expert | Put back what that check finds damaged or missing, from the second copy or Drive — only ever from a copy whose bytes match what the file was. |
+| `scrub_repair` | `True` |  | expert | Put back what that check finds damaged, from the second copy or Drive — only ever from a copy whose bytes match what the file was. Missing files wait for the admin on the Storage check: removed on purpose, or put back (storage/on_purpose.py). |
 | `backup_every_hours` | `24.0` |  | household | The index is the one thing the library itself does not carry: names, albums, visibility, share links, corrected dates. Hours between snapshots; zero turns it off. They land in the state directory unless `backup_dir` says otherwise — put that on another disk if you have one. |
 | `backup_keep` | `7` | `NINAIVU_BACKUP_KEEP` | household | How many dated copies of the index to keep on this computer. |
 | `backup_dir` |  | `NINAIVU_BACKUP_DIR` (wins) | household | Where the copies of the index go; empty means inside the state folder. Not inside a library folder or the second copy. Outside the state folder, the copies leave out the cloud key and the Google sign-in. |

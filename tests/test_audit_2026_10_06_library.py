@@ -198,7 +198,8 @@ def test_repair_does_not_write_into_an_unplugged_library(marked, tmp_path):
         path.unlink()
     admin_api._run_scrubber(cfg.db_path)
     repairer = Repairer(cfg, lambda: db.connect(cfg.db_path), mirror=mirror)
-    repairer.start()
+    # Asked to put the missing ones back (they never are by themselves).
+    repairer.start(missing=True)
     repairer.join(30)
     assert not (root / rel).exists()
     assert repairer.status()["repaired"] == 0
@@ -206,7 +207,7 @@ def test_repair_does_not_write_into_an_unplugged_library(marked, tmp_path):
 
     # And with the drive unplugged entirely, nothing is written either.
     away = _unplug(root)
-    repairer.start()
+    repairer.start(missing=True)
     repairer.join(30)
     assert not any(root.iterdir())
     _plug_back(root, away)

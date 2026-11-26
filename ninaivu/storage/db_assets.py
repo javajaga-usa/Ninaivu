@@ -374,8 +374,8 @@ def delete_missing(conn: sqlite3.Connection, root: str, present: Iterable[str],
     present_set.update(let_go_paths(conn, root))
     within, params = under_folders(under)
     rows = conn.execute(
-        "SELECT id, rel_path, thumb FROM assets WHERE root=?" + within, (root, *params)
-    ).fetchall()
+        "SELECT id, root, rel_path, size, thumb FROM assets WHERE root=?" + within,
+        (root, *params)).fetchall()
     stale = [r for r in rows if r["rel_path"] not in present_set]
     if not stale:
         return []
@@ -405,7 +405,12 @@ def delete_missing(conn: sqlite3.Connection, root: str, present: Iterable[str],
                 f"which looks like a disappearing drive rather than a tidy-up",
                 len(stale), total)
 
+    # Gone from the disk and forgotten here: recorded as removed on purpose,
+    # as emptying the bin records it, so the Secondary's bring-in does not
+    # bring back a photograph somebody removed in Finder (storage/on_purpose.py).
+    from .on_purpose import record_erased                 # noqa: PLC0415
     with _write_lock:
+        record_erased(conn, stale)
         conn.executemany(
             "DELETE FROM assets WHERE id=?", [(r["id"],) for r in stale]
         )

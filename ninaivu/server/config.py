@@ -574,8 +574,10 @@ class Config:
     #: compares it with its fingerprint, by itself, starting in the small
     #: hours (ninaivu/storage/repair.py). 0 leaves it to the button.
     scrub_every_days: int = 30
-    #: Put back what that check finds damaged or missing, from the second copy
-    #: or Drive — only ever from a copy whose bytes match what the file was.
+    #: Put back what that check finds damaged, from the second copy or Drive
+    #: — only ever from a copy whose bytes match what the file was. Missing
+    #: files wait for the admin on the Storage check: removed on purpose, or
+    #: put back (storage/on_purpose.py).
     scrub_repair: bool = True
 
     # --- Location privacy (ninaivu/utils/location.py) -------------------------

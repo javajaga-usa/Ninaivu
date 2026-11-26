@@ -80,17 +80,10 @@ def _same(path: Path, size: int, algo: str, digest: str) -> bool:
 
 
 def _deleted_here(conn: sqlite3.Connection | None, root: str, rel: str, size: int) -> bool:
-    """Whether somebody here deleted or erased the photograph at *rel*."""
-    if conn is None:
-        return False
-    try:
-        if conn.execute("SELECT 1 FROM recycled WHERE root = ? AND rel_path = ? "
-                        "AND restored_at IS NULL LIMIT 1", (root, rel)).fetchone():
-            return True
-        return conn.execute("SELECT 1 FROM erased WHERE root = ? AND rel_path = ? AND size = ? "
-                            "LIMIT 1", (root, rel, size)).fetchone() is not None
-    except sqlite3.Error:
-        return False
+    """Whether somebody here deleted or erased the photograph at *rel*, in
+    Ninaivu or outside it (storage/on_purpose.py)."""
+    from ..storage.on_purpose import deleted_on_purpose  # noqa: PLC0415
+    return deleted_on_purpose(conn, root, rel, size)
 
 
 class BringIn:
