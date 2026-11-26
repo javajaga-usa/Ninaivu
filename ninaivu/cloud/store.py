@@ -723,8 +723,10 @@ def _whole_file_same(row: dict[str, Any], path: Path) -> tuple[bool | None, str]
     Against the recorded SHA-256 of the file itself; for a plain upload made
     before that was kept, the digest or Drive's MD5 of what was sent, which
     are of the same bytes. An encrypted upload from before then has nothing
-    to compare the middle with: the sampled answer stands, as it did, and
-    the digest taken now is kept, so any later edit is caught.
+    to compare the middle with, so it counts as changed and goes up again,
+    which records the digest it lacked. Taking the file as it is now for the
+    one that was sent, as this used to, made an edit made before the first
+    comparison the "backed-up" version for good (audit R2, 26 Nov).
     """
     import hashlib                                           # noqa: PLC0415
 
@@ -744,7 +746,7 @@ def _whole_file_same(row: dict[str, Any], path: Path) -> tuple[bool | None, str]
         return whole == row["digest"], whole
     if plain and row.get("md5"):
         return md5.hexdigest() == row["md5"], whole
-    return True, whole
+    return False, ""
 
 
 def _queue_pairs(conn: sqlite3.Connection, pairs: Iterable[tuple[dict[str, Any], Any]],

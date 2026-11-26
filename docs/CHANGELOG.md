@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- **Fixes from the external audit of 26 November 2026.**
+  - **An encrypted restore no longer calls a photograph damaged in the middle "already there" (R1).** A file on disk with the backed-up size, timestamp and both ends was taken as intact. It is now checked whole against the original's own SHA-256 (recorded with each upload since 5.2); for an older encrypted upload, which has none, the backup is fetched, decrypted and compared, and the good copy is put beside the damaged one.
+  - **An older encrypted upload whose file changed is sent again (R2).** With nothing recorded to compare the middle with, the cloud backup took the file as it is now for the one that was sent. It now goes up again, which records its digest. A file whose size and timestamp both stay the same is still not read on every pass; the monthly scrub is what finds silent damage.
+  - **A Debian first start killed at the wrong moment no longer blocks every later one (R3).** Starts take turns under `flock`, which the system lets go of when a start dies; without `flock`, an empty lock a minute old is taken as left behind.
+  - **On a drive without hard links, a restored or imported file never shows under its name half-written (R4).** The copy is written and synced under a hidden name first and only then takes its real name. What a copy cut off by a crash leaves is cleared by the next one.
+  - **A phone backup is not called safe when its folder could not be synced (R5).** A folder sync that fails with an I/O error now fails the backup, and the phone keeps its copy to send again. A drive that cannot sync folders at all still works.
+  - **The dependency audit checks the versions the release ships (R6).** It installed whatever was newest; it now installs under `requirements/constraints-tested.txt`, as the release builds do.
+  - Not changed here: the audited Mac's `.venv` has older packages than the tested pins and an installed Ninaivu of 4.3.0 (recreate it); socket, Tk and FSEvents test failures there are the audit machine's sandbox.
+
 ## 5.2.0 — 26 November 2026
 
 - **Fixes from the external audit of 25 November 2026.**
