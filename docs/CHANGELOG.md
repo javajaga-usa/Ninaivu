@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 5.2.0 — 26 November 2026
 
 - **Quicker pages on a big library.** Timed on a real library of 216,000 photographs on the Mac. The face review queue (**People**, someone's suggestions) is kept until a face, a group or a rejection changes, where before every open read every unnamed face (about a second). Which face recogniser made most of the faces is counted from a narrow index (`idx_faces_model`) instead of every face's row, and the duplicates review no longer copies every group on each ask. Pages that stay over a second the first time (Then and now, Young faces, Segments) are one cached piece of work each and are next.
 - **Download all also installs the Extras.** On the AI models page, **Download all** now brings in the Home & extensions packages that are missing (one after another), then the models they unblock. The PyTorch image engine is left out, and so is `transformers` unless Letters read aloud is on.
