@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **A photograph removed on purpose is no longer listed as missing, and nothing brings it back.** Deleting in Ninaivu already left a record; removing a file in Finder or another program left none, so the storage check called it missing, the automatic repair put it back from the second copy or Drive, and the Secondary could bring it in again. Now:
+  - The automatic repair still fixes damaged files but never puts back a missing one by itself.
+  - The Storage check offers, for files it could not find, **I removed them on purpose** (one at a time, or all) and **Put back from a copy**. Removed on purpose, a file is recorded as deleted, as emptying the bin records it, and leaves the index. A file whose drive is away, or that is back at its place, is not taken.
+  - A scan that finds a file gone and forgets it records it the same way, so the Secondary's bring-in leaves it where it is.
+  - Every place that could put a photograph back asks the same question first (`storage/on_purpose.py`). The second copy keeps its own copy, untouched.
 - **Fixes from the external audit of 26 November 2026.**
   - **An encrypted restore no longer calls a photograph damaged in the middle "already there" (R1).** A file on disk with the backed-up size, timestamp and both ends was taken as intact. It is now checked whole against the original's own SHA-256 (recorded with each upload since 5.2); for an older encrypted upload, which has none, the backup is fetched, decrypted and compared, and the good copy is put beside the damaged one.
   - **An older encrypted upload whose file changed is sent again (R2).** With nothing recorded to compare the middle with, the cloud backup took the file as it is now for the one that was sent. It now goes up again, which records its digest. A file whose size and timestamp both stay the same is still not read on every pass; the monthly scrub is what finds silent damage.

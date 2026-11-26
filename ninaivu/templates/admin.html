@@ -1830,9 +1830,21 @@
       </div>
       <div class="ar-table-wrap u-d6f2af" id="scrubber-issues-wrap"  hidden>
         <table class="ar-table">
-          <thead><tr><th data-i18n="Asset Path">Asset Path</th><th data-i18n="Status">Status</th><th data-i18n="Checked">Checked</th></tr></thead>
+          <thead><tr><th data-i18n="Asset Path">Asset Path</th><th data-i18n="Status">Status</th><th data-i18n="Checked">Checked</th><th></th></tr></thead>
           <tbody id="scrubber-issues-tbody"></tbody>
         </table>
+      </div>
+      <!-- Files the check could not find. Removed on purpose in Finder reads
+           exactly like lost, so the admin says which (storage/on_purpose.py);
+           nothing puts them back by itself. -->
+      <div class="u-d6f2af" id="scrubber-gone" hidden>
+        <p class="hint" data-i18n="If you removed these files yourself, in Finder or another program, say so: they stop being listed as missing and are never put back. If you did not, put them back from the second copy or Google Drive.">If you removed these files yourself, in Finder or another program, say so:
+          they stop being listed as missing and are never put back. If you did not,
+          put them back from the second copy or Google Drive.</p>
+        <div class="row">
+          <button class="btn ghost" id="scrubber-gone-removed" data-i18n="I removed them on purpose">I removed them on purpose</button>
+          <button class="btn ghost" id="scrubber-gone-put-back" data-i18n="Put back from a copy">Put back from a copy</button>
+        </div>
       </div>
     </div>
 

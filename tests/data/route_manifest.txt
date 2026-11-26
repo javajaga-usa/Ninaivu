@@ -135,6 +135,7 @@ admin | POST                 | /api/admin/reveal/<int:asset_id> | admin | writes
 admin | GET                  | /api/admin/safety | admin | reads | - | server.safety_report | -
 admin | GET                  | /api/admin/screening | admin | reads | - | api_admin.screening_queue | screening
 admin | POST                 | /api/admin/screening/decide | admin | writes | same origin | api_admin.screening_decide | screening
+admin | POST                 | /api/admin/scrubber/removed | admin | writes | same origin | admin.scrubber_removed | -
 admin | POST                 | /api/admin/scrubber/start | admin | writes | same origin | admin.start_scrubber | -
 admin | GET                  | /api/admin/scrubber/status | admin | reads | - | admin.scrubber_status | -
 admin | POST                 | /api/admin/scrubber/stop | admin | writes | same origin | admin.stop_scrubber_route | -
