@@ -33,6 +33,15 @@ class PageClient(FlaskClient):
 Flask.test_client_class = PageClient
 
 
+# Passwords in tests are hashed at the old, lighter profile (p=1): some two
+# thousand tests make three profiles each, and at the real one (p=5, audit
+# F7) that alone added minutes to a run. tests/test_audit_2026_11_25.py puts
+# the real profile back for the tests of hashing itself.
+from ninaivu.server import auth as _auth  # noqa: E402
+
+_auth._SCRYPT = dict(_auth.PASSWORD_PROFILE, p=1)
+
+
 def _real_models_root() -> Path:
     from ninaivu.media import model_catalog
     return model_catalog.models_root()

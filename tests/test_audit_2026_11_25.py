@@ -327,3 +327,94 @@ def test_a_sync_that_fails_does_not_call_the_backup_safe(app, people, monkeypatc
     done = back_up(login(app.test_client(), *FAMILY), "IMG_0002.png", photo())
     assert done["state"] == phone_backup.FAILED
     assert done["state"] not in phone_backup.SAFE
+
+
+# -- F7: password hashes at OWASP's profile, older ones remade on sign-in -------
+
+from ninaivu.server import auth  # noqa: E402
+
+OLD_PROFILE = dict(n=2 ** 14, r=8, p=1, dklen=32)
+
+
+@pytest.fixture()
+def real_profile(monkeypatch):
+    monkeypatch.setattr(auth, "_SCRYPT", dict(auth.PASSWORD_PROFILE))
+
+
+def _old_hash(secret):
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(auth, "_SCRYPT", dict(OLD_PROFILE))
+    try:
+        return auth.hash_password(secret)
+    finally:
+        monkeypatch.undo()
+
+
+def test_the_profile_is_one_owasp_lists():
+    profile = auth.PASSWORD_PROFILE
+    assert (profile["n"], profile["r"], profile["p"]) in {(2 ** 17, 8, 1), (2 ** 14, 8, 5)}
+
+
+@pytest.mark.parametrize("backend", ["hashlib", "cryptography"])
+def test_new_hashes_use_it_and_old_ones_still_verify(real_profile, monkeypatch, backend):
+    import hashlib
+    if backend == "cryptography":
+        pytest.importorskip("cryptography")
+        monkeypatch.delattr(hashlib, "scrypt", raising=False)
+    stored = auth.hash_password("correct horse")
+    assert stored.split("$")[1:4] == ["16384", "8", "5"]
+    assert auth.verify_password("correct horse", stored)
+    assert not auth.verify_password("wrong horse", stored)
+    assert not auth.needs_rehash(stored)
+    old = _old_hash("correct horse")
+    assert auth.verify_password("correct horse", old)
+    assert auth.needs_rehash(old)
+
+
+def test_a_stored_hash_cannot_ask_for_unbounded_memory(real_profile):
+    huge = "scrypt$1073741824$8$1$" + "00" * 16 + "$" + "00" * 32
+    odd = "scrypt$1000$8$1$" + "00" * 16 + "$" + "00" * 32
+    assert not auth.verify_password("x", huge) and not auth.verify_password("x", odd)
+    assert not auth.needs_rehash(huge)
+
+
+def test_more_memory_than_hashlibs_default_still_verifies(real_profile):
+    """N=2^17 takes 128 MiB, four times hashlib's 32 MiB default: without an
+    explicit allowance it failed, and the sign-in with it."""
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(auth, "_SCRYPT", dict(n=2 ** 17, r=8, p=1, dklen=32))
+    try:
+        stored = auth.hash_password("big memory")
+    finally:
+        monkeypatch.undo()
+    assert auth.verify_password("big memory", stored)
+    assert not auth.needs_rehash(stored), "an equally strong hash is left alone"
+
+
+def test_signing_in_remakes_an_older_hash(real_profile, scanned):
+    _, conn, _ = scanned
+    admin = auth.bootstrap_admin(conn, "dad", "a good long password", "Dad")
+    old = _old_hash("a good long password")
+    conn.execute("UPDATE users SET password=? WHERE id=?", (old, admin.id))
+    conn.commit()
+
+    assert auth.authenticate(conn, "dad", "wrong password entirely") is None
+    assert conn.execute("SELECT password FROM users WHERE id=?",
+                        (admin.id,)).fetchone()[0] == old, "a failed sign-in changed it"
+
+    assert auth.authenticate(conn, "dad", "a good long password") is not None
+    new = conn.execute("SELECT password FROM users WHERE id=?", (admin.id,)).fetchone()[0]
+    assert new != old and new.split("$")[3] == "5"
+    assert auth.authenticate(conn, "dad", "a good long password") is not None
+
+
+def test_a_pin_is_remade_too(real_profile, scanned):
+    _, conn, _ = scanned
+    admin = auth.bootstrap_admin(conn, "dad", "a good long password", "Dad")
+    kid = auth.create_user(conn, "kid", None, display_name="Kid",
+                           role=auth.ROLE_FAMILY, created_by=admin.id)
+    conn.execute("UPDATE users SET pin=? WHERE id=?", (_old_hash("2468"), kid.id))
+    conn.commit()
+    assert auth.verify_pin(conn, kid.id, "2468")
+    assert conn.execute("SELECT pin FROM users WHERE id=?",
+                        (kid.id,)).fetchone()[0].split("$")[3] == "5"

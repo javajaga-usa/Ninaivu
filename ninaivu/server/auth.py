@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import logging
 import os
 import re
 import secrets
@@ -267,33 +268,99 @@ def init_auth_schema(conn: sqlite3.Connection) -> None:
 # Password hashing
 # ---------------------------------------------------------------------------
 
-_SCRYPT = dict(n=2 ** 14, r=8, p=1, dklen=32)
+#: How new passwords and PINs are hashed. OWASP's scrypt profile at the
+#: memory the earlier one used (16 MiB), with five times the work: N=2^14,
+#: r=8, p=5 (audit F7). The memory is unchanged, so neither hashlib's 32 MiB
+#: default allowance nor a Pi with little free memory turns a sign-in away;
+#: the extra cost is time, about 0.2 s on a Mac and under a second on a Pi 4,
+#: and the server's connection limit bounds how many run at once. Hashes
+#: made before keep working and are remade at this profile when they next
+#: sign someone in.
+PASSWORD_PROFILE = dict(n=2 ** 14, r=8, p=5, dklen=32)
+_SCRYPT = dict(PASSWORD_PROFILE)
+
+#: The most a stored hash may ask for. A row edited to N=2^30 would make
+#: every sign-in try to take gigabytes; it is refused instead.
+_MAX_N, _MAX_R, _MAX_P = 2 ** 20, 32, 16
+
+
+def _scrypt_memory(n: int, r: int, p: int) -> int:
+    """What OpenSSL needs for these parameters, with room to spare: hashlib
+    refuses anything over 32 MiB unless told otherwise."""
+    return 128 * r * (n + 2) + 128 * r * p + (1 << 20)
 
 
 def hash_password(password: str) -> str:
     """``scrypt$n$r$p$salt$hash`` — self-describing, so parameters can change."""
     salt = secrets.token_bytes(16)
-    digest = kdf.scrypt(password.encode("utf-8"), salt=salt, **_SCRYPT)
+    profile = _SCRYPT
+    digest = kdf.scrypt(password.encode("utf-8"), salt=salt,
+                        maxmem=_scrypt_memory(profile["n"], profile["r"], profile["p"]),
+                        **profile)
     return "scrypt${n}${r}${p}${salt}${hash}".format(
-        n=_SCRYPT["n"], r=_SCRYPT["r"], p=_SCRYPT["p"],
+        n=profile["n"], r=profile["r"], p=profile["p"],
         salt=salt.hex(), hash=digest.hex(),
     )
+
+
+def _parameters(stored: str) -> tuple[int, int, int, str, str] | None:
+    try:
+        scheme, n, r, p, salt, expected = stored.split("$")
+        n_, r_, p_ = int(n), int(r), int(p)
+    except (ValueError, TypeError, AttributeError):
+        return None
+    if scheme != "scrypt":
+        return None
+    if not (1 < n_ <= _MAX_N and n_ & (n_ - 1) == 0 and 0 < r_ <= _MAX_R
+            and 0 < p_ <= _MAX_P):
+        return None
+    return n_, r_, p_, salt, expected
 
 
 def verify_password(password: str, stored: str | None) -> bool:
     if not stored or not password:
         return False
+    found = _parameters(stored)
+    if found is None:
+        return False
+    n, r, p, salt, expected = found
     try:
-        scheme, n, r, p, salt, expected = stored.split("$")
-        if scheme != "scrypt":
-            return False
         digest = kdf.scrypt(
             password.encode("utf-8"), salt=bytes.fromhex(salt),
-            n=int(n), r=int(r), p=int(p), dklen=len(expected) // 2,
+            n=n, r=r, p=p, dklen=len(expected) // 2,
+            maxmem=_scrypt_memory(n, r, p),
         )
         return hmac.compare_digest(digest.hex(), expected)
-    except (ValueError, TypeError):
+    except (ValueError, TypeError, MemoryError):
         return False
+
+
+def needs_rehash(stored: str | None) -> bool:
+    """Whether *stored* was made with less work than new hashes get."""
+    found = _parameters(stored or "")
+    if found is None:
+        return False
+    n, r, p, _, expected = found
+    weaker = n * r * p < _SCRYPT["n"] * _SCRYPT["r"] * _SCRYPT["p"]
+    return weaker or len(expected) // 2 < _SCRYPT["dklen"]
+
+
+def _verify_and_upgrade(conn: sqlite3.Connection, user_id: int, column: str,
+                        secret: str, stored: str | None) -> bool:
+    """:func:`verify_password`, and when it matches a hash made at an older,
+    weaker profile, store one made at today's. Only if the row still holds
+    the hash just checked, so a password changed meanwhile is not undone."""
+    if not verify_password(secret, stored):
+        return False
+    if needs_rehash(stored):
+        assert column in ("password", "pin")
+        try:
+            conn.execute(f"UPDATE users SET {column}=? WHERE id=? AND {column}=?",  # noqa: S608
+                         (hash_password(secret), int(user_id), stored))
+            conn.commit()
+        except sqlite3.Error:
+            logging.getLogger(__name__).warning("could not update an older password hash", exc_info=True)
+    return True
 
 
 def password_problem(password: str) -> str | None:
@@ -911,7 +978,7 @@ def help_asked_at(conn: sqlite3.Connection, user_id: int) -> float | None:
 
 def verify_pin(conn: sqlite3.Connection, user_id: int, pin: str) -> bool:
     row = conn.execute("SELECT pin FROM users WHERE id=?", (user_id,)).fetchone()
-    return bool(row) and verify_password(pin, row["pin"])
+    return bool(row) and _verify_and_upgrade(conn, user_id, "pin", pin, row["pin"])
 
 
 def enter_profile(conn: sqlite3.Connection, user_id: int,
@@ -933,7 +1000,7 @@ def enter_profile(conn: sqlite3.Connection, user_id: int,
     if user.role == ROLE_ADMIN:
         row = conn.execute(
             "SELECT password FROM users WHERE id=?", (user_id,)).fetchone()
-        if not verify_password(secret, row["password"]):
+        if not _verify_and_upgrade(conn, user_id, "password", secret, row["password"]):
             return None
     elif user.has_pin:
         if not verify_pin(conn, user_id, secret):
@@ -941,7 +1008,7 @@ def enter_profile(conn: sqlite3.Connection, user_id: int,
     elif user.has_password:
         row = conn.execute(
             "SELECT password FROM users WHERE id=?", (user_id,)).fetchone()
-        if not verify_password(secret, row["password"]):
+        if not _verify_and_upgrade(conn, user_id, "password", secret, row["password"]):
             return None
 
     conn.execute("UPDATE users SET last_login=? WHERE id=?", (time.time(), user_id))
@@ -980,7 +1047,7 @@ def reauthenticate(conn: sqlite3.Connection, user_id: int, password: str) -> boo
                        (int(user_id),)).fetchone()
     if row is None:
         return False
-    return verify_password(password, row["password"])
+    return _verify_and_upgrade(conn, user_id, "password", password, row["password"])
 
 
 _DECOY_HASH: str | None = None
@@ -1006,9 +1073,10 @@ def authenticate(conn: sqlite3.Connection, username: str, password: str) -> User
         # the time taken said which names exist and which have a password.
         verify_password(password or "-", _decoy_hash())
         return None
-    if not verify_password(password, stored):
-        return None
     if not user.active:
+        verify_password(password, stored)                  # the same time taken
+        return None
+    if not _verify_and_upgrade(conn, user.id, "password", password, stored):
         return None
     conn.execute("UPDATE users SET last_login=? WHERE id=?", (time.time(), user.id))
     conn.commit()
@@ -1208,7 +1276,8 @@ def verify_unlock(conn: sqlite3.Connection, user: User, secret: str) -> bool:
         return verify_pin(conn, user.id, secret)
     row = conn.execute("SELECT password FROM users WHERE id=? AND active=1",
                        (user.id,)).fetchone()
-    return bool(row) and verify_password(secret, row["password"])
+    return bool(row) and _verify_and_upgrade(conn, user.id, "password", secret,
+                                             row["password"])
 
 
 def session_face(conn: sqlite3.Connection, token: str) -> str | None:
