@@ -153,3 +153,122 @@ def test_a_date_change_without_hard_links_never_replaces_a_file_made_meanwhile(
     with pytest.raises(FileExistsError):
         date_edit._move(source, target)
     assert target.read_bytes() == b"NEW ORIGINAL" and source.read_bytes() == b"MOVED"
+
+
+# -- F2: the Debian launcher's first start -------------------------------------
+
+import shutil  # noqa: E402
+import subprocess  # noqa: E402
+import sys  # noqa: E402
+import time  # noqa: E402
+from pathlib import Path  # noqa: E402
+
+ROOT = Path(__file__).resolve().parents[1]
+posix_only = pytest.mark.skipif(sys.platform == "win32", reason="POSIX package launcher")
+
+#: A stand-in for the package's private Python whose venv shows bin/python3
+#: early and finishes later, as CPython's does: first a bare venv without pip
+#: or system site-packages, then a pause, then the real one.
+SLOW_VENV = """#!/bin/sh
+if [ "$1" = "-m" ] && [ "$2" = "venv" ]; then
+    for last; do :; done
+    "{real}" -m venv --without-pip "$last"
+    : > "{started}"
+    sleep 3
+fi
+exec "{real}" "$@"
+"""
+
+
+def _installed(tmp_path, *, slow=False):
+    app = tmp_path / "installed/app"
+    (app / "python/bin").mkdir(parents=True)
+    if slow:
+        wrapper = app / "python/bin/python3"
+        wrapper.write_text(SLOW_VENV.format(real=sys.executable,
+                                            started=tmp_path / "started"))
+        wrapper.chmod(0o755)
+    else:
+        (app / "python/bin/python3").symlink_to(sys.executable)
+    shutil.copyfile(ROOT / "installers/linux/debian/ninaivu.sh", app / "ninaivu.sh")
+    home = tmp_path / "home"
+    home.mkdir()
+    env = {k: v for k, v in os.environ.items() if not k.startswith("NINAIVU_")}
+    env.update(HOME=str(home))
+    return app, home / ".ninaivu", env
+
+
+def _where(app, env, **kwargs):
+    return subprocess.run(["sh", str(app / "ninaivu.sh"), "--where"], env=env,
+                          capture_output=True, text=True, timeout=180, **kwargs)
+
+
+def _sound(state):
+    runtime = state / "runtime"
+    assert "include-system-site-packages = true" in (runtime / "pyvenv.cfg").read_text()
+    assert (runtime / ".ninaivu-ready").exists()
+    subprocess.check_call([str(runtime / "bin/python3"), "-c", "import pip"], timeout=60)
+
+
+@posix_only
+def test_two_first_starts_take_turns(tmp_path):
+    app, state, env = _installed(tmp_path, slow=True)
+    first = subprocess.Popen(["sh", str(app / "ninaivu.sh"), "--where"], env=env,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    deadline = time.monotonic() + 60
+    while not (tmp_path / "started").exists():
+        assert time.monotonic() < deadline and first.poll() is None, first.stderr.read()
+        time.sleep(0.05)
+    assert (state / "runtime/bin/python3").exists(), "the half-made venv is showing"
+    second = _where(app, env)
+    # Before the fix the second start saw bin/python3 and went on at once.
+    assert first.poll() is not None, "the second start did not wait for the first"
+    assert first.wait(60) == 0 and second.returncode == 0, second.stderr
+    _sound(state)
+
+
+@posix_only
+def test_a_start_interrupted_before_the_venv_was_finished_is_repaired(tmp_path):
+    app, state, env = _installed(tmp_path)
+    runtime = state / "runtime"
+    state.mkdir()
+    # What CPython leaves when it is killed while setting up pip: the
+    # interpreter is there, system site-packages are not switched on yet.
+    subprocess.check_call([sys.executable, "-m", "venv", "--without-pip", str(runtime)])
+    assert "include-system-site-packages = false" in (runtime / "pyvenv.cfg").read_text()
+    assert _where(app, env).returncode == 0
+    _sound(state)
+
+
+@posix_only
+def test_a_missing_pip_and_a_stale_marker_are_repaired_keeping_extras(tmp_path):
+    app, state, env = _installed(tmp_path)
+    assert _where(app, env).returncode == 0
+    runtime = state / "runtime"
+    extra = runtime / "keep-extra"
+    extra.touch()
+    for pip in runtime.glob("lib/python*/site-packages/pip"):
+        shutil.rmtree(pip)
+    assert _where(app, env).returncode == 0
+    _sound(state)
+    assert extra.exists(), "repairing threw away Extras"
+
+    # A marker from another Python (the package moved to a new minor version).
+    (runtime / ".ninaivu-ready").write_text(f"3.0 {app}\n")
+    assert _where(app, env).returncode == 0
+    minor = "%d.%d" % sys.version_info[:2]
+    assert (runtime / ".ninaivu-ready").read_text().split()[0] == minor
+    assert extra.exists()
+
+
+@posix_only
+def test_a_lock_left_by_a_killed_start_does_not_block_the_next(tmp_path):
+    app, state, env = _installed(tmp_path)
+    dead = subprocess.Popen(["true"])
+    dead.wait()
+    lock = state / "runtime.lock"
+    lock.mkdir(parents=True)
+    (lock / "pid").write_text(str(dead.pid))
+    assert _where(app, env).returncode == 0
+    _sound(state)
+    assert not lock.exists()
