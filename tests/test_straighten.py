@@ -796,3 +796,27 @@ def test_an_unreadable_photograph_does_not_start_the_automatic_survey_again(
     # Somebody starting it on the Straighten page reads it again.
     job.survey([cfg.active_root]); _run(job)
     assert len(reads) == 2
+
+
+def test_only_new_photos_asks_for_the_last_thirty_days(app, as_admin):
+    """The Straighten page's "Only new photos" button: what was added lately,
+    not the whole library first, and never forgetting what was seen."""
+    import time as _time
+    from ninaivu.api import api_straighten
+
+    asked = {}
+
+    class Stub:
+        def survey(self, roots, **kwargs):
+            asked.update(kwargs)
+            return True
+
+    app.config["MV_STRAIGHTEN"] = Stub()
+    assert as_admin.post("/api/straighten/survey",
+                         json={"new_only": True, "rescan": True}).status_code == 200
+    assert asked["rescan"] is False
+    days = (_time.time() - asked["added_since"]) / 86400
+    assert abs(days - api_straighten.NEW_DAYS) < 0.01
+    asked.clear()
+    as_admin.post("/api/straighten/survey", json={})
+    assert asked["added_since"] is None

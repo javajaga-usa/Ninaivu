@@ -7,6 +7,7 @@ from __future__ import annotations
 from ..words import refusal
 
 import math
+import time
 
 from flask import abort, current_app, jsonify, request
 from ..server import auth
@@ -28,6 +29,10 @@ from .api import admin_only, _cfg, _conn, _id_list, _int_arg, _recipe, _roots
 # Console only, and for the same reason the library controls are: this rewrites
 # thumbnails across the whole library. The family app has no business offering
 # it, and on port 5000 these paths do not exist at all.
+
+
+#: What "Only new photos" counts as new: added to the library this many days ago or since.
+NEW_DAYS = 30
 
 
 def _straightener():
@@ -92,10 +97,15 @@ def straighten_model():
 @require_admin
 def straighten_survey():
     data = json_object()
+    # "Only new photos": the ones added to the library over the last
+    # NEW_DAYS, not yet looked at, without going through the whole library
+    # first. Never with a rescan, which forgets what every photograph showed.
+    new_only = bool(data.get("new_only"))
     started = _straightener().survey(
         _roots(),
         limit=_int_arg("limit") or None,
-        rescan=bool(data.get("rescan")),
+        rescan=bool(data.get("rescan")) and not new_only,
+        added_since=(time.time() - NEW_DAYS * 86400) if new_only else None,
     )
     if not started:
         return jsonify({"error": "A straightening pass is already running."}), 409

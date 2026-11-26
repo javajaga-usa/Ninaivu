@@ -308,6 +308,10 @@ class Straightener:
         self._forget = False
         #: Whether the run going now looks beside the scan instead of holding it.
         self._beside = False
+        #: Photographs added after this are what the next scan brought in:
+        #: the survey after that scan looks at them straight away, even while
+        #: the rest waits for the daily catch-up. Moved on at every scan.
+        self._new_since = time.time()
 
     # -- the second witness ------------------------------------------------
 
@@ -431,7 +435,7 @@ class Straightener:
     def survey(self, roots: list[str], *, limit: int | None = None,
                rescan: bool = False, auto_apply: bool = False,
                since: float | None = None, queued: int | None = None,
-               governed: bool = False) -> bool:
+               governed: bool = False, added_since: float | None = None) -> bool:
         """Ask the model about every candidate it has not seen. On its own it
         changes nothing on disk. *rescan* forgets what it has seen and
         proposed. *auto_apply* then turns what this run found, as one batch:
@@ -439,8 +443,11 @@ class Straightener:
         carrying on after a restart: when the run began, so what it proposed
         before the restart is turned with the rest. *queued* is the count of
         Stops when it was queued (see ``_stops``). *governed*: an automatic
-        survey, which makes way when the daily catch-up says to (``_hold``)."""
-        return self._start(lambda: self._survey(roots, limit, rescan, auto_apply, since),
+        survey, which makes way when the daily catch-up says to (``_hold``).
+        *added_since*: only photographs added to the library at or after
+        that moment (``assets.added_at``) — the new ones."""
+        return self._start(lambda: self._survey(roots, limit, rescan, auto_apply, since,
+                                                added_since),
                            "ninaivu-straighten-survey", may_run_beside=True,
                            queued=queued, governed=governed)
 
@@ -457,9 +464,18 @@ class Straightener:
 
         if not getattr(self.cfg, "straighten_auto", True):
             return False
+        # What this scan brought in: everything added since the last scan.
+        new_since, self._new_since = self._new_since, time.time()
+        added_since: float | None = None
+        governed = True
         if self._hold is not None and self._hold():
-            # Kept for the daily catch-up, which starts it in its stretch.
-            return False
+            # The rest of the library is kept for the daily catch-up, which
+            # starts it in its stretch. What was just imported or backed up
+            # is not: it used to wait for the night too (and, on a Mac that
+            # is not idle then, for days), so photographs somebody had only
+            # just brought in stayed sideways. A few new ones are quick, and
+            # somebody is waiting to see them; they are looked at now.
+            added_since, governed = new_since, False
         if not orientnet.available():
             return False
         if (getattr(self.cfg, "straighten_requires_face", True)
@@ -468,7 +484,7 @@ class Straightener:
         conn = db.connect(self.cfg.db_path)
         init_schema(conn)
         if not self._candidates(conn, roots, limit=len(self.unreadable) + 1,
-                                skip_unreadable=True):
+                                skip_unreadable=True, added_since=added_since):
             return False
         if self._scan_alive():
             # Called as the scan says "done" — from inside it, while its thread
@@ -482,10 +498,13 @@ class Straightener:
                 queued = self._stops
                 self._cancel_wait.clear()
             threading.Thread(target=self._survey_when_scan_ends,
-                             args=(list(roots),), kwargs={"queued": queued},
+                             args=(list(roots),),
+                             kwargs={"queued": queued, "governed": governed,
+                                     "added_since": added_since},
                              name="ninaivu-straighten-wait", daemon=True).start()
             return True
-        return self.survey(roots, auto_apply=self._auto_apply, governed=True)
+        return self.survey(roots, auto_apply=self._auto_apply, governed=governed,
+                           added_since=added_since)
 
     @property
     def _auto_apply(self) -> bool:
@@ -502,7 +521,8 @@ class Straightener:
         return bool(thread is not None and thread.is_alive())
 
     def _survey_when_scan_ends(self, roots: list[str], patience: float = 6 * 3600,
-                               queued: int | None = None) -> None:
+                               queued: int | None = None, governed: bool = True,
+                               added_since: float | None = None) -> None:
         # Counted on the monotonic clock: a clock stepped at boot (a Pi with
         # no battery setting its time from the network) moved the deadline.
         deadline = time.monotonic() + patience
@@ -515,18 +535,25 @@ class Straightener:
                     return                       # stopped by somebody, or shutting down
             if not self._scan_alive():
                 self.survey(roots, auto_apply=self._auto_apply, queued=queued,
-                            governed=True)
+                            governed=governed, added_since=added_since)
         finally:
             with self._lock:
                 self._waiting = False
 
     def _candidates(self, conn, roots: list[str], limit: int | None = None,
-                    skip_unreadable: bool = False) -> list:
+                    skip_unreadable: bool = False,
+                    added_since: float | None = None) -> list:
         if not roots:
             return []
         placeholders = ",".join("?" * len(roots))
         sql = _CANDIDATES.format(roots=placeholders)
         args: list[Any] = [*roots]
+        if added_since is not None:
+            # Before an older library had added_at, it was filled in from
+            # indexed_at (db.py), so a missing one counts as when it was read.
+            sql = sql.replace("ORDER BY id",
+                              "AND COALESCE(added_at, indexed_at) >= ? ORDER BY id")
+            args.append(float(added_since))
         if limit:
             sql += " LIMIT ?"
             args.append(limit)
@@ -542,7 +569,8 @@ class Straightener:
         return int(conn.execute(sql, roots).fetchone()[0])
 
     def _survey(self, roots: list[str], limit: int | None, rescan: bool,
-                auto_apply: bool = False, since: float | None = None) -> None:
+                auto_apply: bool = False, since: float | None = None,
+                added_since: float | None = None) -> None:
         self.progress.reset("surveying")
         began = since or time.time()
         self.progress._set(started_at=time.time(), phase="Looking at photographs")
@@ -550,12 +578,13 @@ class Straightener:
         init_schema(conn)
         # Carried on after a restart without `rescan`: what this run already
         # proposed is kept, and a second rescan would throw it away.
-        resume.want(conn, RESUME_NAME, {"job": "survey", "limit": limit,
-                                        "auto_apply": auto_apply, "since": began,
-                                        "governed": self._governed})
+        record = {"job": "survey", "limit": limit, "auto_apply": auto_apply,
+                  "since": began, "governed": self._governed}
+        narrowed = {} if added_since is None else {"added_since": added_since}
+        resume.want(conn, RESUME_NAME, {**record, **narrowed})
         failed = False
         try:
-            self._survey_all(conn, roots, limit, rescan, began)
+            self._survey_all(conn, roots, limit, rescan, began, **narrowed)
             if auto_apply and self._beside and self._scanner is not None:
                 # Looked beside the scan; turning changes the index, so the
                 # scan stands aside for that part as it always did.
@@ -580,7 +609,8 @@ class Straightener:
         return True
 
     def _survey_all(self, conn, roots: list[str], limit: int | None,
-                    rescan: bool, began: float | None = None) -> None:
+                    rescan: bool, began: float | None = None,
+                    added_since: float | None = None) -> None:
         from . import orientnet
 
         if not orientnet.available():
@@ -610,12 +640,14 @@ class Straightener:
             conn.execute("DELETE FROM orientation_seen")
             conn.commit()
 
-        rows = self._candidates(conn, roots, limit, skip_unreadable=self._governed)
+        rows = self._candidates(conn, roots, limit, skip_unreadable=self._governed,
+                                added_since=added_since)
         # Counted from the whole library, not from what is left. After a
         # restart the survey carries on from what it had looked at, but the
         # console read "0 of" the rest, which looked exactly like starting
         # again from the beginning.
-        earlier = 0 if limit else self._already_seen(conn, roots)
+        # Only the new photographs: counted from those alone, not "5 of 200,005".
+        earlier = 0 if (limit or added_since is not None) else self._already_seen(conn, roots)
         self.progress._set(total=earlier + len(rows), processed=earlier,
                            earlier=earlier)
         if earlier and rows:
