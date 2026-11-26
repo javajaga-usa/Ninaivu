@@ -4819,6 +4819,7 @@
   "Show more": "Show more",
   "Now: {file}": "Now: {file}",
   "The second copy writes these under the names shown and lists them in NINAIVU-NAMES.txt at the top of the copy. Files too large for the disk are left out.": "The second copy writes these under the names shown and lists them in NINAIVU-NAMES.txt at the top of the copy. Files too large for the disk are left out.",
+  "{count} files were on that disk already with the same bytes and were left as they were, not copied again.": "{count} files were on that disk already with the same bytes and were left as they were, not copied again.",
   "{count} files are kept under names this disk takes; NINAIVU-NAMES.txt on the copy says which.": "{count} files are kept under names this disk takes; NINAIVU-NAMES.txt on the copy says which.",
   "{count} files are too large for this disk and were left out (for example {path}). A disk formatted as exFAT takes them.": "{count} files are too large for this disk and were left out (for example {path}). A disk formatted as exFAT takes them.",
   "A folder": "A folder",

@@ -11,6 +11,7 @@
   - **A phone backup is not called safe when its folder could not be synced (R5).** A folder sync that fails with an I/O error now fails the backup, and the phone keeps its copy to send again. A drive that cannot sync folders at all still works.
   - **The dependency audit checks the versions the release ships (R6).** It installed whatever was newest; it now installs under `requirements/constraints-tested.txt`, as the release builds do.
   - Not changed here: the audited Mac's `.venv` has older packages than the tested pins and an installed Ninaivu of 4.3.0 (recreate it); socket, Tk and FSEvents test failures there are the audit machine's sandbox.
+- **The second copy leaves what was on its disk as it was.** A backup folder or network share chosen for the second copy often holds the photographs already. A file there with the same bytes (read and compared) is now taken as the copy and not written again, whether it is at the library's own place or anywhere else on that disk, laid out by year or under another folder; the disk is looked over once for this when it is new to Ninaivu. A different file at the library's place is no longer renamed "(before …)": it is not touched at all, and the library's file goes beside it as `name (2).jpg`, listed in NINAIVU-NAMES.txt. Only a file Ninaivu wrote itself is ever set aside, and a file that appears at that name while one is being written is never written over. The second copy's page says how many files were already there. `tests/test_second_copy_existing_media.py` keeps it.
 
 ## 5.2.0 — 26 November 2026
 
