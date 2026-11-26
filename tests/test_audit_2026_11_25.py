@@ -272,3 +272,58 @@ def test_a_lock_left_by_a_killed_start_does_not_block_the_next(tmp_path):
     assert _where(app, env).returncode == 0
     _sound(state)
     assert not lock.exists()
+
+
+# -- F3: a phone backup is on disk before the phone is told it is safe ----------
+
+def test_a_phone_backup_is_synced_before_it_is_called_safe(app, people, monkeypatch):
+    import sqlite3
+
+    from conftest import FAMILY, login
+    from ninaivu.media import phone_backup, upload_review
+    from test_phone_backup import back_up, photo
+
+    db_path = app.config["MV_CONFIG"].db_path
+    events = []
+
+    def state_now():
+        look = sqlite3.connect(db_path)
+        try:
+            staged = look.execute("SELECT COUNT(*) FROM phone_backups WHERE state=?",
+                                  (phone_backup.STAGED,)).fetchone()[0]
+            held = look.execute("SELECT COUNT(*) FROM pending_uploads").fetchone()[0]
+        finally:
+            look.close()
+        return staged, held
+
+    real_file, real_folder = upload_review.sync_file, upload_review.sync_folder
+    monkeypatch.setattr(upload_review, "sync_file",
+                        lambda p: (events.append(("file", Path(p).name, state_now())),
+                                   real_file(p)))
+    monkeypatch.setattr(upload_review, "sync_folder",
+                        lambda p: (events.append(("folder", Path(p).name, state_now())),
+                                   real_folder(p)))
+
+    data = photo()
+    done = back_up(login(app.test_client(), *FAMILY), "IMG_0001.png", data)
+
+    assert done["state"] == phone_backup.STAGED
+    kinds = [(kind, name) for kind, name, _ in events]
+    assert ("file", "IMG_0001.png") in kinds
+    assert kinds.index(("file", "IMG_0001.png")) < [k for k, _ in kinds].index("folder")
+    assert ("folder", "pending-uploads") in kinds
+    assert all(seen == (0, 0) for *_, seen in events), \
+        "the file was called safe before it was synced"
+
+
+def test_a_sync_that_fails_does_not_call_the_backup_safe(app, people, monkeypatch):
+    from conftest import FAMILY, login
+    from ninaivu.media import phone_backup, upload_review
+    from test_phone_backup import back_up, photo
+
+    def broken(_path):
+        raise OSError(errno.EIO, "I/O error")
+    monkeypatch.setattr(upload_review, "sync_file", broken)
+    done = back_up(login(app.test_client(), *FAMILY), "IMG_0002.png", photo())
+    assert done["state"] == phone_backup.FAILED
+    assert done["state"] not in phone_backup.SAFE

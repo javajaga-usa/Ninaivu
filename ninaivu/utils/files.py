@@ -19,7 +19,7 @@ from pathlib import Path
 
 __all__ = ["CHUNK", "LOCK_FLAGS", "copystat_unlocked", "create_new", "file_flags", "real_path",
            "open_file_limit", "remove_own", "same_bytes", "sha256_file", "stays_inside",
-           "sync_folder", "unlock", "atomic_write", "move_no_replace",
+           "sync_folder", "unlock", "atomic_write", "move_no_replace", "sync_file",
            "publish_no_replace"]
 
 #: Bytes read at a time when a whole file is hashed or copied. Large enough
@@ -202,6 +202,30 @@ def remove_own(path: Path | str) -> None:
         if not unlock(path):
             raise
         os.remove(path)
+
+
+def sync_file(path: Path | str) -> None:
+    """Make the bytes of the finished file at *path* survive a power cut.
+
+    ``flush()`` only hands them to the system's cache, and a file read back
+    from that cache to be hashed proves nothing about the disk. On macOS
+    ``F_FULLFSYNC`` is asked for, which also empties the drive's own cache;
+    plain ``fsync`` there does not. Raises OSError if the sync fails: the
+    caller is about to say the file is safe, and must not.
+    """
+    flags = (os.O_RDWR | getattr(os, "O_BINARY", 0)) if os.name == "nt" else os.O_RDONLY
+    fd = os.open(path, flags)
+    try:
+        if sys.platform == "darwin":
+            import fcntl                                     # noqa: PLC0415
+            try:
+                fcntl.fcntl(fd, fcntl.F_FULLFSYNC)
+                return
+            except (AttributeError, OSError):
+                pass                                         # a drive that cannot
+        os.fsync(fd)
+    finally:
+        os.close(fd)
 
 
 def sync_folder(folder: Path | str) -> None:
