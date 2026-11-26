@@ -11,6 +11,7 @@ import os
 import pytest
 
 from ninaivu.storage import db
+from ninaivu.cloud import store as store_mod
 from ninaivu.cloud import restore
 from ninaivu.storage import importer as importer_mod
 from ninaivu.utils import files as files_mod
@@ -418,3 +419,93 @@ def test_a_pin_is_remade_too(real_profile, scanned):
     assert auth.verify_pin(conn, kid.id, "2468")
     assert conn.execute("SELECT pin FROM users WHERE id=?",
                         (kid.id,)).fetchone()[0].split("$")[3] == "5"
+
+
+# -- F9: a same-size edit in the middle of a big file is sent again -------------
+
+import test_cloud_migration as migration  # noqa: E402
+
+
+@pytest.fixture()
+def uploaded(tmp_path):
+    world_ = migration.world.__wrapped__(tmp_path)
+    return world_, migration.upload_everything(world_)
+
+
+def _edit_the_middle(path):
+    data = bytearray(path.read_bytes())
+    data[len(data) // 2] ^= 0xFF
+    stamp = path.stat().st_mtime + 3600
+    path.write_bytes(bytes(data))
+    os.utime(path, (stamp, stamp))
+
+
+def test_an_edit_in_the_middle_at_the_same_size_is_sent(uploaded):
+    (_, _, _, library, files, _), conn = uploaded
+    big = library / "2019/07/a.jpg"                       # 200,000 bytes
+    _edit_the_middle(big)
+    from ninaivu.utils import source_version as sv
+    row = conn.execute("SELECT source_version FROM cloud_uploads WHERE rel_path=?",
+                       ("2019/07/a.jpg",)).fetchone()
+    assert sv.same_content(row[0], big), "the sampled ends alone cannot see it"
+
+    assert store_mod.queue_missing(conn, migration.assets(library, files)) == 1
+    assert store_mod.state_of(conn, str(library), "2019/07/a.jpg") == store_mod.PENDING
+
+
+def test_the_same_edit_is_seen_by_the_queue_of_changed_files(uploaded):
+    (_, _, _, library, files, _), conn = uploaded
+    _edit_the_middle(library / "2019/07/a.jpg")
+    conn.execute("CREATE TEMP TABLE a_now(id INTEGER PRIMARY KEY, root, rel_path, "
+                 "filename, size, mtime, kind)")
+    conn.executemany("INSERT INTO a_now(root, rel_path, filename, size, mtime, kind) "
+                     "VALUES(:root, :rel_path, :filename, :size, :mtime, :kind)",
+                     list(migration.assets(library, files)))
+    assert store_mod.queue_changed(
+        conn, "SELECT id, root, rel_path, filename, size, mtime, kind FROM a_now") == 1
+
+
+def test_a_copy_that_only_lost_its_timestamps_is_still_not_sent(uploaded):
+    world_, conn = uploaded
+    new = migration.move_without_timestamps(world_)
+    assert store_mod.queue_missing(conn, migration.assets(new, world_[4])) == 0
+    assert all(r[0] for r in conn.execute(
+        "SELECT source_sha256 FROM cloud_uploads WHERE size > ?",
+        (2 * 65536,)))
+
+
+def test_an_encrypted_record_from_before_learns_the_digest_and_then_sees_edits(uploaded):
+    (_, _, _, library, files, _), conn = uploaded
+    # As an encrypted upload made before the file's own digest was kept: what
+    # Drive holds is ciphertext, so nothing recorded speaks for the middle.
+    conn.execute("UPDATE cloud_uploads SET encrypted=1, source_sha256='', digest='x', md5=''")
+    conn.commit()
+    big = library / "2019/07/a.jpg"
+    stamp = big.stat().st_mtime + 60
+    os.utime(big, (stamp, stamp))
+    assert store_mod.queue_missing(conn, migration.assets(library, files)) == 0
+    learned = conn.execute("SELECT source_sha256 FROM cloud_uploads WHERE rel_path=?",
+                           ("2019/07/a.jpg",)).fetchone()[0]
+    assert learned == files_mod.sha256_file(big)
+    _edit_the_middle(big)
+    assert store_mod.queue_missing(conn, migration.assets(library, files)) == 1
+
+
+def test_an_encrypted_upload_records_the_files_own_digest(tmp_path):
+    from ninaivu.cloud.upload_cache import UploadCache
+    world_ = migration.world.__wrapped__(tmp_path)
+    db_path, _, client, library, files, _ = world_
+    conn = db.connect(db_path)
+    store_mod.queue_missing(conn, migration.assets(library, files))
+    key = os.urandom(32)
+    from ninaivu.cloud import engine as engine_mod
+    engine = engine_mod.SyncEngine(
+        connect=lambda: client, open_db=lambda: db.connect(db_path),
+        encryption=lambda: (key, b"k" * 8), cache=UploadCache(tmp_path / "cache"))
+    engine.start()
+    engine._thread.join(30)
+    for rel in files:
+        row = conn.execute("SELECT state, encrypted, source_sha256 FROM cloud_uploads "
+                           "WHERE rel_path=?", (rel,)).fetchone()
+        assert row[0] == store_mod.DONE and row[1] == 1, tuple(row)
+        assert row[2] == files_mod.sha256_file(library / rel)
