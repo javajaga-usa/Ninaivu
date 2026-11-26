@@ -4895,6 +4895,7 @@
   "Show more": "மேலும் காட்டு",
   "Now: {file}": "இப்போது: {file}",
   "The second copy writes these under the names shown and lists them in NINAIVU-NAMES.txt at the top of the copy. Files too large for the disk are left out.": "இரண்டாவது நகல் இவற்றைக் காட்டப்பட்ட பெயர்களில் எழுதி, நகலின் மேல் உள்ள NINAIVU-NAMES.txt கோப்பில் பட்டியலிடும். டிஸ்க்கில் அடங்காத பெரிய கோப்புகள் விடப்படும்.",
+  "{count} files were on that disk already with the same bytes and were left as they were, not copied again.": "{count} கோப்புகள் அதே உள்ளடக்கத்துடன் அந்த டிஸ்க்கில் ஏற்கனவே இருந்தன; அவை மீண்டும் நகலெடுக்கப்படாமல் அப்படியே விடப்பட்டன.",
   "{count} files are kept under names this disk takes; NINAIVU-NAMES.txt on the copy says which.": "{count} கோப்புகள் இந்த டிஸ்க் ஏற்கும் பெயர்களில் வைக்கப்பட்டுள்ளன; எவை என்று நகலில் உள்ள NINAIVU-NAMES.txt சொல்லும்.",
   "{count} files are too large for this disk and were left out (for example {path}). A disk formatted as exFAT takes them.": "{count} கோப்புகள் இந்த டிஸ்க்குக்கு மிகப் பெரியவை, அதனால் விடப்பட்டன (எடுத்துக்காட்டாக {path}). exFAT ஆக வடிவமைத்த டிஸ்க் அவற்றை ஏற்கும்.",
   "A folder": "ஒரு கோப்புறை",

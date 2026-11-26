@@ -207,6 +207,10 @@ export class SecondCopy {
       lines.push(i18n.t('{count} files are kept under names this disk takes; NINAIVU-NAMES.txt on the copy says which.', {
         count: count(status.renamed) }));
     }
+    if (status.already_there) {
+      lines.push(i18n.t('{count} files were on that disk already with the same bytes and were left as they were, not copied again.', {
+        count: count(status.already_there) }));
+    }
     if (status.too_large) {
       lines.push(i18n.t('{count} files are too large for this disk and were left out (for example {path}). A disk formatted as exFAT takes them.', {
         count: count(status.too_large), path: (status.too_large_examples || [])[0] || '' }));
