@@ -189,3 +189,31 @@ def test_only_faces_seen_often_are_waiting_for_a_name(scanned):
     assert db.count_unnamed_clusters(conn, root) == 2
     assert db.count_unnamed_clusters(conn, root, min_photos=3) == 1
     assert db.count_unnamed_clusters(conn, root, min_photos=4) == 0
+
+
+def test_the_review_queue_is_kept_until_something_about_faces_changes(scanned, monkeypatch):
+    """5.2: the queue reads every unnamed face's embedding, so it is kept; a
+    rejection or a change of who a face is makes the next ask work it out again."""
+    from test_settings_groups import _console
+    from ninaivu.media import faceindex
+    from ninaivu.storage import db
+    client, cfg = _console(scanned)
+    calls = []
+    monkeypatch.setattr(faceindex.FaceIndexer, "suggestions",
+                        lambda self, conn, person_id, roots, limit=60: calls.append(person_id) or [])
+    assert client.get("/api/faces/suggestions/7").status_code == 200
+    assert client.get("/api/faces/suggestions/7").status_code == 200
+    assert calls == [7], "the second ask is answered from what was kept"
+    conn = db.connect(cfg.db_path)
+    try:
+        asset = conn.execute("SELECT id FROM assets LIMIT 1").fetchone()[0]
+        conn.execute("INSERT INTO people_clusters(id, name, created_at) VALUES(7,'Ravi',0)")
+        conn.execute("INSERT INTO faces(asset_id, bbox, embedding, quality, source) "
+                     "VALUES (?, '[0,0,1,1]', x'00', 0.9, 'auto')", (asset,))
+        face = conn.execute("SELECT MAX(id) FROM faces").fetchone()[0]
+        conn.commit()
+        db.reject_face_for_person(conn, face, 7)
+    finally:
+        conn.close()
+    assert client.get("/api/faces/suggestions/7").status_code == 200
+    assert calls == [7, 7], "a rejection is not hidden by what was kept"
