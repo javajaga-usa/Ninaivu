@@ -8,6 +8,7 @@ import threading
 
 from ..archive.dates import to_timestamp
 from ..storage import db
+from ..utils.files import move_no_replace
 
 log = logging.getLogger(__name__)
 
@@ -47,8 +48,8 @@ def publish_exclusive(staged, target):
 
     A hard link is atomic and refuses an existing name. exFAT and FAT32 — what
     most external drives ship formatted as — have no hard links, so there the
-    file is renamed after checking the name is free; on Windows the rename
-    itself also refuses an existing name.
+    file is moved by a rename that refuses an existing name (or copied into a
+    name made exclusively), never by a check followed by a rename (audit F1).
     """
     try:
         os.link(staged, target)
@@ -57,9 +58,7 @@ def publish_exclusive(staged, target):
         raise
     except OSError:
         pass
-    if target.exists() or target.is_symlink():
-        raise FileExistsError(target)
-    os.rename(staged, target)
+    move_no_replace(staged, target)
 
 
 def _move(source, target):
@@ -75,9 +74,7 @@ def _move(source, target):
         # runs holding the index's write lock, and copying a four-gigabyte
         # video there held up every other change for minutes.
         if _same_drive(source, target.parent):
-            if target.exists() or target.is_symlink():
-                raise FileExistsError(target) from None
-            os.rename(source, target)
+            move_no_replace(source, target)
             return
         copy_exclusive(source, target)
     try:
