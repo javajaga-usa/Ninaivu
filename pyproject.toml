@@ -133,6 +133,9 @@ markers = [
     # runs the whole suite as Basic (2 GB, no GPU); tests marked tier_full
     # run on the Full job too, with torch and the model stack installed.
     "tier_full: needs the Full tier — a GPU or Apple silicon with the model stack",
+    # Opens a real Tk window: run in a process of its own (tests/conftest.py).
+    # A second Tk root in one process crashed Tk 9.1 natively (audit D1).
+    "fresh_process: run this test alone in a new Python process",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning",

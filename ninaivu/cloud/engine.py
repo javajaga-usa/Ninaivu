@@ -953,6 +953,21 @@ class SyncEngine:
             send_path, send_name = cache, f"{send_name}.ninaivu"
 
         send_size = send_path.stat().st_size
+        # The SHA-256 of the file itself, for the queue to tell an edit in the
+        # middle of it from a copy that lost its timestamps (audit F9). A
+        # fresh plain upload hashes the bytes as they go; otherwise (the
+        # bytes sent are ciphertext, or the front went in an earlier run) it
+        # is read once here, before anything is sent.
+        source_sha256 = ""
+        if cache is not None or resume_url:
+            try:
+                from ..utils.files import sha256_file              # noqa: PLC0415
+                source_sha256 = sha256_file(path)
+            except OSError as exc:
+                store.record_failure(conn, root, rel, f"could not read the file: {exc}")
+                if cache is not None:
+                    self._cache.discard(cache)
+                return "skipped"
         if resume_url and not self._session_fits(row, cache is not None, send_size):
             # The session was opened for other bytes — plain where these are
             # encrypted, or the other way round, or a different length. Drive
@@ -1030,7 +1045,8 @@ class SyncEngine:
         md5 = "" if digest else self._drive_md5(client, remote_id)
         self._record_done(conn, root, rel, remote_id=remote_id, digest=digest,
                           folder=self._folders_key(row), encrypted=cache is not None,
-                          md5=md5)
+                          md5=md5, source_sha256=source_sha256 or (
+                              digest if cache is None else ""))
         if cache is not None:
             self._cache.discard(cache)
         self.state.bump(uploaded_this_run=1, bytes_this_run=actual_size)

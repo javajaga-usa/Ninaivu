@@ -12,6 +12,7 @@ from ..archive.dates import to_timestamp
 from ..storage import db, new_files
 from ..storage import roots as roots_kit
 from ..utils.filenames import portable_name
+from ..utils.files import sync_file, sync_folder
 from . import date_edit, scanner
 
 log = logging.getLogger(__name__)
@@ -67,6 +68,14 @@ def stage(conn, cfg, upload, filename, root, scope, user_id, *,
             raise ValueError("This file is not recognised as supported media.")
         if overrides:
             record.update(overrides)
+        # On disk before the record says it is held: a phone is told its file
+        # is safe (STAGED) once this returns and may then free its own copy.
+        # Without the syncs a power cut could lose a file both ends had let go
+        # of (audit F3). The pieces as they arrive are not synced; a file cut
+        # short is sent again from what is on disk.
+        sync_file(target)
+        sync_folder(folder)
+        sync_folder(base)
         if place is not None:
             # Underscored keys are staging instructions for approve(); they are
             # not asset columns and db._normalise drops them on the way in.

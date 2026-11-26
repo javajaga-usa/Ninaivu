@@ -77,6 +77,7 @@ def _pressing(root, text, then=None, *, after=200):
     root.after(after, press)
 
 
+@pytest.mark.fresh_process
 def test_bringing_the_library_ticks_each_step_and_ends_with_done(root, tmp_path):
     older = SimpleNamespace(version="3.7.0", path=tmp_path / "old", state=tmp_path / "old" / "data",
                             models=tmp_path / "m", control=tmp_path / "c")
@@ -95,6 +96,7 @@ def test_bringing_the_library_ticks_each_step_and_ends_with_done(root, tmp_path)
     assert time.monotonic() - started < 10
 
 
+@pytest.mark.fresh_process
 def test_not_now_moves_nothing(root, tmp_path):
     older = SimpleNamespace(version="3.7.0", path=tmp_path / "old", state=tmp_path / "old" / "data",
                             models=tmp_path / "m", control=tmp_path / "c")
@@ -104,6 +106,7 @@ def test_not_now_moves_nothing(root, tmp_path):
                                  stop=lambda _s: pytest.fail("stopped")) is False
 
 
+@pytest.mark.fresh_process
 def test_a_move_that_fails_is_said_and_can_be_tried_again(root, tmp_path):
     older = SimpleNamespace(version="3.7.0", path=tmp_path / "old", state=tmp_path / "old" / "data",
                             models=tmp_path / "m", control=tmp_path / "c")
@@ -123,6 +126,7 @@ def test_a_move_that_fails_is_said_and_can_be_tried_again(root, tmp_path):
     assert len(tries) == 2
 
 
+@pytest.mark.fresh_process
 def test_the_update_window_opens_the_page_and_the_folder_only_when_asked(root, tmp_path):
     opened, shown, asked = [], [], []
     window = updating.how_to_update(
@@ -140,6 +144,7 @@ def test_the_update_window_opens_the_page_and_the_folder_only_when_asked(root, t
     assert asked == [True]
 
 
+@pytest.mark.fresh_process
 def test_without_an_older_copy_there_is_no_going_back(root, tmp_path):
     window = updating.how_to_update(root, updating.Look(root), version="4.0.0",
                                     folder=tmp_path / "Ninaivu-4.0.0", open_url=lambda _u: None,

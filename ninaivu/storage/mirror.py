@@ -71,7 +71,7 @@ import unicodedata
 from pathlib import Path
 from typing import Any, Callable
 
-from ..utils.files import CHUNK, create_new, sha256_file, stays_inside
+from ..utils.files import CHUNK, create_new, publish_no_replace, sha256_file, stays_inside
 from ..copies import ledger
 from . import fit, roots as roots_kit
 
@@ -773,16 +773,12 @@ class Mirror:
                     if row["mtime"]:
                         os.utime(partial, (row["mtime"], row["mtime"]))
                     try:
-                        os.link(partial, home)
-                        partial.unlink()
+                        # Never over a file that appeared meanwhile, on a
+                        # drive without hard links too (audit F1).
+                        publish_no_replace(partial, home)
                     except FileExistsError:
                         partial.unlink(missing_ok=True)
                         continue
-                    except OSError:
-                        if home.exists():
-                            partial.unlink(missing_ok=True)
-                            continue
-                        os.replace(partial, home)
                     restored += 1
                     touched.add(root)
                     self._bump_copied()

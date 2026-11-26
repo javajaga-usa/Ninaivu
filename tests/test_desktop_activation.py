@@ -162,6 +162,7 @@ def test_failed_activation_is_not_acknowledged_and_the_listener_recovers(tmp_pat
         first.close()
 
 
+@pytest.mark.fresh_process
 def test_real_tk_window_reopens_on_the_same_instance_after_a_callback_error(tmp_path):
     tk = pytest.importorskip('tkinter')
     try:

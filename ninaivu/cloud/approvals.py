@@ -145,26 +145,37 @@ def decide(conn: sqlite3.Connection, ids: list[int], decision: str, user_id: int
     init(conn)
     done = 0
     now = time.time()
+    # Only a file held for a decision, or declined before, is decided on.
+    # The page's list can be minutes old: an approval sent for a file that
+    # has since gone up put it back to pending, and it went up again
+    # (audit F10). The state is asked again in the write itself.
+    held = ("state='skipped' AND (error LIKE ? OR error LIKE ?)",
+            (REASON + "%", DECLINED + "%"))
     for upload_id in ids:
-        row = conn.execute("SELECT root, rel_path, size FROM cloud_uploads WHERE id=?",
-                           (int(upload_id),)).fetchone()
+        row = conn.execute("SELECT root, rel_path, size FROM cloud_uploads WHERE id=? AND "
+                           + held[0], (int(upload_id), *held[1])).fetchone()
         if row is None:
             continue
         try:
             size = (Path(row["root"]) / row["rel_path"]).stat().st_size
         except OSError:
             size = int(row["size"] or 0)
+        if decision == "approved":
+            changed = conn.execute(
+                "UPDATE cloud_uploads SET state='pending', error='', attempts=0, size=? "
+                "WHERE id=? AND " + held[0], (size, int(upload_id), *held[1])).rowcount
+        else:
+            changed = conn.execute(
+                "UPDATE cloud_uploads SET state='skipped', error=?, resume_url='' "
+                "WHERE id=? AND " + held[0],
+                (f"{DECLINED}: {_gb(size)}", int(upload_id), *held[1])).rowcount
+        if not changed:
+            continue
         conn.execute(
             "INSERT INTO cloud_approvals(root, rel_path, size, decision, decided_by, decided_at) "
             "VALUES(?, ?, ?, ?, ?, ?) ON CONFLICT(root, rel_path) DO UPDATE SET size=excluded.size, "
             "decision=excluded.decision, decided_by=excluded.decided_by, decided_at=excluded.decided_at",
             (row["root"], row["rel_path"], size, decision, int(user_id), now))
-        if decision == "approved":
-            conn.execute("UPDATE cloud_uploads SET state='pending', error='', attempts=0, size=? "
-                         "WHERE id=?", (size, int(upload_id)))
-        else:
-            conn.execute("UPDATE cloud_uploads SET state='skipped', error=?, resume_url='' WHERE id=?",
-                         (f"{DECLINED}: {_gb(size)}", int(upload_id)))
         done += 1
     conn.commit()
     return done

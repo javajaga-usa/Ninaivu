@@ -8,15 +8,19 @@ reads (or a bug in it) is made once.
 
 from __future__ import annotations
 
+import ctypes
+import errno
 import hashlib
 import os
+import sys
 import shutil
 import stat
 from pathlib import Path
 
 __all__ = ["CHUNK", "LOCK_FLAGS", "copystat_unlocked", "create_new", "file_flags", "real_path",
            "open_file_limit", "remove_own", "same_bytes", "sha256_file", "stays_inside",
-           "sync_folder", "unlock", "atomic_write"]
+           "sync_folder", "unlock", "atomic_write", "move_no_replace", "sync_file",
+           "publish_no_replace"]
 
 #: Bytes read at a time when a whole file is hashed or copied. Large enough
 #: that a photograph is one read; small enough that a film does not sit in
@@ -200,6 +204,30 @@ def remove_own(path: Path | str) -> None:
         os.remove(path)
 
 
+def sync_file(path: Path | str) -> None:
+    """Make the bytes of the finished file at *path* survive a power cut.
+
+    ``flush()`` only hands them to the system's cache, and a file read back
+    from that cache to be hashed proves nothing about the disk. On macOS
+    ``F_FULLFSYNC`` is asked for, which also empties the drive's own cache;
+    plain ``fsync`` there does not. Raises OSError if the sync fails: the
+    caller is about to say the file is safe, and must not.
+    """
+    flags = (os.O_RDWR | getattr(os, "O_BINARY", 0)) if os.name == "nt" else os.O_RDONLY
+    fd = os.open(path, flags)
+    try:
+        if sys.platform == "darwin":
+            import fcntl                                     # noqa: PLC0415
+            try:
+                fcntl.fcntl(fd, fcntl.F_FULLFSYNC)
+                return
+            except (AttributeError, OSError):
+                pass                                         # a drive that cannot
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+
+
 def sync_folder(folder: Path | str) -> None:
     """Make the renames and new names in *folder* survive a power cut.
 
@@ -244,3 +272,140 @@ def atomic_write(path: Path | str, data: str | bytes, *, encoding: str = "utf-8"
         temporary.unlink(missing_ok=True)
         raise
     sync_folder(path.parent)
+
+
+#: Errors meaning "this filesystem or system cannot do that", after which the
+#: next, slower way is tried. EEXIST is never among them.
+_UNSUPPORTED = {errno.EINVAL, errno.ENOSYS, errno.EXDEV, errno.EPERM,
+                getattr(errno, "ENOTSUP", errno.EINVAL),
+                getattr(errno, "EOPNOTSUPP", errno.EINVAL)}
+
+
+def _libc():
+    try:
+        return ctypes.CDLL(None, use_errno=True)
+    except OSError:
+        return None
+
+
+def _rename_no_replace(src: str, dst: str) -> bool:
+    """Rename *src* to *dst* in one step that fails if *dst* exists.
+
+    True when done; False where the system or filesystem has no such rename
+    (the caller then falls back). Raises FileExistsError when *dst* is taken,
+    and any other OSError as it comes.
+    """
+    if os.name == "nt":
+        # Windows' rename never replaces: an existing name is an error.
+        try:
+            os.rename(src, dst)
+        except FileExistsError:
+            raise
+        except OSError as error:
+            if error.errno in _UNSUPPORTED:
+                return False
+            raise
+        return True
+    libc = _libc()
+    if libc is None:
+        return False
+    if sys.platform.startswith("linux"):
+        call = getattr(libc, "renameat2", None)
+        if call is None:
+            return False
+        at_fdcwd, rename_noreplace = -100, 1
+        result = call(at_fdcwd, os.fsencode(src), at_fdcwd, os.fsencode(dst),
+                      rename_noreplace)
+    elif sys.platform == "darwin":
+        call = getattr(libc, "renamex_np", None)
+        if call is None:
+            return False
+        rename_excl = 0x00000004
+        result = call(os.fsencode(src), os.fsencode(dst), rename_excl)
+    else:
+        return False
+    if result == 0:
+        return True
+    code = ctypes.get_errno()
+    if code == errno.EEXIST:
+        raise FileExistsError(code, os.strerror(code), dst)
+    if code in _UNSUPPORTED:
+        return False
+    raise OSError(code, os.strerror(code), dst)
+
+
+def _copy_into_new(src: str, dst: str) -> None:
+    """Copy *src* to a name made for it here, then drop *src*.
+
+    The name is taken with ``O_EXCL``, so a file, folder or link that is there
+    already, or appears at any moment, is never replaced: the create fails.
+    Until the copy is whole and synced the name holds a part-written file; if
+    the copy fails it is removed (only if it is still the one made here) and
+    *src* is kept, so nothing is lost.
+    """
+    flags = (os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
+             | getattr(os, "O_NOFOLLOW", 0))
+    fd = os.open(dst, flags, 0o666)
+    made = os.fstat(fd)
+    try:
+        with open(src, "rb") as source, os.fdopen(fd, "wb", closefd=False) as out:
+            while chunk := source.read(CHUNK):
+                out.write(chunk)
+            out.flush()
+            os.fsync(fd)
+        info = os.stat(src)
+        try:
+            os.utime(dst, ns=(info.st_atime_ns, info.st_mtime_ns),
+                     follow_symlinks=False)
+        except (NotImplementedError, OSError):
+            os.utime(dst, ns=(info.st_atime_ns, info.st_mtime_ns))
+    except BaseException:
+        os.close(fd)
+        try:
+            now = os.lstat(dst)
+            if (now.st_dev, now.st_ino) == (made.st_dev, made.st_ino):
+                os.unlink(dst)
+        except OSError:
+            pass
+        raise
+    os.close(fd)
+    os.unlink(src)
+
+
+def publish_no_replace(src: Path | str, dst: Path | str) -> None:
+    """Move the finished file *src* to *dst*, never over anything at *dst*.
+
+    Raises FileExistsError if *dst* is taken, now or by something that
+    appears while this runs (audit F1: a check followed by a rename, on a
+    drive without hard links, replaced a photograph imported in between).
+    On any failure *src* is left where it was.
+
+    In order: a hard link (atomic; most drives), a rename that refuses an
+    existing name (Linux ``renameat2``, macOS ``renamex_np``, Windows'
+    rename), then a copy into a name created exclusively (exFAT and FAT,
+    which have neither).
+    """
+    src, dst = os.fspath(src), os.fspath(dst)
+    try:
+        os.link(src, dst, follow_symlinks=False)
+    except FileExistsError:
+        raise
+    except (OSError, NotImplementedError):
+        pass
+    else:
+        os.unlink(src)
+        return
+    move_no_replace(src, dst)
+
+
+def move_no_replace(src: Path | str, dst: Path | str) -> None:
+    """Rename *src* to *dst* without ever replacing anything there.
+
+    The no-hard-link half of :func:`publish_no_replace`: a rename that refuses
+    an existing name where the system has one, else a copy into a name made
+    exclusively. FileExistsError if *dst* is taken; *src* kept on failure.
+    """
+    src, dst = os.fspath(src), os.fspath(dst)
+    if _rename_no_replace(src, dst):
+        return
+    _copy_into_new(src, dst)

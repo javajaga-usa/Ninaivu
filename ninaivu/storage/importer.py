@@ -50,7 +50,6 @@ import logging
 import os
 import posixpath
 import re
-import shutil
 import tarfile
 import threading
 import time
@@ -62,6 +61,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterator
 
 from ..utils.filenames import portable_name
+from ..utils.files import publish_no_replace
 
 log = logging.getLogger(__name__)
 
@@ -1070,17 +1070,12 @@ def _publish(partial: Path, target: Path,
         if claim is not None:
             claim(candidate)
         try:
-            os.link(partial, candidate)
-            partial.unlink()
+            # Never over a file that appears between the check and here, on
+            # a drive without hard links too (audit F1).
+            publish_no_replace(partial, candidate)
             return candidate
         except FileExistsError:
             continue
-        except OSError:
-            # A filesystem without hard links (exFAT). Checked a moment ago.
-            if candidate.exists():
-                continue
-            shutil.move(str(partial), str(candidate))
-            return candidate
     raise OSError(f"no free name for {target.name}")
 
 

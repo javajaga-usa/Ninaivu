@@ -165,7 +165,7 @@ def _tables_current(conn: sqlite3.Connection) -> bool:
     """Whether the queue's tables are here with the newest columns. Only
     prepares two statements, so it never waits on a writer."""
     try:
-        conn.execute("SELECT kind, resume_size FROM cloud_uploads LIMIT 0")
+        conn.execute("SELECT kind, resume_size, source_sha256 FROM cloud_uploads LIMIT 0")
         conn.execute("SELECT 1 FROM cloud_approvals LIMIT 0")
     except sqlite3.OperationalError:
         return False
@@ -210,6 +210,13 @@ def _make_schema(conn: sqlite3.Connection) -> None:
     if "resume_size" not in columns:
         conn.execute("ALTER TABLE cloud_uploads ADD COLUMN resume_size "
                      "INTEGER NOT NULL DEFAULT 0")
+    # SHA-256 of the file as it is on disk (not of what Drive holds, which
+    # for an encrypted backup is ciphertext). The queue needs it to tell a
+    # same-size edit in the middle of a big file from a copy that only lost
+    # its timestamps: the sampled ends cannot (audit F9).
+    if "source_sha256" not in columns:
+        conn.execute("ALTER TABLE cloud_uploads ADD COLUMN source_sha256 "
+                     "TEXT NOT NULL DEFAULT ''")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_cloud_kind_queue "
                  "ON cloud_uploads(state, kind, queued_at, id)")
     # The Cloud page's three short lists (see recent): newest first by the
@@ -329,20 +336,21 @@ def remember(conn: sqlite3.Connection, root: str, rel_path: str, *,
 
 def record_done(conn: sqlite3.Connection, root: str, rel_path: str, *,
                 remote_id: str, digest: str = "", folder: str = "",
-                encrypted: bool = False, md5: str = "") -> None:
+                encrypted: bool = False, md5: str = "", source_sha256: str = "") -> None:
     """Mark a file as uploaded. This is the row that never gets cleared.
 
     ``digest`` is of the bytes Drive holds — for an encrypted upload, the
     ciphertext. ``md5`` is Drive's own checksum of the same bytes, when it
     was asked for (a resumed upload, which has no whole-file ``digest``).
+    ``source_sha256`` is of the file on disk that was sent.
     """
     conn.execute(
         "UPDATE cloud_uploads SET state=?, remote_id=?, digest=?, md5=?, "
         "remote_folder=?, resume_url='', resume_size=0, resume_encrypted=0, "
-        "error='', done_at=?, encrypted=? "
+        "error='', done_at=?, encrypted=?, source_sha256=? "
         "WHERE root=? AND rel_path=?",
         (DONE, remote_id, digest, md5 or "", folder, time.time(), int(bool(encrypted)),
-         root, rel_path))
+         source_sha256 or "", root, rel_path))
     # And the ledger, in the same transaction (ninaivu/copies/ledger.py): at
     # the size the queue sent, and its modified time where it noted one.
     from ..copies import ledger                             # noqa: PLC0415
@@ -640,7 +648,8 @@ def queue_missing(conn: sqlite3.Connection, assets: Iterable[dict[str, Any]],
     existing = {(r["root"], r["rel_path"]): dict(r)
                 for r in conn.execute(
                     "SELECT root, rel_path, state, size, source_version, "
-                    "source_mtime, resume_url FROM cloud_uploads")}
+                    "source_mtime, resume_url, source_sha256, digest, md5, encrypted "
+                    "FROM cloud_uploads")}
     # Looked up as each file comes, so one that appears twice sees what the
     # first of them did.
     pairs = ((asset, existing.get((asset["root"], asset["rel_path"]))) for asset in assets)
@@ -672,7 +681,8 @@ def queue_changed(conn: sqlite3.Connection, sql: str, params: Iterable[Any] = ()
         f"SELECT a.id, a.root, a.rel_path, a.filename, a.size, a.mtime, a.kind, "
         f"c.root AS c_root, c.state AS c_state, c.size AS c_size, "
         f"c.source_version AS c_source_version, c.source_mtime AS c_source_mtime, "
-        f"c.resume_url AS c_resume_url "
+        f"c.resume_url AS c_resume_url, c.source_sha256 AS c_source_sha256, "
+        f"c.digest AS c_digest, c.md5 AS c_md5, c.encrypted AS c_encrypted "
         f"FROM ({sql}) a LEFT JOIN cloud_uploads c "
         f"ON c.root = a.root AND c.rel_path = a.rel_path "
         # Exactly the cases in which queue_missing does not step over a row
@@ -695,13 +705,46 @@ def queue_changed(conn: sqlite3.Connection, sql: str, params: Iterable[Any] = ()
                 row = None if r["c_root"] is None else {
                     "state": r["c_state"], "size": r["c_size"],
                     "source_version": r["c_source_version"],
-                    "source_mtime": r["c_source_mtime"], "resume_url": r["c_resume_url"]}
+                    "source_mtime": r["c_source_mtime"], "resume_url": r["c_resume_url"],
+                    "source_sha256": r["c_source_sha256"], "digest": r["c_digest"],
+                    "md5": r["c_md5"], "encrypted": r["c_encrypted"]}
                 yield {k: r[k] for k in ("id", "root", "rel_path", "filename", "size",
                                          "mtime", "kind")}, row
             if len(page) < CHANGED_PAGE:
                 return
 
     return _queue_pairs(conn, pairs(), on_queued, None)
+
+
+def _whole_file_same(row: dict[str, Any], path: Path) -> tuple[bool | None, str]:
+    """Whether *path* is, byte for byte, the file the record says was sent,
+    and its SHA-256 to write down. ``(None, "")`` when it cannot be read.
+
+    Against the recorded SHA-256 of the file itself; for a plain upload made
+    before that was kept, the digest or Drive's MD5 of what was sent, which
+    are of the same bytes. An encrypted upload from before then has nothing
+    to compare the middle with: the sampled answer stands, as it did, and
+    the digest taken now is kept, so any later edit is caught.
+    """
+    import hashlib                                           # noqa: PLC0415
+
+    sha, md5 = hashlib.sha256(), hashlib.md5()               # noqa: S324 — Drive's checksum
+    try:
+        with open(path, "rb") as handle:
+            while chunk := handle.read(4 * 1024 * 1024):
+                sha.update(chunk)
+                md5.update(chunk)
+    except OSError:
+        return None, ""
+    whole = sha.hexdigest()
+    plain = not row.get("encrypted")
+    if row.get("source_sha256"):
+        return whole == row["source_sha256"], whole
+    if plain and row.get("digest"):
+        return whole == row["digest"], whole
+    if plain and row.get("md5"):
+        return md5.hexdigest() == row["md5"], whole
+    return True, whole
 
 
 def _queue_pairs(conn: sqlite3.Connection, pairs: Iterable[tuple[dict[str, Any], Any]],
@@ -720,7 +763,8 @@ def _queue_pairs(conn: sqlite3.Connection, pairs: Iterable[tuple[dict[str, Any],
     def flush() -> None:
         nonlocal queued, inserts, updates, restamped
         if restamped:
-            conn.executemany("UPDATE cloud_uploads SET source_mtime=? "
+            conn.executemany("UPDATE cloud_uploads SET source_mtime=?, "
+                             "source_sha256=COALESCE(NULLIF(?, ''), source_sha256) "
                              "WHERE root=? AND rel_path=?", restamped)
             conn.commit()
             restamped = []
@@ -759,13 +803,20 @@ def _queue_pairs(conn: sqlite3.Connection, pairs: Iterable[tuple[dict[str, Any],
                     # as an edit of every file sent the whole library to Drive
                     # a second time: days of uploading, and a duplicate of
                     # everything. So the contents decide: the size and both
-                    # ends of the file, against what they were when it went.
+                    # ends of the file, against what they were when it went,
+                    # and then, for a file bigger than the two ends, the whole
+                    # of it against its recorded digest: an edit in the middle
+                    # at the same size kept both ends and was never sent
+                    # (audit F9).
                     same = source_version_mod.same_content(
                         row["source_version"], Path(root) / rel)
+                    learned = ""
+                    if same and size > 2 * source_version_mod.SAMPLE:
+                        same, learned = _whole_file_same(row, Path(root) / rel)
                     if same is None:
                         continue            # cannot tell now; asked again next pass
                     if same:
-                        restamped.append((mtime, root, rel))
+                        restamped.append((mtime, learned, root, rel))
                         if existing is not None:
                             existing[(root, rel)] = {**row, "source_mtime": mtime}
                         if len(restamped) >= QUEUE_BATCH:

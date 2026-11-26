@@ -41,7 +41,6 @@ import glob
 import hashlib
 import logging
 import os
-import shutil
 import threading
 import time
 from dataclasses import dataclass, field
@@ -49,7 +48,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Callable, Iterable
 
 from ..utils import source_version as source_version_mod
-from ..utils.files import same_bytes, stays_inside
+from ..utils.files import publish_no_replace, same_bytes, stays_inside
 from . import crypto, keyring
 from .drive import FOLDER_MIME, DriveClient, DriveError, NeedsReconnect
 from .tempfiles import create_new, is_plain_file, open_to_append
@@ -550,7 +549,17 @@ class RestoreJob:
             raise ValueError("refusing a path outside the destination")
         if item.mtime:
             os.utime(ready, (item.mtime, item.mtime))
-        _publish(ready, target)
+        for _ in range(100):
+            try:
+                _publish(ready, target)
+                break
+            except FileExistsError:
+                # Something took the name since it was checked: an import, or
+                # another program. It is kept, and this copy goes beside it.
+                target = _beside(target)
+                beside = True
+        else:
+            raise OSError(f"no free name beside {target}")
         if self.destination is None and item.root:
             self.touched_roots.add(item.root)
         self.state.bump(beside=1 if beside else 0, restored=0 if beside else 1,
@@ -724,17 +733,8 @@ def _beside(target: Path) -> Path:
 
 
 def _publish(ready: Path, target: Path) -> None:
-    """Put the checked file in place, whole, without replacing anything."""
-    try:
-        # A hard link never replaces an existing name, which a rename on POSIX
-        # would; the staged copy is then dropped.
-        os.link(ready, target)
-        ready.unlink()
-    except FileExistsError:
-        raise
-    except OSError:
-        # exFAT and FAT32 have no hard links. The target was checked a moment
-        # ago; this is the one window where it is not atomic.
-        if target.exists():
-            raise FileExistsError(target) from None
-        shutil.move(str(ready), str(target))
+    """Put the checked file in place, whole, without replacing anything.
+
+    FileExistsError if something has taken the name, even a moment ago; the
+    staged copy is then kept (audit F1)."""
+    publish_no_replace(ready, target)

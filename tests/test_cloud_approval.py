@@ -165,3 +165,32 @@ def test_the_household_is_told_once_with_an_event_it_can_receive(console, monkey
     services.cloud._kept_back(row)                                      # noqa: SLF001
     services.cloud._kept_back(row)                                      # noqa: SLF001
     assert sent == ["cloud_approval"] and "cloud_approval" in notify.EVENTS
+
+
+@pytest.mark.parametrize("decision", ["approved", "declined"])
+def test_a_stale_decision_never_touches_a_file_already_sent(console, decision):
+    """The page's list can be minutes old. An approval sent for a file that
+    went up meanwhile put it back to pending, and it went up again (audit F10)."""
+    client, cfg, services, conn = console
+    upload_id = _state(conn)[2]
+    conn.execute("UPDATE cloud_uploads SET state=?, error='', remote_id='drive-id' "
+                 "WHERE id=?", (store.DONE, upload_id))
+    conn.commit()
+    answer = client.post("/api/cloud/approvals", json={"ids": [upload_id], "decision": decision})
+    assert answer.status_code == 200
+    assert _state(conn)[:2] == (store.DONE, "")
+    assert conn.execute("SELECT COUNT(*) FROM cloud_approvals").fetchone()[0] == 0
+    # Nor a file being sent right now, or one waiting its turn.
+    for state in (store.UPLOADING, store.PENDING):
+        conn.execute("UPDATE cloud_uploads SET state=? WHERE id=?", (state, upload_id))
+        conn.commit()
+        assert approvals.decide(conn, [upload_id], decision, 1) == 0
+        assert _state(conn)[0] == state
+
+
+def test_a_declined_file_can_still_be_approved_later(console):
+    client, cfg, services, conn = console
+    upload_id = _state(conn)[2]
+    assert approvals.decide(conn, [upload_id], "declined", 1) == 1
+    assert approvals.decide(conn, [upload_id], "approved", 1) == 1
+    assert _state(conn)[0] == store.PENDING

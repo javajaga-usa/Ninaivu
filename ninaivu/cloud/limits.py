@@ -163,7 +163,10 @@ def parse_clock(text: str | None) -> int | None:
         return None
     if not (0 <= hour <= 24 and 0 <= minute < 60):
         return None
-    # 24:00 is a way people write midnight at the end of a day; keep it.
+    # 24:00 is a way people write midnight at the end of a day; keep it. Only
+    # that: 24:30 came out as 00:30, a time nobody chose (audit F11).
+    if hour == 24 and minute:
+        return None
     return (hour * 60 + minute) % MINUTES_PER_DAY
 
 
