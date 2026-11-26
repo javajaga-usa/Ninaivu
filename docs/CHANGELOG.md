@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 5.2.0 — 26 November 2026
 
 - **Fixes from the external audit of 25 November 2026.**
   - **A restore or import onto a drive without hard links never replaces a file (F1).** On exFAT and FAT, putting a restored or imported file in place checked the name was free and then renamed onto it, so a photograph that arrived in between was replaced. It is now a rename that refuses an existing name (Linux, macOS, Windows) or a copy into a name made exclusively; a restore puts its copy beside the newcomer, an import takes the next name. The same for a date change and for bringing files back from the second copy.
@@ -12,9 +12,6 @@
   - **The upload window refuses 24:30 (F11).** 24:00 still means midnight; anything later after 24 is refused rather than read as just after midnight.
   - **Tests (F5, F8, D1).** The CI apt helper's tests run on Linux only; the "Secondary away a day" test no longer depends on how full the test computer's disk is; tests that open a real Tk window each run in a process of their own, so a native Tk crash fails one test by name instead of ending the run.
   - Not changed here: F4 is the local `.venv` on the audited Mac (recreate it from `requirements/build-tools.txt`), and F6 (wider type checking) is longer-term work.
-
-## 5.2.0 — 26 November 2026
-
 - **Quicker pages on a big library.** Timed on a real library of 216,000 photographs on the Mac. The face review queue (**People**, someone's suggestions) is kept until a face, a group or a rejection changes, where before every open read every unnamed face (about a second). Which face recogniser made most of the faces is counted from a narrow index (`idx_faces_model`) instead of every face's row, and the duplicates review no longer copies every group on each ask. Pages that stay over a second the first time (Then and now, Young faces, Segments) are one cached piece of work each and are next.
 - **Download all also installs the Extras.** On the AI models page, **Download all** now brings in the Home & extensions packages that are missing (one after another), then the models they unblock. The PyTorch image engine is left out, and so is `transformers` unless Letters read aloud is on.
 - **Seven more switches go from Advanced settings.** `scrub_repair`, `young_faces` (now on by default) and `describe_photos` (follows the AI models page) are always on or follow their model; `ai_gpu`, `cloud_full_speed`, `notify_smtp_tls` and `tailnet_https` move to the Tuning page. A saved value keeps working. `cloud_encrypt` and `cloud_autostart` stay.
