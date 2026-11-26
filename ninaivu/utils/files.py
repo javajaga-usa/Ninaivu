@@ -228,25 +228,40 @@ def sync_file(path: Path | str) -> None:
         os.close(fd)
 
 
-def sync_folder(folder: Path | str) -> None:
+#: What a folder sync answers on a drive or system that cannot sync a
+#: folder at all, as against one that tried and failed.
+_SYNC_UNSUPPORTED = {errno.EINVAL, errno.EBADF, errno.EROFS,
+                     getattr(errno, "ENOTSUP", errno.EINVAL),
+                     getattr(errno, "EOPNOTSUPP", errno.EINVAL)}
+
+
+def sync_folder(folder: Path | str, *, strict: bool = False) -> None:
     """Make the renames and new names in *folder* survive a power cut.
 
     Syncing a file makes its bytes durable, not its name: after ``os.replace``
     the new name lives in the folder, and until the folder is synced a power
     cut can bring back the old one. Not on Windows, where a folder cannot be
-    opened this way and NTFS journals the rename itself. Never raises: this
-    makes a good outcome likelier, and its failure is not a failed copy.
+    opened this way and NTFS journals the rename itself.
+
+    Never raises by default: this makes a good outcome likelier, and its
+    failure is not a failed copy. With *strict*, for a caller about to tell
+    someone their file is safe, a sync that was tried and failed (an I/O
+    error) raises OSError; a drive that cannot sync a folder at all still
+    passes (audit R5, 26 Nov).
     """
     if os.name == "nt":
         return
     try:
         fd = os.open(folder, os.O_RDONLY)
     except OSError:
+        if strict:
+            raise
         return
     try:
         os.fsync(fd)
-    except OSError:
-        pass
+    except OSError as exc:
+        if strict and exc.errno not in _SYNC_UNSUPPORTED:
+            raise
     finally:
         os.close(fd)
 
@@ -334,25 +349,89 @@ def _rename_no_replace(src: str, dst: str) -> bool:
     raise OSError(code, os.strerror(code), dst)
 
 
-def _copy_into_new(src: str, dst: str) -> None:
-    """Copy *src* to a name made for it here, then drop *src*.
+#: The end of the dot-name a copy is written under before it takes its real
+#: name, on a drive with neither hard links nor a no-replace rename.
+PART_SUFFIX = ".ninaivu-part"
 
-    The name is taken with ``O_EXCL``, so a file, folder or link that is there
-    already, or appears at any moment, is never replaced: the create fails.
-    Until the copy is whole and synced the name holds a part-written file; if
-    the copy fails it is removed (only if it is still the one made here) and
-    *src* is kept, so nothing is lost.
+#: A part copy nothing has written to for this long was left by a copy that
+#: stopped (a crash or a power cut) and is cleared by the next one.
+PART_STALE_SECONDS = 3600
+
+
+def _part_name(dst: str) -> str:
+    folder, name = os.path.split(dst)
+    return os.path.join(folder, f".{name}.{os.urandom(6).hex()}{PART_SUFFIX}")
+
+
+def _clear_stopped_parts(dst: str) -> None:
+    """Remove what a copy into *dst* that stopped part-way left behind.
+
+    Its part copy, under a dot-name every scanner steps over; and, where that
+    copy had already taken *dst* to hold it, the empty file at *dst*. A part
+    copy still being written to is someone's live copy and is left alone.
+    """
+    import glob                                              # noqa: PLC0415
+    import time                                              # noqa: PLC0415
+
+    folder, name = os.path.split(dst)
+    stale = False
+    for part in glob.glob(os.path.join(glob.escape(folder or "."),
+                                       f".{glob.escape(name)}.*{PART_SUFFIX}")):
+        try:
+            if time.time() - os.lstat(part).st_mtime < PART_STALE_SECONDS:
+                continue
+            os.unlink(part)
+            stale = True
+        except OSError:
+            pass
+    if stale:
+        try:
+            info = os.lstat(dst)
+            if stat.S_ISREG(info.st_mode) and info.st_size == 0:
+                os.unlink(dst)
+        except OSError:
+            pass
+
+
+def _copy_into_new(src: str, dst: str) -> None:
+    """Copy *src* to *dst*, which nothing may be at, then drop *src*.
+
+    For a drive with neither hard links nor a rename that refuses an existing
+    name (exFAT and FAT). The copy is written whole and synced under a
+    dot-name beside *dst* first; only then is *dst* taken with ``O_EXCL`` (so
+    a file, folder or link that is there already, or appears at any moment,
+    is never replaced: the create fails) and the finished copy renamed over
+    that empty file of its own. Writing straight into *dst* left a part-
+    written photograph under its real name for anything to read, and still
+    there after a crash or a power cut (audit R4, 26 Nov). What a copy that
+    stopped leaves behind is cleared by the next one. On any failure *src* is
+    kept, so nothing is lost.
     """
     flags = (os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
              | getattr(os, "O_NOFOLLOW", 0))
-    fd = os.open(dst, flags, 0o666)
-    made = os.fstat(fd)
+    _clear_stopped_parts(dst)
+    if os.path.lexists(dst):
+        raise FileExistsError(errno.EEXIST, os.strerror(errno.EEXIST), dst)
+    part = _part_name(dst)
+    fd = os.open(part, flags, 0o666)
+    held = None
     try:
         with open(src, "rb") as source, os.fdopen(fd, "wb", closefd=False) as out:
             while chunk := source.read(CHUNK):
                 out.write(chunk)
             out.flush()
             os.fsync(fd)
+        os.close(fd)
+        fd = -1
+        hold = os.open(dst, flags, 0o666)
+        held = os.fstat(hold)
+        os.close(hold)
+        now = os.lstat(dst)
+        if (now.st_dev, now.st_ino) != (held.st_dev, held.st_ino):
+            held = None
+            raise FileExistsError(errno.EEXIST, os.strerror(errno.EEXIST), dst)
+        os.replace(part, dst)
+        held = None
         info = os.stat(src)
         try:
             os.utime(dst, ns=(info.st_atime_ns, info.st_mtime_ns),
@@ -360,15 +439,21 @@ def _copy_into_new(src: str, dst: str) -> None:
         except (NotImplementedError, OSError):
             os.utime(dst, ns=(info.st_atime_ns, info.st_mtime_ns))
     except BaseException:
-        os.close(fd)
+        if fd >= 0:
+            os.close(fd)
         try:
-            now = os.lstat(dst)
-            if (now.st_dev, now.st_ino) == (made.st_dev, made.st_ino):
-                os.unlink(dst)
+            os.unlink(part)
         except OSError:
             pass
+        if held is not None:
+            try:
+                now = os.lstat(dst)
+                if (now.st_dev, now.st_ino) == (held.st_dev, held.st_ino):
+                    os.unlink(dst)
+            except OSError:
+                pass
         raise
-    os.close(fd)
+    sync_folder(os.path.dirname(dst) or ".")
     os.unlink(src)
 
 

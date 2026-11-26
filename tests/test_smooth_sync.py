@@ -127,6 +127,10 @@ def test_an_encrypted_file_already_there_is_not_downloaded_again(tmp_path):
     photo = dest / "a.jpg"
     photo.write_bytes(b"x" * 200_000)
     item = _encrypted_item(photo, source_version(photo))
+    # The original's own SHA-256, recorded with every upload since 5.2, is
+    # what lets it be checked without the backup (audit R1, 26 Nov).
+    from ninaivu.utils.files import sha256_file
+    item.source_sha256 = sha256_file(photo)
     job = restore.RestoreJob(connect=lambda: None, items=[item], destination=dest,
                              key=b"k" * 32)
     job._download = lambda *a: pytest.fail("downloaded a file that was already there")

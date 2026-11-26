@@ -40,14 +40,38 @@ runtime_works() {
 
 release_lock() {
     rm -rf "$lock"
+    if [ -n "${held_flock:-}" ]; then
+        exec 9>&-                   # not handed on to Ninaivu by the exec below
+        held_flock=
+    fi
 }
 
+# The lock is a folder holding its owner's pid. A start killed between making
+# the folder and writing the pid left it empty, and every later start waited
+# out its fifteen minutes and gave up, for good (audit R3, 26 Nov). Where the
+# system has flock (util-linux, on every Debian), the turns are taken under a
+# lock the kernel lets go of when its holder dies, and a folder found by the
+# one holding it can only be a killed start's. Elsewhere an empty folder a
+# minute old is taken as one.
 take_lock() {
+    if command -v flock >/dev/null 2>&1; then
+        exec 9>>"$lock.flock"
+        if ! flock -w 900 9; then
+            echo "ninaivu: another start is still preparing $runtime; try again shortly" >&2
+            exit 75
+        fi
+        held_flock=1
+        rm -rf "$lock"
+    fi
     waited=0
     while ! mkdir "$lock" 2>/dev/null; do
         owner=$(cat "$lock/pid" 2>/dev/null || true)
         if [ -n "$owner" ] && ! kill -0 "$owner" 2>/dev/null; then
             rm -rf "$lock"          # its start was killed; nobody holds it
+            continue
+        fi
+        if [ -z "$owner" ] && [ -n "$(find "$lock" -maxdepth 0 -mmin +1 2>/dev/null)" ]; then
+            rm -rf "$lock"          # killed before it wrote its pid
             continue
         fi
         if [ "$waited" -ge 900 ]; then

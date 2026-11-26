@@ -377,7 +377,12 @@ jobs:
           python -m venv "$RUNNER_TEMP/everything"
           . "$RUNNER_TEMP/everything/bin/activate"
           python -m pip install --upgrade pip
+          # Under the tested pins, as the release builds and the launcher's
+          # installs are: audited unpinned, a newer patch that fixed an
+          # advisory passed here while the release still shipped the old one
+          # (audit R6, 26 Nov).
           pip install --extra-index-url https://download.pytorch.org/whl/cpu \
+            -c requirements/constraints-tested.txt \
             -r requirements/requirements.txt \
             -r requirements/requirements-desktop.txt \
             -r requirements/requirements-ai.txt \

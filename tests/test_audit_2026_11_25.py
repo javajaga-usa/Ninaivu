@@ -302,8 +302,8 @@ def test_a_phone_backup_is_synced_before_it_is_called_safe(app, people, monkeypa
                         lambda p: (events.append(("file", Path(p).name, state_now())),
                                    real_file(p)))
     monkeypatch.setattr(upload_review, "sync_folder",
-                        lambda p: (events.append(("folder", Path(p).name, state_now())),
-                                   real_folder(p)))
+                        lambda p, **kw: (events.append(("folder", Path(p).name, state_now())),
+                                         real_folder(p, **kw)))
 
     data = photo()
     done = back_up(login(app.test_client(), *FAMILY), "IMG_0001.png", data)
@@ -474,21 +474,21 @@ def test_a_copy_that_only_lost_its_timestamps_is_still_not_sent(uploaded):
         (2 * 65536,)))
 
 
-def test_an_encrypted_record_from_before_learns_the_digest_and_then_sees_edits(uploaded):
+def test_an_encrypted_record_from_before_is_sent_again_when_its_timestamp_moves(uploaded):
     (_, _, _, library, files, _), conn = uploaded
     # As an encrypted upload made before the file's own digest was kept: what
     # Drive holds is ciphertext, so nothing recorded speaks for the middle.
+    # The file as it is now must not be taken for the one that was sent
+    # (audit R2, 26 Nov): it goes up again, which records its digest.
     conn.execute("UPDATE cloud_uploads SET encrypted=1, source_sha256='', digest='x', md5=''")
     conn.commit()
     big = library / "2019/07/a.jpg"
     stamp = big.stat().st_mtime + 60
     os.utime(big, (stamp, stamp))
-    assert store_mod.queue_missing(conn, migration.assets(library, files)) == 0
-    learned = conn.execute("SELECT source_sha256 FROM cloud_uploads WHERE rel_path=?",
-                           ("2019/07/a.jpg",)).fetchone()[0]
-    assert learned == files_mod.sha256_file(big)
-    _edit_the_middle(big)
     assert store_mod.queue_missing(conn, migration.assets(library, files)) == 1
+    row = conn.execute("SELECT state, source_sha256 FROM cloud_uploads WHERE rel_path=?",
+                       ("2019/07/a.jpg",)).fetchone()
+    assert row[0] == store_mod.PENDING and row[1] == "", tuple(row)
 
 
 def test_an_encrypted_upload_records_the_files_own_digest(tmp_path):

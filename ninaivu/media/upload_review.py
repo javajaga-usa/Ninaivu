@@ -35,6 +35,9 @@ def stage(conn, cfg, upload, filename, root, scope, user_id, *,
     """
     storage_key = secrets.token_hex(20)
     base = Path(cfg.state_dir) / "pending-uploads"
+    # A staging folder made just now is a new name in its parent, which must
+    # last as well before the phone is told its file is safe.
+    base_is_new = not base.exists()
     if base.is_symlink() or not base.resolve().is_relative_to(Path(cfg.state_dir).resolve()):
         raise ValueError("Upload storage must stay inside Ninaivu's state directory.")
     if not hasattr(upload, "link_into"):
@@ -73,9 +76,14 @@ def stage(conn, cfg, upload, filename, root, scope, user_id, *,
         # Without the syncs a power cut could lose a file both ends had let go
         # of (audit F3). The pieces as they arrive are not synced; a file cut
         # short is sent again from what is on disk.
+        # Strict: a folder sync that failed is not a file that is safe (audit
+        # R5, 26 Nov). The upload fails and the phone keeps its copy to send
+        # again.
         sync_file(target)
-        sync_folder(folder)
-        sync_folder(base)
+        sync_folder(folder, strict=True)
+        sync_folder(base, strict=True)
+        if base_is_new:
+            sync_folder(base.parent, strict=True)
         if place is not None:
             # Underscored keys are staging instructions for approve(); they are
             # not asset columns and db._normalise drops them on the way in.
