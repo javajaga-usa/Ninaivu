@@ -184,6 +184,15 @@ def test_midnight_written_as_the_end_of_a_day():
     assert limits.format_clock(limits.parse_clock("7:5")) == "07:05"
 
 
+
+def test_only_midnight_may_be_written_as_24():
+    """24:30 came out as 00:30, a time nobody chose (audit F11)."""
+    for wrong in ("24:01", "24:30", "24:59", "25:00", "23:60"):
+        assert limits.parse_clock(wrong) is None, wrong
+    assert limits.parse_clock("23:59") == 23 * 60 + 59
+    assert limits.Window("24:30", "06:00").start is None
+
+
 def test_the_window_says_what_it_is_for_the_console():
     assert limits.Window("22:00", "07:00").label() == "22:00–07:00"
 
