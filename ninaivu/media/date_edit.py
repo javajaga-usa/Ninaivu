@@ -7,7 +7,7 @@ import shutil
 import threading
 
 from ..archive.dates import to_timestamp
-from ..storage import db
+from ..storage import db, mirror
 from ..utils.files import move_no_replace
 
 log = logging.getLogger(__name__)
@@ -179,6 +179,9 @@ def relocate(conn, asset_id, when, roots, archive_path=None):
                 if conn.execute("SELECT 1 FROM sqlite_master WHERE name='cloud_uploads'").fetchone():
                     conn.execute("UPDATE cloud_uploads SET rel_path=? WHERE root=? AND rel_path=?",
                                  (new_relative, asset["root"], old_relative))
+                # The second copy keeps it at the old place on its disk; its
+                # record follows the file, so a restore puts it back here.
+                mirror.note_move(conn, asset["root"], old_relative, new_relative)
                 if attached:
                     # Archive verification/deduplication must follow the file;
                     # its content hash and source history have not changed.

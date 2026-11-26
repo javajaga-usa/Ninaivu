@@ -103,7 +103,9 @@ def test_what_is_backed_up_is_not_sent_again(family):
                   {"name": "notes.pdf", "size": 10, "modified": TAKEN_MS}]}).get_json()
 
     assert [f["state"] for f in checked["files"]] == ["staged", "new", "unsupported"]
-    assert checked["summary"]["this_phone"]["safe"] == 1
+    # Waiting for an administrator: one copy in a holding folder, not safe.
+    assert checked["summary"]["this_phone"]["safe"] == 0
+    assert checked["summary"]["this_phone"]["waiting_review"] == 1
     again = offer(family, "IMG_0002.png", data).get_json()
     assert again["state"] == "staged", "offering it again must not start it again"
 
@@ -229,7 +231,9 @@ def test_the_summary_counts_what_is_safe(family):
                content_type="application/octet-stream")
     summary = family.get(f"/api/phone-backup/status?device_id={DEVICE}").get_json()
     phone = summary["this_phone"]
-    assert phone["safe"] == 1 and phone["partial"] == 1 and phone["files"] == 2
+    # The finished one waits for an administrator: counted as waiting, not safe.
+    assert phone["safe"] == 0 and phone["waiting_review"] == 1
+    assert phone["partial"] == 1 and phone["files"] == 2
     assert summary["phones"][0]["device"] == "Maya's phone"
     assert time.time() - phone["last_backup"] < 60
 

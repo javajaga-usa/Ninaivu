@@ -89,7 +89,7 @@ from . import fit, roots as roots_kit
 
 log = logging.getLogger(__name__)
 
-__all__ = ["Mirror", "folder_problem", "MARKER", "NAMES", "RESERVE"]
+__all__ = ["Mirror", "folder_problem", "note_move", "MARKER", "NAMES", "RESERVE"]
 
 #: The file, at the top of a destination, that says which copy it is.
 MARKER = ".ninaivu-second-copy.json"
@@ -142,6 +142,12 @@ CREATE TABLE IF NOT EXISTS mirror_copies (
     PRIMARY KEY (root, rel_path)
 );
 CREATE TABLE IF NOT EXISTS mirror_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL DEFAULT '');
+CREATE TABLE IF NOT EXISTS mirror_moves (
+    id       INTEGER PRIMARY KEY,
+    root     TEXT NOT NULL,
+    old_rel  TEXT NOT NULL,
+    new_rel  TEXT NOT NULL
+);
 -- Files that were on the destination before Ninaivu wrote anything there, of
 -- a size some library file still to be copied has: where to look for the
 -- same photograph before writing it again (Mirror._look_over).
@@ -151,6 +157,35 @@ CREATE TABLE IF NOT EXISTS mirror_found (
 );
 CREATE INDEX IF NOT EXISTS idx_mirror_found_size ON mirror_found(size);
 """
+
+
+def note_move(conn: sqlite3.Connection, root: str, old_rel: str, new_rel: str) -> None:
+    """Say that a library file now lives at *new_rel*, for the second copy.
+
+    The record of the second copy is kept by the file's place in the library.
+    A photograph given another date (media/date_edit.py), or moved in Finder
+    and known by its fingerprint (db.respell_asset), kept its record at the
+    old place, so **Restore from this disk** put it back there: the same
+    photograph twice, on two dates, and the second a new row, shown to the
+    family even when the first had been hidden. The copy on the disk is where
+    it was and stays there; the next run (:meth:`Mirror._follow_moves`) moves
+    the record to the new place, saying where on the disk the file is kept.
+
+    Called inside the caller's transaction; nothing when no second copy was
+    ever made.
+    """
+    if old_rel == new_rel:
+        return
+    try:
+        if conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' "
+                        "AND name='mirror_copies'").fetchone() is None:
+            return
+        conn.execute("CREATE TABLE IF NOT EXISTS mirror_moves (id INTEGER PRIMARY KEY, "
+                     "root TEXT NOT NULL, old_rel TEXT NOT NULL, new_rel TEXT NOT NULL)")
+        conn.execute("INSERT INTO mirror_moves(root, old_rel, new_rel) VALUES(?,?,?)",
+                     (str(root), str(old_rel), str(new_rel)))
+    except sqlite3.Error as exc:
+        log.warning("could not note a move for the second copy: %s", exc)
 
 
 def folder_problem(folder: str, roots: list[str], state_dir: Path | str) -> str | None:
@@ -326,6 +361,7 @@ class Mirror:
             log.warning("the second copy at %s is not the one the record was made "
                         "against; copying to it from the beginning", target)
         conn.execute("DELETE FROM mirror_copies")
+        conn.execute("DELETE FROM mirror_moves")
         conn.execute("DELETE FROM mirror_found")
         copy_id = found or secrets.token_hex(12)
         if not found:
@@ -354,6 +390,37 @@ class Mirror:
             # Two libraries called "Photos" must not be poured together.
             name += "-" + hashlib.sha1(str(root).encode()).hexdigest()[:6]  # noqa: S324
         return name
+
+    def _follow_moves(self, conn: sqlite3.Connection) -> int:
+        """Move the records of files that moved in the library (:func:`note_move`).
+
+        The file on the disk is not touched: the record keeps its new place in
+        the library and says, in ``stored_as``, where on the disk it is. Then a
+        restore puts it back where the library has it now, the recycle bin's
+        record of it is found by its new place, and it is not copied again.
+        Returns how many records moved."""
+        moved = 0
+        for move in conn.execute("SELECT id, root, old_rel, new_rel FROM mirror_moves "
+                                 "ORDER BY id").fetchall():
+            root, old, new = move["root"], move["old_rel"], move["new_rel"]
+            row = conn.execute("SELECT stored_as FROM mirror_copies WHERE root=? AND rel_path=?",
+                               (root, old)).fetchone()
+            if row is not None:
+                if conn.execute("SELECT 1 FROM mirror_copies WHERE root=? AND rel_path=?",
+                                (root, new)).fetchone():
+                    # Copied at its new place already: the old record would
+                    # only bring the file back at the old one.
+                    conn.execute("DELETE FROM mirror_copies WHERE root=? AND rel_path=?",
+                                 (root, old))
+                else:
+                    kept = row["stored_as"] or (
+                        f"{self._library_folder(root)}/{old.replace(chr(92), '/')}")
+                    conn.execute("UPDATE mirror_copies SET rel_path=?, stored_as=? "
+                                 "WHERE root=? AND rel_path=?", (new, kept, root, old))
+                moved += 1
+            conn.execute("DELETE FROM mirror_moves WHERE id=?", (move["id"],))
+        conn.commit()
+        return moved
 
     # -- asking -----------------------------------------------------------
 
@@ -559,6 +626,7 @@ class Mirror:
             # tried again within the hour rather than the next day.
             self._set_meta(conn, "last_attempt", self._clock())
             self._know_the_disk(conn, target)
+            self._follow_moves(conn)
             self._listings = {}
             fstype = self.fstype or fit.filesystem_of(target)
             self._family = fit.family_of(fstype)
@@ -688,6 +756,7 @@ class Mirror:
             target = self.folder
             assert target is not None
             self._know_the_disk(conn, target)
+            self._follow_moves(conn)
             # Carried on from where the last check stopped, with what it had
             # found so far: a whole disk read back takes many hours, and one
             # stopped (or set aside for the nightly copy) used to start again
@@ -793,6 +862,7 @@ class Mirror:
             target = self.folder
             assert target is not None
             self._know_the_disk(conn, target)
+            self._follow_moves(conn)
             # Deleted here (in the bin, or erased from it) is not lost: the
             # second copy never removes anything, and putting the library back
             # must not put those back with it (recycle.Gone).

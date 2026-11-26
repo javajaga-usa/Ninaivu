@@ -12,10 +12,12 @@ and marked done after Drive confirms, so a crash mid-upload leaves a row that
 says "pending with a resume point", never one that says "done" for a file that
 did not arrive.
 
-**Hidden photographs stay here.** Anything an administrator has marked
-admin-only is not sent. Somebody who hid a photograph from their own household
-did not thereby ask for it to be copied to Google, and reading that as consent
-would be the worst possible inference. It is a setting, and it defaults to off.
+**Hidden photographs go only encrypted.** Anything an administrator has
+marked admin-only, and anything explicit, is not sent as it is. Somebody who
+hid a photograph from their own household did not thereby ask for it to be
+copied to Google where Google can read it. It is a setting (cloud_hidden):
+by default they go only while the backup is encrypted, so the documents the
+household hid still have a copy outside the house.
 
 **Stopping is safe.** The stop flag is checked between chunks. An in-flight
 request must finish first, so the delay depends on chunk size and connection
