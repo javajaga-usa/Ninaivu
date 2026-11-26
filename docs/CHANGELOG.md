@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Photographs just imported are straightened without waiting for the night.** With the daily catch-up on, the straightening survey after a scan was kept for the catch-up's stretch, so the photographs an import or a phone backup had just brought in stayed sideways until 02:00, and for days on a Mac in use then. The survey after a scan now looks at what that scan added straight away; the rest of the library still waits for the catch-up. The Straighten page also has **Only new photos (last 30 days)**, which looks at the photographs added lately that have not been looked at, without going through the whole library first.
 - **Fixes from the external audit of 26 November 2026.**
   - **An encrypted restore no longer calls a photograph damaged in the middle "already there" (R1).** A file on disk with the backed-up size, timestamp and both ends was taken as intact. It is now checked whole against the original's own SHA-256 (recorded with each upload since 5.2); for an older encrypted upload, which has none, the backup is fetched, decrypted and compared, and the good copy is put beside the damaged one.
   - **An older encrypted upload whose file changed is sent again (R2).** With nothing recorded to compare the middle with, the cloud backup took the file as it is now for the one that was sent. It now goes up again, which records its digest. A file whose size and timestamp both stay the same is still not read on every pass; the monthly scrub is what finds silent damage.

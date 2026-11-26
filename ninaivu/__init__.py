@@ -1017,7 +1017,10 @@ class Services(ScanPlanning):
                 self.straightener.survey, roots, limit=job.get("limit") or None,
                 rescan=False, auto_apply=bool(job.get("auto_apply")),
                 since=float(job.get("since") or 0) or None,
-                governed=bool(job.get("governed")))
+                governed=bool(job.get("governed")),
+                # Only the new photographs, when that is what it was looking at.
+                **({"added_since": float(job["added_since"])}
+                   if job.get("added_since") is not None else {}))
             attempt("the straightening survey",
                     lambda: self._once_the_model_is_ready(survey))
         elif job and job.get("job") == "apply":
