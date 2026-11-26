@@ -1,7 +1,8 @@
 # Changelog
 
-## Unreleased
+## 5.2.0 — 26 November 2026
 
+- **Quicker pages on a big library.** Timed on a real library of 216,000 photographs on the Mac. The face review queue (**People**, someone's suggestions) is kept until a face, a group or a rejection changes, where before every open read every unnamed face (about a second). Which face recogniser made most of the faces is counted from a narrow index (`idx_faces_model`) instead of every face's row, and the duplicates review no longer copies every group on each ask. Pages that stay over a second the first time (Then and now, Young faces, Segments) are one cached piece of work each and are next.
 - **Download all also installs the Extras.** On the AI models page, **Download all** now brings in the Home & extensions packages that are missing (one after another), then the models they unblock. The PyTorch image engine is left out, and so is `transformers` unless Letters read aloud is on.
 - **Seven more switches go from Advanced settings.** `scrub_repair`, `young_faces` (now on by default) and `describe_photos` (follows the AI models page) are always on or follow their model; `ai_gpu`, `cloud_full_speed`, `notify_smtp_tls` and `tailnet_https` move to the Tuning page. A saved value keeps working. `cloud_encrypt` and `cloud_autostart` stay.
 - **Colour, search and faces are model plugins (P16).** Each lives in a package of its own under `ninaivu/models/` (`colour`, `search`, `faces`), and every import names the new place. An ONNX Runtime session, which more than one of them opens, is in `runtime/ort_session.py`. Nothing changes for a household; the core stays free of model code.

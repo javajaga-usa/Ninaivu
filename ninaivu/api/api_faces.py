@@ -281,11 +281,17 @@ def faces_name_cluster():
 def faces_suggestions(person_id: int):
     """The review queue: faces that might be this person, best guess first."""
     conn = _conn()
-    return jsonify({
-        "person_id": person_id,
-        "suggestions": _face_indexer().suggestions(
-            conn, person_id, _roots(), limit=_face_limit(60)),
-    })
+    roots, limit = _roots(), _face_limit(60)
+    # Reading every unnamed face's embedding took about a second at 200,000
+    # photographs each time the review queue opened. It is kept until a face
+    # is named, unnamed, regrouped or hidden, or a rejection is added
+    # (5.2), and a copy goes to each caller.
+    key = ("face suggestions", person_id, tuple(roots) if isinstance(roots, (list, tuple)) else roots,
+           limit, db.face_edits(), len(db.rejections(conn, person_id=person_id)))
+    suggestions = db.cached_aggregate(
+        conn, key, lambda: _face_indexer().suggestions(conn, person_id, roots, limit=limit),
+        also=(db.FACES_GENERATION_KEY, db.FACE_GROUPS_GENERATION_KEY))
+    return jsonify({"person_id": person_id, "suggestions": suggestions})
 
 
 def _body_id(value, what: str) -> int:

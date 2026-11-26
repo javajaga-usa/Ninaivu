@@ -767,15 +767,16 @@ index | idx_faces_asset | faces | 131 | CREATE INDEX idx_faces_asset    ON faces
 index | idx_faces_person | faces | 132 | CREATE INDEX idx_faces_person   ON faces(person_id, asset_id)
 index | idx_faces_cluster | faces | 133 | CREATE INDEX idx_faces_cluster  ON faces(cluster_key)
 index | idx_faces_unnamed | faces | 134 | CREATE INDEX idx_faces_unnamed  ON faces(person_id, quality DESC)
-index | idx_fingerprints_digest | content_fingerprints | 135 | CREATE INDEX idx_fingerprints_digest ON content_fingerprints(digest, size)
+index | idx_faces_model | faces | 135 | CREATE INDEX idx_faces_model    ON faces(model)
+index | idx_fingerprints_digest | content_fingerprints | 136 | CREATE INDEX idx_fingerprints_digest ON content_fingerprints(digest, size)
 table | assets_fts | assets_fts | 0 | CREATE VIRTUAL TABLE assets_fts USING fts5(
     filename, folder, tags, caption, camera, ocr_text, city,
     content='assets', content_rowid='id', tokenize='unicode61'
 )
-table | assets_fts_data | assets_fts_data | 137 | CREATE TABLE 'assets_fts_data'(id INTEGER PRIMARY KEY, block BLOB)
-table | assets_fts_idx | assets_fts_idx | 138 | CREATE TABLE 'assets_fts_idx'(segid, term, pgno, PRIMARY KEY(segid, term)) WITHOUT ROWID
-table | assets_fts_docsize | assets_fts_docsize | 139 | CREATE TABLE 'assets_fts_docsize'(id INTEGER PRIMARY KEY, sz BLOB)
-table | assets_fts_config | assets_fts_config | 140 | CREATE TABLE 'assets_fts_config'(k PRIMARY KEY, v) WITHOUT ROWID
+table | assets_fts_data | assets_fts_data | 138 | CREATE TABLE 'assets_fts_data'(id INTEGER PRIMARY KEY, block BLOB)
+table | assets_fts_idx | assets_fts_idx | 139 | CREATE TABLE 'assets_fts_idx'(segid, term, pgno, PRIMARY KEY(segid, term)) WITHOUT ROWID
+table | assets_fts_docsize | assets_fts_docsize | 140 | CREATE TABLE 'assets_fts_docsize'(id INTEGER PRIMARY KEY, sz BLOB)
+table | assets_fts_config | assets_fts_config | 141 | CREATE TABLE 'assets_fts_config'(k PRIMARY KEY, v) WITHOUT ROWID
 trigger | assets_ai | assets | 0 | CREATE TRIGGER assets_ai AFTER INSERT ON assets BEGIN
     INSERT INTO assets_fts(rowid, filename, folder, tags, caption, camera, ocr_text, city)
     VALUES (new.id, new.filename, new.folder, new.tags, new.caption, new.camera,
@@ -797,7 +798,7 @@ trigger | assets_au | assets | 0 | CREATE TRIGGER assets_au AFTER UPDATE OF
     VALUES (new.id, new.filename, new.folder, new.tags, new.caption, new.camera,
             new.ocr_text, new.city);
 END
-table | locations | locations | 141 | CREATE TABLE locations (
+table | locations | locations | 142 | CREATE TABLE locations (
     id          INTEGER PRIMARY KEY,
     asset_id    INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE ON UPDATE CASCADE,
     fingerprint TEXT,
@@ -807,9 +808,9 @@ table | locations | locations | 141 | CREATE TABLE locations (
     seen_at     REAL NOT NULL DEFAULT 0,
     UNIQUE (root, rel_path)
 )
-index | sqlite_autoindex_locations_1 | locations | 142 | None
-index | idx_locations_fingerprint | locations | 143 | CREATE INDEX idx_locations_fingerprint ON locations(fingerprint)
-index | idx_locations_asset | locations | 144 | CREATE INDEX idx_locations_asset ON locations(asset_id, place)
+index | sqlite_autoindex_locations_1 | locations | 143 | None
+index | idx_locations_fingerprint | locations | 144 | CREATE INDEX idx_locations_fingerprint ON locations(fingerprint)
+index | idx_locations_asset | locations | 145 | CREATE INDEX idx_locations_asset ON locations(asset_id, place)
 trigger | locations_follow_insert | assets | 0 | CREATE TRIGGER locations_follow_insert AFTER INSERT ON assets
 BEGIN
     DELETE FROM locations WHERE root = NEW.root AND rel_path = NEW.rel_path;
@@ -857,9 +858,9 @@ BEGIN
     UPDATE locations SET fingerprint = NULL
      WHERE asset_id = OLD.asset_id AND place = 'library';
 END
-table | copies | copies | 146 | CREATE TABLE copies ( fingerprint TEXT NOT NULL, destination TEXT NOT NULL, state       TEXT NOT NULL, verified_at REAL NOT NULL DEFAULT 0, size        INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (fingerprint, destination)) WITHOUT ROWID
-index | idx_copies_destination | copies | 147 | CREATE INDEX idx_copies_destination ON copies(destination, state)
-table | duplicate_reviews | duplicate_reviews | 148 | CREATE TABLE duplicate_reviews (
+table | copies | copies | 147 | CREATE TABLE copies ( fingerprint TEXT NOT NULL, destination TEXT NOT NULL, state       TEXT NOT NULL, verified_at REAL NOT NULL DEFAULT 0, size        INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (fingerprint, destination)) WITHOUT ROWID
+index | idx_copies_destination | copies | 148 | CREATE INDEX idx_copies_destination ON copies(destination, state)
+table | duplicate_reviews | duplicate_reviews | 149 | CREATE TABLE duplicate_reviews (
     asset_id   INTEGER PRIMARY KEY REFERENCES assets(id) ON DELETE CASCADE,
     keeper_id  INTEGER REFERENCES assets(id) ON DELETE SET NULL,
     action     TEXT NOT NULL,
@@ -867,13 +868,13 @@ table | duplicate_reviews | duplicate_reviews | 148 | CREATE TABLE duplicate_rev
     decided_by INTEGER,
     decided_at REAL NOT NULL
 )
-index | idx_duplicate_reviews_batch | duplicate_reviews | 149 | CREATE INDEX idx_duplicate_reviews_batch ON duplicate_reviews(batch)
-table | duplicate_undo | duplicate_undo | 150 | CREATE TABLE duplicate_undo (
+index | idx_duplicate_reviews_batch | duplicate_reviews | 150 | CREATE INDEX idx_duplicate_reviews_batch ON duplicate_reviews(batch)
+table | duplicate_undo | duplicate_undo | 151 | CREATE TABLE duplicate_undo (
     batch    INTEGER NOT NULL,
     what     TEXT NOT NULL,
     asset_id INTEGER NOT NULL,
     ref      INTEGER,
     before   TEXT
 )
-index | idx_duplicate_undo_batch | duplicate_undo | 151 | CREATE INDEX idx_duplicate_undo_batch ON duplicate_undo(batch)
-table | sqlite_stat1 | sqlite_stat1 | 152 | CREATE TABLE sqlite_stat1(tbl,idx,stat)
+index | idx_duplicate_undo_batch | duplicate_undo | 152 | CREATE INDEX idx_duplicate_undo_batch ON duplicate_undo(batch)
+table | sqlite_stat1 | sqlite_stat1 | 153 | CREATE TABLE sqlite_stat1(tbl,idx,stat)

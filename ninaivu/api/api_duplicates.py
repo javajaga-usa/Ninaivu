@@ -44,7 +44,10 @@ def _all_groups() -> list[dict[str, Any]]:
             conn, duplicate_review.GENERATION_KEY, "") else (),
         # Favourites and stars (which pick the best) change without the
         # library's number moving: worked out again at most a minute later.
-        max_age=60.0)
+        max_age=60.0,
+        # Read, never edited by the one caller (the page's members are copied
+        # into new dicts), so no copy of every group on each ask (5.2).
+        shared=True)
 
 
 def _item(row: dict[str, Any], recipe: str, admin: bool) -> dict[str, Any]:
