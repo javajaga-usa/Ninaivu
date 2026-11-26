@@ -206,6 +206,7 @@ def test_standard_on_sixteen_cores_is_not_taken_for_performance(monkeypatch):
 # The window itself, where there is a display
 # ---------------------------------------------------------------------------
 
+@pytest.mark.fresh_process
 def test_the_window_opens_with_the_logs_hidden_until_asked(tmp_path, monkeypatch):
     import tkinter as tk
     try:
@@ -243,6 +244,7 @@ def test_the_window_opens_with_the_logs_hidden_until_asked(tmp_path, monkeypatch
         root.destroy()
 
 
+@pytest.mark.fresh_process
 @pytest.mark.parametrize("look", ["light", "dark"])
 def test_hiding_the_logs_gives_the_height_back(tmp_path, monkeypatch, look):
     import tkinter as tk
@@ -431,6 +433,7 @@ def test_the_chosen_look_is_kept_beside_the_mode(tmp_path):
     assert app.theme_preference(SimpleNamespace(settings={"theme": "sepia"})) == "system"
 
 
+@pytest.mark.fresh_process
 def test_switching_the_look_repaints_the_open_window(tmp_path, monkeypatch):
     import tkinter as tk
     try:

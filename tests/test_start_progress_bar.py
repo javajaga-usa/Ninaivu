@@ -218,6 +218,7 @@ def test_the_heading_and_the_time_left():
 
 # -- the card itself, where there is a display ---------------------------------------
 
+@pytest.mark.fresh_process
 def test_the_card_shows_a_start_begun_elsewhere_and_goes_with_it(tmp_path, monkeypatch):
     tk = pytest.importorskip("tkinter")
     try:

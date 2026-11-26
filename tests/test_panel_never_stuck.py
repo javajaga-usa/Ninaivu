@@ -284,6 +284,7 @@ def window(tmp_path, monkeypatch):
         pass
 
 
+@pytest.mark.fresh_process
 def test_a_disk_that_does_not_answer_never_freezes_the_window(window):
     root, make, _app = window
     disk = threading.Event()
@@ -312,6 +313,7 @@ def test_a_disk_that_does_not_answer_never_freezes_the_window(window):
         disk.set()
 
 
+@pytest.mark.fresh_process
 def test_the_window_closes_while_a_start_is_under_way(window):
     root, make, _app = window
     dashboard = make()
@@ -320,6 +322,7 @@ def test_the_window_closes_while_a_start_is_under_way(window):
     assert dashboard.finished.is_set()
 
 
+@pytest.mark.fresh_process
 def test_closing_half_way_through_a_restart_hands_it_over(window):
     root, make, _app = window
     dashboard = make()
@@ -331,6 +334,7 @@ def test_closing_half_way_through_a_restart_hands_it_over(window):
     assert handed == ["power-saving"] and dashboard.finished.is_set()
 
 
+@pytest.mark.fresh_process
 def test_the_window_closes_even_while_the_panel_moves_files(window):
     root, make, _app = window
     dashboard = make()
@@ -343,6 +347,7 @@ def test_the_window_closes_even_while_the_panel_moves_files(window):
     assert dashboard.finished.is_set()
 
 
+@pytest.mark.fresh_process
 def test_a_stuck_start_says_so_and_can_be_stopped(window, monkeypatch):
     root, make, app = window
     dashboard = make()
@@ -369,6 +374,7 @@ def test_a_stuck_start_says_so_and_can_be_stopped(window, monkeypatch):
     assert str(card.stop_button.cget("state")) == "disabled"      # asked once
 
 
+@pytest.mark.fresh_process
 def test_an_import_in_hand_is_not_offered_a_stop(window):
     root, make, _app = window
     dashboard = make()

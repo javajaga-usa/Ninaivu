@@ -378,3 +378,65 @@ def stop_panel(dashboard) -> None:
     for thread in threading.enumerate():
         if thread.name.startswith("ninaivu-panel-") and thread is not threading.current_thread():
             thread.join(timeout=15)
+
+
+# -- tests that open a real Tk window, each in a process of its own -------------
+#
+# Tk 9.1 on macOS crashed natively (a segmentation fault, no Python error) on
+# the second of two Tk roots one process had made and destroyed, and took the
+# rest of the run with it; each such test passed alone (audit D1). A test
+# marked ``fresh_process`` is run in a new interpreter and its outcome
+# reported here, so a crash fails that one test by name.
+
+_FRESH_CHILD = "NINAIVU_TEST_FRESH_PROCESS"
+
+
+def pytest_runtest_protocol(item, nextitem):
+    import os
+    import subprocess
+
+    if item.get_closest_marker("fresh_process") is None or os.environ.get(_FRESH_CHILD):
+        return None
+    from _pytest.reports import TestReport
+
+    item.ihook.pytest_runtest_logstart(nodeid=item.nodeid, location=item.location)
+    env = {**os.environ, _FRESH_CHILD: "1"}
+    env.pop("PYTEST_XDIST_WORKER", None)
+    started = __import__("time").monotonic()
+    try:
+        done = subprocess.run(
+            [sys.executable, "-m", "pytest", item.nodeid, "-q", "-rs",
+             "-p", "no:cacheprovider", "-o", "addopts="],
+            cwd=str(item.config.rootpath), env=env, capture_output=True,
+            text=True, timeout=600, check=False)
+        output, code = (done.stdout or "") + (done.stderr or ""), done.returncode
+    except subprocess.TimeoutExpired as stuck:
+        output, code = f"timed out after {stuck.timeout} s", -1
+    took = __import__("time").monotonic() - started
+    summary = output.strip().splitlines()[-1] if output.strip() else ""
+    if code == 0 and " skipped" in summary and " passed" not in summary:
+        reason = next((line.split("] ", 1)[-1] for line in output.splitlines()
+                       if line.startswith("SKIPPED")), "skipped in its own process")
+        outcome, longrepr = "skipped", (str(item.path), item.location[1] or 0, reason)
+    elif code == 0:
+        outcome, longrepr = "passed", None
+    else:
+        outcome = "failed"
+        longrepr = (f"in its own process the test ended with exit code {code}"
+                    f"{' (a crash: signal ' + str(-code) + ')' if code < 0 else ''}\n"
+                    + "\n".join(output.splitlines()[-60:]))
+    for when in ("setup", "call", "teardown"):
+        report = TestReport(item.nodeid, item.location, dict.fromkeys(item.keywords, 1),
+                            outcome if when == "call" or outcome == "skipped" and when == "setup"
+                            else "passed",
+                            longrepr if when == "call" or outcome == "skipped" and when == "setup"
+                            else None,
+                            when, duration=took if when == "call" else 0.0)
+        item.ihook.pytest_runtest_logreport(report=report)
+        if outcome == "skipped" and when == "setup":
+            break
+    # What the normal run does after a test: end the module and class
+    # fixtures the next test does not share, which were set up for earlier ones.
+    item.session._setupstate.teardown_exact(nextitem)
+    item.ihook.pytest_runtest_logfinish(nodeid=item.nodeid, location=item.location)
+    return True

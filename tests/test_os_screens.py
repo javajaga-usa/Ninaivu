@@ -54,6 +54,7 @@ def test_core_fonts_get_plain_letters_and_nothing_else_changes():
     assert app.glyphs('', plain=True) == ''
 
 
+@pytest.mark.fresh_process
 def test_the_panel_says_its_lines_in_letters_its_fonts_have(monkeypatch):
     import tkinter as tk
     try:
@@ -226,6 +227,7 @@ def test_the_linux_build_carries_the_same_tamil_font_as_windows():
     assert linux.index("NotoSansTamil.ttf") < linux.index("pip wheel")
 
 
+@pytest.mark.fresh_process
 def test_a_line_that_comes_later_is_not_cut_off_the_bottom(tmp_path, monkeypatch):
     import tkinter as tk
     try:
