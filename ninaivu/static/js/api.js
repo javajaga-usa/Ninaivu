@@ -588,6 +588,7 @@ export const admin = (() => {
     postAdminRevealByAssetId: (assetId, options) => send('POST', `/api/admin/reveal/${seg(assetId)}`, options),
     postAdminRevealFolder: (options) => send('POST', '/api/admin/reveal-folder', options),
     postAdminScreeningDecide: (options) => send('POST', '/api/admin/screening/decide', options),
+    postAdminScrubberRemoved: (options) => send('POST', '/api/admin/scrubber/removed', options),
     postAdminScrubberStart: (options) => send('POST', '/api/admin/scrubber/start', options),
     postAdminScrubberStop: (options) => send('POST', '/api/admin/scrubber/stop', options),
     postAdminServerConsoleNetwork: (options) => send('POST', '/api/admin/server/console-network', options),

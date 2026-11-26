@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **A photograph removed on purpose is no longer listed as missing, and nothing brings it back.** Deleting in Ninaivu already left a record; removing a file in Finder or another program left none, so the storage check called it missing, the automatic repair put it back from the second copy or Drive, and the Secondary could bring it in again. Now:
+  - The automatic repair still fixes damaged files but never puts back a missing one by itself.
+  - The Storage check offers, for files it could not find, **I removed them on purpose** (one at a time, or all) and **Put back from a copy**. Removed on purpose, a file is recorded as deleted, as emptying the bin records it, and leaves the index. A file whose drive is away, or that is back at its place, is not taken.
+  - A scan that finds a file gone and forgets it records it the same way, so the Secondary's bring-in leaves it where it is.
+  - Every place that could put a photograph back asks the same question first (`storage/on_purpose.py`). The second copy keeps its own copy, untouched.
 - **Photographs just imported are straightened without waiting for the night.** With the daily catch-up on, the straightening survey after a scan was kept for the catch-up's stretch, so the photographs an import or a phone backup had just brought in stayed sideways until 02:00, and for days on a Mac in use then. The survey after a scan now looks at what that scan added straight away; the rest of the library still waits for the catch-up. The Straighten page also has **Only new photos (last 30 days)**, which looks at the photographs added lately that have not been looked at, without going through the whole library first.
 - **Fixes from the external audit of 26 November 2026.**
   - **An encrypted restore no longer calls a photograph damaged in the middle "already there" (R1).** A file on disk with the backed-up size, timestamp and both ends was taken as intact. It is now checked whole against the original's own SHA-256 (recorded with each upload since 5.2); for an older encrypted upload, which has none, the backup is fetched, decrypted and compared, and the good copy is put beside the damaged one.

@@ -24,8 +24,11 @@ So this closes the loop, file by file:
    index knows, so the index, the second copy and the backup all still see
    the same file and nothing is uploaded or copied again for it.
 
-A missing file is put back the same way, but only while its library folder
-is there: a disk that is not plugged in is not a disk whose files are gone.
+A missing file is put back the same way, but only when the person asks
+(``missing=True``, from the Storage check's "Put back from a copy"): one
+removed in Finder on purpose reads exactly like one that was lost, and the
+automatic repair used to bring it back. Nor ever one deleted on purpose
+(storage/on_purpose.py). And only while its library folder is there: a disk that is not plugged in is not a disk whose files are gone.
 "There" is :func:`roots.root_present`, not merely a folder at the path: an
 unplugged drive under a ``nofail`` mount leaves an empty folder, and the
 repair used to copy the library from the second copy onto the system disk.
@@ -34,7 +37,7 @@ missing is not repaired at all: that is a disk that went away, not damage.
 
 This also runs the storage check on a schedule — once every
 ``scrub_every_days``, started in the small hours — and repairs what it
-finds straight afterwards when ``scrub_repair`` is on.
+finds damaged straight afterwards when ``scrub_repair`` is on.
 """
 
 from __future__ import annotations
@@ -51,6 +54,7 @@ from typing import Any, Callable
 
 from ..utils.files import CHUNK, create_new, sha256_file, stays_inside, sync_folder
 from . import roots as roots_kit
+from .on_purpose import deleted_on_purpose
 
 log = logging.getLogger(__name__)
 
@@ -74,14 +78,22 @@ LAST_PASS = "SELECT MAX(checked_at) FROM bitrot_records WHERE status != 'repaire
 
 
 def candidates(conn: sqlite3.Connection, asset_ids: list[int] | None = None,
-               limit: int = MAX_FILES) -> list[dict[str, Any]]:
-    """Files whose latest check says damaged or missing, with the hash they
-    should have — which is the only thing a copy can be judged against."""
+               limit: int = MAX_FILES, *, missing: bool = False) -> list[dict[str, Any]]:
+    """Files whose latest check says damaged, with the hash they should have
+    — which is the only thing a copy can be judged against. With *missing*,
+    the ones it could not find too.
+
+    Missing ones only when asked: a file removed in Finder on purpose reads
+    exactly like one that was lost, and the automatic repair put photographs
+    the household had thrown away back into the library. The person says
+    which it is on the Storage check (storage/on_purpose.py).
+    """
     sql = ("SELECT b.asset_id, b.status, b.expected_hash, b.file_mtime, b.file_size, "
            "a.root, a.rel_path, a.mtime, a.size, a.filename FROM bitrot_records b "
            "JOIN assets a ON a.id = b.asset_id "
            "WHERE b.id = (SELECT MAX(b2.id) FROM bitrot_records b2 WHERE b2.asset_id = b.asset_id) "
-           "AND b.status IN ('corrupt', 'missing') AND COALESCE(b.expected_hash, '') != '' "
+           f"AND b.status IN ({STATES_WITH_MISSING if missing else STATES}) "
+           "AND COALESCE(b.expected_hash, '') != '' "
            "AND a.trashed = 0 AND NOT EXISTS (SELECT 1 FROM mugil_let_go g "
            "WHERE g.root = a.root AND g.rel_path = a.rel_path)")
     params: list[Any] = []
@@ -91,6 +103,11 @@ def candidates(conn: sqlite3.Connection, asset_ids: list[int] | None = None,
     sql += " ORDER BY b.asset_id LIMIT ?"
     params.append(int(limit))
     return [dict(r) for r in conn.execute(sql, params)]
+
+
+#: What a repair puts right by itself, and with the missing ones as well.
+STATES = "'corrupt'"
+STATES_WITH_MISSING = "'corrupt', 'missing'"
 
 
 class Repairer:
@@ -149,9 +166,12 @@ class Repairer:
         conn = self._connect()           # this thread's own, kept open (db.connect)
         try:
             snap["waiting"] = len(candidates(conn))
+            # Not found, waiting for the person to say removed on purpose or
+            # put back: never put back by the automatic repair.
+            snap["gone"] = len(candidates(conn, missing=True)) - snap["waiting"]
             last = conn.execute(LAST_PASS).fetchone()[0]
         except sqlite3.OperationalError:
-            snap["waiting"], last = 0, None
+            snap["waiting"], snap["gone"], last = 0, 0, None
         snap.update(
             every_days=int(getattr(self.cfg, "scrub_every_days", 30) or 0),
             automatic=self.automatic,
@@ -177,14 +197,18 @@ class Repairer:
 
     # -- repairing --------------------------------------------------------
 
-    def start(self, asset_ids: list[int] | None = None) -> dict[str, Any]:
+    def start(self, asset_ids: list[int] | None = None, *,
+              missing: bool = False) -> dict[str, Any]:
+        """Repair what the check found damaged; with *missing*, put back what
+        it could not find as well (the person said they were not removed on
+        purpose)."""
         with self._lock:
             if self.running:
                 raise ValueError("A repair is already running.")
             self._state.update(running=True, total=0, done=0, repaired=0, failed=0,
                                current="", message="Starting…", problems=[])
             self._stop.clear()
-            self._thread = threading.Thread(target=self._run, args=(asset_ids,),
+            self._thread = threading.Thread(target=self._run, args=(asset_ids, missing),
                                             name="ninaivu-repair", daemon=True)
             self._thread.start()
         return self.status()
@@ -216,12 +240,12 @@ class Repairer:
             if len(self._state["problems"]) < 50:
                 self._state["problems"].append({"file": name, "why": why})
 
-    def _run(self, asset_ids: list[int] | None) -> None:
+    def _run(self, asset_ids: list[int] | None, missing: bool = False) -> None:
         repaired = 0
         message = ""
         try:
             conn = self._connect()
-            wanted = candidates(conn, asset_ids)
+            wanted = candidates(conn, asset_ids, missing=missing)
             self._update(total=len(wanted))
             refused = self._roots_not_to_touch(conn, {str(r["root"]) for r in wanted})
             for row in wanted:
@@ -288,6 +312,8 @@ class Repairer:
             raise ValueError("its library folder is not there — is the disk plugged in?")
         if not stays_inside(root, target):
             raise ValueError("refusing a path outside the library")
+        if deleted_on_purpose(conn, root, rel):
+            raise ValueError("it was deleted on purpose, so it is not put back")
         good = str(row["expected_hash"])
         if row["status"] == "missing" and target.exists():
             raise ValueError("it is back where it was; the next check will see it")

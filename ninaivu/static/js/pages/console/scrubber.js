@@ -5,8 +5,9 @@
  * there for the command bar; this module only draws, once the page is opened.
  */
 
+import { admin } from '../../api.js';
 import * as i18n from '../../i18n.js';
-import { $ } from '../../ui.js';
+import { $, consoleToast as toast } from '../../ui.js';
 
 /** How far a running check has got, and the buttons that go with it. */
 function showScrubberProgress(progress) {
@@ -96,11 +97,68 @@ function showScrubberStatus(data) {
         ? new Date(iss.checked_at * 1000).toLocaleString(i18n.locale())
         : i18n.t('Just now');
 
-      tr.append(pathCell, statusCell, whenCell);
+      // A file not found may have been removed on purpose, in Finder: one
+      // button for it alone (all of them are below the table).
+      const actCell = document.createElement('td');
+      if (iss.status === 'missing' && iss.asset_id) {
+        const btn = document.createElement('button');
+        btn.className = 'btn ghost small';
+        btn.textContent = i18n.t('Removed on purpose');
+        btn.addEventListener('click', () => removedOnPurpose([iss.asset_id], btn));
+        actCell.appendChild(btn);
+      }
+
+      tr.append(pathCell, statusCell, whenCell, actCell);
       tbody.appendChild(tr);
     });
   } else if (wrap) {
     wrap.hidden = true;
+  }
+  const gone = $('#scrubber-gone');
+  if (gone) gone.hidden = !(Number(data.missing) > 0);
+}
+
+/** Ask again and draw what the server says now. */
+async function refresh() {
+  try {
+    show(await admin.getAdminScrubberStatus());
+  } catch (exc) {
+    toast(exc.message, true);
+  }
+}
+
+/**
+ * Files the check could not find were removed on purpose: they leave the
+ * index with a record that they were deleted, and nothing brings them back.
+ * *ids* undefined: all of them.
+ */
+async function removedOnPurpose(ids, button) {
+  if (button) button.disabled = true;
+  try {
+    const result = await admin.postAdminScrubberRemoved({ body: ids ? { ids } : {} });
+    const kept = result.kept || [];
+    toast(kept.length
+      ? i18n.t('{n} recorded as removed on purpose; {kept} kept: {why}',
+        { n: result.removed || 0, kept: kept.length, why: i18n.t(kept[0].why) })
+      : i18n.t('{n} recorded as removed on purpose', { n: result.removed || 0 }), kept.length > 0);
+    await refresh();
+  } catch (exc) {
+    toast(exc.message, true);
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+/** Put back the files the check could not find, from a matching copy. */
+async function putBack(button) {
+  button.disabled = true;
+  try {
+    await admin.postAdminRepair({ body: { missing: true } });
+    toast(i18n.t('Putting them back from a copy. The next check will show them.'));
+  } catch (exc) {
+    toast(exc.message, true);
+  } finally {
+    button.disabled = false;
   }
 }
 
@@ -114,4 +172,8 @@ export function show(data) {
 export function wire(shell) {
   const data = shell.scrubber();
   if (data) show(data);
+  const removed = $('#scrubber-gone-removed');
+  if (removed) removed.addEventListener('click', () => removedOnPurpose(undefined, removed));
+  const back = $('#scrubber-gone-put-back');
+  if (back) back.addEventListener('click', () => putBack(back));
 }

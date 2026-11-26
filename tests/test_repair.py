@@ -52,10 +52,10 @@ def copy_to_mirror(lib, damaged=False):
     return dest
 
 
-def repair(lib, **kw):
+def repair(lib, missing=False, **kw):
     repairer = Repairer(lib["cfg"], lambda: db.connect(lib["cfg"].db_path),
                         mirror=lib["mirror"], **kw)
-    repairer.start()
+    repairer.start(missing=missing)
     repairer.join(30)
     return repairer
 
@@ -103,6 +103,8 @@ def test_a_missing_file_is_put_back_only_while_its_disk_is_there(lib):
     admin_api._run_scrubber(lib["cfg"].db_path)
     assert latest(lib["conn"], lib["id"]) == "missing"
     repair(lib)
+    assert not lib["path"].exists(), "not unless asked: it may have been removed on purpose"
+    repair(lib, missing=True)
     assert sha(lib["path"]) == lib["good"]
 
 
@@ -113,7 +115,7 @@ def test_a_library_that_is_not_plugged_in_is_not_repaired(lib, tmp_path):
     moved = tmp_path / "unplugged"
     os.rename(lib["root"], moved)
     try:
-        repairer = repair(lib)
+        repairer = repair(lib, missing=True)
         assert "plugged in" in repairer.status()["problems"][0]["why"]
         assert not Path(lib["root"]).exists(), "no folder was made where the disk was"
     finally:

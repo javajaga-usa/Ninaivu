@@ -5834,5 +5834,14 @@
   "Documents": "ஆவணங்கள்",
   "Tidy up": "ஒழுங்கமைப்பு",
   "No documents or screenshots": "ஆவணங்களோ திரைப்பிடிப்புகளோ இல்லை",
-  "Kept close": "நெருக்கமானவை"
+  "Kept close": "நெருக்கமானவை",
+  "If you removed these files yourself, in Finder or another program, say so: they stop being listed as missing and are never put back. If you did not, put them back from the second copy or Google Drive.": "இந்தக் கோப்புகளை நீங்களே Finder அல்லது வேறு நிரலில் நீக்கியிருந்தால், அதைச் சொல்லுங்கள்: அவை இனி காணவில்லை எனக் காட்டப்படாது, திரும்ப வைக்கப்படவும் மாட்டாது. நீங்கள் நீக்கவில்லை என்றால், இரண்டாம் நகலிலிருந்தோ Google Drive-இலிருந்தோ திரும்ப வையுங்கள்.",
+  "I removed them on purpose": "நான் வேண்டுமென்றே நீக்கினேன்",
+  "Put back from a copy": "நகலிலிருந்து திரும்ப வை",
+  "Removed on purpose": "வேண்டுமென்றே நீக்கியது",
+  "{n} recorded as removed on purpose": "{n} வேண்டுமென்றே நீக்கியதாகப் பதிவானது",
+  "{n} recorded as removed on purpose; {kept} kept: {why}": "{n} வேண்டுமென்றே நீக்கியதாகப் பதிவானது; {kept} வைக்கப்பட்டது: {why}",
+  "Putting them back from a copy. The next check will show them.": "நகலிலிருந்து திரும்ப வைக்கப்படுகின்றன. அடுத்த சோதனை அவற்றைக் காட்டும்.",
+  "it was deleted on purpose, so it is not put back": "இது வேண்டுமென்றே நீக்கப்பட்டது, எனவே திரும்ப வைக்கப்படாது",
+  "missing must be true or false": "missing என்பது true அல்லது false ஆக இருக்க வேண்டும்"
 }
