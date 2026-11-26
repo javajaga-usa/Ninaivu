@@ -43,7 +43,7 @@ RESUME_NAME = "cloud"
 
 log = logging.getLogger(__name__)
 
-__all__ = ["CloudService"]
+__all__ = ["CloudService", "visibility_for_backup"]
 
 #: How long a half-finished sign-in stays valid. Long enough to read Google's
 #: consent screen properly, short enough that an abandoned attempt does not
@@ -458,15 +458,12 @@ class CloudService:
 
     def _visibility_of(self, root: str, rel: str) -> int | None:
         try:
-            row = self._connect_db().execute(
-                "SELECT visibility FROM assets WHERE root=? AND rel_path=?",
-                (root, rel)).fetchone()
+            return visibility_for_backup(self._connect_db(), root, rel)
         except Exception:                                   # noqa: BLE001
             # Not knowing is not permission. An unreadable index means "do not
             # send", because the alternative is uploading something hidden.
             log.exception("could not read visibility for %s", rel)
             return 2
-        return int(row["visibility"]) if row else None
 
     def _checks_screens(self, conn) -> bool:
         """Is the screenshot and document check going to reach every picture?
@@ -519,7 +516,7 @@ class CloudService:
         store.init_schema(conn)
         hidden_too = self.sends_hidden()
         sql = ("SELECT id, root, rel_path, filename, size, mtime, kind FROM assets "
-               "WHERE trashed=0" + ("" if hidden_too else " AND visibility < 2"))
+               "WHERE trashed=0" + ("" if hidden_too else " AND visibility < 2 AND nsfw = 0"))
         params: list[Any] = []
         if not hidden_too and self._checks_screens(conn):
             sql += (" AND NOT (kind='picture' AND thumb IS NOT NULL "
@@ -1086,3 +1083,20 @@ def _in_pages(conn, sql: str, params: list[Any]):
             yield dict(row)
         if len(page) < QUEUE_PAGE:
             return
+
+
+def visibility_for_backup(conn, root: str, rel: str) -> int | None:
+    """How hidden a file is, as far as the backup to Drive is concerned.
+
+    An explicit photograph (adult content, or people in only their underwear)
+    counts as hidden: kept out of the family app, it goes to Drive only when
+    hidden things may (cloud_hidden), and so, by default, only encrypted. It
+    had been sent with the rest whatever that setting said. None when the
+    index has no such file.
+    """
+    row = conn.execute("SELECT visibility, nsfw FROM assets WHERE root=? AND rel_path=?",
+                       (root, rel)).fetchone()
+    if row is None:
+        return None
+    level = int(row["visibility"] or 0)
+    return max(level, 2) if int(row["nsfw"] or 0) else level

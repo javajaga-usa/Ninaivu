@@ -500,12 +500,15 @@ class Config:
     #: first backups — and the copy of the index, with everybody's names —
     #: went up in the clear. An administrator can still turn it off.
     cloud_encrypt: bool = True
-    #: Whether hidden things are backed up too: "never" (the default: what
-    #: the household hid does not leave the house), "encrypted" (only while
-    #: the backup is encrypted), or "always". Hidden includes every sound file
-    #: — call recordings, voice notes — and the screenshots and documents
-    #: Ninaivu hides by itself, so with "never" those have no copy in Drive.
-    cloud_hidden: str = "never"
+    #: Whether hidden things are backed up too: "never" (what the household
+    #: hid does not leave the house), "encrypted" (the default: only while
+    #: the backup is encrypted, with its key there), or "always". Hidden
+    #: includes every sound file — call recordings, voice notes — the
+    #: screenshots and documents Ninaivu hides by itself, and explicit
+    #: photographs. With "never" those have no copy outside the house, and
+    #: the scanned passports and certificates are the first things a house
+    #: needs back after a fire; encrypted, Google cannot read them.
+    cloud_hidden: str = "encrypted"
     #: What the household chose to leave out of the backup
     #: (ninaivu/cloud/rules.py). Kinds: "all", "no_video" or "pictures".
     cloud_kinds: str = "all"

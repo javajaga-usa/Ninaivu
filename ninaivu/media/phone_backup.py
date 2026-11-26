@@ -553,13 +553,17 @@ def summary(conn, user_id: int, device_id: str = "") -> dict[str, Any]:
     def counts(where: str, params: tuple) -> dict[str, Any]:
         row = conn.execute(
             "SELECT COUNT(*) AS files, "
-            f"COALESCE(SUM(state IN ('{STAGED}','{DONE}','{DUPLICATE}')), 0) AS safe, "
+            # Safe is in the library. A file waiting for an administrator is
+            # one copy in a holding folder, in no second copy and not in
+            # Drive: counted as waiting, never as safe, so nobody frees the
+            # space on their phone on its strength.
+            f"COALESCE(SUM(state IN ('{DONE}','{DUPLICATE}')), 0) AS safe, "
             f"COALESCE(SUM(state='{DONE}'), 0) AS in_library, "
             f"COALESCE(SUM(state='{STAGED}'), 0) AS waiting_review, "
             f"COALESCE(SUM(state='{DUPLICATE}'), 0) AS already_here, "
             f"COALESCE(SUM(state='{RECEIVING}'), 0) AS partial, "
             f"COALESCE(SUM(state='{FAILED}'), 0) AS failed, "
-            f"COALESCE(SUM(CASE WHEN state IN ('{STAGED}','{DONE}','{DUPLICATE}') "
+            f"COALESCE(SUM(CASE WHEN state IN ('{DONE}','{DUPLICATE}') "
             "THEN size ELSE 0 END), 0) AS safe_bytes, "
             "MAX(finished_at) AS last_backup "
             f"FROM phone_backups WHERE {where}", params).fetchone()

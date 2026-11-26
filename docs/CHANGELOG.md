@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **Fixes for what went wrong in real use (26 November 2026).**
+  - **Restore from the second copy no longer brings a re-dated or moved photograph back at its old place.** The second copy's record followed the file by its place in the library, and a date change or a move in Finder left it at the old one, so a restore put the photograph back there too: twice in the library, on two dates, the second shown to the family even when the first was hidden. The record now follows the file (the copy on the disk stays where it is, and `NINAIVU-NAMES.txt` says where), so it is put back at its new place, not copied again, and once deleted stays deleted.
+  - **A phone backup waiting for an administrator is no longer called safe.** It is one copy in a holding folder, in no second copy and not in Drive. The phone now counts it as waiting, not safe, and says to keep those photos on the phone until they are in the library.
+  - **Erase for good says where copies remain.** It said there was nowhere left to put the files back from; a copy already made on the second copy disk, in Google Drive or in the off-site copy stays there (Ninaivu never puts it back into the library).
+  - **Hidden things now go to Drive while the backup is encrypted, by default.** The default was never, so the scanned documents, voice notes and call recordings Ninaivu hides had no copy outside the house at all. Encrypted, Google cannot read them. Every household moves to the new default (never was the default, so it was never written down); choose never again on the Cloud page to keep them at home.
+  - **Explicit photographs are held back from Drive like hidden ones.** Only hidden things were held back, so with encryption turned off, adult photographs went to Drive in the clear. They now follow the Hidden things setting.
+
 - **Fixes from the external audit of 26 November 2026.**
   - **An encrypted restore no longer calls a photograph damaged in the middle "already there" (R1).** A file on disk with the backed-up size, timestamp and both ends was taken as intact. It is now checked whole against the original's own SHA-256 (recorded with each upload since 5.2); for an older encrypted upload, which has none, the backup is fetched, decrypted and compared, and the good copy is put beside the damaged one.
   - **An older encrypted upload whose file changed is sent again (R2).** With nothing recorded to compare the middle with, the cloud backup took the file as it is now for the one that was sent. It now goes up again, which records its digest. A file whose size and timestamp both stay the same is still not read on every pass; the monthly scrub is what finds silent damage.

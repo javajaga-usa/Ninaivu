@@ -545,6 +545,9 @@ def respell_asset(conn: sqlite3.Connection, root: str, old_rel: str,
                 conn.execute("DELETE FROM cloud_uploads WHERE id=?", (drop["id"],))
             conn.execute("UPDATE cloud_uploads SET rel_path=?, filename=? WHERE id=?",
                          (new_rel, filename, keep["id"]))
+        # And the second copy's, which keeps the file where it was on its disk.
+        from . import mirror                                   # noqa: PLC0415
+        mirror.note_move(conn, root, old_rel, new_rel)
         conn.commit()
     return gone
 

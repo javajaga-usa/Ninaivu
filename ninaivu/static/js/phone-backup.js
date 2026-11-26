@@ -386,6 +386,7 @@ export class PhoneBackup {
     $('#backup-list').replaceChildren();
     this.keepAwake();
     let sentFiles = 0;
+    let waitingFiles = 0;
     try {
       this.status(i18n.t('Checking what is already backed up…'));
       const plan = await this.plan(files);
@@ -412,6 +413,7 @@ export class PhoneBackup {
           this.listed(item.file.name, answer.state);
           if (['staged', 'done', 'duplicate'].includes(answer.state)) {
             sentFiles += 1;
+            if (answer.state === 'staged') waitingFiles += 1;
             left.delete(item.file.name);
             this.remember([...left]);
           }
@@ -431,8 +433,18 @@ export class PhoneBackup {
       if (this.stopping) {
         this.status(i18n.t('Stopped. Choose the same photos again to carry on.'));
       } else {
-        this.status(`${i18n.t('Backup finished — {count} more safely backed up.', { count: sentFiles })}${
-          finished.needs_review ? ` ${i18n.t('They join the library once an admin approves them.')}` : ''}`);
+        // Waiting for an administrator is not safe yet: one copy, in a
+        // holding folder. Said so, so nobody frees the phone on its strength.
+        const waiting = finished.needs_review ? waitingFiles : 0;
+        const safe = sentFiles - waiting;
+        const parts = [];
+        if (safe || !waiting) parts.push(i18n.t('Backup finished — {count} more safely backed up.', { count: safe }));
+        else parts.push(i18n.t('Backup finished.'));
+        if (waiting) {
+          parts.push(i18n.t('{count} wait for an administrator. Keep them on your phone until they are in the library.',
+            { count: waiting }));
+        }
+        this.status(parts.join(' '));
       }
       if (finished.approved) this.onFiled();
     } catch (err) {
