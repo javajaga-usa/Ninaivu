@@ -447,6 +447,35 @@ def test_a_survey_that_makes_way_keeps_what_it_did_and_carries_on_later(
     assert conn.execute("SELECT COUNT(*) FROM orientation_seen").fetchone()[0] > seen
 
 
+def test_what_a_scan_just_brought_in_is_looked_at_without_waiting(held_straightener):
+    """A photograph imported in the day was left sideways until the catch-up's
+    stretch, which on a Mac in use could be days. The new ones are looked at
+    now; the rest of the library still waits."""
+    job, cfg, conn, reason = held_straightener
+    total = len(job._candidates(conn, [cfg.active_root]))
+    assert total > 1
+    newest = conn.execute("SELECT MAX(id) FROM assets WHERE kind='picture'").fetchone()[0]
+    conn.execute("UPDATE assets SET added_at=? WHERE id=?", (time.time() + 1, newest))
+    conn.commit()
+    assert job.after_scan([cfg.active_root]) is True
+    _run(job)
+    seen = [r[0] for r in conn.execute("SELECT asset_id FROM orientation_seen")]
+    assert seen == [newest], "only the new photograph, not the whole library"
+    assert job.progress.snapshot()["total"] == 1
+    # Nothing new since: the next scan's survey waits for the catch-up again.
+    assert job.after_scan([cfg.active_root]) is False
+
+
+def test_only_new_photos_on_request(held_straightener):
+    job, cfg, conn, reason = held_straightener
+    newest = conn.execute("SELECT MAX(id) FROM assets WHERE kind='picture'").fetchone()[0]
+    conn.execute("UPDATE assets SET added_at=0 WHERE id<>?", (newest,))
+    conn.commit()
+    assert job.survey([cfg.active_root], added_since=time.time() - 86400) is True
+    _run(job)
+    assert [r[0] for r in conn.execute("SELECT asset_id FROM orientation_seen")] == [newest]
+
+
 def test_a_survey_somebody_started_is_not_held(held_straightener):
     job, cfg, conn, reason = held_straightener
     assert job.survey([cfg.active_root]) is True

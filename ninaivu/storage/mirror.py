@@ -24,6 +24,16 @@ the library is copied beside the older one, which is kept under a name that
 says when it was set aside. If the change was a disk going bad, the good
 version is still there.
 
+**What was on the disk before is left as it was.** A backup folder or a
+network share chosen for the copy often holds the photographs already, put
+there by hand or by another backup. A file already there with the same bytes
+(read and compared, SHA-256) is taken as the copy and not written again,
+whether it is at the library's own place or anywhere else on the disk (looked
+over once, when the disk is new to the record). A different file at the
+library's place is not touched, not renamed and not moved: the library's
+goes beside it as ``name (2).jpg``, and NINAIVU-NAMES.txt says so. Only a
+file Ninaivu wrote itself is ever set aside.
+
 **A file is whole or absent.** It is written under a temporary name, hashed as
 it goes, checked for size, synced, and only then renamed into place.
 
@@ -65,13 +75,15 @@ import os
 import secrets
 import shutil
 import sqlite3
+import stat
 import threading
 import time
 import unicodedata
 from pathlib import Path
 from typing import Any, Callable
 
-from ..utils.files import CHUNK, create_new, publish_no_replace, sha256_file, stays_inside
+from ..utils.files import (CHUNK, create_new, move_no_replace, publish_no_replace, sha256_file,
+                           stays_inside)
 from ..copies import ledger
 from . import fit, roots as roots_kit
 
@@ -103,6 +115,20 @@ RETRY_AFTER = 60 * 60.0
 #: Files checked between saving where a check of the copy has got to.
 VERIFY_SAVE_EVERY = 100
 
+#: ``mirror_copies.origin`` of a file Ninaivu wrote itself, and of one that was
+#: on the disk already with the same bytes and is taken as the copy. Only the
+#: first kind is ever set aside; the second is never touched.
+COPIED, FOUND = "copied", "found"
+
+#: Folders and files on a destination that are the disk's or another
+#: program's, not photographs: never looked through for one already there.
+PASSED_OVER = {"@eaDir", "#recycle", "#snapshot", "$RECYCLE.BIN",
+               "System Volume Information", "lost+found"}
+
+#: Files looked at between pauses for the household while looking the
+#: destination over.
+LOOK_PAUSE_EVERY = 500
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS mirror_copies (
     root       TEXT NOT NULL,
@@ -112,9 +138,18 @@ CREATE TABLE IF NOT EXISTS mirror_copies (
     sha256     TEXT NOT NULL DEFAULT '',
     copied_at  REAL NOT NULL DEFAULT 0,
     stored_as  TEXT NOT NULL DEFAULT '',
+    origin     TEXT NOT NULL DEFAULT 'copied',
     PRIMARY KEY (root, rel_path)
 );
 CREATE TABLE IF NOT EXISTS mirror_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL DEFAULT '');
+-- Files that were on the destination before Ninaivu wrote anything there, of
+-- a size some library file still to be copied has: where to look for the
+-- same photograph before writing it again (Mirror._look_over).
+CREATE TABLE IF NOT EXISTS mirror_found (
+    path       TEXT PRIMARY KEY,
+    size       INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_mirror_found_size ON mirror_found(size);
 """
 
 
@@ -146,6 +181,12 @@ def folder_problem(folder: str, roots: list[str], state_dir: Path | str) -> str 
     if not os.access(target, os.W_OK):
         return "Ninaivu cannot write to that folder."
     return None
+
+
+def _passed_over(name: str) -> bool:
+    """A name on a destination that is never a photograph already there."""
+    return (name.startswith(".") or name in PASSED_OVER
+            or name.endswith(".ninaivu-part"))
 
 
 def _json_list(text: str) -> list[str]:
@@ -192,6 +233,8 @@ class Mirror:
         #: Folder listings on the copy, for _taken_by_another: one per folder
         #: per run rather than one per path part per file. None outside a run.
         self._listings: dict[Path, set[str]] | None = None
+        #: Set by _copy_one: the file was on the disk already, nothing written.
+        self._found_there = False
         #: The kind of disk the copy is on, as the system names it (``exfat``),
         #: when it should not be worked out from the mounted disks (tests).
         self.fstype: str | None = None
@@ -235,8 +278,14 @@ class Mirror:
         conn.executescript(SCHEMA)
         # ``stored_as`` came later: where on the copy a file went when its own
         # name was taken there by another one (see _copy_one).
-        if "stored_as" not in {r[1] for r in conn.execute("PRAGMA table_info(mirror_copies)")}:
+        columns = {r[1] for r in conn.execute("PRAGMA table_info(mirror_copies)")}
+        if "stored_as" not in columns:
             conn.execute("ALTER TABLE mirror_copies ADD COLUMN stored_as TEXT NOT NULL DEFAULT ''")
+            conn.commit()
+        # ``origin`` too: whether Ninaivu wrote the file, or found it there.
+        if "origin" not in columns:
+            conn.execute("ALTER TABLE mirror_copies ADD COLUMN origin TEXT NOT NULL "
+                         f"DEFAULT '{COPIED}'")
             conn.commit()
         return conn
 
@@ -277,6 +326,7 @@ class Mirror:
             log.warning("the second copy at %s is not the one the record was made "
                         "against; copying to it from the beginning", target)
         conn.execute("DELETE FROM mirror_copies")
+        conn.execute("DELETE FROM mirror_found")
         copy_id = found or secrets.token_hex(12)
         if not found:
             marker.write_text(json.dumps({
@@ -353,7 +403,11 @@ class Mirror:
             "too_large": int(self._meta(conn, "too_large", "0") or 0),
             "too_large_examples": _json_list(self._meta(conn, "too_large_examples")),
             "renamed": int(conn.execute(
-                "SELECT COUNT(*) FROM mirror_copies WHERE stored_as != ''").fetchone()[0]),
+                "SELECT COUNT(*) FROM mirror_copies WHERE stored_as != '' AND origin != ?",
+                (FOUND,)).fetchone()[0]),
+            # Already on the disk with the same bytes, so not written again.
+            "already_there": int(conn.execute(
+                "SELECT COUNT(*) FROM mirror_copies WHERE origin = ?", (FOUND,)).fetchone()[0]),
         }
 
     @property
@@ -494,7 +548,7 @@ class Mirror:
             raise _Stop()
 
     def _run(self) -> None:
-        copied = failed = 0
+        copied = failed = found = 0
         message = ""
         try:
             conn = self._db()
@@ -524,6 +578,7 @@ class Mirror:
                 f"AND NOT EXISTS (SELECT 1 FROM mugil_let_go g WHERE g.root=a.root "
                 f"AND g.rel_path=a.rel_path) "
                 f"ORDER BY (a.kind != 'picture'), a.id", roots).fetchall()
+            self._look_over(conn, target, {int(r["size"] or 0) for r in owed} - {0})
             for row in owed:
                 self._pause_for_the_household()
                 root, rel = row["root"], row["rel_path"]
@@ -548,14 +603,19 @@ class Mirror:
                     failed += 1
                     log.warning("could not copy %s to the second copy: %s", rel, exc)
                     continue
+                origin = FOUND if self._found_there else COPIED
                 conn.execute(
                     "INSERT OR REPLACE INTO mirror_copies(root, rel_path, size, mtime, sha256, "
-                    "copied_at, stored_as) VALUES(?,?,?,?,?,?,?)",
-                    (root, rel, size, float(row["mtime"] or 0), digest, time.time(), stored))
+                    "copied_at, stored_as, origin) VALUES(?,?,?,?,?,?,?,?)",
+                    (root, rel, size, float(row["mtime"] or 0), digest, time.time(), stored,
+                     origin))
                 # And the ledger, in the same transaction (ninaivu/copies/ledger.py).
                 ledger.confirm(conn, "mirror", [(root, rel, size, float(row["mtime"] or 0))],
                                at=time.time())
                 conn.commit()
+                if origin == FOUND:
+                    found += 1
+                    continue
                 copied += 1
                 with self._lock:
                     self._state["copied_this_run"] += 1
@@ -566,6 +626,9 @@ class Mirror:
             self._set_meta(conn, "last_finished", self._clock())
             self._set_meta(conn, "last_run", self._clock())
             message = (f"Copied {copied:,} files." if copied else "Nothing new to copy.")
+            if found:
+                message += (f" {found:,} were already on the disk with the same bytes and "
+                            "were left as they were.")
             if failed:
                 message += f" {failed:,} could not be read and will be tried again."
             if too_large:
@@ -629,8 +692,8 @@ class Mirror:
             # found so far: a whole disk read back takes many hours, and one
             # stopped (or set aside for the nightly copy) used to start again
             # from the first file. Kept in mirror_meta, beside the schedule.
-            sql = ("SELECT root, rel_path, sha256, stored_as FROM mirror_copies "
-                   "WHERE sha256 != ''")
+            sql = ("SELECT root, rel_path, sha256, stored_as, origin FROM mirror_copies "
+                   "WHERE sha256 != '' AND size >= 0")
             args: list[Any] = []
             try:
                 cursor = json.loads(self._meta(conn, "verify_cursor") or "null")
@@ -663,8 +726,17 @@ class Mirror:
                     same = False
                 if not same:
                     bad += 0 if not path.exists() else 1
-                    conn.execute("DELETE FROM mirror_copies WHERE root=? AND rel_path=?",
-                                 (row["root"], row["rel_path"]))
+                    if row["origin"] == FOUND:
+                        # Not Ninaivu's file: changed or moved by whoever put
+                        # it there. Copied again beside it, never over it.
+                        conn.execute("DELETE FROM mirror_copies WHERE root=? AND rel_path=?",
+                                     (row["root"], row["rel_path"]))
+                    else:
+                        # Ninaivu's own: kept as owed (a size no file has), so
+                        # the next run knows the one there is its own, sets it
+                        # aside and writes the good one in its place.
+                        conn.execute("UPDATE mirror_copies SET size=-1 WHERE root=? AND rel_path=?",
+                                     (row["root"], row["rel_path"]))
                     conn.commit()
                 checked += 1
                 where = (row["root"], row["rel_path"])
@@ -726,13 +798,15 @@ class Mirror:
             # must not put those back with it (recycle.Gone).
             from .recycle import Gone                             # noqa: PLC0415
             gone = Gone(conn)
-            sql = "SELECT root, rel_path, sha256, mtime, stored_as FROM mirror_copies"
+            # Not the ones a check found bad (size -1): what is there is not
+            # the photograph, and they are copied again on the next run.
+            sql = "SELECT root, rel_path, sha256, mtime, stored_as FROM mirror_copies WHERE size >= 0"
             args: list[Any] = []
             if prefix:
                 # The folder's own name escaped, not stripped: "my_trip" with
                 # its underscore taken out matched nothing at all.
                 like = prefix.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-                sql += " WHERE rel_path = ? OR rel_path LIKE ? ESCAPE '\\'"
+                sql += " AND (rel_path = ? OR rel_path LIKE ? ESCAPE '\\')"
                 args = [prefix, like + "/%"]
             for row in conn.execute(sql + " ORDER BY root, rel_path", args).fetchall():
                 self._pause_for_the_household()
@@ -815,17 +889,28 @@ class Mirror:
     def _copy_one(self, target: Path, root: str, rel: str,
                   conn: sqlite3.Connection | None = None) -> tuple[int, str, str]:
         """Copy one file. Returns its size, its SHA-256 and, when it could not
-        go under its own name, where it went instead (relative to *target*)."""
+        go under its own name, where it went instead (relative to *target*).
+
+        :attr:`_found_there` says afterwards whether nothing was written
+        because the same bytes were on the disk already, put there by someone
+        other than Ninaivu; such a file is recorded as ``FOUND`` and never
+        touched afterwards."""
+        self._found_there = False
         source = Path(root) / rel
         before = source.stat()
         family = self._family
         if family is not None and fit.too_large(before.st_size, family):
             raise _TooLarge(rel)
         stored = ""
+        #: Whether what is at the destination, if anything, is Ninaivu's own
+        #: earlier copy of this file, which may be set aside. Anything else
+        #: there is someone else's and is left exactly as it is.
+        ours = False
         if conn is not None:
-            row = conn.execute("SELECT stored_as FROM mirror_copies WHERE root=? AND rel_path=?",
-                               (root, rel)).fetchone()
-            stored = row[0] if row else ""
+            row = conn.execute("SELECT stored_as, origin FROM mirror_copies "
+                               "WHERE root=? AND rel_path=?", (root, rel)).fetchone()
+            if row is not None and row[1] != FOUND:
+                stored, ours = row[0], True
         if not stored and family is not None:
             # A name this kind of disk refuses ("Diwali: day 2" on exFAT, a
             # Samba share or NTFS) goes under one it keeps, and the record
@@ -851,18 +936,37 @@ class Mirror:
                 n += 1
                 dest = base.with_name(f"{base.stem} ({n}){base.suffix}")
             stored = dest.relative_to(target).as_posix()
-        if dest.is_file() and dest.stat().st_size == before.st_size:
+            ours = False
+        digest_here = ""
+        if dest.is_file() and not dest.is_symlink() and dest.stat().st_size == before.st_size:
             # Most likely the same bytes, with only the file's time moved (a
-            # library copied between disks without keeping times). Both read
-            # and compared, nothing written: writing the whole file out first
+            # library copied between disks without keeping times), or the
+            # same photograph put there by another backup. Both read and
+            # compared, nothing written: writing the whole file out first
             # and comparing afterwards cost a full write per file on a slow
             # USB disk, for a copy that was already there.
-            digest_here = sha256_file(source)
-            after = source.stat()
-            if (after.st_size == before.st_size and after.st_mtime == before.st_mtime
-                    and sha256_file(dest) == digest_here):
-                os.utime(dest, (before.st_atime, before.st_mtime))
+            digest_here = self._hash_unchanged(source, before)
+            if sha256_file(dest) == digest_here:
+                if ours:
+                    os.utime(dest, (before.st_atime, before.st_mtime))
+                else:
+                    self._found_there = True        # someone else's: not even its time
                 return before.st_size, digest_here, stored
+        if not ours and conn is not None and conn.execute(
+                "SELECT 1 FROM mirror_found WHERE size=? LIMIT 1", (before.st_size,)).fetchone():
+            # The same photograph somewhere else on the disk already (a backup
+            # folder laid out by year, or by camera): taken as the copy rather
+            # than written a second time beside it.
+            digest_here = digest_here or self._hash_unchanged(source, before)
+            elsewhere = self._found_elsewhere(conn, target, before.st_size, digest_here)
+            if elsewhere:
+                self._found_there = True
+                return before.st_size, digest_here, elsewhere
+        if not ours and os.path.lexists(dest):
+            # Someone else's file at the library's place, with other bytes:
+            # left exactly where it is, and the library's goes beside it.
+            stored = self._free_name(conn, target, root, dest.relative_to(target).as_posix())
+            dest = target / Path(*stored.split("/"))
         if shutil.disk_usage(target).free < before.st_size + RESERVE:
             raise OSError(28, "no room left on the second copy's disk")
         partial = dest.with_name(dest.name + ".ninaivu-part")
@@ -882,18 +986,33 @@ class Mirror:
             if written != after.st_size or after.st_mtime != before.st_mtime:
                 raise OSError("the file changed while it was being copied")
             os.utime(partial, (before.st_atime, before.st_mtime))
-            if dest.exists():
-                # Never overwritten: the version that was there is set aside,
-                # named for when, in case the new one is the damaged one.
+            if ours and dest.exists():
+                # Never overwritten: the version Ninaivu wrote before is set
+                # aside, named for when, in case the new one is the damaged one.
                 stamp = time.strftime("%Y-%m-%d %H%M%S", time.localtime(dest.stat().st_mtime))
-                kept = dest.with_name(f"{dest.stem} (before {stamp}){dest.suffix}")
                 n = 1
-                while kept.exists():
+                while True:
+                    tail = stamp if n == 1 else f"{stamp} {n}"
+                    kept = dest.with_name(f"{dest.stem} (before {tail}){dest.suffix}")
+                    if not os.path.lexists(kept):
+                        try:
+                            move_no_replace(dest, kept)
+                            break
+                        except FileExistsError:
+                            pass
                     n += 1
-                    kept = dest.with_name(f"{dest.stem} (before {stamp} {n}){dest.suffix}")
-                os.rename(dest, kept)
                 self._noted(target, kept)
-            os.replace(partial, dest)
+            try:
+                publish_no_replace(partial, dest)
+            except FileExistsError:
+                # Something was put there while this was being written: never
+                # over it, this one goes beside it instead.
+                stored = self._free_name(conn, target, root, dest.relative_to(target).as_posix())
+                renamed = target / Path(*stored.split("/"))
+                os.replace(partial, partial.with_name(renamed.name + ".ninaivu-part"))
+                partial = partial.with_name(renamed.name + ".ninaivu-part")
+                dest = renamed
+                publish_no_replace(partial, dest)
             self._noted(target, dest)
         except BaseException:
             try:
@@ -902,6 +1021,80 @@ class Mirror:
                 pass
             raise
         return written, digest.hexdigest(), stored
+
+    @staticmethod
+    def _hash_unchanged(source: Path, before: os.stat_result) -> str:
+        """The SHA-256 of *source*, which must not have changed since *before*."""
+        digest = sha256_file(source)
+        after = source.stat()
+        if after.st_size != before.st_size or after.st_mtime != before.st_mtime:
+            raise OSError("the file changed while it was being read")
+        return digest
+
+    def _look_over(self, conn: sqlite3.Connection, target: Path, sizes: set[int]) -> None:
+        """Once for each disk, what is on it already: the files of a size some
+        library file still to be copied has (:data:`mirror_found`), so the same
+        photograph is found wherever it is and not written a second time."""
+        copy_id = self._meta(conn, "copy_id")
+        if self._meta(conn, "looked_over") == copy_id:
+            return
+        conn.execute("DELETE FROM mirror_found")
+        if sizes:
+            self._update(current="", message="Looking at what is already on the disk…")
+            seen = 0
+            found: list[tuple[str, int]] = []
+            for here, folders, files in os.walk(target, followlinks=False):
+                folders[:] = [f for f in folders if not _passed_over(f)]
+                for name in files:
+                    if _passed_over(name) or name in (MARKER, NAMES):
+                        continue
+                    seen += 1
+                    if seen % LOOK_PAUSE_EVERY == 0:
+                        self._pause_for_the_household()
+                    path = Path(here) / name
+                    try:
+                        info = path.lstat()
+                    except OSError:
+                        continue
+                    if stat.S_ISREG(info.st_mode) and info.st_size in sizes:
+                        found.append((path.relative_to(target).as_posix(), info.st_size))
+            conn.executemany("INSERT OR IGNORE INTO mirror_found(path, size) VALUES(?, ?)", found)
+        self._set_meta(conn, "looked_over", copy_id)
+
+    def _found_elsewhere(self, conn: sqlite3.Connection, target: Path, size: int,
+                         digest: str) -> str:
+        """Where on the disk a file with these bytes already is, put there by
+        someone other than Ninaivu; empty when there is none."""
+        for (path,) in conn.execute("SELECT path FROM mirror_found WHERE size=? ORDER BY path",
+                                    (size,)).fetchall():
+            if self._ninaivus_own(conn, path):
+                continue
+            there = target / Path(*path.split("/"))
+            if not stays_inside(target, there):
+                continue
+            try:
+                if there.is_symlink() or not there.is_file() or there.stat().st_size != size:
+                    continue
+                if sha256_file(there) == digest:
+                    return path
+            except OSError:
+                continue
+        return ""
+
+    def _ninaivus_own(self, conn: sqlite3.Connection, path: str) -> bool:
+        """Whether *path* on the copy is a file Ninaivu wrote for another
+        library file: that one may be set aside when its library file
+        changes, so it is no copy of this one."""
+        if conn.execute("SELECT 1 FROM mirror_copies WHERE stored_as=? AND origin != ? LIMIT 1",
+                        (path, FOUND)).fetchone():
+            return True
+        for root in self.roots:
+            lib = self._library_folder(root)
+            if path.startswith(lib + "/") and conn.execute(
+                    "SELECT 1 FROM mirror_copies WHERE root=? AND rel_path=? AND stored_as='' "
+                    "AND origin != ? LIMIT 1", (root, path[len(lib) + 1:], FOUND)).fetchone():
+                return True
+        return False
 
     def _free_name(self, conn: sqlite3.Connection | None, target: Path, root: str,
                    wanted: str) -> str:
@@ -939,7 +1132,8 @@ class Mirror:
         if not rows:
             return
         lines = ["# Files this copy keeps under a name of their own, because the disk",
-                 "# would not take the library's name, or another file had it.",
+                 "# would not take the library's name, or another file had it, or the",
+                 "# same photograph was on the disk already and was left where it was.",
                  "# Each line: where it is on this copy, a tab, where it belongs in the library.",
                  ""]
         lines += [f"{r['stored_as']}\t{self._library_folder(r['root'])}/{r['rel_path']}" for r in rows]

@@ -65,6 +65,7 @@ export class StraightenPanel {
     $('#st-apply')?.addEventListener('click', () => this.apply());
     $('#st-undo')?.addEventListener('click', () => this.undo());
     $('#st-resurvey')?.addEventListener('click', () => this.survey(true));
+    $('#st-new')?.addEventListener('click', () => this.survey(false, true));
     $('#st-download')?.addEventListener('click', () => this.download());
     $('#st-auto')?.addEventListener('change', (event) => this.setAuto(event.target.checked));
     $('#st-auto-apply')?.addEventListener('change', (event) => this.setAutoApply(event.target.checked));
@@ -174,6 +175,8 @@ export class StraightenPanel {
       return;
     }
     const go = $('#st-go');
+    const fresh = $('#st-new');
+    if (fresh) fresh.hidden = !model.present || !!s.progress?.running;
     if (!model.present) {
       box.appendChild(el('p', 'hint',
         i18n.t('One-time setup: Ninaivu needs a 77 MB model to tell which way up a photograph goes. It is downloaded once and kept with the rest of Ninaivu’s data.')));
@@ -325,12 +328,14 @@ export class StraightenPanel {
     }
   }
 
-  async survey(rescan) {
+  async survey(rescan, newOnly = false) {
     try {
       await json('/api/straighten/survey', {
-        method: 'POST', body: JSON.stringify({ rescan: !!rescan }),
+        method: 'POST', body: JSON.stringify({ rescan: !!rescan, new_only: !!newOnly }),
       });
-      this.toast(rescan ? i18n.t('Looking at every photograph again…') : i18n.t('Survey started.'));
+      this.toast(rescan ? i18n.t('Looking at every photograph again…')
+        : newOnly ? i18n.t('Looking at the photographs added in the last 30 days…')
+          : i18n.t('Survey started.'));
       this.refresh();
     } catch (err) { this.toast(err.message, true); }
   }
