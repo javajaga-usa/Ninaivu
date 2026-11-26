@@ -905,8 +905,14 @@ def test_the_disks_own_verdict_is_read_when_it_can_be(tmp_path, monkeypatch):
 
 # --- telling somebody ------------------------------------------------------------------
 
-def test_somebody_is_told_when_the_secondary_is_away_a_day(primary, secondary):
+def test_somebody_is_told_when_the_secondary_is_away_a_day(primary, secondary, monkeypatch):
     from ninaivu.mugil import courier as courier_module, machines
+    # A healthy disk whatever this computer's is: a nearly full test machine
+    # made the Secondary report "secondary_disk" before the absence was
+    # looked at (audit F8). Low space and SMART have their own test below.
+    monkeypatch.setattr(machines, "_free", lambda _path: {
+        "free_bytes": 400 * 2 ** 30, "total_bytes": 500 * 2 ** 30})
+    monkeypatch.setattr(machines, "smart_verdict", lambda *_a, **_k: {"passed": True})
     mine, courier = primary
     sent = []
     courier.notify = lambda event, summary, detail: sent.append((event, summary))

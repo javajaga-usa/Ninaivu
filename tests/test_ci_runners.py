@@ -19,7 +19,10 @@ import pytest
 
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPT = ROOT / "tools" / "ci_apt_install.sh"
-pytestmark = pytest.mark.skipif(sys.platform == "win32" or not shutil.which("bash")
+# Linux only: the script runs on the Ubuntu runners, and macOS's bash 3.2
+# reads an empty array under ``set -u`` as unbound (audit F5).
+pytestmark = pytest.mark.skipif(not sys.platform.startswith("linux")
+                                or not shutil.which("bash")
                                 or not shutil.which("timeout"),
                                 reason="the script is for the Linux runners")
 
