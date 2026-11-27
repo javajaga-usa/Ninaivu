@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **A photograph turned in the file itself is not doubled on the second copy.** After **Rotate the files themselves**, the older copy on the second copy's disk (found there, or copied by Ninaivu) is the same picture turned the other way, and the library's turned file went beside it as `name (2).jpg`. Now a file that differs only in which way up it goes (a JPEG's or TIFF's orientation tag, a PNG's or BMP's pixels a quarter turn apart, a video's streams packet for packet) is set aside as `name (before …).jpg` and the turned one takes the library's name. A file that really is different is still left exactly as it is. Straighten and the viewer's rotate button never change the file, so their photographs match the copy as they are. `tests/test_second_copy_turned.py` keeps it.
+
 ## 5.3.0 — 27 November 2026
 
 - **The second copy has the library's own folders, and a library already copied there is recognised.** The copy put each library folder in a folder of its own name inside the folder chosen, so a share that already held the library (`…/Ninaivu Archive/2024/05/01/…`) was expected at `…/Ninaivu Archive/Ninaivu Archive/2024/…`, and the page said none of it was there. Now the folder chosen stands for the library folder: `2024/05/01/a.jpg` in the library is `2024/05/01/a.jpg` on the copy. Before the first copy the page says when the folder already holds the library in the same folders, and **Copy now** reads each file there, compares it with the library and keeps the ones with the same bytes exactly as they are (not renamed, not even their times touched); only files missing there are written. A copy Ninaivu began before, in a folder named after the library folder, keeps that layout; with more than one library folder, the others still go in folders of their own names.
