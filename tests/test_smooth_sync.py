@@ -363,7 +363,7 @@ def test_an_identical_file_already_on_the_copy_is_not_written_again(second, monk
     second.conn.execute("UPDATE assets SET mtime=? WHERE rel_path=?",
                         (source.stat().st_mtime, rel))
     second.conn.commit()
-    copy = second.disk / second.library.name / rel
+    copy = second.disk / rel
     inode = copy.stat().st_ino
     writes = []
     real = mirror_mod.create_new

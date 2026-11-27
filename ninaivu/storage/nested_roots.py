@@ -245,7 +245,8 @@ def _carry_keyed_records(conn: sqlite3.Connection, going: str, kept: str,
                 f"UPDATE OR IGNORE mirror_copies SET root=?, rel_path={rel}, "
                 "stored_as=CASE WHEN stored_as='' THEN ? || rel_path ELSE stored_as END "
                 f"WHERE root=? AND {where}",
-                (kept, *rel_args, _mirror_folder(conn, going) + "/", going, *where_args))
+                (kept, *rel_args, (_mirror_folder(conn, going) + "/").lstrip("/"), going,
+                 *where_args))
         else:
             conn.execute(f"UPDATE OR IGNORE {table} SET root=?, rel_path={rel} "
                          f"WHERE root=? AND {where}", (kept, *rel_args, going, *where_args))
@@ -256,6 +257,12 @@ def _mirror_folder(conn: sqlite3.Connection, root: str) -> str:
     """The folder the second copy keeps *root* under (storage/mirror.py's
     ``_library_folder``), from the library folders it has copied."""
     import hashlib                                           # noqa: PLC0415
+    try:
+        flat = conn.execute("SELECT value FROM mirror_meta WHERE key='flat_root'").fetchone()
+    except sqlite3.Error:
+        flat = None
+    if flat and flat[0] == root:
+        return ""                       # the copy has this library folder's own layout
     name = Path(root).name or "library"
     copied = {r[0] for r in conn.execute("SELECT DISTINCT root FROM mirror_copies")} | {root}
     if len([r for r in copied if (Path(r).name or "library") == name]) > 1:

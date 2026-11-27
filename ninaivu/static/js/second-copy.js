@@ -199,6 +199,10 @@ export class SecondCopy {
       if (about.holds === 'another') {
         say(i18n.t('This folder holds another second copy. Files already there with the same bytes are kept, not copied again.'));
       }
+      if (about.holds === 'library' && about.library_here) {
+        say(i18n.t('This folder already holds the library, in the same folders ({found} of {looked} files looked at are there). The first copy compares each file with the library and keeps the ones with the same bytes as they are, writing nothing; only files missing there are written.', {
+          found: count(about.library_here.found), looked: count(about.library_here.looked_at) }));
+      }
       if (about.problem) say(i18n.fromServer(about.problem), true);
     }
     list.hidden = !list.children.length;
@@ -291,6 +295,10 @@ export class SecondCopy {
         size: size(status.copied_bytes), owed: count(status.owed),
       }));
     }
+    if (status.library_here) {
+      lines.push(i18n.t('This folder already holds the library, in the same folders ({found} of {looked} files looked at are there). Copy now compares each file with the library and keeps the ones with the same bytes as they are, writing nothing; only files missing there are written.', {
+        found: count(status.library_here.found), looked: count(status.library_here.looked_at) }));
+    }
     if (status.renamed) {
       lines.push(i18n.t('{count} files are kept under names this disk takes; NINAIVU-NAMES.txt on the copy says which.', {
         count: count(status.renamed) }));
@@ -315,7 +323,7 @@ export class SecondCopy {
       lines.push(i18n.t('The share is connected but the second copy is not on it. The disk behind the share may have dropped (after the Mac slept, say); nothing is written there until it is back. If it is a new disk, press Start afresh here.'));
     }
     if (status.last_finished) lines.push(i18n.t('Last whole copy {when}.', { when: when(status.last_finished) }));
-    if (status.last_verified) {
+    if (status.last_verified && status.verify_checked !== 0) {
       lines.push(status.verify_bad || status.verify_missing
         ? i18n.t('Last checked {when}: {bad} no longer matched and {missing} were missing; they are copied again.', {
           when: when(status.last_verified), bad: count(status.verify_bad), missing: count(status.verify_missing) })

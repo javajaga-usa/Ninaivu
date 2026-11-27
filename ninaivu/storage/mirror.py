@@ -231,6 +231,29 @@ def _passed_over(name: str) -> bool:
             or name.endswith(".ninaivu-part"))
 
 
+def _under(lib: str, rel: str) -> str:
+    """*rel* inside the copy's folder *lib* for one library folder; *lib* is
+    '' when the copy holds that library folder's own folders at its top."""
+    rel = rel.replace("\\", "/")
+    return f"{lib}/{rel}" if lib else rel
+
+
+def _inside(lib: str, path: str) -> str | None:
+    """The part of *path* (on the copy) inside *lib*, or None when it is not
+    in it. With *lib* '' everything on the copy is."""
+    if not lib:
+        return path
+    return path[len(lib) + 1:] if path.startswith(lib + "/") else None
+
+
+#: Seconds a folder's look for the library's files is kept.
+LIBRARY_HERE_FOR = 600.0
+
+#: How many library files are looked for at their places on a folder, to
+#: tell that it already holds the library laid out as the library is.
+LOOK_FOR = 24
+
+
 def _json_list(text: str) -> list[str]:
     try:
         value = json.loads(text or "[]")
@@ -283,6 +306,12 @@ class Mirror:
         #: What that kind of disk can keep (storage/fit.py), during a run;
         #: None outside one, when every name is written as it is.
         self._family: fit.Family | None = None
+        #: The library folder whose own folders are at the top of the copy
+        #: (meta ``flat_root``), read once; None until read.
+        self._flat_root: str | None = None
+        #: What _library_here found, by folder, and when (looked at again
+        #: after LIBRARY_HERE_FOR seconds): it reads a share.
+        self._here_cache: dict[str, tuple[float, int, int, str]] = {}
         self._state: dict[str, Any] = {
             "running": False, "job": "", "current": "", "copied_this_run": 0,
             "bytes_this_run": 0, "message": "", "error": "", "waiting": ""}
@@ -379,6 +408,7 @@ class Mirror:
         conn.execute("DELETE FROM mirror_copies")
         conn.execute("DELETE FROM mirror_moves")
         conn.execute("DELETE FROM mirror_found")
+        self._forget_the_copy(conn)
         copy_id = found or secrets.token_hex(12)
         if not found:
             marker.write_text(json.dumps({
@@ -390,6 +420,95 @@ class Mirror:
         self._set_meta(conn, "copy_id", copy_id)
         self._set_meta(conn, "afresh", "")
 
+    def _forget_the_copy(self, conn: sqlite3.Connection) -> None:
+        """What the record said about a copy that is no longer the one."""
+        for key in ("layout", "flat_root", "looked_over", "last_verified", "verify_bad",
+                    "verify_missing", "verify_checked", "verify_cursor", "last_finished"):
+            self._set_meta(conn, key, "")
+        self._flat_root = None
+
+    def _library_here(self, conn: sqlite3.Connection, target: Path,
+                      root: str) -> tuple[int, int]:
+        """How many of a few of *root*'s files are at *target* already, at
+        their own paths and sizes, as the library has them: (found, looked
+        at). Only sizes, so a few reads of a share; the bytes are compared
+        file by file when the copy runs."""
+        rows = conn.execute("SELECT rel_path, size FROM assets WHERE trashed=0 AND root=? "
+                            "ORDER BY random() LIMIT ?", (root, LOOK_FOR)).fetchall()
+        found = 0
+        for rel, size in rows:
+            there = target / Path(*str(rel).replace("\\", "/").split("/"))
+            try:
+                if stays_inside(target, there) and there.is_file() \
+                        and there.stat().st_size == int(size or 0):
+                    found += 1
+            except OSError:
+                continue
+        return found, len(rows)
+
+    def library_here(self, folder: Path | None = None) -> dict[str, Any] | None:
+        """Whether *folder* (the copy's, by default) already holds the
+        library's files at their own paths, before anything is recorded
+        about it: ``{"found", "looked_at", "root"}``, or None."""
+        folder = folder or self.folder
+        roots = self.roots
+        if folder is None or not roots:
+            return None
+        key = str(folder)
+        now = time.monotonic()
+        cached = self._here_cache.get(key)
+        if cached is None or now - cached[0] > LIBRARY_HERE_FOR:
+            conn = self._db()
+            best = (0, 0, "")
+            try:
+                if folder.is_dir() and not roots_kit.ghost_volume(folder):
+                    for root in roots:
+                        found, looked = self._library_here(conn, folder, root)
+                        if found > best[0]:
+                            best = (found, looked, root)
+            except OSError:
+                pass
+            self._here_cache[key] = cached = (now, best[0], best[1], best[2])
+        _, found, looked, root = cached
+        if not found:
+            return None
+        return {"found": found, "looked_at": looked, "root": root}
+
+    def _choose_layout(self, conn: sqlite3.Connection, target: Path) -> None:
+        """Once for each copy: how the library is laid out on it.
+
+        The copy has the library's own layout: the folder chosen stands for
+        the library folder, and 2024/05/01/a.jpg in the library is
+        2024/05/01/a.jpg on the copy. A copy already in that layout (the
+        library copied there by hand, or by another program) is then found
+        file by file at the same paths and taken as it is (_copy_one).
+
+        With more than one library folder, the one whose files are already
+        at the top of the copy, or else the first, is laid out there; the
+        others go in folders of their own names. A copy Ninaivu began
+        before, with each library folder in a folder named after it, keeps
+        that layout."""
+        if self._meta(conn, "layout"):
+            return
+        roots = self.roots
+        flat = ""
+        recorded = conn.execute("SELECT 1 FROM mirror_copies LIMIT 1").fetchone()
+        if roots and not recorded:
+            here = self.library_here(target)
+            if here:
+                flat = here["root"]
+            else:
+                first = roots[0]
+                nested = target / (Path(first).name or "library")
+                # A copy laid out the old way and its record lost: it stays so.
+                if not (nested.is_dir() and roots_kit.holds_anything(nested)):
+                    flat = first
+        self._set_meta(conn, "flat_root", flat)
+        self._set_meta(conn, "layout", "flat" if flat else "nested")
+        self._flat_root = flat
+        if flat:
+            log.info("the second copy at %s has the library's layout (%s)", target, flat)
+
     def _bare_mount_point(self, target: Path) -> bool:
         """Empty, not a mount point, and on the same disk as the state folder."""
         if roots_kit.holds_anything(target) or os.path.ismount(target):
@@ -399,8 +518,21 @@ class Mirror:
         except OSError:
             return False
 
+    def _flat(self) -> str:
+        """The library folder laid out at the top of the copy, or ''."""
+        if self._flat_root is None:
+            try:
+                self._flat_root = self._meta(self._db(), "flat_root")
+            except sqlite3.Error:
+                return ""
+        return self._flat_root
+
     def _library_folder(self, root: str) -> str:
-        """The folder inside the destination that one library folder goes to."""
+        """The folder inside the destination that one library folder goes to:
+        '' for the library folder whose own folders are at the top of the copy
+        (:meth:`_choose_layout`), so the copy has the library's layout."""
+        if root and root == self._flat():
+            return ""
         name = Path(root).name or "library"
         same = [r for r in self.roots if (Path(r).name or "library") == name]
         if len(same) > 1:
@@ -430,8 +562,7 @@ class Mirror:
                     conn.execute("DELETE FROM mirror_copies WHERE root=? AND rel_path=?",
                                  (root, old))
                 else:
-                    kept = row["stored_as"] or (
-                        f"{self._library_folder(root)}/{old.replace(chr(92), '/')}")
+                    kept = row["stored_as"] or _under(self._library_folder(root), old)
                     conn.execute("UPDATE mirror_copies SET rel_path=?, stored_as=? "
                                  "WHERE root=? AND rel_path=?", (new, kept, root, old))
                 moved += 1
@@ -470,7 +601,22 @@ class Mirror:
         if away and problem and problem.startswith("That folder is not there"):
             problem = str(away)
         owed_bytes = int(size) - int(copied_size)
+        recorded = conn.execute("SELECT 1 FROM mirror_copies LIMIT 1").fetchone() is not None
+        last_verified = float(self._meta(conn, "last_verified", "0") or 0)
+        checked = self._meta(conn, "verify_checked")
+        verified = int(checked) if checked.isdigit() else None
+        if not recorded or verified == 0:
+            # A check with nothing on the copy to read checked nothing; it
+            # is not "every file matched".
+            last_verified, verified = 0.0, 0
+        # Before the first copy: the library's files already there, at their
+        # own paths (a copy made by hand). The copy takes them as they are.
+        library_here = (self.library_here(folder)
+                        if there and not recorded and self._meta(conn, "layout") != "nested"
+                        else None)
         return {
+            "library_here": library_here,
+            "layout": self._meta(conn, "layout"),
             **state,
             "enabled": self.enabled,
             "folder": str(folder or ""),
@@ -496,7 +642,8 @@ class Mirror:
             "last_finished": float(self._meta(conn, "last_finished", "0") or 0),
             "last_run": float(self._meta(conn, "last_run", "0") or 0),
             "last_attempt": float(self._meta(conn, "last_attempt", "0") or 0),
-            "last_verified": float(self._meta(conn, "last_verified", "0") or 0),
+            "last_verified": last_verified,
+            "verify_checked": verified,
             "verify_bad": int(self._meta(conn, "verify_bad", "0") or 0),
             "verify_missing": int(self._meta(conn, "verify_missing", "0") or 0),
             "verify_every_days": self.verify_every / 86400,
@@ -552,6 +699,11 @@ class Mirror:
             conn.execute(f"DELETE FROM {table}")            # noqa: S608 - fixed names
         for key in ("copy_id", "afresh", "place_mount", "place_fs", "verify_cursor"):
             self._set_meta(conn, key, "")
+        # What was said of the old folder (checked, copied, laid out so) is
+        # not true of this one: "every file matched" was shown for a folder
+        # with nothing of the copy on it yet.
+        self._forget_the_copy(conn)
+        self._here_cache.clear()
         conn.commit()
 
     def start_afresh(self) -> dict[str, Any]:
@@ -578,7 +730,9 @@ class Mirror:
         return mirror_place.describe(
             folder, roots, self.cfg.state_dir, needed_bytes=needed,
             problem=folder_problem(folder, roots, self.cfg.state_dir),
-            copy_id=self._meta(conn, "copy_id"))
+            copy_id=self._meta(conn, "copy_id"),
+            library_here=self.library_here(Path(str(folder or "")).expanduser())
+            if str(folder or "").strip() else None)
 
     @property
     def running(self) -> bool:
@@ -729,6 +883,7 @@ class Mirror:
             # tried again within the hour rather than the next day.
             self._set_meta(conn, "last_attempt", self._clock())
             self._know_the_disk(conn, target)
+            self._choose_layout(conn, target)
             self._follow_moves(conn)
             self._listings = {}
             fstype = self.fstype or fit.filesystem_of(target)
@@ -833,7 +988,7 @@ class Mirror:
     def _on_disk(self, target: Path, root: str, rel: str, stored: str = "") -> Path:
         if stored:
             return target / Path(*stored.split("/"))
-        return target / self._library_folder(root) / Path(*rel.replace("\\", "/").split("/"))
+        return target / Path(*_under(self._library_folder(root), rel).split("/"))
 
     def copy_path(self, root: str, rel: str) -> Path:
         """Where the second copy keeps *rel* of *root* (it may not be there)."""
@@ -925,6 +1080,10 @@ class Mirror:
             self._set_meta(conn, "last_verified", self._clock())
             self._set_meta(conn, "verify_bad", bad)
             self._set_meta(conn, "verify_missing", missing)
+            self._set_meta(conn, "verify_checked", checked)
+            if not checked:
+                message = "Nothing is on the second copy yet to check. Copy now first."
+                return
             message = f"Checked {checked:,} files on the second copy."
             message += (f" {bad:,} no longer matched and {missing:,} were missing; they are copied "
                         f"again on the next run." if bad or missing else " Every one read back intact.")
@@ -1098,7 +1257,7 @@ class Mirror:
             # A name this kind of disk refuses ("Diwali: day 2" on exFAT, a
             # Samba share or NTFS) goes under one it keeps, and the record
             # and the names list say where.
-            plain = f"{self._library_folder(root)}/{rel.replace(chr(92), '/')}"
+            plain = _under(self._library_folder(root), rel)
             fitted = fit.fitting_path(plain, family)
             if fitted != "/".join(p for p in plain.split("/") if p):
                 stored = self._free_name(conn, target, root, fitted)
@@ -1272,10 +1431,10 @@ class Mirror:
                         (path, FOUND)).fetchone():
             return True
         for root in self.roots:
-            lib = self._library_folder(root)
-            if path.startswith(lib + "/") and conn.execute(
+            own = _inside(self._library_folder(root), path)
+            if own and conn.execute(
                     "SELECT 1 FROM mirror_copies WHERE root=? AND rel_path=? AND stored_as='' "
-                    "AND origin != ? LIMIT 1", (root, path[len(lib) + 1:], FOUND)).fetchone():
+                    "AND origin != ? LIMIT 1", (root, own, FOUND)).fetchone():
                 return True
         return False
 
@@ -1296,7 +1455,7 @@ class Mirror:
             if conn.execute("SELECT 1 FROM mirror_copies WHERE stored_as=? LIMIT 1",
                             (path,)).fetchone():
                 return True
-            own = path[len(lib) + 1:] if path.startswith(lib + "/") else None
+            own = _inside(lib, path)
             return bool(own) and conn.execute(
                 "SELECT 1 FROM assets WHERE root=? AND rel_path=? LIMIT 1",
                 (root, own)).fetchone() is not None
@@ -1319,7 +1478,8 @@ class Mirror:
                  "# same photograph was on the disk already and was left where it was.",
                  "# Each line: where it is on this copy, a tab, where it belongs in the library.",
                  ""]
-        lines += [f"{r['stored_as']}\t{self._library_folder(r['root'])}/{r['rel_path']}" for r in rows]
+        lines += [f"{r['stored_as']}\t{_under(self._library_folder(r['root']), r['rel_path'])}"
+                  for r in rows]
         text = "\n".join(lines) + "\n"
         try:
             if path.is_file() and path.read_text(encoding="utf-8") == text:

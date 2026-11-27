@@ -105,7 +105,7 @@ def test_a_redated_photograph_deleted_afterwards_stays_deleted(house):
 def test_a_move_before_the_first_copy_changes_nothing(house):
     moved = _redate(house, "shared/holiday/beach1.jpg", "2019-07-14")
     status = _run(house)
-    assert (house["disk"] / house["library"].name / moved["rel_path"]).is_file()
+    assert (house["disk"] / moved["rel_path"]).is_file()
     assert "Copied" in status["message"]
 
 
@@ -124,8 +124,7 @@ def test_the_names_list_says_where_a_moved_file_is_on_the_disk(house):
     moved = _redate(house, "shared/holiday/beach1.jpg", "2019-07-14")
     _run(house)
     names = (house["disk"] / "NINAIVU-NAMES.txt").read_text(encoding="utf-8")
-    lib = house["library"].name
-    assert f"{lib}/shared/holiday/beach1.jpg\t{lib}/{moved['rel_path']}" in names
+    assert f"shared/holiday/beach1.jpg\t{moved['rel_path']}" in names
 
 
 # --- 2. a phone backup waiting for approval -----------------------------------

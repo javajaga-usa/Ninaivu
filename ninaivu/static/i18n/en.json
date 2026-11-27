@@ -5508,5 +5508,7 @@
   "{count} could not be deleted from the second copy.": "{count} could not be deleted from the second copy.",
   "{count} more are not listed here.": "{count} more are not listed here.",
   "{free} free of {total}; the copy needs about {needed} more.": "{free} free of {total}; the copy needs about {needed} more.",
-  "It could not be deleted.": "It could not be deleted."
+  "It could not be deleted.": "It could not be deleted.",
+  "This folder already holds the library, in the same folders ({found} of {looked} files looked at are there). Copy now compares each file with the library and keeps the ones with the same bytes as they are, writing nothing; only files missing there are written.": "This folder already holds the library, in the same folders ({found} of {looked} files looked at are there). Copy now compares each file with the library and keeps the ones with the same bytes as they are, writing nothing; only files missing there are written.",
+  "This folder already holds the library, in the same folders ({found} of {looked} files looked at are there). The first copy compares each file with the library and keeps the ones with the same bytes as they are, writing nothing; only files missing there are written.": "This folder already holds the library, in the same folders ({found} of {looked} files looked at are there). The first copy compares each file with the library and keeps the ones with the same bytes as they are, writing nothing; only files missing there are written."
 }

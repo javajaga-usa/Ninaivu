@@ -5894,5 +5894,7 @@
   "{count} could not be deleted from the second copy.": "{count} ஐ இரண்டாவது நகலிலிருந்து நீக்க முடியவில்லை.",
   "{count} more are not listed here.": "மேலும் {count} இங்கே பட்டியலிடப்படவில்லை.",
   "{free} free of {total}; the copy needs about {needed} more.": "{total} இல் {free} காலியாக உள்ளது; நகலுக்குச் சுமார் {needed} மேலும் தேவை.",
-  "It could not be deleted.": "அதை நீக்க முடியவில்லை."
+  "It could not be deleted.": "அதை நீக்க முடியவில்லை.",
+  "This folder already holds the library, in the same folders ({found} of {looked} files looked at are there). Copy now compares each file with the library and keeps the ones with the same bytes as they are, writing nothing; only files missing there are written.": "இந்தக் கோப்புறையில் ஏற்கெனவே நூலகம் அதே கோப்புறைகளில் உள்ளது (பார்த்த {looked} கோப்புகளில் {found} அங்கே உள்ளன). இப்போது நகலெடு ஒவ்வொரு கோப்பையும் நூலகத்துடன் ஒப்பிட்டு, அதே உள்ளடக்கம் உள்ளவற்றை எதையும் எழுதாமல் அப்படியே வைக்கும்; அங்கே இல்லாத கோப்புகள் மட்டுமே எழுதப்படும்.",
+  "This folder already holds the library, in the same folders ({found} of {looked} files looked at are there). The first copy compares each file with the library and keeps the ones with the same bytes as they are, writing nothing; only files missing there are written.": "இந்தக் கோப்புறையில் ஏற்கெனவே நூலகம் அதே கோப்புறைகளில் உள்ளது (பார்த்த {looked} கோப்புகளில் {found} அங்கே உள்ளன). முதல் நகலெடுப்பு ஒவ்வொரு கோப்பையும் நூலகத்துடன் ஒப்பிட்டு, அதே உள்ளடக்கம் உள்ளவற்றை எதையும் எழுதாமல் அப்படியே வைக்கும்; அங்கே இல்லாத கோப்புகள் மட்டுமே எழுதப்படும்."
 }

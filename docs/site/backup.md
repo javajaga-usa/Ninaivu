@@ -44,7 +44,10 @@ Two more copies, set up beside Mugil:
 
 * **A second copy** on another disk or a NAS share: every photograph copied
   across on a schedule and checked against its own record every few weeks.
-  Nothing removed at home is removed there.
+  Nothing removed at home is removed there. The folder chosen stands for the
+  library folder, so the copy has the library's own folders (`2024/05/01/…`).
+  A folder that already holds the library laid out so is recognised, and the
+  first copy keeps each file with the same bytes as it is, writing nothing.
 * **An off-site copy** to any S3-compatible bucket (Backblaze B2, Wasabi,
   MinIO, Amazon S3) or a folder (a friend's disk, a mounted share), encrypted
   with the Mugil key before it leaves. It can be put back on any computer,

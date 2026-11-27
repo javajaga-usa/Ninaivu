@@ -88,7 +88,7 @@ def _same_disk(folder: Path, roots: list[str]) -> str:
 
 def describe(folder: str, roots: list[str], state_dir: Path | str, *,
              needed_bytes: int = 0, problem: str | None = None,
-             copy_id: str = "") -> dict[str, Any]:
+             copy_id: str = "", library_here: dict[str, Any] | None = None) -> dict[str, Any]:
     """What the console says about *folder* before it becomes the second copy.
 
     *needed_bytes* is what is still to be copied there; *problem* is what
@@ -134,6 +134,11 @@ def describe(folder: str, roots: list[str], state_dir: Path | str, *,
         found = ""
     if found:
         out["holds"] = "this" if found == copy_id else "another"
+    elif library_here:
+        # No copy of Ninaivu's, but the library's own files at their own
+        # paths: the library copied there by hand. Taken as it is.
+        out["holds"] = "library"
+        out["library_here"] = library_here
     return out
 
 
@@ -190,16 +195,16 @@ def listing(mirror, conn: sqlite3.Connection, rel: str = "") -> dict[str, Any]:
         known[row["stored_as"]] = dict(row)
     for root in mirror.roots:
         top = mirror._library_folder(root)                     # noqa: SLF001
-        if rel != top and not rel.startswith(top + "/"):
+        inside = library_folder_of(mirror, rel, root)
+        if inside is None:
             continue
-        inside = rel[len(top) + 1:]
         start = f"{inside}/" if inside else ""
         for row in conn.execute(
                 "SELECT root, rel_path, size, origin, stored_as FROM mirror_copies "
                 "WHERE root = ? AND stored_as = '' AND "
                 "(REPLACE(rel_path, char(92), '/') LIKE ? ESCAPE '\\')",
                 (root, _like(start) + "%")):
-            known.setdefault(f"{top}/{_rel(row['rel_path'])}", dict(row))
+            known.setdefault(_under(top, _rel(row["rel_path"])), dict(row))
 
     dirs: list[dict[str, Any]] = []
     files: list[dict[str, Any]] = []
@@ -248,6 +253,10 @@ def listing(mirror, conn: sqlite3.Connection, rel: str = "") -> dict[str, Any]:
             "library_folder": library_folder_of(mirror, rel, active) if active else None}
 
 
+def _under(top: str, rel: str) -> str:
+    return f"{top}/{rel}" if top and rel else (top or rel)
+
+
 def _like(text: str) -> str:
     return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
@@ -260,10 +269,11 @@ def _record_of(mirror, conn: sqlite3.Connection, path: str):
         return row
     for root in mirror.roots:
         top = mirror._library_folder(root)                     # noqa: SLF001
-        if path.startswith(top + "/"):
+        own = path if not top else (path[len(top) + 1:] if path.startswith(top + "/") else "")
+        if own:
             row = conn.execute(
                 "SELECT root, rel_path FROM mirror_copies WHERE root = ? AND stored_as = '' "
-                "AND REPLACE(rel_path, char(92), '/') = ?", (root, path[len(top) + 1:])).fetchone()
+                "AND REPLACE(rel_path, char(92), '/') = ?", (root, own)).fetchone()
             if row is not None:
                 return row
     return None
@@ -329,18 +339,20 @@ def where_on_copy(mirror, conn: sqlite3.Connection, root: str, rel: str = "",
         row = conn.execute("SELECT stored_as, size FROM mirror_copies WHERE root = ? AND rel_path = ?",
                            (root, rel)).fetchone()
         path = (row["stored_as"] if row is not None and row["stored_as"]
-                else f"{top}/{_rel(rel)}")
+                else _under(top, _rel(rel)))
         parent = path.rsplit("/", 1)[0] if "/" in path else ""
         return {"path": parent, "file": path if row is not None and row["size"] >= 0 else "",
                 "copied": row is not None and row["size"] >= 0}
     folder = _rel(folder)
-    return {"path": f"{top}/{folder}" if folder else top, "file": "", "copied": False}
+    return {"path": _under(top, folder) if folder else top, "file": "", "copied": False}
 
 
 def library_folder_of(mirror, rel: str, root: str) -> str | None:
     """The folder of library *root* that copy folder *rel* holds, or None."""
     top = mirror._library_folder(root)                         # noqa: SLF001
     rel = _rel(rel)
+    if not top:
+        return rel                      # the copy has the library's own layout
     if rel == top:
         return ""
     if rel.startswith(top + "/"):
