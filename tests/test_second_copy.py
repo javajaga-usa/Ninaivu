@@ -50,7 +50,7 @@ def test_the_copy_is_the_library_as_plain_files_in_their_folders(house):
     status = _run(house)
     assert status["owed"] == 0 and status["copied"] == status["files"] > 0
     assert not status["error"] and status["last_finished"] > 0
-    copy = house["disk"] / house["library"].name
+    copy = house["disk"]
     indexed = {r["rel_path"] for r in house["conn"].execute("SELECT rel_path FROM assets")}
     assert set(_files(copy)) == indexed
     for rel, data in _files(copy).items():
@@ -78,13 +78,13 @@ def test_a_photograph_deleted_from_the_library_stays_on_the_copy(house):
     house["conn"].execute("DELETE FROM assets WHERE rel_path=?", (rel,))
     house["conn"].commit()
     _run(house)
-    assert (house["disk"] / house["library"].name / rel).is_file()
+    assert (house["disk"] / rel).is_file()
 
 
 def test_a_changed_file_is_copied_beside_the_older_one(house):
     _run(house)
     rel = "misc/plain.png"
-    copy = house["disk"] / house["library"].name / rel
+    copy = house["disk"] / rel
     old = copy.read_bytes()
     source = house["library"] / rel
     source.write_bytes(b"a different picture entirely")
@@ -106,7 +106,7 @@ def test_a_file_whose_time_moved_but_not_its_bytes_is_not_kept_twice(house):
     house["conn"].execute("UPDATE assets SET mtime=? WHERE rel_path=?", (1_700_000_000, rel))
     house["conn"].commit()
     _run(house)
-    assert not list((house["disk"] / house["library"].name / "misc").glob("plain (before*"))
+    assert not list((house["disk"] / "misc").glob("plain (before*"))
 
 
 def test_a_different_disk_at_the_same_path_is_copied_to_from_the_beginning(house, monkeypatch):
@@ -120,7 +120,7 @@ def test_a_different_disk_at_the_same_path_is_copied_to_from_the_beginning(house
     monkeypatch.setattr(os.path, "ismount", lambda p: str(p) == str(house["disk"]) or real(p))
     status = _run(house)                        # …and is not believed
     assert status["copied_this_run"] == status["files"]
-    assert (house["disk"] / house["library"].name / "misc/plain.png").is_file()
+    assert (house["disk"] / "misc/plain.png").is_file()
 
 
 def test_the_marker_says_what_the_disk_is(house):
@@ -210,7 +210,7 @@ def _wait(house):
 
 def test_a_check_finds_a_file_that_went_bad_and_the_next_run_mends_it(house):
     _run(house)
-    copy = house["disk"] / house["library"].name / "misc/plain.png"
+    copy = house["disk"] / "misc/plain.png"
     good = copy.read_bytes()
     copy.write_bytes(b"\0" * len(good))              # a disk going bad in a drawer
     assert house["mirror"].verify() == {"started": True}
@@ -258,7 +258,7 @@ def test_a_copy_that_does_not_match_its_fingerprint_is_not_put_back(house):
     _run(house)
     lost = house["library"] / "misc/plain.png"
     lost.unlink()
-    (house["disk"] / house["library"].name / "misc/plain.png").write_bytes(b"rotten")
+    (house["disk"] / "misc/plain.png").write_bytes(b"rotten")
     house["mirror"].restore()
     status = _wait(house)
     assert not lost.exists() and "did not match" in status["message"]

@@ -68,7 +68,7 @@ def test_names_an_exfat_disk_refuses_go_under_names_it_keeps(house):
         pytest.skip("this system's own disk cannot hold the name either")
     status = _run(house, "exfat")
     assert not status["error"] and status["owed"] == 0 and status["filesystem"] == "exfat"
-    copy = house["disk"] / house["library"].name / "trips"
+    copy = house["disk"] / "trips"
     names = sorted(p.name for p in copy.iterdir())
     assert not [n for n in names if ":" in n or "?" in n], names
     assert (copy / "Diwali day 2.jpg").read_bytes() == b"the other one", \
@@ -77,9 +77,8 @@ def test_names_an_exfat_disk_refuses_go_under_names_it_keeps(house):
     assert (copy / "what.jpg").read_bytes() == b"a question"
     stored = dict(tuple(r) for r in house["conn"].execute(
         "SELECT rel_path, stored_as FROM mirror_copies WHERE stored_as != ''"))
-    lib = house["library"].name
-    assert stored == {"trips/Diwali: day 2.jpg": f"{lib}/trips/Diwali day 2 (2).jpg",
-                      "trips/what?.jpg": f"{lib}/trips/what.jpg"}
+    assert stored == {"trips/Diwali: day 2.jpg": "trips/Diwali day 2 (2).jpg",
+                      "trips/what?.jpg": "trips/what.jpg"}
     assert status["renamed"] == 2
 
 
@@ -87,9 +86,8 @@ def test_the_names_list_says_where_each_one_is(house):
     if not _indexed(house, "trips/what?.jpg"):
         pytest.skip("this system's own disk cannot hold the name either")
     _run(house, "ntfs")
-    lib = house["library"].name
     text = (house["disk"] / mirror_mod.NAMES).read_text(encoding="utf-8")
-    assert f"{lib}/trips/what.jpg\t{lib}/trips/what?.jpg" in text.splitlines()
+    assert "trips/what.jpg\ttrips/what?.jpg" in text.splitlines()
     assert all(line.startswith("#") or "\t" in line for line in text.splitlines() if line)
 
 
@@ -125,7 +123,7 @@ def test_a_disk_that_keeps_every_name_is_written_as_before(house):
     assert status["renamed"] == 0 and status["owed"] == 0
     assert not (house["disk"] / mirror_mod.NAMES).exists()
     if _indexed(house, "trips/what?.jpg"):
-        assert (house["disk"] / house["library"].name / "trips" / "what?.jpg").is_file()
+        assert (house["disk"] / "trips" / "what?.jpg").is_file()
 
 
 def test_a_file_too_large_for_fat32_is_left_out_and_said(house, monkeypatch):

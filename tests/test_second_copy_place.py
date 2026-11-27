@@ -139,19 +139,18 @@ def test_a_copy_that_goes_away_while_copying_stops_writing(house):
 
 def test_the_copy_is_listed_with_what_each_file_is(house):
     _run(house)
-    top = house["library"].name
-    (house["disk"] / top / "misc" / "mine.txt").write_text("someone else's")
+    (house["disk"] / "misc" / "mine.txt").write_text("someone else's")
     client = house["client"]
     root = client.get("/api/mirror/browse").get_json()
-    assert [d["name"] for d in root["dirs"]] == [top] and root["library_folder"] is None
-    misc = client.get(f"/api/mirror/browse?path={top}/misc").get_json()
+    assert "misc" in [d["name"] for d in root["dirs"]] and root["library_folder"] == ""
+    misc = client.get("/api/mirror/browse?path=misc").get_json()
     kinds = {f["name"]: f["is"] for f in misc["files"]}
     assert kinds["plain.png"] == "copied" and kinds["mine.txt"] == "other"
     plain = next(f for f in misc["files"] if f["name"] == "plain.png")
     assert plain["library_path"] == "misc/plain.png" and misc["library_folder"] == "misc"
     assert not any(f["name"].startswith(".") for f in root["files"])
     assert client.get("/api/mirror/browse?path=../..").status_code == 400
-    opened = client.get(f"/api/mirror/file?path={top}/misc/plain.png")
+    opened = client.get("/api/mirror/file?path=misc/plain.png")
     assert opened.status_code == 200
     assert opened.data == (house["library"] / "misc/plain.png").read_bytes()
     assert client.get(f"/api/mirror/file?path={mirror_mod.MARKER}").status_code == 400
@@ -163,18 +162,17 @@ def test_a_page_on_the_copy_is_handed_over_never_opened_as_the_console(house):
     an HTML or SVG page (the share may be written by other programs) opened
     inline would run its scripts as the signed-in admin's console."""
     _run(house)
-    top = house["library"].name
-    folder = house["disk"] / top / "misc"
+    folder = house["disk"] / "misc"
     (folder / "page.html").write_text("<script src='x.js'></script>")
     (folder / "x.js").write_text("fetch('/api/admin/users')")
     (folder / "pic.svg").write_text("<svg xmlns='http://www.w3.org/2000/svg'/>")
     client = house["client"]
     for name in ("page.html", "x.js", "pic.svg"):
-        got = client.get(f"/api/mirror/file?path={top}/misc/{name}")
+        got = client.get(f"/api/mirror/file?path=misc/{name}")
         assert got.status_code == 200
         assert got.mimetype == "application/octet-stream"
         assert got.headers["Content-Disposition"].startswith("attachment")
-    photo = client.get(f"/api/mirror/file?path={top}/misc/plain.png")
+    photo = client.get("/api/mirror/file?path=misc/plain.png")
     assert photo.mimetype == "image/png"
     assert not photo.headers.get("Content-Disposition", "").startswith("attachment")
     assert "no-store" in photo.headers["Cache-Control"]
@@ -182,23 +180,21 @@ def test_a_page_on_the_copy_is_handed_over_never_opened_as_the_console(house):
 
 def test_library_and_copy_lead_to_each_other(house):
     _run(house)
-    top = house["library"].name
     client = house["client"]
-    assert client.get("/api/mirror/where?folder=misc").get_json()["path"] == f"{top}/misc"
+    assert client.get("/api/mirror/where?folder=misc").get_json()["path"] == "misc"
     asset = house["conn"].execute(
         "SELECT id FROM assets WHERE rel_path='misc/plain.png'").fetchone()["id"]
     place = client.get(f"/api/mirror/where?id={asset}").get_json()
-    assert place == {"path": f"{top}/misc", "file": f"{top}/misc/plain.png", "copied": True}
+    assert place == {"path": "misc", "file": "misc/plain.png", "copied": True}
 
 
 def test_deleting_on_the_copy_needs_the_password_and_copies_a_library_file_again(house):
     _run(house)
-    top = house["library"].name
     client = house["client"]
-    copy = house["disk"] / top / "misc" / "plain.png"
-    stray = house["disk"] / top / "misc" / "mine.txt"
+    copy = house["disk"] / "misc" / "plain.png"
+    stray = house["disk"] / "misc" / "mine.txt"
     stray.write_text("someone else's")
-    paths = [f"{top}/misc/plain.png", f"{top}/misc/mine.txt"]
+    paths = ["misc/plain.png", "misc/mine.txt"]
     refused = client.post("/api/mirror/delete", json={"paths": paths})
     assert refused.status_code == 401 and refused.get_json()["needs_password"]
     assert client.post("/api/mirror/delete",
@@ -212,7 +208,7 @@ def test_deleting_on_the_copy_needs_the_password_and_copies_a_library_file_again
     house["services"].mirror.cfg.mirror_every_hours = 24
     _run(house)
     assert copy.is_file() and not stray.exists()
-    bad = client.post("/api/mirror/delete", json={"paths": [f"../{top}"], "password": ADMIN[1]})
+    bad = client.post("/api/mirror/delete", json={"paths": ["../misc"], "password": ADMIN[1]})
     assert bad.get_json()["failed"] and not bad.get_json()["deleted"]
 
 

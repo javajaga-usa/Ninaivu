@@ -149,7 +149,7 @@ def test_a_file_named_as_another_was_stored_gets_a_name_of_its_own(house, scanne
                                  ).fetchone():
         pytest.skip("this system's own disk cannot hold the name either")
     _copy_run(house, "exfat")
-    copy = house["disk"] / house["library"].name / "trips"
+    copy = house["disk"] / "trips"
     assert (copy / "what.jpg").read_bytes() == b"a question"
     # Later a real "what.jpg" is added to the library.
     (house["library"] / "trips" / "what.jpg").write_bytes(b"an answer")
@@ -160,8 +160,7 @@ def test_a_file_named_as_another_was_stored_gets_a_name_of_its_own(house, scanne
         "the copy of what?.jpg was set aside and written over"
     stored = dict(tuple(r) for r in house["conn"].execute(
         "SELECT rel_path, stored_as FROM mirror_copies WHERE rel_path LIKE 'trips/what%'"))
-    lib = house["library"].name
-    assert stored["trips/what?.jpg"] == f"{lib}/trips/what.jpg"
-    assert stored["trips/what.jpg"] == f"{lib}/trips/what (2).jpg"
+    assert stored["trips/what?.jpg"] == "trips/what.jpg"
+    assert stored["trips/what.jpg"] == "trips/what (2).jpg"
     assert (copy / "what (2).jpg").read_bytes() == b"an answer"
     assert not [p for p in copy.iterdir() if "before" in p.name]

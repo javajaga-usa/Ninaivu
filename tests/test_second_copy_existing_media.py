@@ -53,7 +53,7 @@ REL = "misc/plain.png"
 
 
 def test_the_same_photograph_at_its_own_place_is_left_untouched(house):
-    there = house["disk"] / house["library"].name / REL
+    there = house["disk"] / REL
     there.parent.mkdir(parents=True)
     shutil.copyfile(house["library"] / REL, there)
     os.utime(there, (1_000_000_000, 1_000_000_000))      # another backup's time
@@ -71,19 +71,19 @@ def test_the_same_photograph_elsewhere_on_the_disk_is_not_written_again(house):
     there.parent.mkdir(parents=True)
     shutil.copyfile(house["library"] / REL, there)
     status = _run(house)
-    assert not (house["disk"] / house["library"].name / REL).exists()
+    assert not (house["disk"] / REL).exists()
     row = _row(house, REL)
     assert row["origin"] == mirror_mod.FOUND and row["stored_as"] == "Old backup/2019/IMG_0001.png"
     assert there.read_bytes() == (house["library"] / REL).read_bytes()
     assert status["owed"] == 0
     names = (house["disk"] / mirror_mod.NAMES).read_text(encoding="utf-8")
-    assert f"Old backup/2019/IMG_0001.png\t{house['library'].name}/{REL}" in names
+    assert f"Old backup/2019/IMG_0001.png\t{REL}" in names
     # The copy reads back from where it is, and the library can be put back from it.
     assert house["mirror"].copy_path(str(house["library"]), REL) == there
 
 
 def test_a_different_file_at_the_librarys_place_is_kept_and_the_copy_goes_beside(house):
-    there = house["disk"] / house["library"].name / REL
+    there = house["disk"] / REL
     there.parent.mkdir(parents=True)
     theirs = b"someone else's picture, not this one"
     there.write_bytes(theirs)
@@ -101,7 +101,7 @@ def test_a_different_file_at_the_librarys_place_is_kept_and_the_copy_goes_beside
 
 
 def test_a_found_file_is_never_set_aside_when_the_library_one_changes(house):
-    there = house["disk"] / house["library"].name / REL
+    there = house["disk"] / REL
     there.parent.mkdir(parents=True)
     shutil.copyfile(house["library"] / REL, there)
     original = there.read_bytes()
@@ -122,7 +122,7 @@ def test_a_found_file_is_never_set_aside_when_the_library_one_changes(house):
 
 
 def test_a_found_file_changed_by_its_owner_is_copied_again_beside_it(house):
-    there = house["disk"] / house["library"].name / REL
+    there = house["disk"] / REL
     there.parent.mkdir(parents=True)
     shutil.copyfile(house["library"] / REL, there)
     _run(house)
@@ -137,7 +137,7 @@ def test_a_found_file_changed_by_its_owner_is_copied_again_beside_it(house):
 
 
 def test_a_file_put_there_while_one_is_written_is_not_overwritten(house, monkeypatch):
-    there = house["disk"] / house["library"].name / REL
+    there = house["disk"] / REL
     real = mirror_mod.publish_no_replace
 
     def someone_else_writes_first(src, dst):
