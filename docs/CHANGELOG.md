@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 5.3.1 — 27 November 2026
 
 - **Sudar can mirror a photo.** Under **Composition**, beside Straighten, **Flip left to right** and **Flip upside down** mirror the photograph; press again to put it back, and Undo takes it back too. The flip is in the preview, the Compare view, the download and the copy saved to the library; the original file is never changed. Typing "flip it", "mirror the photo" or "flip it upside down" in AI Assist does the same, and the local AI planner may set them. English and Tamil. `tests/ai_playground.mjs`, `tests/ai_playground_ui.mjs` and `tests/test_advanced_ai.py` keep it.
 - **A photograph turned in the file itself is not doubled on the second copy.** After **Rotate the files themselves**, the older copy on the second copy's disk (found there, or copied by Ninaivu) is the same picture turned the other way, and the library's turned file went beside it as `name (2).jpg`. Now a file that differs only in which way up it goes (a JPEG's or TIFF's orientation tag, a PNG's or BMP's pixels a quarter turn apart, a video's streams packet for packet) is set aside as `name (before …).jpg` and the turned one takes the library's name. A file that really is different is still left exactly as it is. Straighten and the viewer's rotate button never change the file, so their photographs match the copy as they are. `tests/test_second_copy_turned.py` keeps it.
