@@ -69,7 +69,7 @@ from ..media import media
 __all__ = [
     "Turn", "rotate_original", "can_rotate_original", "compose",
     "orientation_of", "video_rotation", "JPEG_EXTS", "TIFF_EXTS",
-    "PIXEL_EXTS", "VIDEO_EXTS",
+    "PIXEL_EXTS", "VIDEO_EXTS", "only_turned",
 ]
 
 #: EXIF/TIFF tag 0x0112 — which way up the picture goes.
@@ -679,6 +679,85 @@ def _save(img: Image.Image, fmt: str | None, info: dict[str, Any] | None = None,
 # ---------------------------------------------------------------------------
 # The way in
 # ---------------------------------------------------------------------------
+
+#: The largest picture :func:`only_turned` reads whole to compare.
+ONLY_TURNED_LARGEST = 256 * 1024 * 1024
+
+
+def only_turned(old: str | Path, new: str | Path) -> bool:
+    """Whether *new* is *old* turned by :func:`rotate_original` and nothing
+    else: the same picture, or the same video streams, with only which way
+    up it goes changed. False whenever that cannot be told for certain.
+
+    JPEG and TIFF: *old* with *new*'s orientation tag written in as this
+    module writes it is *new*, byte for byte. PNG and BMP: the same pixels,
+    upright, a quarter turn apart. Videos: the same streams, packet for
+    packet, whatever the container says about turning them.
+    """
+    old, new = Path(old), Path(new)
+    suffix = new.suffix.lower()
+    if old.suffix.lower() != suffix:
+        return False
+    try:
+        if suffix in VIDEO_EXTS:
+            return _same_streams(old, new)
+        if old.stat().st_size > ONLY_TURNED_LARGEST or new.stat().st_size > ONLY_TURNED_LARGEST:
+            return False
+        if suffix in JPEG_EXTS or suffix in TIFF_EXTS:
+            before, after = old.read_bytes(), new.read_bytes()
+            if before == after:
+                return False                        # the same file, not a turned one
+            if suffix in JPEG_EXTS:
+                found = _exif_app1(after)
+                wanted = orientation_of(after[found[1] + 6:found[2]]) if found else 1
+                return _jpeg_with_orientation(before, wanted) == after
+            return _set_orientation(before, orientation_of(after)) == after
+        if suffix in PIXEL_EXTS:
+            return _same_pixels_turned(old, new)
+    except (OSError, ValueError, struct.error):
+        return False
+    return False
+
+
+def _same_pixels_turned(old: Path, new: Path) -> bool:
+    with Image.open(old) as a, Image.open(new) as b:
+        first = ImageOps.exif_transpose(a) or a
+        second = ImageOps.exif_transpose(b) or b
+        if first.mode != second.mode:
+            return False
+        want = second.tobytes()
+        if first.size == second.size and first.tobytes() == want:
+            # The same pixels unturned: whatever changed, it was not a turn
+            # (and a picture that looks the same turned cannot tell one).
+            return False
+        for turn in (90, 180, 270):
+            turned = first.rotate(-turn, expand=True)
+            if turned.size == second.size and turned.tobytes() == want:
+                return True
+    return False
+
+
+def _stream_hashes(path: Path) -> str | None:
+    ffmpeg = media.FFMPEG
+    if not ffmpeg:
+        return None
+    try:
+        done = subprocess.run(
+            [ffmpeg, "-v", "error", "-nostdin", *media.LOCAL_ONLY, "-i", str(path),
+             "-map", "0", "-c", "copy", "-f", "streamhash", "-hash", "sha256", "-"],
+            capture_output=True, timeout=FFMPEG_TIMEOUT, check=False)
+    except (subprocess.SubprocessError, OSError):
+        return None
+    out = done.stdout.decode("utf-8", "replace").strip()
+    return out if done.returncode == 0 and out else None
+
+
+def _same_streams(old: Path, new: Path) -> bool:
+    if video_rotation(old) == video_rotation(new):
+        return False                                # not a turn
+    first = _stream_hashes(old)
+    return first is not None and first == _stream_hashes(new)
+
 
 def can_rotate_original(path: str | Path, kind: str = "") -> bool:
     """Whether :func:`rotate_original` has a lossless route for this file.

@@ -1304,6 +1304,13 @@ class Mirror:
             if elsewhere:
                 self._found_there = True
                 return before.st_size, digest_here, elsewhere
+        if not ours and os.path.lexists(dest) and self._only_turned(dest, source):
+            # The library's own photograph from before it was turned in the
+            # file itself (Rotate the files themselves): the same picture, only
+            # which way up it goes changed. Set aside as "(before …)", as a
+            # copy Ninaivu wrote would be, so the turned one takes its name
+            # rather than going beside it as "name (2)".
+            ours = True
         if not ours and os.path.lexists(dest):
             # Someone else's file at the library's place, with other bytes:
             # left exactly where it is, and the library's goes beside it.
@@ -1363,6 +1370,17 @@ class Mirror:
                 pass
             raise
         return written, digest.hexdigest(), stored
+
+    @staticmethod
+    def _only_turned(dest: Path, source: Path) -> bool:
+        """Whether the file at *dest* is *source* before it was turned."""
+        try:
+            if dest.is_symlink() or not dest.is_file():
+                return False
+        except OSError:
+            return False
+        from ..server.turn import only_turned                   # noqa: PLC0415
+        return only_turned(dest, source)
 
     @staticmethod
     def _hash_unchanged(source: Path, before: os.stat_result) -> str:
