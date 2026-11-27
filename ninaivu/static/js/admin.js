@@ -591,7 +591,7 @@ function wireChrome() {
 
   // The Cloud tab is the same shape: its own module, the console's toast, and
   // it only polls while it is the tab on screen.
-  cloud = new CloudPanel({ toast });
+  cloud = new CloudPanel({ toast, pickFolder: (options) => openFolderPicker(options) });
   cloud.wire();
   workload = new WorkloadPanel({ toast });
   workload.wire();

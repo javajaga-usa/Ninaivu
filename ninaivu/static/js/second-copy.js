@@ -8,6 +8,11 @@
  * files too large for it, each with a name that would work. Choosing a new
  * folder asks the same by itself. The server does the checking; this only
  * says what it answers.
+ *
+ * Browse opens the console's folder picker (disks and network shares under
+ * /Volumes included), and a folder chosen or typed is described at once
+ * (storage/mirror_place.py): there or not, writable, room free and needed,
+ * a network share, on the same disk as the library, holding a copy already.
  */
 
 import { reportUnauthorized } from './api.js';
@@ -65,8 +70,10 @@ const PROBLEM = {
 const LISTED = 20;
 
 export class SecondCopy {
-  constructor({ toast }) {
+  constructor({ toast, pickFolder = null }) {
     this.toast = toast || (() => {});
+    this.pickFolder = pickFolder;
+    this.about = null;
     this.timer = null;
     this.visible = false;
     this.status = null;
@@ -74,12 +81,36 @@ export class SecondCopy {
     i18n.onChange(() => {
       if (this.status) this.render(this.status);
       if (this.fit) this.renderFit(this.fit);
+      if (this.about) this.renderAbout(this.about);
     });
   }
 
   wire() {
     if (!$('#sc-block')) return;
     $('#sc-check').onclick = () => this.check();
+    const browse = $('#sc-browse');
+    if (browse) {
+      browse.hidden = !this.pickFolder;
+      browse.onclick = () => this.pickFolder?.({
+        title: i18n.t('Choose where the second copy is kept'),
+        cta: i18n.t('Use this folder'),
+        anyFolder: true,
+        start: $('#sc-folder').value.trim() || this.status?.folder || '/Volumes',
+        pick: (path) => {
+          $('#sc-folder').value = path;
+          this.describe(path);
+        },
+      });
+    }
+    $('#sc-folder').addEventListener('change', () => this.describe($('#sc-folder').value.trim()));
+    const afresh = $('#sc-afresh');
+    if (afresh) {
+      afresh.onclick = () => {
+        if (!window.confirm(i18n.t('Copy the whole library to this share from the beginning? Only do this if the disk behind the share really is a new one.'))) return;
+        this.act(() => json('/api/mirror/afresh', { method: 'POST' }),
+          i18n.t('Copying to the other disk'));
+      };
+    }
     $('#sc-save').onclick = () => this.save();
     $('#sc-start').onclick = () => this.act(() => json('/api/mirror/start', { method: 'POST' }),
       i18n.t('Copying to the other disk'));
@@ -121,6 +152,56 @@ export class SecondCopy {
       buttons.forEach((b) => { b.disabled = false; });
     }
     this.schedule();
+  }
+
+  /** Say what *folder* is before it is used: storage/mirror_place.py. */
+  async describe(folder) {
+    if (!folder) { $('#sc-about').hidden = true; this.about = null; return; }
+    try {
+      this.renderAbout(await json(`/api/mirror/folder?path=${encodeURIComponent(folder)}`));
+    } catch (exc) {
+      this.toast(exc.message, true);
+    }
+  }
+
+  renderAbout(about) {
+    this.about = about;
+    const list = $('#sc-about');
+    list.textContent = '';
+    const say = (text, warn = false) => {
+      const line = document.createElement('li');
+      line.textContent = text;
+      if (warn) line.className = 'sc-warn';
+      list.append(line);
+    };
+    if (!about.there) {
+      say(i18n.fromServer(about.away_said || about.problem || 'That folder is not there. Is the disk plugged in?'), true);
+    } else {
+      if (about.network) {
+        say(i18n.t('A network share ({kind}) at {mount}. If it drops, the copy waits and carries on when it is back.', {
+          kind: about.filesystem || '?', mount: about.mount_point || about.folder }));
+      }
+      if (about.free_bytes !== null && about.free_bytes !== undefined) {
+        say(i18n.t('{free} free of {total}; the copy needs about {needed} more.', {
+          free: size(about.free_bytes), total: size(about.total_bytes), needed: size(about.needed_bytes) }),
+        about.short_of_room);
+      }
+      if (about.short_of_room) {
+        say(i18n.t('There is not room for the whole copy there. It copies what fits and says when the disk is full.'), true);
+      }
+      say(about.writable ? i18n.t('Ninaivu can write there.') : i18n.t('Ninaivu cannot write to that folder.'),
+        !about.writable);
+      if (about.same_disk_as) {
+        say(i18n.t('This is the same disk as the library ({folder}). A copy there guards against mistakes, not against the disk failing.', {
+          folder: about.same_disk_as }), true);
+      }
+      if (about.holds === 'this') say(i18n.t('The second copy is already in this folder; it carries on where it was.'));
+      if (about.holds === 'another') {
+        say(i18n.t('This folder holds another second copy. Files already there with the same bytes are kept, not copied again.'));
+      }
+      if (about.problem) say(i18n.fromServer(about.problem), true);
+    }
+    list.hidden = !list.children.length;
   }
 
   async check() {
@@ -189,14 +270,21 @@ export class SecondCopy {
     $('#sc-every').value = ['24', '168', '0'].includes(every) ? every : '24';
     $('#sc-state').textContent = !status.enabled ? i18n.t('Off')
       : status.running ? i18n.t('Copying')
-        : status.there ? i18n.t('On') : i18n.t('The disk is not plugged in');
+        : status.there ? i18n.t('On')
+          : status.network ? i18n.t('The share is not connected') : i18n.t('The disk is not plugged in');
     $('#sc-run-row').hidden = !status.enabled;
     $('#sc-start').hidden = Boolean(status.running);
     $('#sc-verify').hidden = Boolean(status.running);
     $('#sc-stop').hidden = !status.running;
+    const afresh = $('#sc-afresh');
+    if (afresh) afresh.hidden = !status.copy_missing || Boolean(status.running);
+    if (!this.about && status.folder && document.activeElement !== $('#sc-folder')) {
+      this.describe(status.folder);
+    }
 
     const lines = [];
-    if (status.problem) lines.push(i18n.fromServer(status.problem));
+    if (status.away_said) lines.push(i18n.fromServer(status.away_said));
+    else if (status.problem) lines.push(i18n.fromServer(status.problem));
     if (status.enabled || status.copied) {
       lines.push(i18n.t('{copied} of {files} files are on the copy ({size}); {owed} still to copy.', {
         copied: count(status.copied), files: count(status.files),
@@ -219,6 +307,12 @@ export class SecondCopy {
     if (status.waiting) lines.push(i18n.t('Waiting: {reason}', { reason: i18n.fromServer(status.waiting) }));
     if (status.free_bytes !== null && status.free_bytes !== undefined) {
       lines.push(i18n.t('{free} free on that disk.', { free: size(status.free_bytes) }));
+    }
+    if (status.short_of_room) {
+      lines.push(i18n.t('There is not room for the whole copy there. It copies what fits and says when the disk is full.'));
+    }
+    if (status.copy_missing) {
+      lines.push(i18n.t('The share is connected but the second copy is not on it. The disk behind the share may have dropped (after the Mac slept, say); nothing is written there until it is back. If it is a new disk, press Start afresh here.'));
     }
     if (status.last_finished) lines.push(i18n.t('Last whole copy {when}.', { when: when(status.last_finished) }));
     if (status.last_verified) {
