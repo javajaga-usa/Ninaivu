@@ -45,6 +45,9 @@ export function planRequest(text,current=defaults(),analysis={}) {
     if(/^crop (it |this )?(to )?(16:9|landscape)$/.test(c)){assign({crop:'landscape'});continue;}
     if(/^crop (it |this )?(to )?(4:5|portrait)$/.test(c)){assign({crop:'portrait'});continue;}
     if(/^(crop (it |this )?(to |for )?(a )?(9:16|story|stories|reel|reels|vertical( video)?)|story crop|reel crop)$/.test(c)){assign({crop:'story'});continue;}
+    // Mirror flips: each request turns the flip over, so asking twice puts it back.
+    if(/^(flip|mirror)( (it|this|the (photo|image|picture)))?( (horizontally|left to right|right to left|sideways|across))?$/.test(c)){assign({flipH:!state.flipH});continue;}
+    if(/^((flip|mirror)( (it|this|the (photo|image|picture)))? (vertically|upside down|top to bottom)|upside down)$/.test(c)){assign({flipV:!state.flipV});continue;}
     if(/^(auto enhance|enhance( this( photo)?)?|improve( this)? photo)$/.test(c)){assign({exposure:analysis.brightness>170?-8:12,contrast:10,vibrance:10,clarity:6,highlights:-10});continue;}
     if(/^(like a professional product photo|professional product photo|product photo enhancement)$/.test(c)){assign(presets['product photo']);continue;}
     let m=c.match(/^(?:set |adjust )?(.+?) (to|by) ([+-]?\d+(?:\.\d+)?)\s*%?$/);

@@ -15,6 +15,8 @@ LIMITS = {key: (-100, 100) for key in ('exposure', 'contrast', 'saturation', 'vi
                                         'shadows', 'highlights', 'clarity', 'dehaze')}
 LIMITS.update(sharpness=(0, 100), noise=(0, 100), vignette=(0, 100), angle=(-10, 10))
 CROPS = ['original', 'square', 'landscape', 'portrait', 'story']
+#: Mirror flips, on or off: left to right, and upside down.
+FLIPS = ('flipH', 'flipV')
 _slot = threading.BoundedSemaphore(1)
 
 
@@ -36,12 +38,15 @@ def check_prompt(value):
 
 
 def validate_adjustments(value):
-    if not isinstance(value, dict) or set(value) - (set(LIMITS) | {'crop'}):
+    if not isinstance(value, dict) or set(value) - (set(LIMITS) | {'crop'} | set(FLIPS)):
         raise ValueError('The model returned unsupported adjustments.')
     for key, number in value.items():
         if key == 'crop':
             if number not in CROPS:
                 raise ValueError('Invalid crop returned by model.')
+        elif key in FLIPS:
+            if not isinstance(number, bool):
+                raise ValueError('A flip is either on or off.')
         elif (isinstance(number, bool) or not isinstance(number, (int, float))
               or not math.isfinite(number) or not LIMITS[key][0] <= number <= LIMITS[key][1]):
             raise ValueError('An adjustment exceeds the supported range.')
@@ -68,6 +73,7 @@ def plan(prompt, current):
     try:
         properties = {key: {'type': 'number', 'minimum': low, 'maximum': high} for key, (low, high) in LIMITS.items()}
         properties['crop'] = {'type': 'string', 'enum': CROPS}
+        properties.update({key: {'type': 'boolean'} for key in FLIPS})
         schema = {'type': 'object', 'additionalProperties': False,
                   'properties': {'summary': {'type': 'string'}, 'unsupported': {'type': 'boolean'},
                                  'adjustments': {'type': 'object', 'additionalProperties': False, 'properties': properties}},
@@ -84,6 +90,8 @@ def plan(prompt, current):
                   'Use restrained magnitudes: ordinarily +20 shadows and -20 highlights, not +/-100. '
                   'Gentle/subtle requests use 10 to 15. Only use extreme settings when the user explicitly asks for them. '
                   'Crop is centered original/square/landscape(16:9)/portrait(4:5)/story(9:16, for stories and reels). '
+                  'flipH true mirrors the photo left to right, flipV true turns it upside down as a mirror; '
+                  'change them only when a flip or mirror is asked for. '
                   'You cannot see the photo. Do not claim to identify objects or recover lost detail. '
                   'If ANY requested part needs object removal, generation, face/identity changes, '
                   'a background selection or content manipulation, set unsupported=true and adjustments={}; '
