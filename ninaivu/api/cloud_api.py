@@ -1047,7 +1047,22 @@ def mirror_file():
     path = target.joinpath(*parts)
     if not stays_inside(target, path) or path.is_symlink() or not path.is_file():
         return jsonify({"error": "That file is not on the second copy.", "status": 404}), 404
-    return send_file(path, conditional=True, as_attachment=False, download_name=path.name)
+    # Only pictures, videos and sounds open in the browser. Anything else on
+    # the disk (it may be a share other programs write to) is handed over as
+    # a download: an HTML or SVG file opened here would run its scripts as
+    # the console, signed in as the admin, and a .js file beside it is
+    # "self" to the page's policy.
+    import mimetypes                                          # noqa: PLC0415
+
+    from .api import INLINE_TYPES, download_name              # noqa: PLC0415
+    mime = mimetypes.guess_type(path.name)[0]
+    inline = mime in INLINE_TYPES
+    response = send_file(path, conditional=True,
+                         mimetype=mime if inline else "application/octet-stream",
+                         as_attachment=not inline,
+                         download_name=path.name if inline else download_name(path.name))
+    response.headers["Cache-Control"] = "private, no-store"
+    return response
 
 
 # ---------------------------------------------------------------------------
