@@ -158,6 +158,28 @@ def test_the_copy_is_listed_with_what_each_file_is(house):
     assert client.get("/api/mirror/file?path=../x").status_code == 400
 
 
+def test_a_page_on_the_copy_is_handed_over_never_opened_as_the_console(house):
+    """A file on the copy that is not a picture, video or sound is a download:
+    an HTML or SVG page (the share may be written by other programs) opened
+    inline would run its scripts as the signed-in admin's console."""
+    _run(house)
+    top = house["library"].name
+    folder = house["disk"] / top / "misc"
+    (folder / "page.html").write_text("<script src='x.js'></script>")
+    (folder / "x.js").write_text("fetch('/api/admin/users')")
+    (folder / "pic.svg").write_text("<svg xmlns='http://www.w3.org/2000/svg'/>")
+    client = house["client"]
+    for name in ("page.html", "x.js", "pic.svg"):
+        got = client.get(f"/api/mirror/file?path={top}/misc/{name}")
+        assert got.status_code == 200
+        assert got.mimetype == "application/octet-stream"
+        assert got.headers["Content-Disposition"].startswith("attachment")
+    photo = client.get(f"/api/mirror/file?path={top}/misc/plain.png")
+    assert photo.mimetype == "image/png"
+    assert not photo.headers.get("Content-Disposition", "").startswith("attachment")
+    assert "no-store" in photo.headers["Cache-Control"]
+
+
 def test_library_and_copy_lead_to_each_other(house):
     _run(house)
     top = house["library"].name

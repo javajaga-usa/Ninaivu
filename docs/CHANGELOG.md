@@ -1,7 +1,8 @@
 # Changelog
 
-## Unreleased
+## 5.3.0 — 27 November 2026
 
+- **A page on the second copy opens as a download, not as the console.** **Open** on a file in Folders → Second copy showed it in the browser whatever it was. The copy's folder may be a share other programs write to, and an HTML or SVG file there, opened inside the console, could run its scripts as the signed-in administrator. Only pictures, videos and sounds open in the browser now; anything else is handed over as a download, and none of it is kept by the browser's cache.
 - **Second copy: choose its folder with Browse, see what is there, and look at the copy from Folders.**
   - **Browse** opens the console's folder picker (disks and network shares under `/Volumes` among its shortcuts) instead of typing a path. A folder chosen or typed is described at once: room free and how much the copy still needs, whether Ninaivu can write there, whether it is a network share, whether it is on the same disk as the library (then it guards against mistakes, not against the disk failing), and whether it already holds this copy or another one.
   - **A share that is not connected is called one.** The page says the network share at `/Volumes/…` is not connected and how to connect it again, and the copy carries on by itself within ten minutes of it coming back.
