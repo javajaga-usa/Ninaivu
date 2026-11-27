@@ -2074,3 +2074,26 @@ body.admin {
    (an inline style outranked them), yet a script's own style object still wins. */
 .u-08e13a.u-08e13a.u-08e13a{max-width:6rem}
 .u-d6f2af.u-d6f2af.u-d6f2af{margin-top:14px}
+
+/* Folders → Library or second copy, and the second copy's own files. */
+.fold-which { padding: 0; margin: 0 0 12px; }
+.fold-which .chip { cursor: pointer; font: inherit; font-size: 13px; padding: 6px 14px; }
+.scf-dir .fold-body { padding: 12px; }
+.scf-files { display: grid; gap: 2px; margin-bottom: 12px; }
+.scf-file {
+  display: grid; align-items: center; gap: 4px 12px;
+  grid-template-columns: auto minmax(0, 1fr) auto auto minmax(0, 14em) auto auto;
+  padding: 7px 10px; border-radius: 8px; font-size: 13.5px; cursor: pointer;
+}
+.scf-file:hover { background: var(--surface-2); }
+.scf-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scf-size, .scf-when { color: var(--text-3); font-variant-numeric: tabular-nums; }
+.scf-is { color: var(--text-3); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scf-file.is-other .scf-is, .scf-file.is-bad .scf-is { color: var(--vis-hidden); }
+.scf-file.here { outline: 2px solid var(--accent); }
+.scf-open, .scf-tolib { font-size: 12.5px; white-space: nowrap; background: none; border: 0; color: var(--accent); cursor: pointer; padding: 0; font: inherit; }
+@media (max-width: 640px) {
+  .scf-file { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .scf-when, .scf-is { grid-column: 2 / -1; }
+}
+.sc-about li.sc-warn { color: var(--vis-hidden); }

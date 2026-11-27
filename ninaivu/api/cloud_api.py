@@ -24,7 +24,7 @@ sending the whole library again.
 """
 
 from __future__ import annotations
-from ..words import refusal
+from ..words import refusal, said
 
 import logging
 from pathlib import Path
@@ -840,6 +840,9 @@ def mirror_settings():
         if mirror.running and folder != (cfg.mirror_dir or ""):
             return jsonify({"error": "Stop the copy that is running before moving it.",
                             "status": 409}), 409
+    if folder and folder != (cfg.mirror_dir or ""):
+        # A record made against the old folder is not about this one.
+        mirror.moved_to(folder)
     cfg.mirror_dir, cfg.mirror_enabled, cfg.mirror_every_hours = folder, enabled, float(hours)
     cfg.save()
     if not enabled:
@@ -895,6 +898,147 @@ def mirror_restore():
 def mirror_stop():
     _mirror().stop()
     return jsonify({"ok": True, **_mirror().status()})
+
+
+@cloud_bp.get("/api/mirror/folder")
+@require_admin
+def mirror_folder():
+    """What ``?path=`` (default: the second copy's folder) is, before it is
+    chosen: there, writable, free and needed room, network share, same disk
+    as the library, already holding a copy (storage/mirror_place.py)."""
+    raw = request.args.get("path")
+    folder = (raw if raw is not None else _cfg().mirror_dir or "").strip()
+    if "\x00" in folder:
+        return jsonify({"error": "That is not a folder on this computer.", "status": 400}), 400
+    return jsonify(_mirror().describe(folder))
+
+
+@cloud_bp.post("/api/mirror/afresh")
+@require_admin
+def mirror_afresh():
+    """The share is connected and empty, and a person says it is a new disk."""
+    mirror = _mirror()
+    if not mirror.enabled:
+        return jsonify({"error": "Switch the second copy on first.", "status": 409}), 409
+    result = mirror.start_afresh()
+    if result.get("reason"):
+        return jsonify({"error": result["reason"], "status": 409}), 409
+    auth.audit(db.connect(_cfg().db_path), current_user().id, "second_copy",
+               "start afresh on a new disk")
+    return jsonify({"ok": True, **result, **mirror.status()})
+
+
+@cloud_bp.get("/api/mirror/browse")
+@require_admin
+def mirror_browse():
+    """One folder of the second copy, read-only, for the Folders screen."""
+    from ..storage import mirror_place                       # noqa: PLC0415
+    mirror = _mirror()
+    if not mirror.enabled or mirror.folder is None:
+        return jsonify({"error": "Switch the second copy on first.", "status": 409}), 409
+    try:
+        return jsonify(mirror_place.listing(mirror, mirror._db(),           # noqa: SLF001
+                                            request.args.get("path", "")))
+    except ValueError as exc:
+        return jsonify({"error": str(exc), "status": 400}), 400
+    except FileNotFoundError as exc:
+        return jsonify({"error": str(exc), "status": 404}), 404
+    except PermissionError as exc:
+        return jsonify({"error": str(exc), "status": 403}), 403
+
+
+@cloud_bp.get("/api/mirror/where")
+@require_admin
+def mirror_where():
+    """Where a library file (``?id=``) or a folder of the library the Folders
+    screen shows (``?folder=``) is on the second copy."""
+    from ..storage import mirror_place                       # noqa: PLC0415
+    mirror = _mirror()
+    if not mirror.enabled or mirror.folder is None:
+        return jsonify({"error": "Switch the second copy on first.", "status": 409}), 409
+    conn = mirror._db()                                       # noqa: SLF001
+    raw = request.args.get("id")
+    if raw:
+        try:
+            row = conn.execute("SELECT root, rel_path FROM assets WHERE id = ?",
+                               (int(raw),)).fetchone()
+        except ValueError:
+            row = None
+        if row is None:
+            return jsonify({"error": "That file is not in the library.", "status": 404}), 404
+        return jsonify(mirror_place.where_on_copy(mirror, conn, row["root"], rel=row["rel_path"]))
+    root = str(_cfg().active_root or "")
+    if not root:
+        return jsonify({"error": "Choose a library folder first.", "status": 409}), 409
+    return jsonify(mirror_place.where_on_copy(mirror, conn, root,
+                                              folder=request.args.get("folder", "")))
+
+
+@cloud_bp.post("/api/mirror/delete")
+@require_admin
+def mirror_delete():
+    """Delete files on the second copy, after the admin's password. The copy
+    never deletes by itself; a file still in the library is copied again on
+    the next run, one the library no longer has stays gone."""
+    from ..storage import mirror_place                       # noqa: PLC0415
+    from .accounts_api import reauthenticate_limited          # noqa: PLC0415
+    data = json_body()
+    paths = data.get("paths") if isinstance(data, dict) else None
+    if not isinstance(paths, list) or not paths or len(paths) > 1000 \
+            or not all(isinstance(p, str) for p in paths):
+        return jsonify({"error": "Send the paths of the files on the second copy.",
+                        "status": 400}), 400
+    mirror = _mirror()
+    if not mirror.enabled or mirror.folder is None:
+        return jsonify({"error": "Switch the second copy on first.", "status": 409}), 409
+    if mirror.running:
+        return jsonify({"error": "Stop the copy that is running first.", "status": 409}), 409
+    conn = db.connect(_cfg().db_path)
+    user = current_user()
+    answer = reauthenticate_limited(conn, user.id, str(data.get("password", "")))
+    if answer is None:
+        return jsonify({"error": "Too many attempts. Wait a few minutes and try again.",
+                        "status": 429}), 429
+    if not answer:
+        return jsonify({
+            "needs_password": True, "status": 401,
+            "error": (said("Enter your password to delete these from the second copy.")
+                      if not data.get("password") else said("That password is not right.")),
+        }), 401
+    try:
+        result = mirror_place.delete(mirror, mirror._db(), paths)      # noqa: SLF001
+    except (LookupError, FileNotFoundError) as exc:
+        return jsonify({"error": str(exc), "status": 409}), 409
+    auth.audit(conn, user.id, "second_copy",
+               f"deleted {len(result['deleted'])} file(s) on the second copy"
+               + (f": {result['deleted'][0]}" if len(result["deleted"]) == 1 else ""))
+    return jsonify({"ok": True, **result})
+
+
+@cloud_bp.get("/api/mirror/file")
+@require_admin
+def mirror_file():
+    """One file on the second copy, opened read-only, to see it is there."""
+    from flask import send_file                              # noqa: PLC0415
+
+    from ..storage import mirror_place                       # noqa: PLC0415
+    from ..utils.files import stays_inside                    # noqa: PLC0415
+    mirror = _mirror()
+    target = mirror.folder
+    if not mirror.enabled or target is None:
+        return jsonify({"error": "Switch the second copy on first.", "status": 409}), 409
+    rel = str(request.args.get("path", "")).replace("\\", "/").strip("/")
+    parts = [p for p in rel.split("/") if p]
+    if not parts or any(p in (".", "..") or p.startswith(".") for p in parts) \
+            or "\x00" in rel:
+        return jsonify({"error": "That is not a file on the second copy.", "status": 400}), 400
+    reason = mirror_place.away(str(target), *mirror.place())
+    if reason:
+        return jsonify({"error": reason, "status": 404}), 404
+    path = target.joinpath(*parts)
+    if not stays_inside(target, path) or path.is_symlink() or not path.is_file():
+        return jsonify({"error": "That file is not on the second copy.", "status": 404}), 404
+    return send_file(path, conditional=True, as_attachment=False, download_name=path.name)
 
 
 # ---------------------------------------------------------------------------

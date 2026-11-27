@@ -483,7 +483,13 @@
         <ul class="admin-guide-topics" aria-label="At a glance" data-i18n-label="At a glance"><li data-i18n="Browse folders">Browse folders</li><li data-i18n="Manage files">Manage files</li><li data-i18n="Recently deleted">Recently deleted</li></ul>
       </div>
     </div>
-    <div class="block">
+    <!-- Library or second copy: shown only while the second copy is on -->
+    <div class="chips fold-which" id="fold-which" role="group" hidden
+         aria-label="Which copy" data-i18n-label="Which copy">
+      <button class="chip active" id="fold-which-lib" type="button" aria-pressed="true" data-i18n="Library">Library</button>
+      <button class="chip" id="fold-which-copy" type="button" aria-pressed="false" data-i18n="Second copy">Second copy</button>
+    </div>
+    <div class="block" id="fold-block">
       <div class="block-head">
         <div>
           <h2 data-i18n="Inside the library">Inside the library</h2>
@@ -493,6 +499,7 @@
             of it reaches the family app.</p>
         </div>
         <div class="fold-actions">
+          <button class="btn ghost small" id="fold-to-copy" type="button" hidden data-i18n="Show in second copy">Show in second copy</button>
           <label class="toggle">
             <input type="checkbox" id="fold-deep"> <span data-i18n="Include files in folders inside">Include files in folders inside</span>
           </label>
@@ -529,6 +536,32 @@
       <button class="btn ghost fold-more" id="fold-more" hidden></button>
 
       <p class="empty-note calm" id="fold-empty" hidden></p>
+    </div>
+
+    <!-- the second copy's own folders, when it is on: static/js/pages/console/second-copy-files.js -->
+    <div class="block" id="scf-block" hidden>
+      <div class="block-head">
+        <div>
+          <h2 data-i18n="Second copy">Second copy</h2>
+          <p class="hint" id="scf-where"></p>
+          <p class="hint subtle" data-i18n="What is on the other disk, as it is there. Ninaivu never deletes anything on it by itself. A file you delete here that is still in the library is copied again on the next run; one the library no longer has stays gone.">What is on the other disk, as it is there. Ninaivu never deletes anything
+            on it by itself. A file you delete here that is still in the library is copied again on the
+            next run; one the library no longer has stays gone.</p>
+        </div>
+        <div class="fold-actions">
+          <button class="btn ghost small" id="scf-to-lib" type="button" hidden data-i18n="Show in library">Show in library</button>
+          <button class="btn ghost small" id="scf-refresh" type="button" data-i18n="Refresh">Refresh</button>
+        </div>
+      </div>
+      <nav class="fold-trail" id="scf-trail" aria-label="Folder path" data-i18n-label="Folder path"></nav>
+      <div class="fold-grid" id="scf-dirs"></div>
+      <div class="scf-files" id="scf-files"></div>
+      <div class="fold-pickbar" id="scf-pickbar" hidden>
+        <span class="hint" id="scf-picked" data-i18n="Nothing chosen">Nothing chosen</span>
+        <div class="spacer"></div>
+        <button class="btn danger small" id="scf-delete" type="button" disabled data-i18n="Delete from the second copy">Delete from the second copy</button>
+      </div>
+      <p class="empty-note calm" id="scf-empty" hidden></p>
     </div>
 
     <div class="block" id="bin-block">
@@ -1011,8 +1044,11 @@
       <div class="ar-add">
         <input type="text" class="input" id="sc-folder" placeholder="/Volumes/Backup/Ninaivu"
                aria-label="Folder on the other disk" data-i18n-label="Folder on the other disk" autocomplete="off" spellcheck="false">
+        <button class="btn ghost" id="sc-browse" type="button" data-i18n="Browse…">Browse…</button>
         <button class="btn ghost" id="sc-check" type="button" data-i18n="Will it fit?">Will it fit?</button>
       </div>
+      <!-- what that folder is: storage/mirror_place.py describe() -->
+      <ul class="sc-problems sc-about" id="sc-about" hidden aria-live="polite"></ul>
       <div id="sc-fit" class="sc-fit" hidden>
         <p class="hint" id="sc-fit-says"></p>
         <ul class="sc-problems" id="sc-problems"></ul>
@@ -1030,6 +1066,7 @@
         <button class="btn primary" id="sc-start" type="button" data-i18n="Copy now">Copy now</button>
         <button class="btn ghost" id="sc-verify" type="button" data-i18n="Check the copy">Check the copy</button>
         <button class="btn ghost" id="sc-stop" type="button" hidden data-i18n="Stop">Stop</button>
+        <button class="btn danger" id="sc-afresh" type="button" hidden data-i18n="Start afresh here">Start afresh here</button>
       </div>
       <p class="hint subtle" id="sc-progress"></p>
     </div>
@@ -2942,7 +2979,8 @@
   <div class="modal-card narrow">
     <h2 id="lf-delete-title" data-i18n="Delete this file?">Delete this file?</h2>
     <p class="hint" id="lf-delete-what"></p>
-    <p class="hint" data-i18n-rich="It moves into the &lt;strong&gt;_deleted&lt;/strong&gt; folder at the top of your library, the same as deleting from the gallery — still on disk, and you can put it back from the Folders tab.">It moves into the <strong>_deleted</strong> folder at
+    <p class="hint" id="lf-delete-note-other" hidden></p>
+    <p class="hint" id="lf-delete-note" data-i18n-rich="It moves into the &lt;strong&gt;_deleted&lt;/strong&gt; folder at the top of your library, the same as deleting from the gallery — still on disk, and you can put it back from the Folders tab.">It moves into the <strong>_deleted</strong> folder at
       the top of your library, the same as deleting from the gallery —
       still on disk, and you can put it back from the Folders tab.</p>
     <label class="field">
@@ -2981,6 +3019,7 @@
       <button class="btn small" id="fv-explicit"></button>
       <button class="btn danger small" id="fv-delete" data-i18n="Delete">Delete</button>
       <a class="btn ghost small" id="fv-download" download data-i18n="Download">Download</a>
+      <button class="btn ghost small" id="fv-to-copy" type="button" hidden data-i18n="Show in second copy">Show in second copy</button>
       <button class="btn ghost small" id="fv-reveal" hidden data-i18n="Show in Finder or Explorer">Show in Finder or Explorer</button>
     </div>
     <details class="fv-date">

@@ -13,6 +13,7 @@ import {
   $, $$, askPasswordToDelete, bytesShort, consoleToast as toast, el, plural, span,
 } from '../../ui.js';
 import { labelled, revealItem, VIS_NAMES_BY_VALUE, visibilityWord } from './common.js';
+import * as secondCopy from './second-copy-files.js';
 
 const folderApi = {
   folder: (path, show = 'all', deep = false, offset = 0) =>
@@ -754,18 +755,74 @@ function creationDateControl(item) {
   return row;
 }
 
+/* --- library or second copy -------------------------------------------- */
+
+/* While the second copy is on, the page shows either the library or the
+ * second copy, and a folder or a file of one opens at the same place in the
+ * other (second-copy-files.js). */
+let showing = 'library';
+
+function showWhich(which) {
+  showing = which === 'copy' && secondCopy.isOn() ? 'copy' : 'library';
+  const copy = showing === 'copy';
+  $$('#fold-block').hidden = copy;
+  $$('#bin-block').hidden = copy;
+  $$('#scf-block').hidden = !copy;
+  for (const [id, on] of [['#fold-which-lib', !copy], ['#fold-which-copy', copy]]) {
+    $$(id).classList.toggle('active', on);
+    $$(id).setAttribute('aria-pressed', String(on));
+  }
+}
+
+function secondCopyState(on) {
+  $$('#fold-which').hidden = !on;
+  $$('#fold-to-copy').hidden = !on;
+  $$('#fv-to-copy').hidden = !on;
+  if (!on && showing === 'copy') showWhich('library');
+}
+
+function wireWhich() {
+  if (!$$('#fold-which')) return;
+  secondCopy.wire({
+    onState: secondCopyState,
+    openLibrary: async (folder) => {
+      showWhich('library');
+      await loadFolderScreen(folder || '');
+    },
+  });
+  $$('#fold-which-lib').onclick = () => showWhich('library');
+  $$('#fold-which-copy').onclick = async () => {
+    showWhich('copy');
+    await secondCopy.showLibrary({ folder: foldState.path });
+  };
+  $$('#fold-to-copy').onclick = async () => {
+    showWhich('copy');
+    await secondCopy.showLibrary({ folder: foldState.path });
+  };
+  $$('#fv-to-copy').onclick = async () => {
+    const item = foldState.items[foldState.viewing];
+    if (!item) return;
+    closeFoldViewer();
+    showWhich('copy');
+    await secondCopy.showLibrary({ id: item.id });
+  };
+}
+
 /** The page has been opened: wire its controls, once. */
 export function wire(context) {
   shell = context;
   wireFolderScreen();
+  wireWhich();
 }
 
 /** Show the folder last open, or the library's top. */
-export function load() {
+export async function load() {
+  if ($$('#fold-which')) await secondCopy.check();
   return loadFolderScreen(foldState.path);
 }
 
 /** Draw again in the current language. */
 export function render() {
   renderFolderScreen();
+  secondCopy.redraw();
 }

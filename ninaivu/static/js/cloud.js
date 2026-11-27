@@ -100,7 +100,7 @@ const STATE_WORDS = {
 };
 
 export class CloudPanel {
-  constructor({ toast }) {
+  constructor({ toast, pickFolder = null }) {
     this.toast = toast || (() => {});
     this.status = null;
     this.view = 'recent';
@@ -110,7 +110,7 @@ export class CloudPanel {
     this.tests = new RestoreTests({ toast: this.toast });
     this.indexCopy = new IndexCopyStatus({ toast: this.toast });
     this.twoComputers = new TwoComputers({ toast: this.toast });
-    this.secondCopy = new SecondCopy({ toast: this.toast });
+    this.secondCopy = new SecondCopy({ toast: this.toast, pickFolder });
     this.offsite = new Offsite({ toast: this.toast });
   }
 

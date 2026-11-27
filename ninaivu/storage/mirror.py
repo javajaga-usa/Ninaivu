@@ -85,7 +85,7 @@ from typing import Any, Callable
 from ..utils.files import (CHUNK, create_new, move_no_replace, publish_no_replace, sha256_file,
                            stays_inside)
 from ..copies import ledger
-from . import fit, roots as roots_kit
+from . import fit, mirror_place, roots as roots_kit
 
 log = logging.getLogger(__name__)
 
@@ -104,6 +104,11 @@ TOO_LARGE_EXAMPLES = 5
 
 #: Left free on the destination, so the copy never fills a disk to the byte.
 RESERVE = 1024 * 1024 * 1024
+
+#: Said when a network share is there but the copy on it is not.
+SHARE_EMPTY = ("the share is connected but the second copy is not on it; the disk behind "
+               "the share may have dropped. Nothing was written there. If this is a new "
+               "disk, press Start afresh here")
 
 #: How often the keeper looks at whether a run is owed, in seconds.
 LOOK_EVERY = 10 * 60.0
@@ -211,7 +216,9 @@ def folder_problem(folder: str, roots: list[str], state_dir: Path | str) -> str 
                     "The second copy belongs on another disk.")
         if resolved in other.parents:
             return f"That folder contains {other}; choose a folder of its own."
-    if not target.is_dir():
+    if not target.is_dir() or roots_kit.ghost_volume(target):
+        # A folder under /Volumes with no disk mounted at it is the Mac's own
+        # disk, not the one that was chosen.
         return "That folder is not there. Is the disk plugged in?"
     if not os.access(target, os.W_OK):
         return "Ninaivu cannot write to that folder."
@@ -346,7 +353,16 @@ class Mirror:
             pass
         if found and found == known:
             return
-        if known and not found and self._bare_mount_point(target):
+        if known and not found and self._meta(conn, "afresh") != "1" \
+                and mirror_place.is_network(self._fstype_at(target)):
+            # A share with nothing of the copy on it. A Linux VM sharing a
+            # USB disk over SMB keeps sharing its mount point when the disk
+            # drops (after the Mac sleeps, say), and what is then shared is
+            # the VM's own small disk: starting again there filled it. A new
+            # disk behind the share is taken only when a person says so.
+            raise OSError(SHARE_EMPTY)
+        if known and not found and self._meta(conn, "afresh") != "1" \
+                and self._bare_mount_point(target):
             # Nothing at all where the copy was, not even its marker, on the
             # disk Ninaivu itself runs from: the folder an unplugged drive
             # leaves behind under a ``nofail`` mount. Wiping the record and
@@ -372,6 +388,7 @@ class Mirror:
                         "read them. Leave this file where it is so Ninaivu knows the disk.",
             }, indent=2), encoding="utf-8")
         self._set_meta(conn, "copy_id", copy_id)
+        self._set_meta(conn, "afresh", "")
 
     def _bare_mount_point(self, target: Path) -> bool:
         """Empty, not a mount point, and on the same disk as the state folder."""
@@ -441,21 +458,40 @@ class Mirror:
         folder = self.folder
         problem = self.problem() if (self.enabled or folder) else None
         free = None
-        if folder is not None and folder.is_dir():
+        there = bool(folder and folder.is_dir()) and not roots_kit.ghost_volume(folder)
+        if there:
             try:
                 free = int(shutil.disk_usage(folder).free)
             except OSError:
                 free = None
+            self._remember_place(conn, folder)
+        mount, fstype = self.place(conn)
+        away = mirror_place.away(str(folder), mount, fstype) if folder and not there else None
+        if away and problem and problem.startswith("That folder is not there"):
+            problem = str(away)
+        owed_bytes = int(size) - int(copied_size)
         return {
             **state,
             "enabled": self.enabled,
             "folder": str(folder or ""),
             "every_hours": self.every / 3600,
-            "there": bool(folder and folder.is_dir()),
+            "there": there,
+            # The disk the folder is on, as last seen: a share's (smbfs, nfs)
+            # is said to be one, and an unmounted one is called not connected.
+            "mount_point": mount, "network": mirror_place.is_network(fstype),
+            "away": str(away or ""),
+            # The same, for the page to say in its own language.
+            "away_said": away.as_json() if away else None,
+            "short_of_room": free is not None and owed_bytes + RESERVE > free,
+            "same_disk_as": mirror_place._same_disk(folder, roots) if there else "",  # noqa: SLF001
+            # On a share, the copy's record but not its marker: see _know_the_disk.
+            "copy_missing": bool(there and self._meta(conn, "copy_id")
+                                 and not (folder / MARKER).is_file()
+                                 and mirror_place.is_network(fstype)),
             "problem": problem,
             "files": int(total), "bytes": int(size),
             "copied": int(copied), "copied_bytes": int(copied_size),
-            "owed": int(total) - int(copied), "owed_bytes": int(size) - int(copied_size),
+            "owed": int(total) - int(copied), "owed_bytes": owed_bytes,
             "free_bytes": free,
             "last_finished": float(self._meta(conn, "last_finished", "0") or 0),
             "last_run": float(self._meta(conn, "last_run", "0") or 0),
@@ -476,6 +512,73 @@ class Mirror:
             "already_there": int(conn.execute(
                 "SELECT COUNT(*) FROM mirror_copies WHERE origin = ?", (FOUND,)).fetchone()[0]),
         }
+
+    def place(self, conn: sqlite3.Connection | None = None) -> tuple[str, str]:
+        """The mount point and file system type the folder was on when last
+        seen, so a share that has gone is still known to be a share."""
+        conn = conn or self._db()
+        return self._meta(conn, "place_mount"), self._meta(conn, "place_fs")
+
+    def _fstype_at(self, target: Path) -> str:
+        return self.fstype or mirror_place.mount_of(target)[1]
+
+    def _remember_place(self, conn: sqlite3.Connection, folder: Path) -> None:
+        mount, fstype = mirror_place.mount_of(folder)
+        if self.fstype:
+            fstype = self.fstype
+        if not mount and not fstype:
+            return
+        if (mount, fstype) != self.place(conn):
+            self._set_meta(conn, "place_mount", mount)
+            self._set_meta(conn, "place_fs", fstype)
+
+    def moved_to(self, folder: str) -> None:
+        """The folder setting changed to *folder*. The record was made against
+        the old one: it is kept only when the copy there is the same copy (its
+        marker says so: a share mounted under another name), and otherwise
+        let go of, so the new folder is not taken for the old disk gone
+        away. Nothing on either disk is touched."""
+        conn = self._db()
+        known = self._meta(conn, "copy_id")
+        found = ""
+        try:
+            found = str(json.loads((Path(folder).expanduser() / MARKER).read_text(
+                encoding="utf-8")).get("id") or "")
+        except (OSError, ValueError, AttributeError, TypeError):
+            pass
+        if known and found == known:
+            return
+        for table in ("mirror_copies", "mirror_moves", "mirror_found"):
+            conn.execute(f"DELETE FROM {table}")            # noqa: S608 - fixed names
+        for key in ("copy_id", "afresh", "place_mount", "place_fs", "verify_cursor"):
+            self._set_meta(conn, key, "")
+        conn.commit()
+
+    def start_afresh(self) -> dict[str, Any]:
+        """A person says the empty share is a new disk: copy to it from the
+        beginning. Only for the case _know_the_disk refused."""
+        if self.running:
+            return {"started": False, "reason": "A copy or a check is running."}
+        conn = self._db()
+        self._set_meta(conn, "afresh", "1")
+        self._update(error="")
+        return self.start()
+
+    def describe(self, folder: str) -> dict[str, Any]:
+        """What the console says about *folder* before it is chosen."""
+        conn = self._db()
+        roots = self.roots
+        marks = ",".join("?" * len(roots)) or "''"
+        needed = int(conn.execute(
+            f"SELECT COALESCE(SUM(size), 0) FROM assets WHERE trashed=0 AND root IN ({marks})",
+            roots).fetchone()[0])
+        same = str(self.folder or "") == str(folder or "").strip()
+        if same:
+            needed = int(self.status()["owed_bytes"])
+        return mirror_place.describe(
+            folder, roots, self.cfg.state_dir, needed_bytes=needed,
+            problem=folder_problem(folder, roots, self.cfg.state_dir),
+            copy_id=self._meta(conn, "copy_id"))
 
     @property
     def running(self) -> bool:
@@ -655,7 +758,9 @@ class Mirror:
                 if not roots_kit.root_present(root):
                     away.add(root)                  # a library drive not plugged in
                     continue
-                if not target.is_dir():
+                if not (target / MARKER).is_file():
+                    # Gone, or a share whose disk dropped behind it: what is at
+                    # the folder now is not the copy, and nothing goes there.
                     raise OSError("the disk the second copy is on is no longer there")
                 self._update(current=rel, message="Copying…")
                 try:
@@ -789,6 +894,11 @@ class Mirror:
                 try:
                     same = sha256_file(path) == row["sha256"]
                 except FileNotFoundError:
+                    if not (target / MARKER).is_file():
+                        # The whole copy went, not this file: a check that
+                        # carried on would call every file missing.
+                        raise OSError("the disk the second copy is on is no longer there") \
+                            from None
                     missing += 1
                     same = False
                 except OSError:
@@ -824,6 +934,9 @@ class Mirror:
                        "and carried on after it.")
         except _Stop:
             message = f"Stopped after checking {checked:,} files. It carries on from here next time."
+        except OSError as exc:
+            log.warning("the check of the second copy stopped: %s", exc)
+            self._update(error=f"The check stopped: {exc}")
         except Exception as exc:                            # noqa: BLE001
             log.exception("the check of the second copy stopped")
             self._update(error=f"The check stopped: {exc}")

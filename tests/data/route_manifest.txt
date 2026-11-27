@@ -516,12 +516,18 @@ admin | POST                 | /api/me/password | guest | writes | same origin |
 home  | POST                 | /api/me/password | guest | writes | same origin | accounts.change_password | -
 admin | GET                  | /api/memories/on-this-day | guest | reads | - | api.memories_on_this_day | -
 home  | GET                  | /api/memories/on-this-day | guest | reads | - | api.memories_on_this_day | -
+admin | POST                 | /api/mirror/afresh | admin | writes | same origin | cloud.mirror_afresh | -
+admin | GET                  | /api/mirror/browse | admin | reads | - | cloud.mirror_browse | -
+admin | POST                 | /api/mirror/delete | admin | writes | same origin | cloud.mirror_delete | -
+admin | GET                  | /api/mirror/file | admin | reads | - | cloud.mirror_file | -
+admin | GET                  | /api/mirror/folder | admin | reads | - | cloud.mirror_folder | -
 admin | POST                 | /api/mirror/restore | admin | writes | same origin | cloud.mirror_restore | -
 admin | POST                 | /api/mirror/settings | admin | writes | same origin | cloud.mirror_settings | -
 admin | POST                 | /api/mirror/start | admin | writes | same origin | cloud.mirror_start | -
 admin | GET                  | /api/mirror/status | admin | reads | - | cloud.mirror_status | -
 admin | POST                 | /api/mirror/stop | admin | writes | same origin | cloud.mirror_stop | -
 admin | POST                 | /api/mirror/verify | admin | writes | same origin | cloud.mirror_verify | -
+admin | GET                  | /api/mirror/where | admin | reads | - | cloud.mirror_where | -
 admin | GET                  | /api/moments | guest | reads | - | api.moments_search | video_moments
 home  | GET                  | /api/moments | guest | reads | - | api.moments_search | video_moments
 admin | GET                  | /api/moments/<int:asset_id> | guest | reads | - | api.moments_of_clip | video_moments

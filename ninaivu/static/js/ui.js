@@ -200,12 +200,22 @@ export function lfDescribe(items) {
  * and by the folder screen. With *password*, the files go to the bin through
  * the password-gated /api/delete; without, through the folders' own delete.
  */
-export function askPasswordToDelete(items, done, { password = true } = {}) {
+export function askPasswordToDelete(items, done, { password = true, send = null, note = '' } = {}) {
   const modal = $('#lf-delete-modal');
   const input = $('#lf-delete-password');
   const error = $('#lf-delete-error');
   const confirm = $('#lf-delete-confirm');
-  input.closest('.field').hidden = !password;
+  // *send* (the second copy's delete) asks for the password and posts to its
+  // own place, with its own *note* in place of the bin's.
+  const asks = Boolean(password || send);
+  input.closest('.field').hidden = !asks;
+  const binNote = $('#lf-delete-note');
+  const otherNote = $('#lf-delete-note-other');
+  if (binNote && otherNote) {
+    binNote.hidden = Boolean(note);
+    otherNote.hidden = !note;
+    otherNote.textContent = note;
+  }
 
   $('#lf-delete-title').textContent = items.length === 1
     ? i18n.t('Delete this file?')
@@ -222,16 +232,17 @@ export function askPasswordToDelete(items, done, { password = true } = {}) {
   } });
   const close = () => dialog.close();
   dialog.open();
-  (password ? input : confirm).focus();
+  (asks ? input : confirm).focus();
 
   const attempt = async () => {
-    if (password && !input.value) { input.focus(); return; }
+    if (asks && !input.value) { input.focus(); return; }
     confirm.disabled = true;
     try {
       const ids = items.map((item) => item.id);
-      const result = password
-        ? await admin.postDelete({ body: { ids, password: input.value } })
-        : await admin.postAdminFoldersDelete({ body: { ids } });
+      const result = send ? await send(ids, input.value)
+        : password
+          ? await admin.postDelete({ body: { ids, password: input.value } })
+          : await admin.postAdminFoldersDelete({ body: { ids } });
       close();
       await done(result);
     } catch (exc) {
