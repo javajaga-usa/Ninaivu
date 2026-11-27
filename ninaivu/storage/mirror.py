@@ -314,7 +314,13 @@ class Mirror:
         self._here_cache: dict[str, tuple[float, int, int, str]] = {}
         self._state: dict[str, Any] = {
             "running": False, "job": "", "current": "", "copied_this_run": 0,
-            "bytes_this_run": 0, "message": "", "error": "", "waiting": ""}
+            "bytes_this_run": 0, "message": "", "error": "", "waiting": "",
+            # During a check: files read back so far (with what an earlier,
+            # stopped check had read) and how many there are to read.
+            "checked": 0, "to_check": 0,
+            # What the last copy or check came to, in numbers the page says
+            # in its own language (``message`` is the English for the log).
+            "last": {}}
 
     # -- settings ---------------------------------------------------------
 
@@ -642,6 +648,8 @@ class Mirror:
             "last_finished": float(self._meta(conn, "last_finished", "0") or 0),
             "last_run": float(self._meta(conn, "last_run", "0") or 0),
             "last_attempt": float(self._meta(conn, "last_attempt", "0") or 0),
+            # When the copy runs by itself next (0: only when asked, or off).
+            "next_at": self._next_copy_at(conn),
             "last_verified": last_verified,
             "verify_checked": verified,
             "verify_bad": int(self._meta(conn, "verify_bad", "0") or 0),
@@ -762,7 +770,8 @@ class Mirror:
                         "reason": "The second copy is busy; wait for it to finish."}
             self._stop.clear()
             self._state.update(running=True, job=job, current="", copied_this_run=0,
-                               bytes_this_run=0, message=message, error="", waiting="")
+                               bytes_this_run=0, message=message, error="", waiting="",
+                               checked=0, to_check=0)
             self._thread = threading.Thread(target=work, name=f"ninaivu-second-copy-{job}",
                                             daemon=True)
             self._thread.start()
@@ -832,6 +841,19 @@ class Mirror:
             return False
         return not (self._hold is not None and self._hold())
 
+    def _next_copy_at(self, conn) -> float:
+        """When :meth:`_copy_owed` turns true by the clock alone, or 0 when the
+        copy is off or runs only when asked. A household, a problem or a run
+        under way can still put it off; the page says those on their own."""
+        if not self.enabled or self.every <= 0:
+            return 0.0
+        last = float(self._meta(conn, "last_run", "0") or 0)
+        tried = float(self._meta(conn, "last_attempt", "0") or 0)
+        at = last + self.every
+        if tried > last:
+            at = max(at, tried + min(self.every, RETRY_AFTER))
+        return at
+
     def _copy_owed(self, conn) -> bool:
         """The schedule alone: a day (by default) since the last run that
         finished, and not straight after one that did not."""
@@ -874,6 +896,7 @@ class Mirror:
     def _run(self) -> None:
         copied = failed = found = 0
         message = ""
+        last: dict[str, Any] = {"job": "copying", "outcome": "failed"}
         try:
             conn = self._db()
             target = self.folder
@@ -966,8 +989,10 @@ class Mirror:
             if away:
                 message += (" A library folder was not connected, so its files "
                             "are still owed.")
+            last.update(outcome="done", too_large=len(too_large), library_away=bool(away))
             self._update(error="")
         except _Stop:
+            last["outcome"] = "stopped"
             message = f"Stopped after {copied:,} files. It carries on from here next time."
         except OSError as exc:
             full = getattr(exc, "errno", None) in (28, 122) or "no room" in str(exc)
@@ -981,7 +1006,8 @@ class Mirror:
         finally:
             self._listings = None
             self._family = None
-            self._update(running=False, current="", waiting="", message=message)
+            last.update(copied=copied, found=found, failed=failed, finished=self._clock())
+            self._update(running=False, current="", waiting="", message=message, last=last)
             if message:
                 log.info("second copy of the library: %s", message)
 
@@ -1011,6 +1037,7 @@ class Mirror:
         finished = False
         #: Set aside for a copy that is due: the keeper is woken to start it.
         yielded = False
+        last: dict[str, Any] = {"job": "checking", "outcome": "failed"}
         try:
             conn = self._db()
             target = self.folder
@@ -1036,6 +1063,7 @@ class Mirror:
                 missing = int(cursor.get("missing") or 0)
                 checked = int(cursor.get("checked") or 0)
             rows = conn.execute(sql + " ORDER BY root, rel_path", args).fetchall()
+            self._update(checked=checked, to_check=checked + len(rows))
             for row in rows:
                 self._pause_for_the_household()
                 if where is not None and checked % VERIFY_SAVE_EVERY == 0:
@@ -1075,6 +1103,7 @@ class Mirror:
                 checked += 1
                 where = (row["root"], row["rel_path"])
                 self._bump_copied()
+                self._update(checked=checked)
             finished = True
             self._set_meta(conn, "verify_cursor", "")
             self._set_meta(conn, "last_verified", self._clock())
@@ -1082,16 +1111,20 @@ class Mirror:
             self._set_meta(conn, "verify_missing", missing)
             self._set_meta(conn, "verify_checked", checked)
             if not checked:
+                last["outcome"] = "nothing"
                 message = "Nothing is on the second copy yet to check. Copy now first."
                 return
+            last["outcome"] = "done"
             message = f"Checked {checked:,} files on the second copy."
             message += (f" {bad:,} no longer matched and {missing:,} were missing; they are copied "
                         f"again on the next run." if bad or missing else " Every one read back intact.")
         except _Yield:
             yielded = True
+            last["outcome"] = "set_aside"
             message = (f"Checked {checked:,} files so far; set aside for the copy that is due, "
                        "and carried on after it.")
         except _Stop:
+            last["outcome"] = "stopped"
             message = f"Stopped after checking {checked:,} files. It carries on from here next time."
         except OSError as exc:
             log.warning("the check of the second copy stopped: %s", exc)
@@ -1105,7 +1138,9 @@ class Mirror:
                     self._save_verify_cursor(conn, where, bad, missing, checked)
                 except sqlite3.Error:
                     pass
-            self._update(running=False, current="", waiting="", message=message, job="")
+            last.update(checked=checked, bad=bad, missing=missing, finished=self._clock())
+            self._update(running=False, current="", waiting="", message=message, job="",
+                         last=last)
             if message:
                 log.info("second copy: %s", message)
             if yielded:

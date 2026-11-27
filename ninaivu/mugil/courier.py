@@ -356,8 +356,22 @@ class Courier:
     def status(self) -> dict[str, Any]:
         with self._lock:
             return {"running": self.running, "progress": dict(self._progress),
-                    "last": dict(self.last),
+                    "last": dict(self.last), "next_at": self.next_at(),
                     "every_hours": float(getattr(self.cfg, "mugil_copy_every_hours", 0) or 0)}
+
+    def next_at(self) -> float:
+        """When :meth:`owed` turns true by the clock alone, or 0 when the
+        originals are sent only when asked, or cannot be sent from here."""
+        every = float(getattr(self.cfg, "mugil_copy_every_hours", 0) or 0) * 3600
+        if every <= 0 or role(self.cfg) != PRIMARY:
+            return 0.0
+        if self._first_copy_at:
+            return self._first_copy_at
+        last = self.last.get("finished") or 0
+        if not last:
+            return 0.0
+        wait = every if self.last.get("complete", True) else min(every, RETRY_AFTER)
+        return float(last) + wait
 
     def ready(self) -> str | None:
         """Why a run cannot start, or None."""
@@ -495,7 +509,10 @@ class Courier:
                   "skipped_libraries": []}
         result: dict[str, Any] = {"started": started, **totals}
         try:
-            result.update(self.run(totals))
+            outcome = self.run(totals)
+            # The counts were made in *totals* as the run went; *result* was
+            # copied from it before, when they were all nought.
+            result.update(totals, **outcome)
         except PartnerError as exc:
             result.update(totals, complete=False, error=str(exc))
             if exc.replaced:
@@ -543,9 +560,11 @@ class Courier:
         try:
             # Only the library folders plugged in now: one that is away has
             # nothing to read, and is sent when it is back.
-            for root in list(self.cfg.libraries):
+            libraries = list(self.cfg.libraries)
+            for number, root in enumerate(libraries, 1):
                 if self._stop.is_set():
                     return {"complete": False, "stopped": True}
+                totals["library_no"], totals["libraries"] = number, len(libraries)
                 library = library_id.read_id(root)
                 if not library:
                     totals["skipped_libraries"].append(str(root))
@@ -676,7 +695,14 @@ class Courier:
             record.execute("INSERT OR REPLACE INTO libraries (root, library, name) VALUES (?,?,?)",
                            (root, library, name))
         with self._lock:
-            self._progress = {"library": root, "files": len(rows), "done": 0}
+            # The counts of what was sent run across every library folder;
+            # ``done`` of ``files`` is this folder's, numbered among them.
+            kept = {k: self._progress[k] for k in ("short_of_room",) if k in self._progress}
+            self._progress = {"library": root, "name": name, "files": len(rows), "done": 0,
+                              "library_no": int(totals.get("library_no") or 1),
+                              "libraries": int(totals.get("libraries") or 1),
+                              **{k: totals[k] for k in ("sent", "bytes", "already") if k in totals},
+                              **kept}
         for start in range(0, len(rows), GROUP):
             if self._stop.is_set():
                 return

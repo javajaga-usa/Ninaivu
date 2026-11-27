@@ -71,20 +71,20 @@ await tab(page, 'folders', '#fold-block');
 await page.waitForSelector('#fold-which:not([hidden])', { timeout: 10000 });
 ok('Folders offers Library and Second copy', await page.isVisible('#fold-which-copy'));
 await page.click('#fold-which-copy');
-await page.waitForSelector('#scf-block:not([hidden]) .scf-dir, #scf-block:not([hidden]) .scf-file',
+await page.waitForSelector('#scf-block:not([hidden]) .scf-dir, #scf-block:not([hidden]) .scf-item',
   { timeout: 10000 });
 ok('the library view steps aside', await page.isHidden('#fold-block'));
 ok('the copy shows where it is', (await page.textContent('#scf-where')).includes(folder));
 
 // Down to a folder with files in it.
-for (let i = 0; i < 6 && !(await page.$('.scf-file')); i += 1) {
+for (let i = 0; i < 6 && !(await page.$('.scf-item')); i += 1) {
   await page.click('.scf-dir');
   await page.waitForTimeout(400);
 }
-const files = await page.$$eval('.scf-file .scf-name', (els) => els.map((e) => e.textContent));
+const files = await page.$$eval('.scf-item .name', (els) => els.map((e) => e.textContent));
 ok('a folder of the copy lists its files', files.length > 0, JSON.stringify(files));
 ok('each file says what it is',
-  (await page.textContent('.scf-file .scf-is')).includes('Copy of a library file'));
+  (await page.getAttribute('.scf-item .where', 'title')).includes('Copy of a library file'));
 const copyPath = await page.evaluate(() => document.querySelector('#scf-trail .here')?.textContent);
 
 await page.click('#scf-to-lib');
@@ -95,7 +95,7 @@ const libHere = await page.evaluate(() => document.querySelector('#fold-trail .h
 ok('Show in library opens the same folder of the library', libHere === copyPath,
   `${libHere} / ${copyPath}`);
 await page.click('#fold-to-copy');
-await page.waitForSelector('#scf-block:not([hidden]) .scf-file', { timeout: 10000 });
+await page.waitForSelector('#scf-block:not([hidden]) .scf-item', { timeout: 10000 });
 await page.waitForFunction((want) => document.querySelector('#scf-trail .here')?.textContent === want,
   copyPath, { timeout: 5000 }).catch(() => {});
 ok('and Show in second copy goes back', await page.evaluate(
@@ -105,7 +105,7 @@ const shot = process.env.NINAIVU_SHOTS;
 if (shot) await page.screenshot({ path: path.join(shot, 'second-copy-files-desktop.png'), fullPage: true });
 
 /* -- deleting on the copy ------------------------------------------------ */
-await page.click('.scf-file input[type=checkbox]');
+await page.click('.scf-item input[type=checkbox]');
 ok('choosing a file offers Delete', await page.isEnabled('#scf-delete'));
 await page.click('#scf-delete');
 await page.waitForSelector('#lf-delete-modal:not([hidden])', { timeout: 5000 });
