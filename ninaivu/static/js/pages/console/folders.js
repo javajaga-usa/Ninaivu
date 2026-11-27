@@ -13,7 +13,7 @@ import {
   $, $$, askPasswordToDelete, bytesShort, consoleToast as toast, el, plural, span,
 } from '../../ui.js';
 import { labelled, revealItem, VIS_NAMES_BY_VALUE, visibilityWord } from './common.js';
-import * as secondCopy from './second-copy-files.js';
+import * as secondCopy from '../../second-copy-files.js';
 
 const folderApi = {
   folder: (path, show = 'all', deep = false, offset = 0) =>

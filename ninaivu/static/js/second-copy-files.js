@@ -9,9 +9,9 @@
  * never deletes anything.
  */
 
-import { consoleJson as json } from '../../api.js';
-import * as i18n from '../../i18n.js';
-import { $$, askPasswordToDelete, bytesShort, consoleToast as toast, el } from '../../ui.js';
+import { consoleJson as json } from './api.js';
+import * as i18n from './i18n.js';
+import { $$, askPasswordToDelete, bytesShort, consoleToast as toast, el } from './ui.js';
 
 const state = { path: '', data: null, chosen: new Set(), on: false, here: '', folder: '' };
 
