@@ -126,6 +126,10 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
               <div>
                 <div class="ap-group-title">${i18n.t('Composition')}</div>
                 <div class="ap-controls-geometry"></div>
+                <div class="ap-cluster ap-flips" role="group" aria-label="${i18n.t('Mirror flip')}">
+                  <button type="button" class="btn" data-flip="flipH" aria-pressed="false" title="${i18n.t('Mirror the photo, left to right')}">⇋ ${i18n.t('Flip left to right')}</button>
+                  <button type="button" class="btn" data-flip="flipV" aria-pressed="false" title="${i18n.t('Mirror the photo, top to bottom')}">⇵ ${i18n.t('Flip upside down')}</button>
+                </div>
                 <div class="u-20a743">
                   <span class="u-adf2b0">${i18n.t('Crop framing')}</span>
                   <select data-crop class="u-fa7bc6">
@@ -607,6 +611,7 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
       if(out) out.textContent = formatValue(i.dataset.adjust, i.value);
     });
     $('[data-crop]').value = a.crop;
+    dialog.querySelectorAll('[data-flip]').forEach(b => b.setAttribute('aria-pressed', String(!!a[b.dataset.flip])));
   }
 
   async function preview() {
@@ -615,12 +620,13 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
     try {
       const a = history.current;
       const edited = await service.applyAdjustments(bitmap, a);
-      const original = await service.applyAdjustments(bitmap, {...defaults(), crop: a.crop, angle: a.angle});
+      // The same framing and the same way round, so the two halves of Compare line up.
+      const original = await service.applyAdjustments(bitmap, {...defaults(), crop: a.crop, angle: a.angle, flipH: a.flipH, flipV: a.flipV});
       if(closed) return;
       releaseURLs(); urls = [URL.createObjectURL(edited), URL.createObjectURL(original)];
       $('.ap-edited').src = urls[0]; $('.ap-original').src = urls[1];
       $('.ap-stage').hidden = false; $('.ap-compare').hidden = false;
-      $('.ap-crop-note').hidden = a.crop === 'original' && a.angle === 0;
+      $('.ap-crop-note').hidden = a.crop === 'original' && a.angle === 0 && !a.flipH && !a.flipV;
       previewReady = true; $('.ap-empty').hidden = true; setView(viewMode); sync(); status(i18n.t('Preview updated.'));
     } catch(error) { sync(); status(i18n.t('{reason} Preview could not update.', {reason: errorText(error, i18n.t)})); }
     finally { if(!closed) lock(false); }
@@ -699,6 +705,10 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
   dialog.addEventListener('selectstart', e => { if(sliding) e.preventDefault(); });
 
   $('[data-crop]').onchange = e => apply({crop: e.target.value});
+  // A mirror flip, on or off: pressing it again puts the photo back.
+  dialog.querySelectorAll('[data-flip]').forEach(btn => {
+    btn.onclick = () => apply({[btn.dataset.flip]: !history.current[btn.dataset.flip]});
+  });
 
   /** A tool's finished picture becomes the photograph on the canvas, with the sliders at zero again, so it can be adjusted further and saved like any edit. */
   async function takeOnto(next, message){
@@ -1038,7 +1048,7 @@ export function openPlayground({item=null, returnFocus=document.activeElement, c
         const plan = await service.planEdit($('#ap-prompt').value, history.current, analysis, provider, controller.signal);
         if(closed) return; pendingPlan = plan;
         $('[data-plan-summary]').textContent = `${i18n.t(plan.provider)}: ${i18n.t(plan.summary)}`; $('[data-plan-changes]').replaceChildren();
-        const labels = {exposure:i18n.t('Exposure'),contrast:i18n.t('Contrast'),saturation:i18n.t('Saturation'),vibrance:i18n.t('Vibrance'),warmth:i18n.t('White balance'),sharpness:i18n.t('Sharpness'),noise:i18n.t('Noise reduction'),shadows:i18n.t('Shadows'),highlights:i18n.t('Highlights'),clarity:i18n.t('Clarity'),dehaze:i18n.t('Dehaze'),vignette:i18n.t('Vignette'),angle:i18n.t('Straighten'),crop:i18n.t('Crop framing')};
+        const labels = {exposure:i18n.t('Exposure'),contrast:i18n.t('Contrast'),saturation:i18n.t('Saturation'),vibrance:i18n.t('Vibrance'),warmth:i18n.t('White balance'),sharpness:i18n.t('Sharpness'),noise:i18n.t('Noise reduction'),shadows:i18n.t('Shadows'),highlights:i18n.t('Highlights'),clarity:i18n.t('Clarity'),dehaze:i18n.t('Dehaze'),vignette:i18n.t('Vignette'),angle:i18n.t('Straighten'),crop:i18n.t('Crop framing'),flipH:i18n.t('Flip left to right'),flipV:i18n.t('Flip upside down')};
         for(const [key, value] of Object.entries(plan.patch)) {
           const li = document.createElement('li'); li.textContent = `${labels[key]||key}: ${history.current[key]} → ${value}`; $('[data-plan-changes]').append(li);
         }

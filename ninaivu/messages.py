@@ -32,6 +32,7 @@ MESSAGES = (
     said("A file's size must be a whole number of bytes."),
     said('A film has {min_count} to {max_count} moments.'),
     said('A film is already being made. Try again when it is finished.'),
+    said('A flip is either on or off.'),
     said('A health check or archive run is already active.'),
     said("A helper's name is up to 80 characters and the phone up to 40."),
     said('A name cannot be empty.'),

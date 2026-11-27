@@ -29,6 +29,9 @@ export async function render(bitmap, adjustments, maxSide = Infinity) {
   // Zoom to avoid empty corners when straightening.
   const zoom = Math.max(Math.cos(angle)+Math.abs(Math.sin(angle))*h/w, Math.cos(angle)+Math.abs(Math.sin(angle))*w/h);
   ctx.rotate(angle); ctx.scale(zoom,zoom);
+  // A mirror flip is of the photograph itself, so it is the innermost step:
+  // the straighten above turns the flipped picture, and a crop stays centred.
+  ctx.scale(a.flipH ? -1 : 1, a.flipV ? -1 : 1);
   ctx.drawImage(bitmap, (bitmap.width-sw)/2, (bitmap.height-sh)/2, sw,sh, -w/2,-h/2,w,h); ctx.restore();
   // The pixel work is the Photo Studio's own engine (studio/develop.mjs), so a
   // slider here means what the same slider means there. Detail is sized to the

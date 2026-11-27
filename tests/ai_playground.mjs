@@ -74,3 +74,13 @@ test('vibrance, clarity, dehaze and the story crop are understood by the planner
   assert.ok(suggestions({brightness:200,contrast:30,warmth:0,color:80,width:3000,height:2000}).some(s=>s.title==='Clear the haze'));
   assert.ok(!suggestions({brightness:80,contrast:30,warmth:0,color:80,width:3000,height:2000}).some(s=>s.title==='Clear the haze'));
 });
+test('mirror flips are on or off, start off, and the planner turns them over',()=>{
+  assert.equal(defaults().flipH,false);assert.equal(defaults().flipV,false);
+  const a=validate({flipH:true});assert.equal(a.flipH,true);assert.equal(a.flipV,false);
+  assert.throws(()=>validate({flipH:1}));assert.throws(()=>validate({flipV:'yes'}));
+  assert.deepEqual(planRequest('flip it').patch,{flipH:true});
+  assert.deepEqual(planRequest('mirror the photo left to right').patch,{flipH:true});
+  assert.deepEqual(planRequest('flip horizontally',{...defaults(),flipH:true}).patch,{flipH:false});
+  assert.deepEqual(planRequest('flip it upside down and make it warmer').patch,{flipV:true,warmth:20});
+  assert.deepEqual(planRequest('flip vertically').patch,{flipV:true});
+});

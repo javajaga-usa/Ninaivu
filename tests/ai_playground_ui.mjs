@@ -63,6 +63,18 @@ try{
     const downloadPromise=page.waitForEvent('download');await page.locator('[data-export]').click();const download=await downloadPromise;assert.equal(download.suggestedFilename(),'ninaivu-edited.png');
     const bytes=await fs.readFile(await download.path());assert.equal(bytes.readUInt32BE(16),400);assert.equal(bytes.readUInt32BE(20),400);assert.ok(!bytes.includes(Buffer.from('eXIf')));
     await page.locator('[data-reset]').click();await ready();assert.equal(await pixel(),original);
+    // Mirror flips: on, shown pressed, back off with undo, and the picture really is mirrored.
+    const flipH=page.locator('[data-flip="flipH"]');
+    await flipH.click();await ready();assert.equal(await flipH.getAttribute('aria-pressed'),'true');
+    await page.locator('[data-undo]').click();await ready();assert.equal(await flipH.getAttribute('aria-pressed'),'false');
+    assert.deepEqual(await page.evaluate(async()=>{
+      const {render}=await import('/static/js/ai-playground/services/processor.mjs');
+      const c=document.createElement('canvas');c.width=40;c.height=20;const x=c.getContext('2d');
+      x.fillStyle='#000';x.fillRect(0,0,40,20);x.fillStyle='#fff';x.fillRect(0,0,20,10);
+      const bitmap=await createImageBitmap(c),at=(out,px,py)=>out.getContext('2d').getImageData(px,py,1,1).data[0];
+      const across=await render(bitmap,{flipH:true}),down=await render(bitmap,{flipV:true});
+      return [at(across,35,5)>200,at(across,5,5)<50,at(down,5,15)>200,at(down,5,5)<50];
+    }),[true,true,true,true]);
     await page.locator('[data-compare]').fill('25');assert.match(await page.locator('.ap-original').getAttribute('style'),/75%/);
     // A mouse drag along a slider must not sweep a text selection across the
     // panel (Safari did, ignoring the unprefixed user-select); text elsewhere

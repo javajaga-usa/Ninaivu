@@ -26,7 +26,7 @@ def test_compact_local_plan_is_validated(monkeypatch):
     assert calls[0]['stream'] is False
 
 
-@pytest.mark.parametrize('patch', [{'exposure':float('nan')}, {'exposure':True}, {'crop':'face'}, {'script':'alert(1)'}, {'noise':-5}, {'dehaze':101}, {'crop':'reel'}])
+@pytest.mark.parametrize('patch', [{'exposure':float('nan')}, {'exposure':True}, {'crop':'face'}, {'script':'alert(1)'}, {'noise':-5}, {'dehaze':101}, {'crop':'reel'}, {'flipH':1}, {'flipV':'yes'}])
 def test_invalid_model_operations_rejected(patch):
     with pytest.raises(ValueError):
         ai_editing.validate_adjustments(patch)
@@ -39,6 +39,13 @@ def test_the_planner_speaks_the_same_vocabulary_as_the_sliders():
     assert set(ai_editing.LIMITS) == {'exposure', 'contrast', 'saturation', 'vibrance', 'warmth', 'shadows',
                                       'highlights', 'clarity', 'dehaze', 'sharpness', 'noise', 'vignette', 'angle'}
     assert ai_editing.CROPS == ['original', 'square', 'landscape', 'portrait', 'story']
+
+
+def test_sudar_mirror_flips_reach_the_planner_as_on_or_off():
+    """Sudar's flip buttons travel with the current edit, so the planner takes them."""
+    current = {'exposure': 10, 'flipH': True, 'flipV': False}
+    assert ai_editing.validate_adjustments(current) == current
+    assert ai_editing.FLIPS == ('flipH', 'flipV')
 
 
 def test_guest_cannot_use_local_inference(as_guest):

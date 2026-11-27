@@ -3,7 +3,7 @@ import {failure} from '../utils/messages.mjs';
 //: local key() rather than importing i18n.js; the component showing the text
 //: translates it with i18n.t() (see ../utils/messages.mjs).
 const i18n = {key: (s) => s};
-export const defaults = () => ({exposure: 0, contrast: 0, saturation: 0, vibrance: 0, warmth: 0, sharpness: 0, noise: 0, shadows: 0, highlights: 0, clarity: 0, dehaze: 0, vignette: 0, angle: 0, crop: 'original'});
+export const defaults = () => ({exposure: 0, contrast: 0, saturation: 0, vibrance: 0, warmth: 0, sharpness: 0, noise: 0, shadows: 0, highlights: 0, clarity: 0, dehaze: 0, vignette: 0, angle: 0, crop: 'original', flipH: false, flipV: false});
 export const CROPS = ['original', 'square', 'landscape', 'portrait', 'story'];
 export function validate(a) {
   const result = defaults();
@@ -18,6 +18,12 @@ export function validate(a) {
   }
   if (!CROPS.includes(a.crop ?? 'original')) throw new Error(i18n.key('Invalid crop.'));
   result.crop = a.crop ?? 'original';
+  // Mirror flips: left to right, and upside down. On or off, nothing else.
+  for (const key of ['flipH', 'flipV']) {
+    const v = a[key] ?? false;
+    if (typeof v !== 'boolean') throw failure(i18n.key('Invalid {name} adjustment.'), {name: key});
+    result[key] = v;
+  }
   return result;
 }
 export function analyze(data, width, height) {
