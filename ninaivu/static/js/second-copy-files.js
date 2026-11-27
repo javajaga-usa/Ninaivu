@@ -9,7 +9,7 @@
  * never deletes anything.
  */
 
-import { consoleJson as json } from './api.js';
+import { consoleJson as json, thumbUrl } from './api.js';
 import * as i18n from './i18n.js';
 import { $$, askPasswordToDelete, bytesShort, consoleToast as toast, el } from './ui.js';
 
@@ -51,7 +51,7 @@ async function load(path = state.path, { here = '' } = {}) {
   state.here = here;
   if (!await check()) return;
   if (path !== state.path) state.chosen.clear();
-  $$('#scf-where').textContent = i18n.t('On {folder}', { folder: state.folder });
+  $$('#scf-where').textContent = i18n.t('On {folder}.', { folder: state.folder });
   try {
     state.data = await json(`/api/mirror/browse?path=${encodeURIComponent(path || '')}`);
     state.path = state.data.path;
@@ -95,74 +95,151 @@ function render() {
     trail.appendChild(button);
   });
 
+  // The copy's own folders, as the library's are drawn (folders.js): a
+  // picture from inside, how many of the library's files are there and
+  // their size, from the copy's record.
   const dirs = $$('#scf-dirs');
   dirs.textContent = '';
-  for (const dir of data.dirs) {
-    const card = el('button', 'fold-card scf-dir');
-    card.type = 'button';
-    const body = el('div', 'fold-body');
-    body.appendChild(el('div', 'fold-name', dir.name));
-    card.title = dir.path;
-    card.appendChild(body);
-    card.onclick = () => load(dir.path);
-    dirs.appendChild(card);
-  }
+  for (const dir of data.dirs) dirs.appendChild(dirCard(dir));
+  dirs.hidden = !data.dirs.length;
+
+  const files = data.files;
+  const summary = $$('#scf-summary');
+  summary.textContent = '';
+  const inDirs = data.dirs.reduce((sum, dir) => sum + (dir.n || 0), 0);
+  const kinds = { copied: 0, found: 0, bad: 0, other: 0 };
+  for (const file of files) kinds[file.is in kinds ? file.is : 'other'] += 1;
+  const piece = (text, cls = '') => summary.appendChild(el('span', cls, text));
+  piece(i18n.t('{count} folders', { count: number(data.dirs.length) }));
+  piece(i18n.t('{count} files', { count: number(files.length + inDirs) }));
+  const bytes = files.reduce((sum, file) => sum + (file.size || 0), 0)
+    + data.dirs.reduce((sum, dir) => sum + (dir.bytes || 0), 0);
+  if (bytes) piece(bytesShort(bytes));
+  if (kinds.found) piece(i18n.t('{count} were there already', { count: number(kinds.found) }));
+  if (kinds.bad) piece(i18n.t('{count} changed since copied', { count: number(kinds.bad) }), 'hidden-n');
+  if (kinds.other) piece(i18n.t('{count} not from the library', { count: number(kinds.other) }), 'hidden-n');
+  summary.hidden = !(data.dirs.length || files.length);
+
+  const head = $$('#scf-files-head');
+  head.hidden = !files.length;
+  $$('#scf-files-title').textContent = files.length === 1 ? i18n.t('1 file here')
+    : i18n.t('{count} files here', { count: number(files.length) });
+  $$('#scf-files-note').textContent = data.more
+    ? i18n.t('{count} more are not listed here.', { count: number(data.more) }) : '';
 
   const list = $$('#scf-files');
   list.textContent = '';
-  for (const file of data.files) {
-    const row = el('label', `scf-file is-${file.is}`);
-    const tick = el('input');
-    tick.type = 'checkbox';
-    tick.checked = state.chosen.has(file.path);
-    tick.onchange = () => {
-      if (tick.checked) state.chosen.add(file.path); else state.chosen.delete(file.path);
-      renderPick();
-    };
-    const name = el('span', 'scf-name', file.name);
-    name.title = file.library_path
-      ? i18n.t('In the library: {path}', { path: file.library_path }) : file.path;
-    if (file.path === state.here) row.classList.add('here');
-    const open = el('a', 'scf-open', i18n.t('Open'));
-    open.href = `/api/mirror/file?path=${encodeURIComponent(file.path)}`;
-    open.target = '_blank';
-    open.rel = 'noopener';
-    open.onclick = (event) => event.stopPropagation();
-    row.append(tick, name,
-      el('span', 'scf-size', bytesShort(file.size)),
-      el('span', 'scf-when', when(file.mtime)),
-      el('span', 'scf-is', i18n.t(IS[file.is] || IS.other)),
-      open);
-    if (file.library_path && file.library_root === data.active_root) {
-      const back = el('button', 'scf-tolib', i18n.t('Show in library'));
-      back.type = 'button';
-      back.onclick = (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        const folder = file.library_path.includes('/')
-          ? file.library_path.slice(0, file.library_path.lastIndexOf('/')) : '';
-        hooks.openLibrary(folder);
-      };
-      row.appendChild(back);
-    } else {
-      row.appendChild(el('span'));
-    }
-    list.appendChild(row);
-  }
+  for (const file of files) list.appendChild(fileTile(file, data));
   const toLib = $$('#scf-to-lib');
   toLib.hidden = data.library_folder === null || data.library_folder === undefined;
   toLib.onclick = () => hooks.openLibrary(data.library_folder || '');
   if (state.here) {
-    list.querySelector('.scf-file.here')?.scrollIntoView({ block: 'center' });
+    list.querySelector('.fold-item.here')?.scrollIntoView({ block: 'center' });
   }
   const empty = $$('#scf-empty');
   empty.hidden = Boolean(data.dirs.length || data.files.length);
   empty.textContent = i18n.t('Nothing in this folder of the second copy.');
-  if (data.more) {
-    list.appendChild(el('p', 'hint subtle', i18n.t('{count} more are not listed here.', {
-      count: data.more.toLocaleString(i18n.locale()) })));
-  }
   renderPick();
+}
+
+const number = (n) => (Number(n) || 0).toLocaleString(i18n.locale());
+
+const FOLDER_ICON =
+  '<svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></svg>';
+
+/** The library's thumbnail of *id* in *holder*, over the plain mark already
+ * there; one the library no longer has leaves the mark showing. */
+function picture(id, holder) {
+  const img = document.createElement('img');
+  img.src = thumbUrl(id, 256);
+  img.alt = '';
+  img.loading = 'lazy';
+  img.className = 'scf-thumb';
+  img.onerror = () => { img.hidden = true; };
+  holder.appendChild(img);
+}
+
+function dirCard(dir) {
+  const card = el('button', 'fold-card scf-dir');
+  card.type = 'button';
+  card.title = dir.path;
+  card.onclick = () => load(dir.path);
+  const cover = el('div', 'fold-cover');
+  cover.innerHTML = FOLDER_ICON;
+  if (dir.cover) picture(dir.cover, cover);
+  card.appendChild(cover);
+  const body = el('div', 'fold-body');
+  body.appendChild(el('div', 'fold-name', dir.name));
+  const meta = el('div', 'fold-meta');
+  if (dir.n) {
+    meta.appendChild(el('span', '', i18n.t('{count} files', { count: number(dir.n) })));
+    if (dir.bytes) meta.appendChild(el('span', '', bytesShort(dir.bytes)));
+  } else {
+    meta.appendChild(el('span', '', i18n.t('No library files')));
+  }
+  body.appendChild(meta);
+  card.appendChild(body);
+  return card;
+}
+
+//: The mark on a tile that is not simply Ninaivu's copy of a library file.
+const BADGE = {
+  found: i18n.key('There already'),
+  bad: i18n.key('Changed'),
+  other: i18n.key('Not from the library'),
+};
+
+function fileTile(file, data) {
+  const tile = el('div', `fold-item scf-item is-${file.is}`);
+  if (state.chosen.has(file.path)) tile.classList.add('chosen');
+  if (file.path === state.here) tile.classList.add('here');
+  tile.title = file.library_path
+    ? i18n.t('In the library: {path}', { path: file.library_path }) : file.path;
+
+  // Opens read-only in a new tab (the server says which kinds a browser may show).
+  const open = el('a', 'fold-open');
+  open.href = `/api/mirror/file?path=${encodeURIComponent(file.path)}`;
+  open.target = '_blank';
+  open.rel = 'noopener';
+  open.setAttribute('aria-label', i18n.t('Open {name}', { name: file.name }));
+  const ext = file.name.includes('.') ? file.name.slice(file.name.lastIndexOf('.') + 1) : '';
+  open.appendChild(el('span', 'fold-nothumb', ext.toUpperCase().slice(0, 5)));
+  if (file.id && (file.kind === 'picture' || file.kind === 'video')) picture(file.id, open);
+  if (file.kind === 'video') open.appendChild(el('span', 'fold-play', '▶'));
+  tile.appendChild(open);
+
+  const pick = document.createElement('input');
+  pick.type = 'checkbox';
+  pick.className = 'fold-pick';
+  pick.checked = state.chosen.has(file.path);
+  pick.setAttribute('aria-label', i18n.t('Choose {name}', { name: file.name }));
+  pick.onchange = () => {
+    if (pick.checked) state.chosen.add(file.path); else state.chosen.delete(file.path);
+    tile.classList.toggle('chosen', pick.checked);
+    renderPick();
+  };
+  tile.appendChild(pick);
+
+  if (BADGE[file.is]) {
+    const badges = el('div', 'fold-badges');
+    badges.appendChild(el('span', `badge scf-badge-${file.is}`, i18n.t(BADGE[file.is])));
+    tile.appendChild(badges);
+  }
+  tile.appendChild(el('div', 'name', file.name));
+  const meta = el('div', 'where', `${bytesShort(file.size)} · ${when(file.mtime)}`);
+  meta.title = i18n.t(IS[file.is] || IS.other);
+  tile.appendChild(meta);
+  if (file.library_path && file.library_root === data.active_root) {
+    const back = el('button', 'scf-tolib', i18n.t('Show in library'));
+    back.type = 'button';
+    back.onclick = () => {
+      const folder = file.library_path.includes('/')
+        ? file.library_path.slice(0, file.library_path.lastIndexOf('/')) : '';
+      hooks.openLibrary(folder);
+    };
+    tile.appendChild(back);
+  }
+  return tile;
 }
 
 function renderPick() {

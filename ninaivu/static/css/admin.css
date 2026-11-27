@@ -2078,22 +2078,71 @@ body.admin {
 /* Folders → Library or second copy, and the second copy's own files. */
 .fold-which { padding: 0; margin: 0 0 12px; }
 .fold-which .chip { cursor: pointer; font: inherit; font-size: 13px; padding: 6px 14px; }
-.scf-dir .fold-body { padding: 12px; }
-.scf-files { display: grid; gap: 2px; margin-bottom: 12px; }
-.scf-file {
-  display: grid; align-items: center; gap: 4px 12px;
-  grid-template-columns: auto minmax(0, 1fr) auto auto minmax(0, 14em) auto auto;
-  padding: 7px 10px; border-radius: 8px; font-size: 13.5px; cursor: pointer;
-}
-.scf-file:hover { background: var(--surface-2); }
-.scf-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.scf-size, .scf-when { color: var(--text-3); font-variant-numeric: tabular-nums; }
-.scf-is { color: var(--text-3); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.scf-file.is-other .scf-is, .scf-file.is-bad .scf-is { color: var(--vis-hidden); }
-.scf-file.here { outline: 2px solid var(--accent); }
-.scf-open, .scf-tolib { font-size: 12.5px; white-space: nowrap; background: none; border: 0; color: var(--accent); cursor: pointer; padding: 0; font: inherit; }
-@media (max-width: 640px) {
-  .scf-file { grid-template-columns: auto minmax(0, 1fr) auto; }
-  .scf-when, .scf-is { grid-column: 2 / -1; }
-}
+.scf-where { color: var(--text-3); overflow-wrap: anywhere; }
+/* The copy's files as tiles, like the library's (.fold-item): the library's
+   thumbnail over a plain mark of the file's kind, a badge when it is not
+   simply Ninaivu's copy of a library file. */
+.fold-cover .scf-thumb, .scf-item .scf-thumb { position: absolute; inset: 0; }
+.scf-item .fold-open { cursor: pointer; text-decoration: none; }
+#scf-dirs[hidden] { display: none; }
+.scf-item.is-bad, .scf-item.is-other { border-color: var(--vis-hidden); }
+.scf-item.is-found .badge { background: var(--surface); color: var(--text-2);
+  border: 1px solid var(--border); }
+.scf-item.here { outline: 2px solid var(--accent); outline-offset: 2px; }
+.scf-item.chosen { border-color: var(--accent); }
+.scf-item .where { font-variant-numeric: tabular-nums; }
+.scf-item .scf-tolib { margin: -3px 8px 8px; align-self: flex-start; font-size: 11.5px;
+  white-space: nowrap; background: none; border: 0; color: var(--accent); cursor: pointer;
+  padding: 0; font-family: inherit; }
 .sc-about li.sc-warn { color: var(--vis-hidden); }
+
+/* One status card for work that runs on its own (static/js/status-card.js):
+   the second copy, the originals sent to the Secondary, its update. The
+   state comes first, in a word and a colour; the facts follow, one a line. */
+.jst-host[hidden] { display: none; }
+.jst-card {
+  --jst-tone: var(--text-3);
+  margin: 10px 0 4px; padding: 12px 14px; display: grid; gap: 8px; min-width: 0;
+  border: 1px solid var(--border-soft); border-left: 3px solid var(--jst-tone);
+  border-radius: var(--r-md, 10px); background: var(--bg-elev, var(--surface-2));
+}
+.jst-card[data-tone="ok"] { --jst-tone: var(--ok, #1f9d55); }
+.jst-card[data-tone="busy"] { --jst-tone: var(--accent); }
+.jst-card[data-tone="wait"] { --jst-tone: var(--warn, #b8862f); }
+.jst-card[data-tone="warn"] { --jst-tone: var(--danger); }
+.jst-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; min-width: 0; }
+.jst-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--jst-tone); flex: none;
+  align-self: center; }
+.jst-card[data-tone="busy"] .jst-dot { animation: jst-pulse 1.6s ease-in-out infinite; }
+@keyframes jst-pulse { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .jst-card[data-tone="busy"] .jst-dot { animation: none; } }
+.jst-state { color: var(--jst-tone); font-size: 14px; }
+.jst-headline { color: var(--text); font-size: 13.5px; overflow-wrap: anywhere; min-width: 0; }
+.jst-bar { height: 8px; border-radius: 999px; background: var(--border-soft); overflow: hidden; }
+.jst-bar span { display: block; height: 100%; background: var(--jst-tone); border-radius: inherit;
+  transition: width .4s ease; }
+.jst-bar-label { margin: -2px 0 0; font-size: 12.5px; color: var(--text-2);
+  font-variant-numeric: tabular-nums; }
+.jst-steps { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none;
+  counter-reset: jst-step; }
+.jst-steps li { counter-increment: jst-step; display: flex; align-items: center; gap: 6px;
+  font-size: 12.5px; color: var(--text-3); padding: 3px 10px 3px 4px; border-radius: 999px;
+  border: 1px solid var(--border-soft); background: var(--surface-2); }
+.jst-steps li::before { content: counter(jst-step); display: inline-grid; place-items: center;
+  width: 18px; height: 18px; border-radius: 50%; font-size: 11px; font-weight: 600;
+  background: var(--border-soft); color: var(--text-2); }
+.jst-steps li[data-at="done"] { color: var(--text-2); }
+.jst-steps li[data-at="done"]::before { content: "✓"; background: var(--ok, #1f9d55); color: #fff; }
+.jst-steps li[data-at="now"] { color: var(--text); font-weight: 600; border-color: var(--jst-tone); }
+.jst-steps li[data-at="now"]::before { background: var(--jst-tone); color: #fff; }
+.jst-steps li[data-at="bad"] { color: var(--danger); border-color: var(--danger); }
+.jst-steps li[data-at="bad"]::before { content: "!"; background: var(--danger); color: #fff; }
+.jst-facts { margin: 0; padding-left: 18px; display: grid; gap: 3px; font-size: 13px;
+  color: var(--text-2); }
+.jst-facts li { overflow-wrap: anywhere; }
+.jst-facts li.jst-warn { color: var(--danger); }
+.jst-facts li.jst-quiet { color: var(--text-3); }
+.ar-indexer[data-tone="ok"] { color: var(--ok, #1f9d55); }
+.ar-indexer[data-tone="busy"] { color: var(--accent); }
+.ar-indexer[data-tone="wait"] { color: var(--warn, #b8862f); }
+.ar-indexer[data-tone="warn"] { color: var(--danger); }

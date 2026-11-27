@@ -17,6 +17,7 @@
 
 import { reportUnauthorized } from './api.js';
 import * as i18n from './i18n.js';
+import { percent, renderStatus } from './status-card.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -272,10 +273,6 @@ export class SecondCopy {
     $('#sc-enabled').checked = Boolean(status.enabled);
     const every = String(Math.round(status.every_hours || 0));
     $('#sc-every').value = ['24', '168', '0'].includes(every) ? every : '24';
-    $('#sc-state').textContent = !status.enabled ? i18n.t('Off')
-      : status.running ? i18n.t('Copying')
-        : status.there ? i18n.t('On')
-          : status.network ? i18n.t('The share is not connected') : i18n.t('The disk is not plugged in');
     $('#sc-run-row').hidden = !status.enabled;
     $('#sc-start').hidden = Boolean(status.running);
     $('#sc-verify').hidden = Boolean(status.running);
@@ -285,51 +282,165 @@ export class SecondCopy {
     if (!this.about && status.folder && document.activeElement !== $('#sc-folder')) {
       this.describe(status.folder);
     }
+    const card = this.card(status);
+    $('#sc-state').textContent = card.state;
+    $('#sc-state').dataset.tone = card.tone;
+    renderStatus($('#sc-status'), card);
+  }
 
-    const lines = [];
-    if (status.away_said) lines.push(i18n.fromServer(status.away_said));
-    else if (status.problem) lines.push(i18n.fromServer(status.problem));
-    if (status.enabled || status.copied) {
-      lines.push(i18n.t('{copied} of {files} files are on the copy ({size}); {owed} still to copy.', {
-        copied: count(status.copied), files: count(status.files),
-        size: size(status.copied_bytes), owed: count(status.owed),
-      }));
+  /** What the second copy is doing, as one card (status-card.js): the state
+   * first, then how far, then the facts one to a line. */
+  card(status) {
+    const job = status.running ? (status.job || 'copying') : '';
+    const facts = [];
+    const warn = (text) => facts.push({ text, tone: 'warn' });
+    const owed = Number(status.owed) || 0;
+    const files = Number(status.files) || 0;
+    const onCopy = i18n.t('{copied} of {files} files are on the copy ({size}).', {
+      copied: count(status.copied), files: count(files), size: size(status.copied_bytes) });
+    const wholeBar = files ? {
+      value: status.copied, max: files,
+      label: i18n.t('{percent}% of the library is on the copy', {
+        percent: count(percent(status.copied, files)) }),
+    } : null;
+
+    let tone;
+    let state;
+    let headline;
+    let bar = null;
+    if (job === 'checking') {
+      tone = 'busy';
+      state = i18n.t('Checking');
+      headline = i18n.t('Reading every file on the copy back and comparing it with its fingerprint.');
+      const total = Number(status.to_check) || Number(status.copied) || 0;
+      bar = total ? {
+        value: status.checked, max: total,
+        label: i18n.t('{checked} of {total} files read back', {
+          checked: count(status.checked), total: count(total) }),
+      } : null;
+    } else if (job === 'restoring') {
+      tone = 'busy';
+      state = i18n.t('Putting back');
+      headline = i18n.t('Putting back from the copy what the library no longer has.');
+    } else if (job) {
+      tone = 'busy';
+      state = i18n.t('Copying');
+      headline = onCopy;
+      bar = wholeBar;
+      if (status.copied_this_run) {
+        facts.push(i18n.t('This run: {count} copied ({size}).', {
+          count: count(status.copied_this_run), size: size(status.bytes_this_run) }));
+      }
+    } else if (!status.enabled) {
+      tone = 'off';
+      state = i18n.t('Off');
+      headline = status.copied ? onCopy : i18n.t('No second copy is kept. Choose a folder on another disk and tick Keep the copy.');
+    } else if (!status.there) {
+      tone = 'warn';
+      state = status.network ? i18n.t('The share is not connected') : i18n.t('The disk is not plugged in');
+      headline = status.away_said ? i18n.fromServer(status.away_said)
+        : i18n.t('Nothing can be copied until the disk is back. The copy carries on by itself when it is.');
+    } else if (status.error || status.copy_missing || status.problem) {
+      tone = 'warn';
+      state = i18n.t('Needs you');
+      headline = status.error ? i18n.fromServer(status.error)
+        : status.copy_missing ? i18n.t('The share is connected but the second copy is not on it. The disk behind the share may have dropped (after the Mac slept, say); nothing is written there until it is back. If it is a new disk, press Start afresh here.')
+          : i18n.fromServer(status.problem);
+      bar = wholeBar;
+    } else if (owed > 0) {
+      tone = 'wait';
+      state = i18n.t('Behind');
+      headline = i18n.t('{owed} files ({size}) still to copy.', {
+        owed: count(owed), size: size(status.owed_bytes) });
+      bar = wholeBar;
+    } else {
+      tone = 'ok';
+      state = i18n.t('Up to date');
+      headline = files ? i18n.t('Every file in the library is on the copy ({size}).', { size: size(status.copied_bytes) })
+        : i18n.t('The library has no files yet.');
     }
+
+    if (job && status.waiting) {
+      facts.push({ text: i18n.t('Paused: {reason}', { reason: i18n.fromServer(status.waiting) }), tone: 'warn' });
+    }
+    if (job && status.current) facts.push({ text: i18n.t('Now: {path}', { path: status.current }), tone: 'quiet' });
+    if (job === 'checking' || job === 'restoring' || (tone === 'warn' && !job)) {
+      if (status.enabled || status.copied) facts.push(onCopy);
+    }
+    if (!job) {
+      const last = this.lastRun(status.last);
+      if (last) facts.push(last);
+    }
+    if (status.short_of_room) warn(i18n.t('There is not room for the whole copy there. It copies what fits and says when the disk is full.'));
     if (status.library_here) {
-      lines.push(i18n.t('This folder already holds the library, in the same folders ({found} of {looked} files looked at are there). Copy now compares each file with the library and keeps the ones with the same bytes as they are, writing nothing; only files missing there are written.', {
+      facts.push(i18n.t('This folder already holds the library, in the same folders ({found} of {looked} files looked at are there). Copy now compares each file with the library and keeps the ones with the same bytes as they are, writing nothing; only files missing there are written.', {
         found: count(status.library_here.found), looked: count(status.library_here.looked_at) }));
     }
-    if (status.renamed) {
-      lines.push(i18n.t('{count} files are kept under names this disk takes; NINAIVU-NAMES.txt on the copy says which.', {
-        count: count(status.renamed) }));
-    }
-    if (status.already_there) {
-      lines.push(i18n.t('{count} files were on that disk already with the same bytes and were left as they were, not copied again.', {
-        count: count(status.already_there) }));
-    }
     if (status.too_large) {
-      lines.push(i18n.t('{count} files are too large for this disk and were left out (for example {path}). A disk formatted as exFAT takes them.', {
+      warn(i18n.t('{count} files are too large for this disk and were left out (for example {path}). A disk formatted as exFAT takes them.', {
         count: count(status.too_large), path: (status.too_large_examples || [])[0] || '' }));
     }
-    if (status.running && status.current) lines.push(i18n.t('Now: {path}', { path: status.current }));
-    if (status.waiting) lines.push(i18n.t('Waiting: {reason}', { reason: i18n.fromServer(status.waiting) }));
+    // Not said twice: the last run's own line already says when it finished.
+    const lastDone = !job && status.last?.outcome === 'done' ? status.last.job : '';
+    if (status.last_verified && status.verify_checked !== 0 && lastDone !== 'checking') {
+      if (status.verify_bad || status.verify_missing) {
+        warn(i18n.t('Last checked {when}: {bad} no longer matched and {missing} were missing; they are copied again.', {
+          when: when(status.last_verified), bad: count(status.verify_bad), missing: count(status.verify_missing) }));
+      } else {
+        facts.push(i18n.t('Last checked {when}: every file matched.', { when: when(status.last_verified) }));
+      }
+    }
+    if (status.last_finished && lastDone !== 'copying') facts.push(i18n.t('Last whole copy {when}.', { when: when(status.last_finished) }));
+    if (!job && status.enabled && status.there && status.next_at) {
+      facts.push(status.next_at * 1000 <= Date.now()
+        ? i18n.t('Next copy: as soon as the household is quiet.')
+        : i18n.t('Next copy {when}.', { when: when(status.next_at) }));
+    } else if (!job && status.enabled && !(Number(status.every_hours) > 0)) {
+      facts.push(i18n.t('Copies only when you press Copy now.'));
+    }
     if (status.free_bytes !== null && status.free_bytes !== undefined) {
-      lines.push(i18n.t('{free} free on that disk.', { free: size(status.free_bytes) }));
+      facts.push({ text: i18n.t('{free} free on that disk.', { free: size(status.free_bytes) }), tone: 'quiet' });
     }
-    if (status.short_of_room) {
-      lines.push(i18n.t('There is not room for the whole copy there. It copies what fits and says when the disk is full.'));
+    if (status.already_there) {
+      facts.push({ text: i18n.t('{count} files were on that disk already with the same bytes and were left as they were, not copied again.', {
+        count: count(status.already_there) }), tone: 'quiet' });
     }
-    if (status.copy_missing) {
-      lines.push(i18n.t('The share is connected but the second copy is not on it. The disk behind the share may have dropped (after the Mac slept, say); nothing is written there until it is back. If it is a new disk, press Start afresh here.'));
+    if (status.renamed) {
+      facts.push({ text: i18n.t('{count} files are kept under names this disk takes; NINAIVU-NAMES.txt on the copy says which.', {
+        count: count(status.renamed) }), tone: 'quiet' });
     }
-    if (status.last_finished) lines.push(i18n.t('Last whole copy {when}.', { when: when(status.last_finished) }));
-    if (status.last_verified && status.verify_checked !== 0) {
-      lines.push(status.verify_bad || status.verify_missing
-        ? i18n.t('Last checked {when}: {bad} no longer matched and {missing} were missing; they are copied again.', {
-          when: when(status.last_verified), bad: count(status.verify_bad), missing: count(status.verify_missing) })
-        : i18n.t('Last checked {when}: every file matched.', { when: when(status.last_verified) }));
+    return { tone, state, headline, bar, facts };
+  }
+
+  /** What the last copy or check came to (mirror.py ``last``), or ''. */
+  lastRun(last) {
+    if (!last || !last.finished) return '';
+    const at = when(last.finished);
+    if (last.job === 'checking') {
+      switch (last.outcome) {
+        case 'done':
+          return last.bad || last.missing
+            ? { text: i18n.t('Check finished {when}: {checked} read back, {bad} no longer matched and {missing} were missing; they are copied again.', {
+              when: at, checked: count(last.checked), bad: count(last.bad), missing: count(last.missing) }), tone: 'warn' }
+            : i18n.t('Check finished {when}: all {checked} files read back intact.', { when: at, checked: count(last.checked) });
+        case 'nothing': return i18n.t('Nothing is on the copy yet to check. Press Copy now first.');
+        case 'stopped': return i18n.t('Check stopped {when} after {checked} files. It carries on from there next time.', { when: at, checked: count(last.checked) });
+        case 'set_aside': return i18n.t('Check paused {when} after {checked} files for the copy that was due; it carries on after it.', { when: at, checked: count(last.checked) });
+        default: return { text: i18n.t('Check stopped {when} with a problem; see above.', { when: at }), tone: 'warn' };
+      }
     }
-    if (status.error) lines.push(i18n.fromServer(status.error));
-    $('#sc-progress').textContent = lines.join(' ');
+    switch (last.outcome) {
+      case 'done': {
+        const parts = [last.copied
+          ? i18n.t('Copy finished {when}: {count} files copied.', { when: at, count: count(last.copied) })
+          : i18n.t('Copy finished {when}: nothing new to copy.', { when: at })];
+        if (last.found) parts.push(i18n.t('{count} were on the disk already.', { count: count(last.found) }));
+        if (last.failed) parts.push(i18n.t('{count} could not be read and are tried again next time.', { count: count(last.failed) }));
+        if (last.library_away) parts.push(i18n.t('A library folder was not connected; its files are still owed.'));
+        return { text: parts.join(' '), tone: last.failed || last.library_away ? 'warn' : '' };
+      }
+      case 'stopped': return i18n.t('Copy stopped {when} after {count} files. It carries on from there next time.', { when: at, count: count(last.copied) });
+      default: return { text: i18n.t('Copy stopped {when} with a problem after {count} files; see above.', { when: at, count: count(last.copied) }), tone: 'warn' };
+    }
   }
 }

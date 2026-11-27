@@ -59,8 +59,10 @@ for (let i = 0; i < 60; i += 1) {
 }
 ok('it copies the library there', status.copied === status.files && status.files > 0, JSON.stringify(status));
 await page.waitForTimeout(4500);
-ok('it says how far it has got', /of .* files are on the copy/.test(await page.textContent('#sc-progress')),
-  await page.textContent('#sc-progress'));
+const card = await page.textContent('#sc-status');
+ok('it says it is up to date, first', /^\s*Up to date/.test(card)
+  && await page.getAttribute('#sc-status .jst-card', 'data-tone') === 'ok', card);
+ok('it says what the last copy came to', /Copy finished .*: \d+ files copied\./.test(card), card);
 
 await page.fill('#sc-folder', 'not/a/whole/path');
 await page.click('#sc-save');

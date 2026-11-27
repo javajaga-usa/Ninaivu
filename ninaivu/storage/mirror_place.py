@@ -243,6 +243,8 @@ def listing(mirror, conn: sqlite3.Connection, rel: str = "") -> dict[str, Any]:
                       "mtime": float(info.st_mtime), "is": what,
                       "library_path": _rel(record["rel_path"]) if record else "",
                       "library_root": record["root"] if record else ""})
+    _what_is_inside(mirror, conn, dirs)
+    _library_items(conn, files)
     parent = None
     if rel:
         parent = rel.rsplit("/", 1)[0] if "/" in rel else ""
@@ -251,6 +253,57 @@ def listing(mirror, conn: sqlite3.Connection, rel: str = "") -> dict[str, Any]:
             "files": files, "more": more, "active_root": active,
             # The same folder in the library the Folders screen shows, if any.
             "library_folder": library_folder_of(mirror, rel, active) if active else None}
+
+
+def _what_is_inside(mirror, conn: sqlite3.Connection, dirs: list[dict[str, Any]]) -> None:
+    """For each folder of the copy listed, what the record says is under it:
+    how many of the library's files, their size, and a picture of one of them
+    to show on its card, as the library's own folders are shown (Folders).
+
+    From the record, not the disk, so a folder of 50,000 files costs one
+    range of the index, not a walk of a share. Files found there that are
+    not the library's, and ones kept under another name, are not counted."""
+    for item in dirs:
+        files = size = 0
+        cover = None
+        for root in mirror.roots:
+            inside = library_folder_of(mirror, item["path"], root)
+            if inside is None:
+                continue
+            where, args = "m.root = ? AND m.stored_as = ''", [root]
+            if inside:
+                # Both ways a folder is written in a path: a range of the
+                # primary key each, not a LIKE that reads every row.
+                where += (" AND ((m.rel_path >= ? AND m.rel_path < ?)"
+                          " OR (m.rel_path >= ? AND m.rel_path < ?))")
+                args += [f"{inside}/", f"{inside}0", f"{inside}\\", f"{inside}]"]
+            row = conn.execute(
+                "SELECT COUNT(*), COALESCE(SUM(m.size), 0), "
+                "MIN(CASE WHEN a.kind IN ('picture', 'video') AND a.trashed = 0 THEN a.id END) "
+                "FROM mirror_copies m LEFT JOIN assets a "
+                "ON a.root = m.root AND a.rel_path = m.rel_path "
+                f"WHERE {where} AND m.size >= 0", args).fetchone()
+            files += int(row[0] or 0)
+            size += int(row[1] or 0)
+            cover = cover or (int(row[2]) if row[2] is not None else None)
+        item.update(n=files, bytes=size, cover=cover)
+
+
+def _library_items(conn: sqlite3.Connection, files: list[dict[str, Any]]) -> None:
+    """The library's own id and kind for each file listed that is a copy of
+    one, so its picture can be shown from the library's thumbnails."""
+    for item in files:
+        item["id"], item["kind"] = None, ""
+        if not item.get("library_root") or not item.get("library_path"):
+            continue
+        # The path as the index keeps it, with either separator: looked up
+        # by the index's own key, one file at a time, never by a scan.
+        rel = item["library_path"]
+        row = conn.execute(
+            "SELECT id, kind FROM assets WHERE root = ? AND rel_path IN (?, ?) AND trashed = 0 "
+            "LIMIT 1", (item["library_root"], rel, rel.replace("/", "\\"))).fetchone()
+        if row is not None:
+            item["id"], item["kind"] = int(row[0]), str(row[1] or "")
 
 
 def _under(top: str, rel: str) -> str:

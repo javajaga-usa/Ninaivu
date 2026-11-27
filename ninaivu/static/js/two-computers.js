@@ -15,6 +15,7 @@
 
 import { reportUnauthorized } from './api.js';
 import * as i18n from './i18n.js';
+import { percent, renderStatus } from './status-card.js';
 
 const $ = (sel) => document.querySelector(sel);
 
@@ -282,6 +283,8 @@ export class TwoComputers {
       return;
     }
     $('#tc-checklist-row').hidden = false;
+    this.originals = (answer.items || []).find((i) => i.id === 'originals') || null;
+    if (this.status) this.renderSending(this.status);
     $('#tc-checklist-says').textContent = i18n.t('{done} of {of} in place.', {
       done: count(answer.done), of: count(answer.of) });
     const marks = { done: '✓', todo: '○', problem: '!', off: '–' };
@@ -378,7 +381,10 @@ export class TwoComputers {
   /** Paired: the two computers side by side, asked at most twice a minute. */
   async machines() {
     const now = Date.now();
-    if (this.machinesAt && now - this.machinesAt < 30000) return;
+    if (this.machinesAt && now - this.machinesAt < 30000) {
+      if (this.updateBusy && this.status?.role === 'primary') await this.updating();
+      return;
+    }
     this.machinesAt = now;
     let answer;
     try {
@@ -445,7 +451,8 @@ export class TwoComputers {
     if (primaryHere) await this.updating();
   }
 
-  /** The Primary: a newer Ninaivu on its way to the Secondary (mugil/update.py). */
+  /** The Primary: a newer Ninaivu on its way to the Secondary (mugil/update.py),
+   * as a card with its four steps: sent, unpacked, switched, running. */
   async updating() {
     let answer;
     try {
@@ -453,41 +460,79 @@ export class TwoComputers {
     } catch {
       return;
     }
-    const says = $('#tc-update-says');
+    const card = this.updateCard(answer);
+    // While an update is under way the page asks every few seconds, not once
+    // a minute: the Secondary is away for only a minute or two when it switches.
+    this.updateBusy = Boolean(card && card.tone === 'busy');
+    renderStatus($('#tc-update-status'), card);
+  }
+
+  updateCard(answer) {
     const sending = answer.sending || {};
     const there = answer.secondary || {};
-    let text = '';
-    let away = false;
+    const recent = there.stage && (!there.finished_at || Date.now() / 1000 - there.finished_at < 7 * 86400);
+    const to = sending.to || there.to || '?';
+    const labels = [i18n.t('Send'), i18n.t('Unpack'), i18n.t('Switch'), i18n.t('Running')];
+    // How far it got (0 to 4) and whether the step it is on went wrong.
+    let reached;
+    let bad = false;
+    let headline;
+    let bar = null;
+    const facts = [];
     if (sending.running) {
-      text = i18n.t('Sending Ninaivu {to} to the Secondary: {sent} of {size}.', {
-        to: sending.to, sent: size(sending.sent), size: size(sending.size) });
+      reached = 0;
+      headline = i18n.t('Sending Ninaivu {to} to the Secondary.', { to });
+      bar = { value: sending.sent, max: sending.size,
+        label: i18n.t('{sent} of {size} sent', { sent: size(sending.sent), size: size(sending.size) }) };
     } else if (sending.stage === 'failed') {
-      text = i18n.t('The Secondary did not take the update: {why}', { why: sending.message });
-      away = true;
-    } else if (there.stage && (!there.finished_at || Date.now() / 1000 - there.finished_at < 7 * 86400)) {
-      const to = there.to || '?';
+      reached = 0; bad = true;
+      headline = i18n.t('The Secondary did not take the update: {why}', { why: i18n.fromServer(sending.message) });
+    } else if (recent && there.to && (sending.stage !== 'sent' || there.to === sending.to)) {
       switch (there.stage) {
         case 'receiving':
+          reached = 0;
+          headline = i18n.t('The Secondary is receiving Ninaivu {to}.', { to }); break;
         case 'unpacking':
-          text = i18n.t('The Secondary is unpacking Ninaivu {to}.', { to }); break;
+          reached = 1;
+          headline = i18n.t('The Secondary is unpacking Ninaivu {to}.', { to }); break;
         case 'waiting':
-          text = i18n.t('The Secondary has Ninaivu {to} ready, and switches to it when no originals are arriving.', { to }); break;
+          reached = 2;
+          headline = i18n.t('The Secondary has Ninaivu {to} ready, and switches to it when no originals are arriving.', { to }); break;
         case 'switching':
         case 'starting':
-          text = i18n.t('The Secondary is switching to Ninaivu {to}. It is away for a minute or two.', { to }); break;
+          reached = 2;
+          headline = i18n.t('The Secondary is switching to Ninaivu {to}. It is away for a minute or two.', { to }); break;
         case 'done':
-          text = i18n.t('The Secondary runs Ninaivu {to}.', { to }); break;
+          reached = 4;
+          headline = i18n.t('The Secondary runs Ninaivu {to}.', { to }); break;
         case 'went_back':
-          text = i18n.t('Ninaivu {to} could not start on the Secondary, so it went back to the version it had, as it was. Its logs say why.', { to });
-          away = true; break;
+          reached = 3; bad = true;
+          headline = i18n.t('Ninaivu {to} could not start on the Secondary, so it went back to the version it had, as it was. Its logs say why.', { to }); break;
         default:
-          text = i18n.t('The Secondary did not take the update: {why}', { why: there.message || there.stage });
-          away = true;
+          reached = there.stage === 'refused' ? 1 : 2; bad = true;
+          headline = i18n.t('The Secondary did not take the update: {why}', { why: i18n.fromServer(there.message || there.stage) });
       }
+    } else if (sending.stage === 'sent') {
+      // Sent, and the Secondary not saying yet: unpacking, or away switching.
+      reached = answer.online === false ? 2 : 1;
+      headline = answer.online === false
+        ? i18n.t('Ninaivu {to} was sent. The Secondary is not answering now; it is most likely switching to it, which takes a minute or two.', { to })
+        : i18n.t('Ninaivu {to} was sent. Waiting for the Secondary to say how it stands.', { to });
+    } else {
+      return null;
     }
-    says.textContent = text;
-    says.className = away ? 'hint tc-away' : 'hint subtle';
-    says.hidden = !text;
+    if (answer.online === false && reached < 4 && !bad && sending.stage !== 'sent') {
+      facts.push(i18n.t('The Secondary is not answering now.'));
+    }
+    const steps = labels.map((label, i) => ({
+      label, at: i < reached ? 'done' : i === reached ? (bad ? 'bad' : 'now') : 'todo' }));
+    if (reached >= 4) steps.forEach((step) => { step.at = 'done'; });
+    const done = reached >= 4;
+    return {
+      tone: bad ? 'warn' : done ? 'ok' : 'busy',
+      state: bad ? i18n.t('Needs you') : done ? i18n.t('Updated') : i18n.t('Updating'),
+      headline, bar, steps, facts,
+    };
   }
 
   /** Send the Linux download the person chose; the Primary sends it on. */
@@ -548,7 +593,7 @@ export class TwoComputers {
       || Boolean(this.only?.found?.running) || Boolean(this.only?.bring?.running)
       || (status.role === 'primary' && !status.paired)
       || (status.role === 'secondary' && status.welcome?.waiting)
-      || Boolean(this.topology?.running);
+      || Boolean(this.topology?.running) || Boolean(this.updateBusy);
     this.timer = setTimeout(() => this.refresh(), busy ? 4000 : 60000);
   }
 
@@ -643,51 +688,118 @@ export class TwoComputers {
     $('#tc-send').hidden = running;
     $('#tc-stop').hidden = !running;
 
-    const lines = [];
-    const progress = sending.progress || {};
-    if (running) {
-      lines.push(i18n.t('Sending: {done} of {files} files looked at, {sent} sent ({size}), {already} already there.', {
-        done: count(progress.done), files: count(progress.files), sent: count(progress.sent),
-        size: size(progress.bytes), already: count(progress.already),
-      }));
-      if (progress.waiting) lines.push(i18n.t('Waiting: {reason}', { reason: progress.waiting }));
-      if (progress.secondary_preparing) {
-        lines.push(i18n.t('The Secondary is taking in a copy made by hand. Sending carries on by itself once it is checked.'));
-      }
-      if (progress.short_of_room) {
-        lines.push(i18n.t('{needed} still to send and {free} free on the Secondary: what fits is sent.', {
-          needed: size(progress.short_of_room.needed), free: size(progress.short_of_room.free) }));
-      }
-      if (progress.secondary_away) {
-        lines.push(i18n.t('The Secondary has not answered since {when}. Sending carries on by itself when it is back.', { when: when(progress.secondary_away) }));
-      }
-    } else if (sending.last && sending.last.finished) {
-      const last = sending.last;
-      lines.push(i18n.t('Last run {when}: {sent} sent ({size}), {already} already there.', {
-        when: when(last.finished), sent: count(last.sent), size: size(last.bytes),
-        already: count(last.already),
-      }));
-      if (last.changed) lines.push(i18n.t('{count} changed while being sent; they go next time.', { count: count(last.changed) }));
-      if (last.failed) lines.push(i18n.t('{count} could not be sent; the log says why.', { count: count(last.failed) }));
-      if (last.error) lines.push(i18n.t('It stopped: {reason}', { reason: last.error }));
-    }
-    const confirmed = Object.values(status.confirmed || {});
-    if (confirmed.length) {
-      const files = confirmed.reduce((sum, c) => sum + (c.files || 0), 0);
-      const bytes = confirmed.reduce((sum, c) => sum + (c.bytes || 0), 0);
-      lines.push(i18n.t('The Secondary has confirmed {files} originals, {size}.', {
-        files: count(files), size: size(bytes),
-      }));
-    }
+    this.renderSending(status);
     $('#tc-family-copy').checked = Boolean(status.family_copy);
+    this.renderFreeing(status);
+  }
+
+  /** The originals on their way to the Secondary, as one card
+   * (status-card.js): sending, waiting, up to date or needing someone. */
+  renderSending(status) {
+    if (!status || status.role !== 'primary' || !status.paired) {
+      renderStatus($('#tc-status'), null);
+      return;
+    }
+    const sending = status.sending || {};
+    const running = Boolean(sending.running);
+    const progress = sending.progress || {};
+    const last = sending.last || {};
+    // How many of the library's originals the Secondary has confirmed: the
+    // checklist's count (mugil/checklist.py), which leaves out files deleted
+    // since; before it is read, what the record holds.
+    const whole = this.originals;
+    const confirmedRecord = Object.values(status.confirmed || {});
+    const confirmed = whole ? Number(whole.confirmed) || 0
+      : confirmedRecord.reduce((sum, c) => sum + (c.files || 0), 0);
+    const total = whole ? Number(whole.total) || 0 : 0;
+    const confirmedBytes = confirmedRecord.reduce((sum, c) => sum + (c.bytes || 0), 0);
+    const safeLine = total
+      ? i18n.t('{confirmed} of {total} originals are safe on the Secondary ({percent}%).', {
+        confirmed: count(confirmed), total: count(total), percent: count(percent(confirmed, total)) })
+      : confirmed ? i18n.t('The Secondary has confirmed {files} originals, {size}.', {
+        files: count(confirmed), size: size(confirmedBytes) }) : '';
+    const facts = [];
+    const warn = (text) => facts.push({ text, tone: 'warn' });
+    let tone;
+    let state;
+    let headline;
+    let bar = null;
+    const away = progress.secondary_away || progress.secondary_preparing || progress.waiting;
+    if (running && away) {
+      tone = 'wait';
+      state = i18n.t('Waiting');
+      headline = progress.secondary_preparing
+        ? i18n.t('The Secondary is taking in a copy made by hand. Sending carries on by itself once it is checked.')
+        : progress.secondary_away
+          ? i18n.t('The Secondary has not answered since {when}. Sending carries on by itself when it is back.', { when: when(progress.secondary_away) })
+          : i18n.t('Paused: {reason}', { reason: i18n.fromServer(progress.waiting) });
+    } else if (running) {
+      tone = 'busy';
+      state = i18n.t('Sending');
+      headline = safeLine || i18n.t('Sending the originals to the Secondary.');
+    } else if (last.error) {
+      tone = 'warn';
+      state = i18n.t('Needs you');
+      headline = i18n.t('It stopped: {reason}', { reason: i18n.fromServer(last.error) });
+    } else if (total && confirmed >= total) {
+      tone = 'ok';
+      state = i18n.t('Up to date');
+      headline = i18n.t('Every original in the library is safe on the Secondary ({count}).', { count: count(total) });
+    } else {
+      tone = last.finished ? 'wait' : 'off';
+      state = last.finished ? i18n.t('Behind') : i18n.t('Not sent yet');
+      headline = total
+        ? i18n.t('{count} originals are still to send.', { count: count(Math.max(0, total - confirmed)) })
+        : safeLine || i18n.t('Nothing has been sent to the Secondary yet.');
+    }
+    if (running && progress.files) {
+      bar = {
+        value: progress.done, max: progress.files,
+        label: Number(progress.libraries) > 1
+          ? i18n.t('Library {number} of {of} ({name}): {done} of {files} files looked at', {
+            number: count(progress.library_no), of: count(progress.libraries),
+            name: progress.name || progress.library || '',
+            done: count(progress.done), files: count(progress.files) })
+          : i18n.t('{done} of {files} files looked at', {
+            done: count(progress.done), files: count(progress.files) }),
+      };
+      facts.push(i18n.t('This run: {sent} sent ({size}), {already} were there already.', {
+        sent: count(progress.sent), size: size(progress.bytes), already: count(progress.already) }));
+    } else if (!running && total) {
+      bar = { value: confirmed, max: total, label: safeLine };
+    }
+    if (running && tone === 'wait' && safeLine) facts.push(safeLine);
+    if (progress.short_of_room) {
+      warn(i18n.t('{needed} still to send and {free} free on the Secondary: what fits is sent.', {
+        needed: size(progress.short_of_room.needed), free: size(progress.short_of_room.free) }));
+    }
+    if (!running && last.finished) {
+      const parts = [last.stopped
+        ? i18n.t('Last run {when} was stopped: {sent} sent ({size}).', {
+          when: when(last.finished), sent: count(last.sent), size: size(last.bytes) })
+        : i18n.t('Last run {when}: {sent} sent ({size}), {already} already there.', {
+          when: when(last.finished), sent: count(last.sent), size: size(last.bytes),
+          already: count(last.already) })];
+      facts.push(parts[0]);
+      if (last.changed) facts.push(i18n.t('{count} changed while being sent; they go next time.', { count: count(last.changed) }));
+      if (last.failed) warn(i18n.t('{count} could not be sent; the log says why.', { count: count(last.failed) }));
+    }
+    if (!running) {
+      if (sending.next_at) {
+        facts.push(sending.next_at * 1000 <= Date.now()
+          ? i18n.t('Next run: as soon as the household is quiet.')
+          : i18n.t('Next run {when}.', { when: when(sending.next_at) }));
+      } else if (!(Number(status.copy_every_hours) > 0)) {
+        facts.push(i18n.t('Sends only when you press Send the originals now.'));
+      }
+    }
     const handover = status.handover || {};
     if (status.family_copy && handover.at) {
-      lines.push(i18n.t('The family app\'s copy was last sent {when}.', { when: when(handover.at) }));
+      facts.push({ text: i18n.t('The family app\'s copy was last sent {when}.', { when: when(handover.at) }), tone: 'quiet' });
     } else if (status.family_copy && handover.error) {
-      lines.push(i18n.t('The family app\'s copy could not be sent: {reason}', { reason: i18n.fromServer(handover.error) }));
+      warn(i18n.t('The family app\'s copy could not be sent: {reason}', { reason: i18n.fromServer(handover.error) }));
     }
-    $('#tc-progress').textContent = lines.join(' ');
-    this.renderFreeing(status);
+    renderStatus($('#tc-status'), { tone, state, headline, bar, facts });
   }
 
   /** The Primary: originals let go before 4.0.1, and bringing them back (mugil/free.py). */

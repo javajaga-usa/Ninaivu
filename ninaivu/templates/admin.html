@@ -542,11 +542,11 @@
     <div class="block" id="scf-block" hidden>
       <div class="block-head">
         <div>
-          <h2 data-i18n="Second copy">Second copy</h2>
-          <p class="hint" id="scf-where"></p>
-          <p class="hint subtle" data-i18n="What is on the other disk, as it is there. Ninaivu never deletes anything on it by itself. A file you delete here that is still in the library is copied again on the next run; one the library no longer has stays gone.">What is on the other disk, as it is there. Ninaivu never deletes anything
+          <h2 data-i18n="Inside the second copy">Inside the second copy</h2>
+          <p class="hint"><span data-i18n="What is on the other disk, as it is there. Ninaivu never deletes anything on it by itself. A file you delete here that is still in the library is copied again on the next run; one the library no longer has stays gone.">What is on the other disk, as it is there. Ninaivu never deletes anything
             on it by itself. A file you delete here that is still in the library is copied again on the
-            next run; one the library no longer has stays gone.</p>
+            next run; one the library no longer has stays gone.</span>
+            <span class="scf-where" id="scf-where"></span></p>
         </div>
         <div class="fold-actions">
           <button class="btn ghost small" id="scf-to-lib" type="button" hidden data-i18n="Show in library">Show in library</button>
@@ -554,8 +554,13 @@
         </div>
       </div>
       <nav class="fold-trail" id="scf-trail" aria-label="Folder path" data-i18n-label="Folder path"></nav>
+      <div class="fold-summary" id="scf-summary" hidden></div>
       <div class="fold-grid" id="scf-dirs"></div>
-      <div class="scf-files" id="scf-files"></div>
+      <div class="fold-items-head" id="scf-files-head" hidden>
+        <h3 id="scf-files-title"></h3>
+        <span class="hint" id="scf-files-note"></span>
+      </div>
+      <div class="fold-items scf-items" id="scf-files"></div>
       <div class="fold-pickbar" id="scf-pickbar" hidden>
         <span class="hint" id="scf-picked" data-i18n="Nothing chosen">Nothing chosen</span>
         <div class="spacer"></div>
@@ -1068,7 +1073,7 @@
         <button class="btn ghost" id="sc-stop" type="button" hidden data-i18n="Stop">Stop</button>
         <button class="btn danger" id="sc-afresh" type="button" hidden data-i18n="Start afresh here">Start afresh here</button>
       </div>
-      <p class="hint subtle" id="sc-progress"></p>
+      <div class="jst-host" id="sc-status" aria-live="polite" hidden></div>
     </div>
 
     <!-- the copy out of the house: cloud/offsite.py, static/js/offsite.js -->
@@ -1209,7 +1214,7 @@
           </div>
           <label class="sc-on"><input type="checkbox" id="tc-family-copy">
             <span data-i18n="Let the family browse on the Secondary while this computer is off">Let the family browse on the Secondary while this computer is off</span></label>
-          <p class="hint subtle" id="tc-progress"></p>
+          <div class="jst-host" id="tc-status" aria-live="polite" hidden></div>
           <div id="tc-free" hidden>
             <p class="hint" id="tc-free-says"></p>
             <div class="ar-actions" id="tc-free-actions">
@@ -1295,7 +1300,7 @@
                  aria-label="The Linux portable download" data-i18n-label="The Linux portable download">
           <button class="btn" id="tc-update-send" type="button" data-i18n="Update the Secondary">Update the Secondary</button>
         </div>
-        <p class="hint subtle" id="tc-update-says" hidden></p>
+        <div class="jst-host" id="tc-update-status" aria-live="polite" hidden></div>
       </div>
       <div id="tc-checklist-row" hidden>
         <h3 data-i18n="Mugil checklist">Mugil checklist</h3>
@@ -2467,7 +2472,7 @@
   <!-- Setup check: ports, drives, Tailscale and permissions, each with what
        to do. Built by pages/console/setup-check.js from /api/admin/setup-check. -->
   <section class="panel" data-panel="setup-check">
-    <div class="block" id="sc-block">
+    <div class="block" id="setup-check-block">
       <div class="block-head">
         <div>
           <h2 id="sc-headline" data-i18n="Checking this computer…">Checking this computer…</h2>
