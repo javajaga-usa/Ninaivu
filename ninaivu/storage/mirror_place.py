@@ -19,6 +19,7 @@ Nothing here writes, renames or deletes anything at the folder.
 
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 import sqlite3
@@ -34,6 +35,8 @@ try:                                    # optional, as in storage/fit.py
     import psutil
 except Exception:                       # noqa: BLE001
     psutil = None
+
+log = logging.getLogger(__name__)
 
 __all__ = ["describe", "away", "listing", "delete", "mount_of", "is_network", "LISTED"]
 
@@ -301,7 +304,8 @@ def delete(mirror, conn: sqlite3.Connection, paths: list[str]) -> dict[str, Any]
             row = _record_of(mirror, conn, rel)
             path.unlink()
         except OSError as exc:
-            failed.append({"path": rel, "why": f"It could not be deleted: {exc}"})
+            log.warning("could not delete %s on the second copy: %s", rel, exc)
+            failed.append({"path": rel, "why": "It could not be deleted."})
             continue
         if row is not None:
             conn.execute("DELETE FROM mirror_copies WHERE root = ? AND rel_path = ?",

@@ -218,6 +218,7 @@ MESSAGES = (
     said('Invalid plan structure received from Gemini.'),
     said('Invalid request.'),
     said('Invalid segmentation request.'),
+    said('It could not be deleted.'),
     said('It is not uploading right now.'),
     said('It is uploading now.'),
     said('It was made by Ninaivu {made_by}, newer than this one ({version}). Update Ninaivu here first, then import it.'),

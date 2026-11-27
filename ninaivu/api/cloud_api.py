@@ -24,7 +24,7 @@ sending the whole library again.
 """
 
 from __future__ import annotations
-from ..words import refusal, said
+from ..words import body_for, refusal, said
 
 import logging
 from pathlib import Path
@@ -936,15 +936,20 @@ def mirror_browse():
     mirror = _mirror()
     if not mirror.enabled or mirror.folder is None:
         return jsonify({"error": "Switch the second copy on first.", "status": 409}), 409
+    away = mirror_place.away(str(mirror.folder), *mirror.place())
+    if away:
+        return jsonify({"status": 404, **body_for(away)}), 404
+    # Fixed words for each refusal: an exception's own text is not sent.
     try:
         return jsonify(mirror_place.listing(mirror, mirror._db(),           # noqa: SLF001
                                             request.args.get("path", "")))
-    except ValueError as exc:
-        return jsonify({"error": str(exc), "status": 400}), 400
-    except FileNotFoundError as exc:
-        return jsonify({"error": str(exc), "status": 404}), 404
-    except PermissionError as exc:
-        return jsonify({"error": str(exc), "status": 403}), 403
+    except ValueError:
+        return jsonify({"error": "That is not a folder on the second copy.", "status": 400}), 400
+    except FileNotFoundError:
+        return jsonify({"error": "That folder is not on the second copy.", "status": 404}), 404
+    except PermissionError:
+        return jsonify({"error": "Ninaivu cannot read that folder on the second copy.",
+                        "status": 403}), 403
 
 
 @cloud_bp.get("/api/mirror/where")
@@ -1005,10 +1010,14 @@ def mirror_delete():
             "error": (said("Enter your password to delete these from the second copy.")
                       if not data.get("password") else said("That password is not right.")),
         }), 401
+    away = mirror_place.away(str(mirror.folder), *mirror.place())
+    if away:
+        return jsonify({"status": 409, **body_for(away)}), 409
     try:
         result = mirror_place.delete(mirror, mirror._db(), paths)      # noqa: SLF001
-    except (LookupError, FileNotFoundError) as exc:
-        return jsonify({"error": str(exc), "status": 409}), 409
+    except (LookupError, FileNotFoundError):
+        return jsonify({"error": "The second copy is not at its folder, so nothing was deleted.",
+                        "status": 409}), 409
     auth.audit(conn, user.id, "second_copy",
                f"deleted {len(result['deleted'])} file(s) on the second copy"
                + (f": {result['deleted'][0]}" if len(result["deleted"]) == 1 else ""))
@@ -1034,7 +1043,7 @@ def mirror_file():
         return jsonify({"error": "That is not a file on the second copy.", "status": 400}), 400
     reason = mirror_place.away(str(target), *mirror.place())
     if reason:
-        return jsonify({"error": reason, "status": 404}), 404
+        return jsonify({"status": 404, **body_for(reason)}), 404
     path = target.joinpath(*parts)
     if not stays_inside(target, path) or path.is_symlink() or not path.is_file():
         return jsonify({"error": "That file is not on the second copy.", "status": 404}), 404

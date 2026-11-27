@@ -5507,5 +5507,6 @@
   "{count} chosen": "{count} chosen",
   "{count} could not be deleted from the second copy.": "{count} could not be deleted from the second copy.",
   "{count} more are not listed here.": "{count} more are not listed here.",
-  "{free} free of {total}; the copy needs about {needed} more.": "{free} free of {total}; the copy needs about {needed} more."
+  "{free} free of {total}; the copy needs about {needed} more.": "{free} free of {total}; the copy needs about {needed} more.",
+  "It could not be deleted.": "It could not be deleted."
 }

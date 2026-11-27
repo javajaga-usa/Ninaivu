@@ -5893,5 +5893,6 @@
   "{count} chosen": "{count} தேர்ந்தெடுக்கப்பட்டன",
   "{count} could not be deleted from the second copy.": "{count} ஐ இரண்டாவது நகலிலிருந்து நீக்க முடியவில்லை.",
   "{count} more are not listed here.": "மேலும் {count} இங்கே பட்டியலிடப்படவில்லை.",
-  "{free} free of {total}; the copy needs about {needed} more.": "{total} இல் {free} காலியாக உள்ளது; நகலுக்குச் சுமார் {needed} மேலும் தேவை."
+  "{free} free of {total}; the copy needs about {needed} more.": "{total} இல் {free} காலியாக உள்ளது; நகலுக்குச் சுமார் {needed} மேலும் தேவை.",
+  "It could not be deleted.": "அதை நீக்க முடியவில்லை."
 }
